@@ -1196,6 +1196,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_osmux.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_r_uus1.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_rlcmac.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_rlp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_sim.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_sms.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_sms_ud.c
