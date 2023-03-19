@@ -673,6 +673,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3com-njack.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3com-xns.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3g-a11.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-4sight.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-5co-legacy.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-6lowpan.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-9p.c
@@ -831,6 +832,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cattp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cbor.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ccsds.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-cdm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cdp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cdma2k.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cell_broadcast.c
@@ -1752,6 +1754,8 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-s5066dts.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-s7comm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-s7comm_szl_ids.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sacta.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sacta-utils.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sadmind.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sametime.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sap.c
