@@ -43,6 +43,7 @@ static int proto_sacta = -1;
 
 static const uint16_t SACTA_HEADER_SIZE = 20;
 static dissector_handle_t asterix_handle;
+static dissector_handle_t xml_handle;
 
 enum TiposInterceptor {
     TIPO_INTERCEPTOR_EVEREST = 0xBEBA,
@@ -286,6 +287,23 @@ sacta_get_gint32(packet_info* pinfo, tvbuff_t* tvb, const gint offset) {
     return w_size;
 }
 
+static bool isXMLPacket(tvbuff_t* backing, const gint backing_offset, const gint backing_length, const gint reported_length)
+{
+    static gint C_XML_MAGIC_LENGTH = 5;
+    static guint8 C_XML_MAGIC[] = "<?xml";
+    bool res = false;
+    if (backing_length >= C_XML_MAGIC_LENGTH &&
+        reported_length >= C_XML_MAGIC_LENGTH)
+    {
+        guint8* starting_bytes = tvb_get_string_enc(wmem_packet_scope(), backing, backing_offset, C_XML_MAGIC_LENGTH, ENC_UTF_8);
+        if (memcmp(starting_bytes, C_XML_MAGIC, C_XML_MAGIC_LENGTH) == 0)
+        {
+            res = true;
+        }
+    }
+
+    return res;
+}
 int dissect_sacta(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
 const char* get_sacta_message_length(uint16_t w_size);
 const char* get_sacta_message_field(array_string* array, uint32_t index);
@@ -364,43 +382,43 @@ static int dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pinfo, proto_tree*
 
             uint16_t w_size = sacta_get_gint16(pinfo, tvb, 14);
             unsigned int end_data = tvb_captured_length(tvb) - SACTA_HEADER_SIZE;
+            //Dominio > 7, instancia > 7, sesion > 7 => supone que no es cabecera SACTA
+            uint8_t sacta_src_dominio = tvb_get_guint8(tvb, 0);
+            uint8_t sacta_dst_dominio = tvb_get_guint8(tvb, 4);
+            uint8_t sacta_instancia = tvb_get_guint8(tvb, 8);
+            uint8_t sacta_sesion = tvb_get_guint8(tvb, 9);
+            int dissect_sacta_ok = sacta_src_dominio <= 7 && sacta_dst_dominio <= 7 && sacta_instancia <= 7 && sacta_sesion <= 7;
 
-            if (end_data == 2 * w_size) {
-                dissect_sacta(tvb, pinfo, tree, data);
-                res = 1;
-            }
-            else {
-                //Caso especial: con cabecera extendida pero sin flag
-                if (
-                    (end_data == 2 * w_size + TAMANO_CABX ||
-                        end_data == 2 * w_size + 2 * TAMANO_CABX ||
-                        end_data == 2 * w_size + 3 * TAMANO_CABX))
-                {
+            if (dissect_sacta_ok)
+            {
+                if (end_data == 2 * w_size) {
                     dissect_sacta(tvb, pinfo, tree, data);
                     res = 1;
                 }
-                else
-                {
-                    // TODO: Agrupar todos los fragmentos
-                    struct tvbuff* top_tvb = tvb_get_ds_tvb(tvb);
-                    uint16_t longitud_udp = sacta_get_gint16(pinfo, top_tvb, 38);
-                    uint16_t flag_more_fragments = sacta_get_gint16(pinfo, top_tvb, 20) & 0xE000;
-                    gint16 fragment_offset = sacta_get_gint16(pinfo, top_tvb, 20) & 0x1FFF;
-                    if ((flag_more_fragments || fragment_offset > 0) && longitud_udp > w_size)
-                    {
-                        dissect_fragmented_sacta(tvb, pinfo, tree, data); // != -1)
-                        /*
-                        if (res == -1)
-                        {
-                            res = 0;
-                        }
-                        */
-                    }
+                else {
+                    //Caso especial: con cabecera extendida pero sin flag
                     /*
+                    if (
+                        (end_data == 2 * w_size + TAMANO_CABX ||
+                            end_data == 2 * w_size + 2 * TAMANO_CABX ||
+                            end_data == 2 * w_size + 3 * TAMANO_CABX))
                     {
+                        dissect_sacta(tvb, pinfo, tree, data);
                         res = 1;
                     }
+                    else
+                    {
                     */
+                        // TODO: Agrupar todos los fragmentos
+                        struct tvbuff* top_tvb = tvb_get_ds_tvb(tvb);
+                        uint16_t longitud_udp = sacta_get_gint16(pinfo, top_tvb, 38);
+                        uint16_t flag_more_fragments = sacta_get_gint16(pinfo, top_tvb, 20) & 0xE000;
+                        gint16 fragment_offset = sacta_get_gint16(pinfo, top_tvb, 20) & 0x1FFF;
+                        if ((flag_more_fragments || fragment_offset > 0) && longitud_udp > w_size)
+                        {
+                            dissect_fragmented_sacta(tvb, pinfo, tree, data); // != -1)
+                        }
+                    /* } */
                 }
             }
         }
@@ -493,7 +511,7 @@ int dissect_fragmented_sacta(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree
             more_fragments = FALSE;
         }
         tvbuff_t* new_tvb = NULL;
-        fragment_item* frag_msg = NULL;
+        fragment_head* frag_msg = NULL;
         //guint16 msg_seqid = tvb_get_ntohs(tvb, offset); offset += 2;
         uint16_t msg_seqid = sacta_get_gint16(pinfo, top_tvb, 18);
         //guint16 msg_num = tvb_get_ntohs(tvb, offset); offset += 2;
@@ -557,8 +575,8 @@ int dissect_sacta(tvbuff_t * tvb, packet_info * pinfo, proto_tree* tree, void* d
     proto_item* ti = proto_tree_add_item(tree, proto_sacta, tvb, 0, -1, ENC_NA);
     proto_tree* sacta_tree = proto_item_add_subtree(ti, ett_sacta_proto);
     struct tvbuff* top_tvb = tvb_get_ds_tvb(tvb);
-    uint16_t longitud_udp = sacta_get_gint16(pinfo, top_tvb, 38);
-    proto_tree_add_uint(sacta_tree, hf_sacta_longitud_udp, top_tvb, 38, 2, longitud_udp);
+    uint16_t longitud_udp = sacta_get_gint16(pinfo, top_tvb, 4);
+    proto_tree_add_uint(sacta_tree, hf_sacta_longitud_udp, top_tvb, 4, 2, longitud_udp);
 
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "SACTA_COM");
@@ -569,7 +587,7 @@ int dissect_sacta(tvbuff_t * tvb, packet_info * pinfo, proto_tree* tree, void* d
     //Obtencion de longitud
     //uint16_t sacta_longitud = sacta_get_gint16(pinfo, tvb, OFFSET_LONGITUD) * 2;
 
-    // Obtencion de lorigen
+    // Obtencion del origen
     uint8_t sacta_src_dominio = tvb_get_guint8(tvb, 0);
     uint8_t sacta_src_centro = tvb_get_guint8(tvb, 1);
     uint16_t sacta_src_usuario = sacta_get_gint16(pinfo, tvb, 2);
@@ -685,7 +703,7 @@ int dissect_sacta(tvbuff_t * tvb, packet_info * pinfo, proto_tree* tree, void* d
 
     if (sacta_short_size == 0)
     {
-        proto_tree_add_boolean(sacta_tree, hf_sacta_sin_datos, tvb, offset + despl_longitud, 2, sacta_short_size * 2);
+        proto_tree_add_none_format(sacta_tree, hf_sacta_sin_datos, tvb, offset + despl_longitud, 2, "Mensaje sin datos");
     }
     else
     {
@@ -743,6 +761,11 @@ int dissect_sacta(tvbuff_t * tvb, packet_info * pinfo, proto_tree* tree, void* d
             int16_t asterixLen = tvb_get_gint16(data_tvb, 1, ENC_BIG_ENDIAN);
             tvbuff_t* asterix_tvb = tvb_new_subset_length_caplen(data_tvb, data_offset, asterixLen, asterixLen);
             call_dissector(asterix_handle, asterix_tvb, pinfo, tree);
+        }
+        else if (xml_handle != NULL && (isXMLPacket(data_tvb, data_offset, longitud_datos, longitud_datos))) {
+            //If XML packet, call wireshark XML dissector
+            tvbuff_t* xml_tvb = tvb_new_subset_length_caplen(data_tvb, data_offset, longitud_datos, longitud_datos);
+            call_dissector(xml_handle, xml_tvb, pinfo, tree);
         }
         else {
             //Disector de datos
@@ -1040,6 +1063,7 @@ void proto_reg_handoff_sacta(void) {
     dissector_handle_t sacta_handle;
     heur_dissector_t heuristic_dissector_function = dissect_sacta_heur_udp;
     asterix_handle = find_dissector_add_dependency("asterix", proto_sacta);
+    xml_handle = find_dissector_add_dependency("xml", proto_sacta);
     sacta_handle = create_dissector_handle(dissect_fragmented_sacta, proto_sacta);
     dissector_add_uint_with_preference("udp.port", SACTA_UDP_PORT, sacta_handle);
     heur_dissector_add("udp", heuristic_dissector_function, "sacta over UDP", "sacta_udp", proto_sacta, HEURISTIC_ENABLE);
