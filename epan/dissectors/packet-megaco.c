@@ -46,7 +46,7 @@
 #include "packet-h245.h"
 #include "packet-h248.h"
 #include "packet-ip.h"
-#include "packet-http.h"
+#include "packet-media-type.h"
 #include "packet-sdp.h"
 
 void proto_register_megaco(void);
@@ -668,7 +668,7 @@ dissect_megaco_text(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 
     if (g_ascii_strncasecmp(word, "MEGACO", 6) != 0 && !short_form){
         gint8 ber_class;
-        gboolean pc;
+        bool pc;
         gint32 tag;
         dissector_handle_t handle = data_handle;
 
@@ -3029,21 +3029,23 @@ dissect_megaco_LocalRemotedescriptor(tvbuff_t *tvb, proto_tree *megaco_mediadesc
 {
     gint tokenlen;
     tvbuff_t *next_tvb;
-    http_message_info_t message_info = { SIP_DATA, NULL, NULL, NULL };
+    media_content_info_t content_info = { MEDIA_CONTAINER_SIP_DATA, NULL, NULL, NULL };
 
     sdp_setup_info_t setup_info;
 
     /* Only fill in the info when we have valid contex */
     if ((context != 0) && (context < 0xfffffffe)) {
-        setup_info.hf_id = hf_megaco_Context;
-        setup_info.hf_type = SDP_TRACE_ID_HF_TYPE_GUINT32;
+        setup_info = (sdp_setup_info_t){
+            .hf_id = hf_megaco_Context,
+            .hf_type = SDP_TRACE_ID_HF_TYPE_GUINT32,
+            .trace_id.num = context,
+        };
         if (!sip_hide_generated_call_ids) {
             setup_info.add_hidden = FALSE;
         } else {
             setup_info.add_hidden = prefs_get_bool_value(sip_hide_generated_call_ids, pref_current);
         }
-        setup_info.trace_id.num = context;
-        message_info.data = &setup_info;
+        content_info.data = &setup_info;
     }
 
     proto_tree  *megaco_localdescriptor_tree;
@@ -3061,7 +3063,7 @@ dissect_megaco_LocalRemotedescriptor(tvbuff_t *tvb, proto_tree *megaco_mediadesc
 
     if ( tokenlen > 3 ){
         next_tvb = tvb_new_subset_length(tvb, tvb_current_offset, tokenlen);
-        call_dissector_with_data(sdp_handle, next_tvb, pinfo, megaco_localdescriptor_tree, &message_info);
+        call_dissector_with_data(sdp_handle, next_tvb, pinfo, megaco_localdescriptor_tree, &content_info);
     }
 }
 

@@ -14,7 +14,7 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/addr_resolv.h>
-#include <packet-udp.h>
+#include "packet-udp.h"
 
 void proto_reg_handoff_shicp(void);
 void proto_register_shicp(void);
@@ -475,7 +475,7 @@ proto_register_shicp(void)
         { &hf_shicp_auth_req,
           { "Authentication required", "shicp.authreq",
             FT_BOOLEAN, 8,
-            TFS(&tfs_true_false), 0x0,
+            NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_shicp_module_version,

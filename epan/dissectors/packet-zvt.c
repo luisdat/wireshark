@@ -224,6 +224,8 @@ static const bitmap_info_t bitmap_info[] = {
 void proto_register_zvt(void);
 void proto_reg_handoff_zvt(void);
 
+static dissector_handle_t zvt_tcp_handle;
+
 static int proto_zvt = -1;
 
 static int ett_zvt = -1;
@@ -556,10 +558,10 @@ static inline gint dissect_zvt_tlv_receipt_param(
 
 static inline gint dissect_zvt_tlv_characters_per_line(
         tvbuff_t *tvb, gint offset, gint len,
-        packet_info *pinfo, proto_tree *tree, tlv_seq_info_t *seq_info _U_)
+        packet_info *pinfo _U_, proto_tree *tree, tlv_seq_info_t *seq_info _U_)
 {
-    const gchar *str = tvb_bcd_dig_to_str_be(pinfo->pool, tvb, offset, 1, NULL, FALSE);
-    proto_tree_add_string(tree, hf_zvt_characters_per_line, tvb, offset, 1, str);
+    proto_tree_add_item(tree, hf_zvt_characters_per_line, tvb, offset, 1,
+            ENC_BCD_DIGITS_0_9 | ENC_BIG_ENDIAN);
     return len;
 }
 
@@ -605,7 +607,7 @@ dissect_zvt_tlv_tag(tvbuff_t *tvb, gint offset,
     tag_ti = proto_tree_add_uint_format(tree, hf_zvt_tlv_tag,
             tvb, offset_start, offset-offset_start, _tag,
             "Tag: %s (0x%x)",
-            val_to_str_ext(_tag, &tlv_tags_ext, "unknown"), _tag);
+            val_to_str_ext_const(_tag, &tlv_tags_ext, "unknown"), _tag);
 
     tag_tree = proto_item_add_subtree(tag_ti, ett_zvt_tlv_tag);
     proto_tree_add_item(tag_tree, hf_zvt_tlv_tag_class,
@@ -763,10 +765,10 @@ static inline gint dissect_zvt_card_type(
 
 
 static inline gint dissect_zvt_terminal_id(
-        tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree)
+        tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *tree)
 {
-    const gchar *str = tvb_bcd_dig_to_str_be(pinfo->pool, tvb, offset, 4, NULL, FALSE);
-    proto_tree_add_string(tree, hf_zvt_terminal_id, tvb, offset, 4, str);
+    proto_tree_add_item(tree, hf_zvt_terminal_id, tvb, offset, 4,
+            ENC_BCD_DIGITS_0_9 | ENC_BIG_ENDIAN);
     return 4;
 }
 
@@ -832,22 +834,23 @@ static inline gint dissect_zvt_expiry_date(
 
 
 static inline gint dissect_zvt_trace_number(
-        tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree)
+        tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *tree)
 {
-    const gchar *str = tvb_bcd_dig_to_str_be(pinfo->pool, tvb, offset, 3, NULL, FALSE);
-    proto_tree_add_string(tree, hf_zvt_trace_number, tvb, offset, 3, str);
+    proto_tree_add_item(tree, hf_zvt_trace_number, tvb, offset, 3,
+            ENC_BCD_DIGITS_0_9 | ENC_BIG_ENDIAN);
     return 3;
 }
 
 
 static inline gint dissect_zvt_card_number(
-        tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree)
+        tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     guint8 tens = tvb_get_guint8(tvb, offset) & 0x0f;
     guint8 ones = tvb_get_guint8(tvb, offset + 1) & 0x0f;
     guint8 length = tens * 10 + ones;
-    const gchar *str = tvb_bcd_dig_to_str_be(pinfo->pool, tvb, offset + 2, length, NULL, FALSE);
-    proto_tree_add_string(tree, hf_zvt_card_number, tvb, offset + 2, length, str);
+
+    proto_tree_add_item(tree, hf_zvt_card_number, tvb, offset + 2, length,
+            ENC_BCD_DIGITS_0_9 | ENC_BIG_ENDIAN);
     return 2 + length;
 }
 
@@ -901,7 +904,7 @@ dissect_zvt_bitmap(tvbuff_t *tvb, gint offset,
     proto_tree_add_item(bitmap_tree, hf_zvt_bmp,
             tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_item_append_text(bitmap_it, ": %s",
-            val_to_str(bmp, bitmap, "unknown"));
+            val_to_str_const(bmp, bitmap, "unknown"));
     offset++;
 
     bi = (bitmap_info_t *)g_hash_table_lookup(
@@ -1114,7 +1117,7 @@ dissect_zvt_apdu(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tre
         ctrl = tvb_get_ntohs(tvb, offset);
         proto_tree_add_item(apdu_tree, hf_zvt_ctrl, tvb, offset, 2, ENC_BIG_ENDIAN);
         col_append_sep_str(pinfo->cinfo, COL_INFO, NULL,
-                val_to_str_const(ctrl, ctrl_field, "Unknown 0x%x"));
+                val_to_str(ctrl, ctrl_field, "Unknown 0x%x"));
         offset += 2;
 
         if (PINFO_FD_VISITED(pinfo)) {
@@ -1505,6 +1508,7 @@ proto_register_zvt(void)
 
     /* register by name to allow mapping to a user DLT */
     register_dissector("zvt", dissect_zvt, proto_zvt);
+    zvt_tcp_handle = register_dissector("zvt.tcp", dissect_zvt_tcp, proto_zvt);
 
     register_shutdown_routine(zvt_shutdown);
 }
@@ -1513,10 +1517,6 @@ proto_register_zvt(void)
 void
 proto_reg_handoff_zvt(void)
 {
-    dissector_handle_t  zvt_tcp_handle;
-
-    zvt_tcp_handle = create_dissector_handle(dissect_zvt_tcp, proto_zvt);
-
     dissector_add_for_decode_as_with_preference("tcp.port", zvt_tcp_handle);
 }
 

@@ -9167,7 +9167,6 @@ dissect_tetra(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 
 void proto_reg_handoff_tetra(void)
 {
-	tetra_handle = create_dissector_handle(dissect_tetra, proto_tetra);
 	dissector_add_uint_with_preference("udp.port", TETRA_UDP_PORT, tetra_handle);
 }
 
@@ -9204,10 +9203,10 @@ void proto_register_tetra (void)
 		{ "Channel 3", "tetra.txchannel3", FT_UINT8, BASE_DEC, VALS(channeltypenames), 0x0,
 		"Logical channels type", HFILL }},
 		{ &hf_tetra_txreg,
-		{ "TxR", "tetra.txreg", FT_UINT16, BASE_HEX, NULL, 0x0,
+		{ "TxR", "tetra.txreg", FT_UINT32, BASE_HEX, NULL, 0x0,
 		 "TX Register", HFILL }},
 		{ &hf_tetra_rvstr,
-		{ "RvSteR", "tetra.rvster", FT_UINT16, BASE_HEX, NULL, 0x0,
+		{ "RvSteR", "tetra.rvster", FT_UINT32, BASE_HEX, NULL, 0x0,
 		 "Receive Status Register", HFILL }},
 		{ &hf_tetra_carriernumber,
 		{ "Carrier Number", "tetra.carrier", FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -9228,7 +9227,7 @@ void proto_register_tetra (void)
 		{ "CRC", "tetra.crc", FT_BOOLEAN, BASE_NONE, NULL, 0x0,
 		 "CRC result", HFILL }},
 		{ &hf_tetra_len0,
-		{ "Length", "tetra.len0", FT_UINT16, BASE_DEC, NULL, 0x0,
+		{ "Length", "tetra.len0", FT_UINT32, BASE_DEC, NULL, 0x0,
 		 "Length of the PDU", HFILL }},
 		{ &hf_tetra_pdu,
 		{ "PDU", "tetra.pdu", FT_BYTES, BASE_NONE, NULL, 0x0,
@@ -11890,7 +11889,7 @@ void proto_register_tetra (void)
 	proto_tetra = proto_register_protocol("TETRA Protocol", "TETRA", "tetra");
 	proto_register_field_array (proto_tetra, hf, array_length (hf));
 	proto_register_subtree_array (ett, array_length (ett));
-	register_dissector("tetra", dissect_tetra, proto_tetra);
+	tetra_handle = register_dissector("tetra", dissect_tetra, proto_tetra);
 	expert_tetra = expert_register_protocol(proto_tetra);
 	expert_register_field_array(expert_tetra, ei, array_length(ei));
 

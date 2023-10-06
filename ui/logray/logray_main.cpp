@@ -26,6 +26,7 @@
 #include <wsutil/clopts_common.h>
 #include <wsutil/cmdarg_err.h>
 #include <ui/urls.h>
+#include <wsutil/time_util.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/privileges.h>
 #include <wsutil/socket.h>
@@ -399,6 +400,23 @@ macos_enable_layer_backing(void)
 }
 #endif
 
+#ifdef HAVE_LIBPCAP
+static GList *
+capture_opts_get_interface_list(int *err, char **err_str)
+{
+    /*
+     * XXX - should this pass an update callback?
+     * We already have a window up by the time we start parsing
+     * the majority of the command-line arguments, because
+     * we need to do a bunch of initialization work before
+     * parsing those arguments, and we want to let the user
+     * know that we're doing that initialization, given that
+     * it can take a while.
+     */
+    return capture_interface_list(err, err_str, NULL);
+}
+#endif
+
 /* And now our feature presentation... [ fade to music ] */
 int main(int argc, char *qt_argv[])
 {
@@ -508,6 +526,8 @@ int main(int argc, char *qt_argv[])
     setlocale(LC_ALL, "");
 #endif
 
+    ws_tzset();
+
 #ifdef _WIN32
     //
     // On Windows, QCoreApplication has its own WinMain(), which gets the
@@ -601,6 +621,8 @@ int main(int argc, char *qt_argv[])
     /* Get the compile-time version information string */
     ws_init_version_info("Logray", gather_wireshark_qt_compiled_info,
                          gather_wireshark_runtime_info);
+
+    init_report_message("Logray", &wireshark_report_routines);
 
     /* Create the user profiles directory */
     if (create_profiles_dir(&rf_path) == -1) {
@@ -710,10 +732,8 @@ int main(int argc, char *qt_argv[])
 #ifdef HAVE_LIBPCAP
     /* Set the initial values in the capture options. This might be overwritten
        by preference settings and then again by the command line parameters. */
-    capture_opts_init(&global_capture_opts);
+    capture_opts_init(&global_capture_opts, capture_opts_get_interface_list);
 #endif
-
-    init_report_message("Logray", &wireshark_report_routines);
 
     /*
      * Libwiretap must be initialized before libwireshark is, so that
@@ -920,7 +940,7 @@ int main(int argc, char *qt_argv[])
     lwApp->emitAppSignal(LograyApplication::ColumnsChanged); // We read "recent" widths above.
     lwApp->emitAppSignal(LograyApplication::RecentPreferencesRead); // Must be emitted after PreferencesChanged.
 
-    lwApp->setMonospaceFont(prefs.gui_qt_font_name);
+    lwApp->setMonospaceFont(prefs.gui_font_name);
 
     /* For update of WindowTitle (When use gui.window_title preference) */
     main_w->setWSWindowTitle();
@@ -962,7 +982,7 @@ int main(int argc, char *qt_argv[])
                                          QObject::tr("The filter expression %1 isn't a valid display filter. (%2).")
                                                  .arg(global_commandline_info.jfilter, df_err->msg),
                                          QMessageBox::Ok);
-                    dfilter_error_free(df_err);
+                    df_error_free(&df_err);
                 } else {
                     /* Filter ok, jump to the first packet matching the filter
                        conditions. Default search direction is forward, but if

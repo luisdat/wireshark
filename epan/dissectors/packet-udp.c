@@ -40,6 +40,8 @@ void proto_reg_handoff_udp(void);
 
 static dissector_handle_t udp_handle;
 static dissector_handle_t udplite_handle;
+static capture_dissector_handle_t udp_cap_handle;
+static capture_dissector_handle_t udplite_cap_handle;
 
 static int udp_tap = -1;
 static int udp_follow_tap = -1;
@@ -347,13 +349,13 @@ udpip_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, co
 }
 
 static gboolean
-udp_filter_valid(packet_info *pinfo)
+udp_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
     return proto_is_frame_protocol(pinfo->layers, "udp");
 }
 
 static gchar*
-udp_build_filter(packet_info *pinfo)
+udp_build_filter(packet_info *pinfo, void *user_data _U_)
 {
     if( pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4 ) {
         /* UDP over IPv4 */
@@ -1415,11 +1417,13 @@ proto_register_udp(void)
     proto_udp = proto_register_protocol("User Datagram Protocol", "UDP", "udp");
     proto_register_field_array(proto_udp, hf_udp, array_length(hf_udp));
     udp_handle = register_dissector("udp", dissect_udp, proto_udp);
+    udp_cap_handle = register_capture_dissector("udp", capture_udp, proto_udp);
     expert_udp = expert_register_protocol(proto_udp);
 
     proto_udplite = proto_register_protocol("Lightweight User Datagram Protocol", "UDP-Lite", "udplite");
     proto_register_field_array(proto_udplite, hf_udplite, array_length(hf_udplite));
-    udplite_handle = create_dissector_handle(dissect_udplite, proto_udplite);
+    udplite_handle = register_dissector("udplite", dissect_udplite, proto_udplite);
+    udplite_cap_handle = register_capture_dissector("udplite", capture_udp, proto_udplite);
 
     proto_register_subtree_array(ett, array_length(ett));
     expert_register_field_array(expert_udp, ei, array_length(ei));
@@ -1474,7 +1478,7 @@ proto_register_udp(void)
 
     register_decode_as(&udp_da);
     register_conversation_table(proto_udp, FALSE, udpip_conversation_packet, udpip_endpoint_packet);
-    register_conversation_filter("udp", "UDP", udp_filter_valid, udp_build_filter);
+    register_conversation_filter("udp", "UDP", udp_filter_valid, udp_build_filter, NULL);
     register_follow_stream(proto_udp, "udp_follow", udp_follow_conv_filter, udp_follow_index_filter, udp_follow_address_filter,
                         udp_port_to_display, follow_tvb_tap_listener, get_udp_stream_count, NULL);
 
@@ -1484,15 +1488,12 @@ proto_register_udp(void)
 void
 proto_reg_handoff_udp(void)
 {
-    capture_dissector_handle_t udp_cap_handle;
 
     dissector_add_uint("ip.proto", IP_PROTO_UDP, udp_handle);
     dissector_add_uint("ip.proto", IP_PROTO_UDPLITE, udplite_handle);
 
-    udp_cap_handle = create_capture_dissector_handle(capture_udp, proto_udp);
     capture_dissector_add_uint("ip.proto", IP_PROTO_UDP, udp_cap_handle);
-    udp_cap_handle = create_capture_dissector_handle(capture_udp, proto_udplite);
-    capture_dissector_add_uint("ip.proto", IP_PROTO_UDPLITE, udp_cap_handle);
+    capture_dissector_add_uint("ip.proto", IP_PROTO_UDPLITE, udplite_cap_handle);
 
     udp_tap = register_tap("udp");
     udp_follow_tap = register_tap("udp_follow");

@@ -16,7 +16,6 @@
 #include <unistd.h>
 #endif
 
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -31,7 +30,7 @@
 #include "wsutil/str_util.h"
 #include <wsutil/inet_addr.h>
 #include <wsutil/ws_assert.h>
-
+#include <glib.h>
 
 #include "nettrace_3gpp_32_423.h"
 
@@ -51,7 +50,7 @@ static const guchar c_e_msg[] = "</msg>";
 static const guchar c_s_rawmsg[] = "<rawMsg";
 static const guchar c_change_time[] = "changeTime=\"";
 static const guchar c_proto_name[] = "name=\"";
-static const guchar c_address[] = "ddress"; /* omit the 'a' to cater for "Address" */
+//static const guchar c_address[] = "ddress"; /* omit the 'a' to cater for "Address" */
 static const guchar c_s_initiator[] = "<initiator";
 static const guchar c_e_initiator[] = "</initiator>";
 static const guchar c_s_target[] = "<target";
@@ -66,6 +65,7 @@ static const guchar c_protocol[] = "protocol=\"";
 static const guchar c_sai_req[] = "gsm_map.v3.arg.opcode";
 static const guchar c_sai_rsp[] = "gsm_map.v3.res.opcode";
 static const guchar c_nas_eps[] = "nas-eps_plain";
+
 
 #define RINGBUFFER_START_SIZE G_MAXINT
 #define RINGBUFFER_CHUNK_SIZE 1024
@@ -120,18 +120,18 @@ void register_nettrace_3gpp_32_423(void);
 static char*
 nettrace_parse_address(char* curr_pos, char* next_pos, gboolean is_src_addr, exported_pdu_info_t *exported_pdu_info)
 {
-	guint port;
+	guint port=0;
 	char transp_str[5];
-	int scan_found;
-	char str[3];
-	char* end_pos, *skip_pos;
 	char ip_addr_str[WS_INET6_ADDRSTRLEN];
-	int str_len;
 	ws_in6_addr ip6_addr;
 	guint32 ip4_addr;
-	gchar tempchar;
+	char *err; //for strtol function
 
-	/* curr_pos pointing to first char after address */
+	GMatchInfo *match_info;
+	static GRegex *regex = NULL;
+	char *matched_ipaddress = NULL;
+	char *matched_port = NULL;
+	char *matched_transport = NULL;
 
 	/* Excample from one trace, unsure if it's generic...
 	 * {address == 192.168.73.1, port == 5062, transport == Udp}
@@ -139,38 +139,43 @@ nettrace_parse_address(char* curr_pos, char* next_pos, gboolean is_src_addr, exp
 	 * {address == 2001:1B70:8294:210A::90, port...
 	 *  Address=198.142.204.199,Port=2123
 	 */
-	/* Skip whitespace and equalsigns) */
-	for (skip_pos = curr_pos; skip_pos < next_pos &&
-		((tempchar = *skip_pos) == ' ' ||
-			tempchar == '\t' || tempchar == '\r' || tempchar == '\n' || tempchar == '=');
-		skip_pos++);
 
-	curr_pos = skip_pos;
+	if (regex == NULL) {
+		regex = g_regex_new (
+			"^.*address\\s*=*\\s*" //curr_pos will begin with address
+			"\\[?(?P<ipaddress>(?:" //store ipv4 or ipv6 address in named group "ipaddress"
+				"(?:\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})" //match an IPv4 address
+				"|" // or
+				"(?:[0-9a-f:]*)))\\]?" //match an IPv6 address.
+			"(?:.*port\\s*=*\\s*(?P<port>\\d{1,5}))?" //match a port store it in named group "port"
+			"(?:.*transport\\s*=*\\s*(?P<transport>\\w+))?", //match a transport store it in named group "transport"
+			G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
+	 }
 
-	(void) g_strlcpy(str, curr_pos, 3);
-	/* If we find "" here we have no IP address */
-	if (strcmp(str, "\"\"") == 0) {
+	/* curr_pos pointing to first char of "address" */
+
+	g_regex_match (regex, curr_pos, 0, &match_info);
+
+	if (g_match_info_matches (match_info)) {
+		matched_ipaddress = g_match_info_fetch_named(match_info, "ipaddress"); //will be empty string if no ipv4 or ipv6
+		matched_port = g_match_info_fetch_named(match_info, "port"); //will be empty string if port not in trace
+		matched_transport = g_match_info_fetch_named(match_info, "transport"); //will be empty string if transport not in trace
+	} else {
 		return next_pos;
 	}
-	str[1] = 0;
-	if (strcmp(str, "[") == 0) {
-		/* Should we check for a digit here?*/
-		end_pos = strstr(curr_pos, "]");
 
-	}else {
-		/* Should we check for a digit here?*/
-		end_pos = strstr(curr_pos, ",");
+	g_match_info_free(match_info);
+
+	if (matched_ipaddress != NULL && strlen(matched_ipaddress)) {
+		(void) g_strlcpy(ip_addr_str, matched_ipaddress, strlen(matched_ipaddress)+1);
 	}
-	if (!end_pos) {
-		return next_pos;
+	if (matched_port != NULL && strlen(matched_port)) {
+		port = (guint) strtol(matched_port, &err, 10);
+	}
+	if (matched_transport != NULL && strlen(matched_transport)) {
+		(void) g_strlcpy(transp_str, matched_transport, strlen(matched_transport)+1);
 	}
 
-	str_len = (int)(end_pos - curr_pos)+1;
-	if (str_len > WS_INET6_ADDRSTRLEN) {
-		return next_pos;
-	}
-	(void) g_strlcpy(ip_addr_str, curr_pos, str_len);
-	curr_pos = end_pos;
 	if (ws_inet_pton6(ip_addr_str, &ip6_addr)) {
 		if (is_src_addr) {
 			exported_pdu_info->presence_flags |= EXP_PDU_TAG_IP6_SRC_BIT;
@@ -192,9 +197,7 @@ nettrace_parse_address(char* curr_pos, char* next_pos, gboolean is_src_addr, exp
 		}
 	}
 
-	curr_pos++;
-	scan_found = sscanf(curr_pos, ", %*s %*s %5u, %*s %*s %4s", &port, transp_str);
-	if (scan_found == 2) {
+	if (port > 0) {
 		/* Only add port_type once */
 		if (exported_pdu_info->ptype == EXP_PDU_PT_NONE) {
 			if (g_ascii_strncasecmp(transp_str, "udp", 3) == 0) {
@@ -346,9 +349,8 @@ nettrace_msg_to_packet(nettrace_3gpp_32_423_file_info_t *file_info, wtap_rec *re
 		curr_pos += CLEN(c_s_initiator);
 		next_pos = STRNSTR(curr_pos, c_e_initiator);
 		/* Find address */
-		curr_pos = STRNSTR(curr_pos, c_address);
+		//curr_pos = STRNSTR(curr_pos, c_address) - 1; //Not needed due to regex
 		if (curr_pos != NULL) {
-			curr_pos += CLEN(c_address);
 			nettrace_parse_address(curr_pos, next_pos, TRUE/* SRC */, &exported_pdu_info);
 		}
 	}
@@ -360,12 +362,10 @@ nettrace_msg_to_packet(nettrace_3gpp_32_423_file_info_t *file_info, wtap_rec *re
 	/* Check if we have the tag or if we passed the end of the current message */
 	if (curr_pos != NULL) {
 		curr_pos += CLEN(c_s_target);
-		curr_pos = curr_pos + 7;
 		next_pos = STRNSTR(curr_pos, c_e_target);
 		/* Find address */
-		curr_pos = STRNSTR(curr_pos, c_address);
+		//curr_pos = STRNSTR(curr_pos, c_address) - 1; //Not needed due to regex
 		if (curr_pos != NULL) {
-			curr_pos += CLEN(c_address);
 			/* curr_pos set below */
 			nettrace_parse_address(curr_pos, next_pos, FALSE/* DST */, &exported_pdu_info);
 		}
@@ -448,7 +448,7 @@ nettrace_msg_to_packet(nettrace_3gpp_32_423_file_info_t *file_info, wtap_rec *re
 	}
 
 	if (exported_pdu_info.presence_flags & EXP_PDU_TAG_COL_PROT_BIT) {
-		wtap_buffer_append_epdu_tag(buf, EXP_PDU_TAG_COL_PROT_TEXT, exported_pdu_info.proto_col_str, (guint16)strlen(exported_pdu_info.proto_col_str));
+		wtap_buffer_append_epdu_string(buf, EXP_PDU_TAG_COL_PROT_TEXT, exported_pdu_info.proto_col_str);
 		g_free(exported_pdu_info.proto_col_str);
 		exported_pdu_info.proto_col_str = NULL;
 	}
@@ -457,14 +457,14 @@ nettrace_msg_to_packet(nettrace_3gpp_32_423_file_info_t *file_info, wtap_rec *re
 		wtap_buffer_append_epdu_tag(buf, EXP_PDU_TAG_IPV4_SRC, exported_pdu_info.src_ip, EXP_PDU_TAG_IPV4_LEN);
 	}
 	if (exported_pdu_info.presence_flags & EXP_PDU_TAG_IP_DST_BIT) {
-		wtap_buffer_append_epdu_tag(buf, EXP_PDU_TAG_IPV4_SRC, exported_pdu_info.dst_ip, EXP_PDU_TAG_IPV4_LEN);
+		wtap_buffer_append_epdu_tag(buf, EXP_PDU_TAG_IPV4_DST, exported_pdu_info.dst_ip, EXP_PDU_TAG_IPV4_LEN);
 	}
 
 	if (exported_pdu_info.presence_flags & EXP_PDU_TAG_IP6_SRC_BIT) {
 		wtap_buffer_append_epdu_tag(buf, EXP_PDU_TAG_IPV6_SRC, exported_pdu_info.src_ip, EXP_PDU_TAG_IPV6_LEN);
 	}
 	if (exported_pdu_info.presence_flags & EXP_PDU_TAG_IP6_DST_BIT) {
-		wtap_buffer_append_epdu_tag(buf, EXP_PDU_TAG_IPV6_SRC, exported_pdu_info.dst_ip, EXP_PDU_TAG_IPV6_LEN);
+		wtap_buffer_append_epdu_tag(buf, EXP_PDU_TAG_IPV6_DST, exported_pdu_info.dst_ip, EXP_PDU_TAG_IPV6_LEN);
 	}
 
 	if (exported_pdu_info.presence_flags & (EXP_PDU_TAG_SRC_PORT_BIT | EXP_PDU_TAG_DST_PORT_BIT)) {
@@ -653,7 +653,8 @@ nettrace_3gpp_32_423_file_open(wtap *wth, int *err, gchar **err_info)
 {
 	char magic_buf[MAGIC_BUF_SIZE+1];
 	int bytes_read;
-	char *curr_pos;
+	const char *curr_pos;
+	nstime_t start_time;
 	nettrace_3gpp_32_423_file_info_t *file_info;
 	gint64 start_offset;
 
@@ -690,10 +691,15 @@ nettrace_3gpp_32_423_file_open(wtap *wth, int *err, gchar **err_info)
 		return WTAP_OPEN_NOT_MINE;
 	}
 	curr_pos += CLEN(c_begin_time);
+	/* Next we expect an ISO 8601-format time */
+	curr_pos = iso8601_to_nstime(&start_time, curr_pos, ISO8601_DATETIME);
+	if (!curr_pos) {
+		return WTAP_OPEN_NOT_MINE;
+	}
 
 	/* Ok it's our file. From here we'll need to free memory */
 	file_info = g_new0(nettrace_3gpp_32_423_file_info_t, 1);
-	curr_pos += iso8601_to_nstime(&file_info->start_time, curr_pos, ISO8601_DATETIME);
+	file_info->start_time = start_time;
 	file_info->start_offset = start_offset + (curr_pos - magic_buf);
 	file_info->buffer = g_byte_array_sized_new(RINGBUFFER_START_SIZE);
 	g_byte_array_append(file_info->buffer, curr_pos, (guint)(bytes_read - (curr_pos - magic_buf)));

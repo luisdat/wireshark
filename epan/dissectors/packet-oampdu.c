@@ -25,6 +25,8 @@
 void proto_register_oampdu(void);
 void proto_reg_handoff_oampdu(void);
 
+static dissector_handle_t oampdu_handle;
+
 #define OUI_CL_0                    0x00
 #define OUI_CL_1                    0x10
 #define OUI_CL_2                    0x00
@@ -987,7 +989,7 @@ static const unit_name_string units_pdus_100ms = { " (PDUs/100ms)", NULL };
 static const unit_name_string units_num_100ms = { " (Number of 100ms)", NULL };
 static const unit_name_string units_1k = { " (KB)", NULL };
 
-static dgt_set_t Dgt1_9_bcd = {
+static dgt_set_t Dgt0_9_bcd = {
     {
         /*  0   1   2   3   4   5   6   7   8   9   a   b   c   d   e   f */
            '0','1','2','3','4','5','6','7','8','9','?','?','?','?','?','?'
@@ -2055,7 +2057,7 @@ dissect_oampdu_vendor_specific(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
                                 /* Check for a BCD encoded year in the range 2000 - 2599 */
                                 if (year >= 0x2000 && year <= 0x2599) {
-                                    bcd_date = tvb_get_bcd_string(pinfo->pool, tvb, offset, 4, &Dgt1_9_bcd, FALSE, FALSE, TRUE);
+                                    bcd_date = tvb_get_bcd_string(pinfo->pool, tvb, offset, 4, &Dgt0_9_bcd, FALSE, FALSE, TRUE);
                                     date[0] = bcd_date[0];
                                     date[1] = bcd_date[1];
                                     date[2] = bcd_date[2];
@@ -2207,7 +2209,7 @@ dissect_oampdu_vendor_specific(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
                                                 break;
                                             case 0x05:
                                                 proto_item_append_text(dpoe_opcode_response, " Copy output field");
-                                                proto_tree_add_item(dpoe_opcode_response_tree, hf_oam_dpoe_user_port_object_result_rr_copy, tvb, offset+2, 2, ENC_BIG_ENDIAN);
+                                                proto_tree_add_item(dpoe_opcode_response_tree, hf_oam_dpoe_user_port_object_result_rr_copy, tvb, offset+4, 4, ENC_BIG_ENDIAN);
                                                 break;
                                             case 0x06:
                                                 proto_item_append_text(dpoe_opcode_response, " Delete field");
@@ -2426,37 +2428,37 @@ proto_register_oampdu(void)
 
         { &hf_oampdu_flags_link_fault,
             { "Link Fault",        "oampdu.flags.linkFault",
-                FT_BOOLEAN,    8,        TFS(&tfs_true_false),    OAMPDU_FLAGS_LINK_FAULT,
+                FT_BOOLEAN,    8,        NULL,    OAMPDU_FLAGS_LINK_FAULT,
                 "The PHY detected a fault in the receive direction. True = 1, False = 0", HFILL }},
 
         { &hf_oampdu_flags_dying_gasp,
             { "Dying Gasp",        "oampdu.flags.dyingGasp",
-                FT_BOOLEAN,    8,        TFS(&tfs_true_false),    OAMPDU_FLAGS_DYING_GASP,
+                FT_BOOLEAN,    8,        NULL,    OAMPDU_FLAGS_DYING_GASP,
                 "An unrecoverable local failure occurred. True = 1, False = 0", HFILL }},
 
         { &hf_oampdu_flags_critical_event,
             { "Critical Event",        "oampdu.flags.criticalEvent",
-                FT_BOOLEAN,    8,        TFS(&tfs_true_false),    OAMPDU_FLAGS_CRITICAL_EVENT,
+                FT_BOOLEAN,    8,        NULL,    OAMPDU_FLAGS_CRITICAL_EVENT,
                 "A critical event has occurred. True = 1, False = 0", HFILL }},
 
         { &hf_oampdu_flags_local_evaluating,
             { "Local Evaluating",        "oampdu.flags.localEvaluating",
-                FT_BOOLEAN,    8,        TFS(&tfs_true_false),    OAMPDU_FLAGS_LOCAL_EVAL,
+                FT_BOOLEAN,    8,        NULL,    OAMPDU_FLAGS_LOCAL_EVAL,
                 "Local DTE Discovery process in progress. True = 1, False = 0", HFILL }},
 
         { &hf_oampdu_flags_local_stable,
             { "Local Stable",        "oampdu.flags.localStable",
-                FT_BOOLEAN,    8,        TFS(&tfs_true_false),    OAMPDU_FLAGS_LOCAL_STABLE,
+                FT_BOOLEAN,    8,        NULL,    OAMPDU_FLAGS_LOCAL_STABLE,
                 "Local DTE is Stable. True = 1, False = 0", HFILL }},
 
         { &hf_oampdu_flags_remote_evaluating,
             { "Remote Evaluating",        "oampdu.flags.remoteEvaluating",
-                FT_BOOLEAN,    8,        TFS(&tfs_true_false),    OAMPDU_FLAGS_REMOTE_EVAL,
+                FT_BOOLEAN,    8,        NULL,    OAMPDU_FLAGS_REMOTE_EVAL,
                 "Remote DTE Discovery process in progress. True = 1, False = 0", HFILL }},
 
         { &hf_oampdu_flags_remote_stable,
             { "Remote Stable",        "oampdu.flags.remoteStable",
-                FT_BOOLEAN,    8,        TFS(&tfs_true_false),    OAMPDU_FLAGS_REMOTE_STABLE,
+                FT_BOOLEAN,    8,        NULL,    OAMPDU_FLAGS_REMOTE_STABLE,
                 "Remote DTE is Stable. True = 1, False = 0", HFILL }},
 
         { &hf_oampdu_code,
@@ -3074,32 +3076,32 @@ proto_register_oampdu(void)
 
         { &hf_oam_dpoe_user_port_object_result_rr_copy,
             { "Field Code to set from field used in last clause of rule", "oampdu.user.port.object.result.rr.copy",
-                FT_UINT8, BASE_HEX, NULL, 0x0,
+                FT_UINT32, BASE_HEX, NULL, 0x0,
                 NULL, HFILL } },
 
         { &hf_oam_dpoe_user_port_object_result_rr_delete,
             { "Field Code to remove from frame", "oampdu.user.port.object.result.rr.delete",
-                FT_UINT8, BASE_HEX, NULL, 0x0,
+                FT_UINT16, BASE_HEX, NULL, 0x0,
                 NULL, HFILL } },
 
         { &hf_oam_dpoe_user_port_object_result_rr_insert,
             { "Field Code to insert into frame", "oampdu.user.port.object.result.rr.insert",
-                FT_UINT8, BASE_HEX, NULL, 0x0,
+                FT_UINT16, BASE_HEX, NULL, 0x0,
                 NULL, HFILL } },
 
         { &hf_oam_dpoe_user_port_object_result_rr_replace,
             { "Field Code to replace", "oampdu.user.port.object.result.rr.replace",
-                FT_UINT8, BASE_HEX, NULL, 0x0,
+                FT_UINT16, BASE_HEX, NULL, 0x0,
                 NULL, HFILL } },
 
         { &hf_oam_dpoe_user_port_object_result_rr_cd,
             { "Field Code not to delete", "oampdu.user.port.object.result.rr.cd",
-                FT_UINT8, BASE_HEX, NULL, 0x0,
+                FT_UINT16, BASE_HEX, NULL, 0x0,
                 NULL, HFILL } },
 
         { &hf_oam_dpoe_user_port_object_result_rr_ci,
             { "Field Code not to insert", "oampdu.user.port.object.result.rr.ci",
-                FT_UINT8, BASE_HEX, NULL, 0x0,
+                FT_UINT16, BASE_HEX, NULL, 0x0,
                 NULL, HFILL } },
 
         { &hf_oam_dpoe_qc_ll_u,
@@ -3233,14 +3235,13 @@ proto_register_oampdu(void)
     proto_register_subtree_array(ett, array_length(ett));
     expert_oampdu = expert_register_protocol(proto_oampdu);
     expert_register_field_array(expert_oampdu, ei, array_length(ei));
+
+    oampdu_handle = register_dissector("oampdu", dissect_oampdu, proto_oampdu);
 }
 
 void
 proto_reg_handoff_oampdu(void)
 {
-    dissector_handle_t oampdu_handle;
-
-    oampdu_handle = create_dissector_handle(dissect_oampdu, proto_oampdu);
     dissector_add_uint("slow.subtype", OAM_SUBTYPE, oampdu_handle);
 }
 

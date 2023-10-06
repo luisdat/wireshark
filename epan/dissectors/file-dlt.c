@@ -14,8 +14,8 @@
 
  /*
   * Sources for specification:
-  * https://www.autosar.org/fileadmin/user_upload/standards/classic/21-11/AUTOSAR_SWS_DiagnosticLogAndTrace.pdf
-  * https://www.autosar.org/fileadmin/user_upload/standards/foundation/21-11/AUTOSAR_PRS_LogAndTraceProtocol.pdf
+  * https://www.autosar.org/fileadmin/standards/classic/21-11/AUTOSAR_SWS_DiagnosticLogAndTrace.pdf
+  * https://www.autosar.org/fileadmin/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf
   * https://github.com/COVESA/dlt-viewer
   */
 
@@ -23,11 +23,6 @@
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <epan/expert.h>
-#include <epan/exceptions.h>
-#include <epan/show_exception.h>
-#include <epan/wmem_scopes.h>
-#include <wiretap/autosar_dlt.h>
 
 static int proto_dlt = -1;
 

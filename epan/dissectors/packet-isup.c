@@ -52,7 +52,7 @@
 #include "packet-e164.h"
 #include "packet-charging_ase.h"
 #include "packet-mtp3.h"
-#include "packet-http.h"
+#include "packet-media-type.h"
 
 void proto_register_isup(void);
 void proto_reg_handoff_isup(void);
@@ -2134,7 +2134,7 @@ static const value_string isup_generic_name_type_value[] = {
 
 static const true_false_string isup_INN_ind_value = {
   "routing to internal network number not allowed",
-  "routing to internal network number allowed "
+  "routing to internal network number allowed"
 };
 static const true_false_string isup_NI_ind_value = {
   "incomplete",
@@ -4077,7 +4077,7 @@ dissect_ansi_isup_transit_network_selection_parameter(tvbuff_t *parameter_tvb, p
   proto_tree_add_bitmask_list(parameter_tree, parameter_tvb, 0, 1, indicators_fields, ENC_NA);
   offset = 1;
 
-  proto_tree_add_item(parameter_tree, hf_ansi_isup_nw_id, parameter_tvb, offset, 2, ENC_BCD_DIGITS_0_9);
+  proto_tree_add_item(parameter_tree, hf_ansi_isup_nw_id, parameter_tvb, offset, 2, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
   offset += 2;
   proto_tree_add_item(parameter_tree, hf_ansi_isup_circuit_code, parameter_tvb, offset, 1, ENC_BIG_ENDIAN);
 
@@ -4115,7 +4115,7 @@ dissect_ansi_isup_param_carrier_id(tvbuff_t *parameter_tvb, packet_info *pinfo _
   proto_tree_add_bitmask_list(parameter_tree, parameter_tvb, offset, 1, flags, ENC_BIG_ENDIAN);
   offset++;
 
-  proto_tree_add_item(parameter_tree, hf_ansi_isup_nw_id, parameter_tvb, offset, 2, ENC_BCD_DIGITS_0_9);
+  proto_tree_add_item(parameter_tree, hf_ansi_isup_nw_id, parameter_tvb, offset, 2, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
 
 }
 
@@ -5698,10 +5698,6 @@ dissect_isup_optional_backward_call_indicators_parameter(tvbuff_t *parameter_tvb
 /* ------------------------------------------------------------------
   Dissector Parameter User-to-user indicators
  */
-static const true_false_string isup_UUI_type_value = {
-  "Response",
-  "Request"
-};
 static const value_string isup_UUI_request_service_values[] = {
   { 0,  "No information"},
   { 1,  "Spare"},
@@ -7360,7 +7356,7 @@ dissect_japan_isup_contractor_number(tvbuff_t *parameter_tvb, packet_info *pinfo
   proto_tree_add_item(parameter_tree, hf_isup_numbering_plan_indicator, parameter_tvb, offset, 1, ENC_BIG_ENDIAN);
   offset += 1;
 
-  proto_tree_add_item_ret_display_string(parameter_tree, hf_japan_isup_contractor_number,  parameter_tvb, offset, parameter_length-2, ENC_BCD_DIGITS_0_9, pinfo->pool, &digit_str);
+  proto_tree_add_item_ret_display_string(parameter_tree, hf_japan_isup_contractor_number,  parameter_tvb, offset, parameter_length-2, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN, pinfo->pool, &digit_str);
 
   proto_item_append_text(parameter_item, " %s", digit_str);
 
@@ -8063,11 +8059,11 @@ dissect_isup_optional_parameter(tvbuff_t *optional_parameters_tvb, packet_info *
                                      "%u (%s)",
                                      parameter_type,
                                      val_to_str_ext_const(parameter_type, &japan_isup_parameter_type_value_ext, "unknown"));
-          proto_item_append_text(parameter_tree, ": %s", val_to_str_ext(parameter_type, &japan_isup_parameter_type_value_ext, "Unknown"));
+          proto_item_append_text(parameter_tree, ": %s", val_to_str_ext_const(parameter_type, &japan_isup_parameter_type_value_ext, "Unknown"));
           break;
         default:
           proto_tree_add_uint(parameter_tree, hf_isup_opt_parameter_type, optional_parameters_tvb, offset, PARAMETER_TYPE_LENGTH, parameter_type);
-          proto_item_append_text(parameter_tree, ": %s", val_to_str_ext(parameter_type, &ansi_isup_parameter_type_value_ext, "Unknown"));
+          proto_item_append_text(parameter_tree, ": %s", val_to_str_ext_const(parameter_type, &ansi_isup_parameter_type_value_ext, "Unknown"));
           break;
 
       }
@@ -8425,7 +8421,8 @@ dissect_ansi_isup_optional_parameter(tvbuff_t *optional_parameters_tvb, packet_i
 
       parameter_tree = proto_tree_add_subtree_format(isup_tree, optional_parameters_tvb,
                                            offset, parameter_length  + PARAMETER_TYPE_LENGTH + PARAMETER_LENGTH_IND_LENGTH,
-                                           ett_isup_parameter, &parameter_item, "Parameter: (t=%u, l=%u): %s", parameter_type, parameter_length, val_to_str_ext(parameter_type, &ansi_isup_parameter_type_value_ext, "Unknown"));
+                                           ett_isup_parameter, &parameter_item, "Parameter: (t=%u, l=%u): %s",
+                                           parameter_type, parameter_length, val_to_str_ext_const(parameter_type, &ansi_isup_parameter_type_value_ext, "Unknown"));
       proto_tree_add_uint(parameter_tree, hf_isup_opt_parameter_type, optional_parameters_tvb, offset,
                                  PARAMETER_TYPE_LENGTH, parameter_type);
       offset += PARAMETER_TYPE_LENGTH;
@@ -10550,10 +10547,10 @@ dissect_application_isup(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
   guint8      itu_isup_variant = ISUP_ITU_STANDARD_VARIANT; /* Default */
 
   if (data) {
-    http_message_info_t *message_info = (http_message_info_t *)data;
-    if (message_info->media_str) {
-      version = ws_find_media_type_parameter(pinfo->pool, message_info->media_str, "version");
-      base = ws_find_media_type_parameter(pinfo->pool, message_info->media_str, "base");
+    media_content_info_t *content_info = (media_content_info_t *)data;
+    if (content_info->media_str) {
+      version = ws_find_media_type_parameter(pinfo->pool, content_info->media_str, "version");
+      base = ws_find_media_type_parameter(pinfo->pool, content_info->media_str, "base");
       if ((version && g_ascii_strncasecmp(version, "ansi", 4) == 0) ||
           (base && g_ascii_strncasecmp(base, "ansi", 4) == 0) ||
           (version && g_ascii_strncasecmp(version, "gr", 2) == 0) ||
@@ -11201,7 +11198,7 @@ proto_register_isup(void)
 
     { &hf_isup_UUI_type,
       { "User-to-User indicator type",  "isup.UUI_type",
-        FT_BOOLEAN, 8, TFS(&isup_UUI_type_value), A_8BIT_MASK,
+        FT_BOOLEAN, 8, TFS(&tfs_response_request), A_8BIT_MASK,
         NULL, HFILL }},
 
     { &hf_isup_UUI_req_service1,

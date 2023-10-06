@@ -23,6 +23,8 @@
 void proto_register_vrt(void);
 void proto_reg_handoff_vrt(void);
 
+static dissector_handle_t vrt_handle;
+
 #define VITA_49_PORT    4991
 #define DEFAULT_EPHEMERIS_FIELDS { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }
 #define DEFAULT_FORMATTED_GPS_INS_FIELDS { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }
@@ -1709,13 +1711,13 @@ proto_register_vrt(void)
         { &hf_vrt_context_signal_data_format_repeat_count,
             { "Repeat count", "vrt.context.signaldataformat.repeatcount",
             FT_UINT16, BASE_DEC,
-            NULL, 0xFFFF,
+            NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_vrt_context_signal_data_format_vector_size,
             { "Vector size", "vrt.context.signaldataformat.vectorsize",
             FT_UINT16, BASE_DEC,
-            NULL, 0xFFFF,
+            NULL, 0,
             NULL, HFILL }
         },
         { &hf_vrt_context_gps.tsi,
@@ -2445,6 +2447,8 @@ proto_register_vrt(void)
     proto_register_field_array(proto_vrt, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
+    vrt_handle = register_dissector("vrt", dissect_vrt, proto_vrt);
+
     vrt_module = prefs_register_protocol(proto_vrt, NULL);
     prefs_register_bool_preference(vrt_module, "ettus_uhd_header_format",
         "Use Ettus UHD header format",
@@ -2455,10 +2459,10 @@ proto_register_vrt(void)
 void
 proto_reg_handoff_vrt(void)
 {
-    dissector_handle_t vrt_handle;
-
-    vrt_handle = create_dissector_handle(dissect_vrt, proto_vrt);
     dissector_add_uint_with_preference("udp.port", VITA_49_PORT, vrt_handle);
+
+    dissector_add_string("rtp_dyn_payload_type","VITA 49", vrt_handle);
+    dissector_add_uint_range_with_preference("rtp.pt", "", vrt_handle);
 }
 
 /*

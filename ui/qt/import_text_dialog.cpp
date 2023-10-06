@@ -185,7 +185,7 @@ ImportTextDialog::~ImportTextDialog()
 
 void ImportTextDialog::loadSettingsFile()
 {
-    QFileInfo fileInfo(QString(get_profile_dir(get_profile_name(), FALSE)), QString(SETTINGS_FILE));
+    QFileInfo fileInfo(gchar_free_to_qstring(get_profile_dir(get_profile_name(), FALSE)), QString(SETTINGS_FILE));
     QFile loadFile(fileInfo.filePath());
 
     if (!fileInfo.exists() || !fileInfo.isFile()) {
@@ -202,7 +202,7 @@ void ImportTextDialog::loadSettingsFile()
 
 void ImportTextDialog::saveSettingsFile()
 {
-    QFileInfo fileInfo(QString(get_profile_dir(get_profile_name(), FALSE)), QString(SETTINGS_FILE));
+    QFileInfo fileInfo(gchar_free_to_qstring(get_profile_dir(get_profile_name(), FALSE)), QString(SETTINGS_FILE));
     QFile saveFile(fileInfo.filePath());
 
     if (fileInfo.exists() && !fileInfo.isFile()) {
@@ -536,7 +536,8 @@ int ImportTextDialog::exec() {
     }
   cleanup_wtap:
     /* g_free checks for null */
-    g_free(params.idb_inf);
+    wtap_free_idb_info(params.idb_inf);
+    wtap_dump_params_cleanup(&params);
     g_free(tmp);
     g_free((gpointer) import_info_.payload);
     switch (import_info_.mode) {

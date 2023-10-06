@@ -139,7 +139,7 @@ set(WSUTIL_PUBLIC_HEADERS
 	ws_mempbrk_int.h
 	ws_pipe.h
 	ws_roundup.h
-	ws_return.h
+	ws_strptime.h
 	wsgcrypt.h
 	wsjson.h
 	wslog.h
@@ -200,6 +200,7 @@ set(WSUTIL_COMMON_FILES
 	ws_getopt.c
 	ws_mempbrk.c
 	ws_pipe.c
+	ws_strptime.c
 	wsgcrypt.c
 	wsjson.c
 	wslog.c
@@ -302,10 +303,6 @@ if(COMPILER_CAN_HANDLE_SSE4_2)
 endif()
 if(HAVE_SSE4_2)
 	list(APPEND WSUTIL_FILES ws_mempbrk_sse42.c)
-endif()
-
-if(NOT HAVE_STRPTIME)
-	list(APPEND WSUTIL_FILES strptime.c)
 endif()
 
 if(APPLE)

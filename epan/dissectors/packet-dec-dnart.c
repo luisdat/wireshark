@@ -81,6 +81,8 @@ typedef enum {
 void proto_register_dec_rt(void);
 void proto_reg_handoff_dec_rt(void);
 
+static dissector_handle_t dec_rt_handle;
+
 static int proto_dec_rt = -1;
 
 static int hf_dec_routing_flags = -1;
@@ -221,9 +223,9 @@ static const value_string rt_flow_control_vals[] = {
 
 static const value_string rt_services_vals[] = {
     {0x00,  "none"},
-    {0x04,  "segment request count"},
-    {0x08,  "Session control message request count"},
-    {0x0c,  "reserved"},
+    {0x01,  "segment request count"},
+    {0x02,  "Session control message request count"},
+    {0x03,  "reserved"},
     {0x0,   NULL}
 };
 
@@ -1258,7 +1260,7 @@ proto_register_dec_rt(void)
             NULL, HFILL }},
         { &hf_dec_rt_segnum,
           { "Message number",        "dec_dna.nsp.segnum",
-            FT_UINT16,    BASE_DEC,    NULL,   0xfff,
+            FT_UINT16,    BASE_DEC,    NULL,   0x0fff,
             "Segment number", HFILL }},
         { &hf_dec_rt_delay,
           { "Delayed ACK allowed",  "dec_dna.nsp.delay",
@@ -1457,15 +1459,14 @@ proto_register_dec_rt(void)
     proto_register_subtree_array(ett, array_length(ett));
     expert_dec_rt = expert_register_protocol(proto_dec_rt);
     expert_register_field_array(expert_dec_rt, ei, array_length(ei));
+
+    dec_rt_handle = register_dissector("dec_dna", dissect_dec_rt,
+                                            proto_dec_rt);
 }
 
 void
 proto_reg_handoff_dec_rt(void)
 {
-    dissector_handle_t dec_rt_handle;
-
-    dec_rt_handle = create_dissector_handle(dissect_dec_rt,
-                                            proto_dec_rt);
     dissector_add_uint("ethertype", ETHERTYPE_DNA_RT, dec_rt_handle);
     dissector_add_uint("chdlc.protocol", ETHERTYPE_DNA_RT, dec_rt_handle);
     dissector_add_uint("ppp.protocol", PPP_DEC4, dec_rt_handle);

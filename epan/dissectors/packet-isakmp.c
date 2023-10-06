@@ -4983,7 +4983,7 @@ dissect_notif(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_t
             bit_offset += 6;
 
             /* Payload Octet 7 - Identity type */
-            proto_tree_add_bits_ret_val(tree, hf_isakmp_notify_data_3gpp_device_identity_type, tvb, bit_offset, 2, &octet, ENC_LITTLE_ENDIAN);
+            proto_tree_add_bits_ret_val(tree, hf_isakmp_notify_data_3gpp_device_identity_type, tvb, bit_offset, 2, &octet, ENC_BIG_ENDIAN);
 
             offset += 1;
             length -= 3;
@@ -4996,11 +4996,11 @@ dissect_notif(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_t
             switch (octet) {
                 case 1:
                     /* IMEI */
-                    proto_tree_add_item(tree, hf_isakmp_notify_data_3gpp_device_identity_imei, tvb, offset, length, ENC_BCD_DIGITS_0_9);
+                    proto_tree_add_item(tree, hf_isakmp_notify_data_3gpp_device_identity_imei, tvb, offset, length, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
                     break;
                 case 2:
                     /* IMEISV */
-                    proto_tree_add_item(tree, hf_isakmp_notify_data_3gpp_device_identity_imeisv, tvb, offset, length, ENC_BCD_DIGITS_0_9);
+                    proto_tree_add_item(tree, hf_isakmp_notify_data_3gpp_device_identity_imeisv, tvb, offset, length, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
                     break;
                 default:
                     proto_tree_add_expert(tree, pinfo, &ei_isakmp_notify_data_3gpp_unknown_device_identity, tvb, offset, length);
@@ -5055,7 +5055,7 @@ dissect_notif(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_t
 
             /*IE Octet 5 to j | Digit_N+1 | Digit_N | */
             current_em_num_len -= 2; //Not counting octets 3 and 4
-            proto_tree_add_item(current_emergency_call_number_tree, hf_iskamp_notify_data_3gpp_emergency_call_number, tvb, offset, current_em_num_len, ENC_BCD_DIGITS_0_9);
+            proto_tree_add_item(current_emergency_call_number_tree, hf_iskamp_notify_data_3gpp_emergency_call_number, tvb, offset, current_em_num_len, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
             offset += current_em_num_len; //moving to the next number in the list
           }
         }
@@ -6326,7 +6326,7 @@ isakmp_cleanup_protocol(void) {
 UAT_BUFFER_CB_DEF(ikev1_users, icookie, ikev1_uat_data_key_t, icookie, icookie_len)
 UAT_BUFFER_CB_DEF(ikev1_users, key, ikev1_uat_data_key_t, key, key_len)
 
-static gboolean ikev1_uat_data_update_cb(void* p, char** err) {
+static bool ikev1_uat_data_update_cb(void* p, char** err) {
   ikev1_uat_data_key_t *ud = (ikev1_uat_data_key_t *)p;
 
   if (ud->icookie_len != COOKIE_SIZE) {
@@ -6411,7 +6411,7 @@ ikev2_uat_data_copy_cb(void *dest, const void *source, size_t len _U_)
   return dest;
 }
 
-static gboolean ikev2_uat_data_update_cb(void* p, char** err) {
+static bool ikev2_uat_data_update_cb(void* p, char** err) {
   ikev2_uat_data_t *ud = (ikev2_uat_data_t *)p;
 
   if (ud->key.spii_len != COOKIE_SIZE) {
@@ -7617,7 +7617,7 @@ proto_register_isakmp(void)
         FT_UINT8, BASE_DEC, NULL, 0x00,
         NULL, HFILL }},
     { &hf_isakmp_cfg_attr_internal_ip6_netmask,
-      { "INTERNAL IP4 NETMASK", "isakmp.cfg.attr.internal_ip6_netmask",
+      { "INTERNAL IP6 NETMASK", "isakmp.cfg.attr.internal_ip6_netmask",
         FT_IPv6, BASE_NONE, NULL, 0x00,
         "The internal network's netmask", HFILL }},
     { &hf_isakmp_cfg_attr_internal_ip6_dns,
@@ -7811,7 +7811,7 @@ proto_register_isakmp(void)
         NULL, HFILL }},
     { &hf_isakmp_sat_src_id_length,
       { "SRC ID Data Length", "isakmp.sat.src_id_length",
-        FT_UINT8, BASE_DEC, NULL, 0x0,
+        FT_UINT16, BASE_DEC, NULL, 0x0,
         NULL, HFILL }},
     { &hf_isakmp_sat_src_id_data,
       { "SRC ID Data", "isakmp.sat.src_id_data",
@@ -7827,7 +7827,7 @@ proto_register_isakmp(void)
         NULL, HFILL }},
     { &hf_isakmp_sat_dst_id_length,
       { "DST ID Data Length", "isakmp.sat.dst_id_length",
-        FT_UINT8, BASE_DEC, NULL, 0x0,
+        FT_UINT16, BASE_DEC, NULL, 0x0,
         NULL, HFILL }},
     { &hf_isakmp_sat_dst_id_data,
       { "DST ID Data", "isakmp.sat.dst_id_data",

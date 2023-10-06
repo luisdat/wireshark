@@ -13,17 +13,17 @@
 #include "config.h"
 
 #include <stdlib.h>
-#include <errno.h>
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <epan/addr_resolv.h>
 #include <epan/conversation.h>
 
 #include "packet-infiniband.h"
 
 void proto_register_ib_sdp(void);
 void proto_reg_handoff_ib_sdp(void);
+
+static dissector_handle_t ib_sdp_handle;
 
 /* If the service-id is non-zero after being ANDed with the following mask then
    this is SDP traffic */
@@ -152,7 +152,7 @@ dissect_ib_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_mid, tvb, local_offset, 1, ENC_BIG_ENDIAN); local_offset += 1;
 
     col_append_fstr(pinfo->cinfo, COL_INFO, "(SDP %s)",
-                    rval_to_str(mid, mid_meanings, "Unknown"));
+                    rval_to_str_const(mid, mid_meanings, "Unknown"));
 
     proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags, tvb, local_offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags_oobpres, tvb, local_offset, 2, ENC_BIG_ENDIAN);
@@ -429,7 +429,7 @@ proto_register_ib_sdp(void)
 
     proto_ib_sdp = proto_register_protocol("Infiniband Sockets Direct Protocol", "Infiniband SDP", "infiniband_sdp");
 
-    register_dissector("infiniband_sdp", dissect_ib_sdp, proto_ib_sdp);
+    ib_sdp_handle = register_dissector("infiniband_sdp", dissect_ib_sdp, proto_ib_sdp);
 
     /* Required function calls to register the header fields and subtrees used */
     proto_register_field_array(proto_ib_sdp, hf, array_length(hf));
@@ -462,7 +462,7 @@ proto_reg_handoff_ib_sdp(void)
     heur_dissector_add("infiniband.payload", dissect_ib_sdp_heur, "Infiniband SDP", "sdp_infiniband", proto_ib_sdp, HEURISTIC_ENABLE);
     heur_dissector_add("infiniband.mad.cm.private", dissect_ib_sdp_heur, "Infiniband SDP in PrivateData of CM packets", "sdp_ib_private", proto_ib_sdp, HEURISTIC_ENABLE);
 
-    dissector_add_for_decode_as("infiniband", create_dissector_handle( dissect_ib_sdp, proto_ib_sdp ) );
+    dissector_add_for_decode_as("infiniband", ib_sdp_handle);
 
     proto_infiniband = proto_get_id_by_filter_name( "infiniband" );
 }

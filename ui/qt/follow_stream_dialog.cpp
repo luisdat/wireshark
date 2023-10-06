@@ -23,6 +23,7 @@
 
 #include "ui/alert_box.h"
 #include "ui/simple_dialog.h"
+#include <ui/recent.h>
 #include <wsutil/utf8_entities.h>
 #include <wsutil/ws_assert.h>
 
@@ -64,12 +65,13 @@ static QMutex loop_break_mutex;
 // Indicates that a Follow Stream is currently running
 static gboolean isReadRunning;
 
+Q_DECLARE_METATYPE(bytes_show_type)
+
 FollowStreamDialog::FollowStreamDialog(QWidget &parent, CaptureFile &cf, int proto_id) :
     WiresharkDialog(parent, cf),
     ui(new Ui::FollowStreamDialog),
     b_find_(NULL),
     follower_(NULL),
-    show_type_(SHOW_ASCII),
     truncated_(false),
     client_buffer_count_(0),
     server_buffer_count_(0),
@@ -111,6 +113,7 @@ FollowStreamDialog::FollowStreamDialog(QWidget &parent, CaptureFile &cf, int pro
     // UTF-8 is guaranteed to exist as a QTextCodec
     cbcs->addItem(tr("UTF-8"), SHOW_CODEC);
     cbcs->addItem(tr("YAML"), SHOW_YAML);
+    cbcs->setCurrentIndex(cbcs->findData(recent.gui_follow_show));
     cbcs->blockSignals(false);
 
     b_filter_out_ = ui->buttonBox->addButton(tr("Filter Out This Stream"), QDialogButtonBox::ActionRole);
@@ -287,7 +290,7 @@ void FollowStreamDialog::saveAs()
 
     // Unconditionally save data as UTF-8 (even if data is decoded otherwise).
     QByteArray bytes = ui->teStreamContent->toPlainText().toUtf8();
-    if (show_type_ == SHOW_RAW) {
+    if (recent.gui_follow_show == SHOW_RAW) {
         // The "Raw" format is currently displayed as hex data and needs to be
         // converted to binary data.
         bytes = QByteArray::fromHex(bytes);
@@ -358,7 +361,7 @@ void FollowStreamDialog::on_cbDirections_currentIndexChanged(int idx)
 void FollowStreamDialog::on_cbCharset_currentIndexChanged(int idx)
 {
     if (idx < 0) return;
-    show_type_ = static_cast<show_type_t>(ui->cbCharset->itemData(idx).toInt());
+    recent.gui_follow_show = ui->cbCharset->currentData().value<bytes_show_type>();
     readStream();
 }
 
@@ -537,6 +540,22 @@ FollowStreamDialog::readStream()
 
     ui->teStreamContent->clear();
     text_pos_to_packet_.clear();
+    switch (recent.gui_follow_show) {
+
+    case SHOW_CARRAY:
+    case SHOW_HEXDUMP:
+    case SHOW_YAML:
+        /* We control the width and insert line breaks in these formats. */
+        ui->teStreamContent->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        break;
+
+    default:
+        /* Everything else might have extremely long lines without whitespace,
+         * (SHOW_RAW almost surely so), and QTextEdit is O(N^2) trying
+         * to search for word boundaries on long lines when adding text.
+         */
+        ui->teStreamContent->setWordWrapMode(QTextOption::WrapAnywhere);
+    }
 
     truncated_ = false;
     frs_return_t ret;
@@ -677,7 +696,7 @@ FollowStreamDialog::showBuffer(char *buffer, size_t nchars, gboolean is_from_ser
     guint32 current_pos;
     static const gchar hexchars[16] = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
 
-    switch (show_type_) {
+    switch (recent.gui_follow_show) {
 
     case SHOW_EBCDIC:
     {
@@ -884,6 +903,12 @@ DIAG_ON(stringop-overread)
         addText(ba, is_from_server, packet_num);
         break;
     }
+
+    default:
+        /* The other Show types are supported in Show Packet Bytes but
+         * not here in Follow. (XXX: Maybe some could be added?)
+         */
+        ws_assert_not_reached();
     }
 
     if (last_packet_ == 0) {

@@ -24,7 +24,7 @@
 
 #include <wiretap/wtap.h>
 
-#include "packet-http.h"
+#include "packet-media-type.h"
 #include "packet-acdr.h"
 #include "packet-json.h"
 
@@ -84,6 +84,15 @@ static gint ett_json_member_raw = -1;
 static gboolean json_compact = FALSE;
 
 static gboolean json_raw = FALSE;
+
+/* Determine whether to hide the tree of original form or root item of compact or raw form
+ * based on the enabled status of compact_form and raw_form preferences.
+ * If the preference auto_hide is TRUE and compact_form or raw_form is TRUE, hide the tree of
+ * original form. If the preference auto_hide is TRUE and only one of preference of
+ * compact_form or raw_form is TRUE, then hide the root item of compact or raw form and put
+ * the content of compact or raw form under the tree item of JSON protocol directly.
+ */
+static gboolean auto_hide = FALSE;
 
 static gboolean ignore_leading_bytes = FALSE;
 
@@ -145,6 +154,9 @@ typedef struct {
 #define JSON_ARRAY_OBJECT_END(json_tvbparse_data) wmem_stack_pop(json_tvbparse_data->array_idx)
 #define JSON_INSIDE_ARRAY(idx) (idx >= JSON_COMPACT_ARRAY)
 #define JSON_OBJECT_SET_HAS_KEY(idx) (idx == JSON_COMPACT_OBJECT_WITH_KEY)
+
+#define json_hide_original_tree() (auto_hide && (json_compact || json_raw))
+#define json_hide_root_item() (auto_hide && ((json_compact && !json_raw) || (!json_compact && json_raw)))
 
 static void
 json_array_index_increment(json_parser_data_t *data)
@@ -483,7 +495,7 @@ dissect_json(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 	json_parser_data_t parser_data;
 	tvbparse_t *tt;
 
-	http_message_info_t *message_info;
+	media_content_info_t *content_info;
 	const char *data_name;
 	int offset;
 
@@ -510,14 +522,14 @@ dissect_json(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 		/*
 		 * No information from "match_string"
 		 */
-		message_info = (http_message_info_t *)data;
-		if (message_info == NULL) {
+		content_info = (media_content_info_t *)data;
+		if (content_info == NULL) {
 			/*
 			 * No information from dissector data
 			 */
 			data_name = NULL;
 		} else {
-			data_name = message_info->media_str;
+			data_name = content_info->media_str;
 			if (! (data_name && data_name[0])) {
 				/*
 				 * No information from dissector data
@@ -567,8 +579,8 @@ dissect_json(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 	}
 
 	if (json_compact) {
-		proto_tree* json_tree_compact = NULL;
-		json_tree_compact = proto_tree_add_subtree(json_tree, tvb, 0, -1, ett_json_compact, NULL, "JSON compact form:");
+		proto_tree* json_tree_compact = json_hide_root_item() ? json_tree :
+			proto_tree_add_subtree(json_tree, tvb, 0, -1, ett_json_compact, NULL, "JSON compact form:");
 
 		parser_data.stack_compact = wmem_stack_new(pinfo->pool);
 		wmem_stack_push(parser_data.stack_compact, json_tree_compact);
@@ -578,8 +590,8 @@ dissect_json(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 	}
 
 	if (json_raw) {
-		proto_tree* json_tree_raw = NULL;
-		json_tree_raw = proto_tree_add_subtree(json_tree, tvb, 0, -1, ett_json_raw, NULL, "JSON raw form:");
+		proto_tree* json_tree_raw = json_hide_root_item() ? json_tree :
+			proto_tree_add_subtree(json_tree, tvb, 0, -1, ett_json_raw, NULL, "JSON raw form:");
 
 		parser_data.stack_raw = wmem_stack_new(pinfo->pool);
 		wmem_stack_push(parser_data.stack_raw, json_tree_raw);
@@ -630,6 +642,9 @@ before_object(void *tvbparse_data, const void *wanted_data _U_, tvbparse_elem_t 
 	proto_item *ti;
 
 	ti = proto_tree_add_item(tree, hf_json_object, tok->tvb, tok->offset, tok->len, ENC_NA);
+	if (json_hide_original_tree() && wmem_stack_count(data->stack) == 1) {
+		proto_item_set_hidden(ti);
+	}
 
 	subtree = proto_item_add_subtree(ti, ett_json_object);
 	wmem_stack_push(data->stack, subtree);
@@ -838,6 +853,9 @@ before_array(void *tvbparse_data, const void *wanted_data _U_, tvbparse_elem_t *
 	proto_item *ti;
 
 	ti = proto_tree_add_item(tree, hf_json_array, tok->tvb, tok->offset, tok->len, ENC_NA);
+	if (json_hide_original_tree() && wmem_stack_count(data->stack) == 1) {
+		proto_item_set_hidden(ti);
+	}
 
 	subtree = proto_item_add_subtree(ti, ett_json_array);
 	wmem_stack_push(data->stack, subtree);
@@ -1396,6 +1414,12 @@ proto_register_json(void)
 		"Display JSON in raw form",
 		"Display JSON like in vscode editor",
 		&json_raw);
+
+	prefs_register_bool_preference(json_module, "auto_hide",
+		"Hide tree or root item automatically",
+		"Determine whether to hide the tree of original form or root item of compact or raw form"
+		" based on the enabled status of compact_form and raw_form preferences.",
+		&auto_hide);
 
 	prefs_register_bool_preference(json_module, "ignore_leading_bytes",
 		"Ignore leading non JSON bytes",

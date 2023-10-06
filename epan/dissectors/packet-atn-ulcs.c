@@ -1525,7 +1525,7 @@ static const value_string atn_ulcs_ABRT_diagnostic_vals[] = {
   { 0, NULL }
 };
 
-static guint32 ABRT_diagnostic_value_map[6+0] = {1, 2, 3, 4, 5, 6};
+static uint32_t ABRT_diagnostic_value_map[6+0] = {1, 2, 3, 4, 5, 6};
 
 static int
 dissect_atn_ulcs_ABRT_diagnostic(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
@@ -2081,7 +2081,7 @@ dissect_atn_ulcs(
             1,
             value_ses_pres,
             "%s (0x%02x)",
-            val_to_str( value_ses_pres & ATN_SES_PRES_MASK , atn_pres_vals, "?"),
+            val_to_str_const( value_ses_pres & ATN_SES_PRES_MASK, atn_pres_vals, "?"),
             value_pres);
 
         /* PPDU errorcode in case of SRF/CPR */
@@ -2523,7 +2523,7 @@ void proto_register_atn_ulcs (void)
           HFILL}},
       { &hf_atn_pres_pdu_type,
         { "PDU type", "atn-ulcs.pres.pdu_type",
-          FT_UINT8,
+          FT_UINT16,
           BASE_HEX,
           NULL,
           ATN_SES_PRES_MASK,

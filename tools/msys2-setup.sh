@@ -71,16 +71,17 @@ BASIC_LIST="base-devel \
 	${PACKAGE_PREFIX}-libsmi \
 	${PACKAGE_PREFIX}-libssh \
 	${PACKAGE_PREFIX}-libxml2 \
-	${PACKAGE_PREFIX}-lua51 \
 	${PACKAGE_PREFIX}-lz4 \
 	${PACKAGE_PREFIX}-minizip \
 	${PACKAGE_PREFIX}-ninja \
+	${PACKAGE_PREFIX}-opencore-amr \
 	${PACKAGE_PREFIX}-opus \
 	${PACKAGE_PREFIX}-pcre2 \
 	${PACKAGE_PREFIX}-python \
 	${PACKAGE_PREFIX}-qt6-base \
 	${PACKAGE_PREFIX}-qt6-multimedia \
 	${PACKAGE_PREFIX}-qt6-tools \
+	${PACKAGE_PREFIX}-qt6-translations \
 	${PACKAGE_PREFIX}-qt6-5compat \
 	${PACKAGE_PREFIX}-sbc \
 	${PACKAGE_PREFIX}-snappy \
@@ -93,9 +94,11 @@ BASIC_LIST="base-devel \
 
 ADDITIONAL_LIST="${PACKAGE_PREFIX}-asciidoctor \
 	${PACKAGE_PREFIX}-ccache \
+	${PACKAGE_PREFIX}-docbook-xsl \
 	${PACKAGE_PREFIX}-doxygen \
+	${PACKAGE_PREFIX}-libxslt \
 	${PACKAGE_PREFIX}-perl \
-	${PACKAGE_PREFIX}-libxslt"
+	${PACKAGE_PREFIX}-ntldd"
 
 TESTDEPS_LIST="${PACKAGE_PREFIX}-python-pytest \
 	${PACKAGE_PREFIX}-python-pytest-xdist"

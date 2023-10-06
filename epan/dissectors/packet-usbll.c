@@ -22,10 +22,16 @@
 #include <epan/to_str.h>
 #include <epan/proto_data.h>
 #include <epan/reassemble.h>
+#include <wiretap/wtap.h>
 #include "packet-usb.h"
 
 void proto_register_usbll(void);
 void proto_reg_handoff_usbll(void);
+
+static dissector_handle_t unknown_speed_handle;
+static dissector_handle_t low_speed_handle;
+static dissector_handle_t full_speed_handle;
+static dissector_handle_t high_speed_handle;
 
 static int proto_usbll = -1;
 
@@ -237,7 +243,7 @@ static guint besl_to_us(guint8 besl)
     return us;
 }
 
-static void lpm_besl_str(gchar *buf, guint32 value)
+void usb_lpm_besl_str(gchar *buf, guint32 value)
 {
     snprintf(buf, ITEM_LABEL_LENGTH, "%d us (%d)", besl_to_us(value), value);
 }
@@ -1700,11 +1706,11 @@ static gboolean is_get_device_descriptor(guint8 setup[8])
 static gboolean is_set_address(guint8 setup[8])
 {
     guint16 addr = setup[2] | (setup[3] << 8);
-    guint16 index = setup[4] | (setup[5] << 8);
+    guint16 idx = setup[4] | (setup[5] << 8);
     guint16 length = setup[6] | (setup[7] << 8);
     return (setup[0] == USB_DIR_OUT) &&
            (setup[1] == USB_SETUP_SET_ADDRESS) &&
-           (addr <= 127) && (index == 0x00) && (length == 0x00);
+           (addr <= 127) && (idx == 0x00) && (length == 0x00);
 }
 
 static void
@@ -1860,7 +1866,7 @@ dissect_usbll_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offs
                         /* Merge SETUP data with OUT Data to pass to USB dissector */
                         transfer->more_frags = TRUE;
                         ep_out->active_transfer_key = pinfo->num;
-                        ep_out->requested_transfer_length = requested_length;
+                        ep_out->requested_transfer_length = 8 + requested_length;
                         ep_out->transfer_offset = 8;
                         ep_out->last_data_pid = pid;
                         ep_out->last_data_acked = FALSE;
@@ -2652,7 +2658,7 @@ proto_register_usbll(void)
               NULL, HFILL }},
         { &hf_usbll_lpm_besl,
             { "BESL", "usbll.lpm_besl",
-              FT_UINT16, BASE_CUSTOM, CF_FUNC(lpm_besl_str), 0x00F0,
+              FT_UINT16, BASE_CUSTOM, CF_FUNC(usb_lpm_besl_str), 0x00F0,
               "Best Effort Service Latency", HFILL}},
         { &hf_usbll_lpm_remote_wake,
             { "bRemoteWake", "usbll.lpm_remote_wake",
@@ -2699,7 +2705,10 @@ proto_register_usbll(void)
         "Use specified speed if speed is not indicated in capture",
         &global_dissect_unknown_speed_as, dissect_unknown_speed_as, FALSE);
 
-    register_dissector("usbll", dissect_usbll_unknown_speed, proto_usbll);
+    unknown_speed_handle = register_dissector("usbll", dissect_usbll_unknown_speed, proto_usbll);
+    low_speed_handle = register_dissector("usbll.low_speed", dissect_usbll_low_speed, proto_usbll);
+    full_speed_handle = register_dissector("usbll.full_speed", dissect_usbll_full_speed, proto_usbll);
+    high_speed_handle = register_dissector("usbll.high_speed", dissect_usbll_high_speed, proto_usbll);
     register_cleanup_routine(usbll_cleanup_data);
 
     usbll_address_type = address_type_dissector_register("AT_USBLL", "USBLL Address",
@@ -2712,11 +2721,6 @@ proto_register_usbll(void)
 void
 proto_reg_handoff_usbll(void)
 {
-    dissector_handle_t unknown_speed_handle = create_dissector_handle(dissect_usbll_unknown_speed, proto_usbll);
-    dissector_handle_t low_speed_handle = create_dissector_handle(dissect_usbll_low_speed, proto_usbll);
-    dissector_handle_t full_speed_handle = create_dissector_handle(dissect_usbll_full_speed, proto_usbll);
-    dissector_handle_t high_speed_handle = create_dissector_handle(dissect_usbll_high_speed, proto_usbll);
-
     dissector_add_uint("wtap_encap", WTAP_ENCAP_USB_2_0, unknown_speed_handle);
     dissector_add_uint("wtap_encap", WTAP_ENCAP_USB_2_0_LOW_SPEED, low_speed_handle);
     dissector_add_uint("wtap_encap", WTAP_ENCAP_USB_2_0_FULL_SPEED, full_speed_handle);

@@ -23,6 +23,8 @@
 void proto_register_ajp13(void);
 void proto_reg_handoff_ajp13(void);
 
+static dissector_handle_t ajp13_handle;
+
 #define AJP13_TCP_PORT 8009 /* Not IANA registered */
 
 /* IMPORTANT IMPLEMENTATION NOTES
@@ -295,7 +297,7 @@ typedef struct ajp13_frame_data {
  * XXX - is there a tvbuff routine to handle this?
  */
 static const gchar *
-ajp13_get_nstring(tvbuff_t *tvb, gint offset, guint16* ret_len)
+ajp13_get_nstring(wmem_allocator_t *scope, tvbuff_t *tvb, gint offset, guint16* ret_len)
 {
   guint16 len;
 
@@ -308,7 +310,7 @@ ajp13_get_nstring(tvbuff_t *tvb, gint offset, guint16* ret_len)
   if (len == 0xFFFF)
     len = 0;
 
-  return tvb_format_text(wmem_packet_scope(), tvb, offset+2, len);
+  return tvb_format_text(scope, tvb, offset+2, len);
 }
 
 
@@ -367,7 +369,7 @@ display_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ajp13_tree, ajp13_con
 
     /* HTTP RESPONSE STATUS MESSAGE
      */
-    rsmsg = ajp13_get_nstring(tvb, pos, &rsmsg_len);
+    rsmsg = ajp13_get_nstring(pinfo->pool, tvb, pos, &rsmsg_len);
     col_append_fstr(pinfo->cinfo, COL_INFO, " %s", rsmsg);
     if (ajp13_tree)
       proto_tree_add_string(ajp13_tree, hf_ajp13_rsmsg, tvb, pos, rsmsg_len+2, rsmsg);
@@ -404,7 +406,7 @@ display_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ajp13_tree, ajp13_con
         if (hid >= array_length(rsp_headers))
           hid = 0;
 
-        hval = ajp13_get_nstring(tvb, pos, &hval_len);
+        hval = ajp13_get_nstring(pinfo->pool, tvb, pos, &hval_len);
 
         proto_tree_add_string_format_value(ajp13_tree, *rsp_headers[hid],
                                        tvb, hpos, 2+hval_len+2, hval,
@@ -416,10 +418,10 @@ display_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ajp13_tree, ajp13_con
           cl = 1;
 #endif
       } else {
-        hname = ajp13_get_nstring(tvb, pos, &hname_len);
+        hname = ajp13_get_nstring(pinfo->pool, tvb, pos, &hname_len);
         pos+=hname_len+2;
 
-        hval = ajp13_get_nstring(tvb, pos, &hval_len);
+        hval = ajp13_get_nstring(pinfo->pool, tvb, pos, &hval_len);
 
         if (hcd >= array_length(rsp_headers)) {
           hcd = 0;
@@ -571,14 +573,14 @@ display_req_forward(tvbuff_t *tvb, packet_info *pinfo,
 
   /* HTTP VERSION STRING
    */
-  ver = ajp13_get_nstring(tvb, pos, &ver_len);
+  ver = ajp13_get_nstring(pinfo->pool, tvb, pos, &ver_len);
   if (ajp13_tree)
     proto_tree_add_string(ajp13_tree, hf_ajp13_ver, tvb, pos, ver_len+2, ver);
   pos=pos+ver_len+2;  /* skip over size + chars + trailing null */
 
   /* URI
    */
-  uri = ajp13_get_nstring(tvb, pos, &uri_len);
+  uri = ajp13_get_nstring(pinfo->pool, tvb, pos, &uri_len);
   if (ajp13_tree)
     proto_tree_add_string(ajp13_tree, hf_ajp13_uri, tvb, pos, uri_len+2, uri);
   pos=pos+uri_len+2;  /* skip over size + chars + trailing null */
@@ -589,21 +591,21 @@ display_req_forward(tvbuff_t *tvb, packet_info *pinfo,
 
   /* REMOTE ADDRESS
    */
-  raddr = ajp13_get_nstring(tvb, pos, &raddr_len);
+  raddr = ajp13_get_nstring(pinfo->pool, tvb, pos, &raddr_len);
   if (ajp13_tree)
     proto_tree_add_string(ajp13_tree, hf_ajp13_raddr, tvb, pos, raddr_len+2, raddr);
   pos=pos+raddr_len+2;  /* skip over size + chars + trailing null */
 
   /* REMOTE HOST
    */
-  rhost = ajp13_get_nstring(tvb, pos, &rhost_len);
+  rhost = ajp13_get_nstring(pinfo->pool, tvb, pos, &rhost_len);
   if (ajp13_tree)
     proto_tree_add_string(ajp13_tree, hf_ajp13_rhost, tvb, pos, rhost_len+2, rhost);
   pos=pos+rhost_len+2;  /* skip over size + chars + trailing null */
 
   /* SERVER NAME
    */
-  srv = ajp13_get_nstring(tvb, pos, &srv_len);
+  srv = ajp13_get_nstring(pinfo->pool, tvb, pos, &srv_len);
   if (ajp13_tree)
     proto_tree_add_string(ajp13_tree, hf_ajp13_srv, tvb, pos, srv_len+2, srv);
   pos=pos+srv_len+2;  /* skip over size + chars + trailing null */
@@ -654,7 +656,7 @@ display_req_forward(tvbuff_t *tvb, packet_info *pinfo,
       if (hid >= array_length(req_headers))
         hid = 0;
 
-      hval = ajp13_get_nstring(tvb, pos, &hval_len);
+      hval = ajp13_get_nstring(pinfo->pool, tvb, pos, &hval_len);
 
 
       pi = proto_tree_add_string_format_value(ajp13_tree, *req_headers[hid],
@@ -667,14 +669,14 @@ display_req_forward(tvbuff_t *tvb, packet_info *pinfo,
 
       pos+=hval_len+2;
     } else {
-      hname = ajp13_get_nstring(tvb, pos, &hname_len);
+      hname = ajp13_get_nstring(pinfo->pool, tvb, pos, &hname_len);
       pos+=hname_len+2;
 
       if (hcd >= array_length(req_headers)) {
         hcd = 0;
       }
 
-      hval = ajp13_get_nstring(tvb, pos, &hval_len);
+      hval = ajp13_get_nstring(pinfo->pool, tvb, pos, &hval_len);
 
       proto_tree_add_string_format(ajp13_tree, *req_headers[hcd],
                                      tvb, hpos, hname_len+2+hval_len+2,
@@ -706,10 +708,10 @@ display_req_forward(tvbuff_t *tvb, packet_info *pinfo,
     if (aid == 0x0A) {
       /* req_attribute - name and value follow */
 
-      aname = ajp13_get_nstring(tvb, pos, &aname_len);
+      aname = ajp13_get_nstring(pinfo->pool, tvb, pos, &aname_len);
       pos+=aname_len+2;
 
-      aval = ajp13_get_nstring(tvb, pos, &aval_len);
+      aval = ajp13_get_nstring(pinfo->pool, tvb, pos, &aval_len);
       pos+=aval_len+2;
 
       proto_tree_add_string_format(ajp13_tree, hf_ajp13_req_attribute,
@@ -727,7 +729,7 @@ display_req_forward(tvbuff_t *tvb, packet_info *pinfo,
       if (aid >= array_length(req_attributes))
         aid = 0;
 
-      aval = ajp13_get_nstring(tvb, pos, &aval_len);
+      aval = ajp13_get_nstring(pinfo->pool, tvb, pos, &aval_len);
       pos+=aval_len+2;
 
       proto_tree_add_string_format_value(ajp13_tree, *req_attributes[aid],
@@ -1086,7 +1088,7 @@ proto_register_ajp13(void)
         HFILL }
     },
     { &hf_ajp13_rsmsg,
-      { "RSMSG",  "ajp13.rmsg", FT_STRING, BASE_NONE, NULL, 0x0, "HTTP Status Message",
+      { "RSMSG",  "ajp13.rsmsg", FT_STRING, BASE_NONE, NULL, 0x0, "HTTP Status Message",
         HFILL }
     },
     { &hf_ajp13_data,
@@ -1113,6 +1115,8 @@ proto_register_ajp13(void)
 
   expert_ajp13 = expert_register_protocol(proto_ajp13);
   expert_register_field_array(expert_ajp13, ei, array_length(ei));
+
+  ajp13_handle = register_dissector("ajp13", dissect_ajp13, proto_ajp13);
 }
 
 
@@ -1120,8 +1124,6 @@ proto_register_ajp13(void)
 void
 proto_reg_handoff_ajp13(void)
 {
-  dissector_handle_t ajp13_handle;
-  ajp13_handle = create_dissector_handle(dissect_ajp13, proto_ajp13);
   dissector_add_uint_with_preference("tcp.port", AJP13_TCP_PORT, ajp13_handle);
 }
 

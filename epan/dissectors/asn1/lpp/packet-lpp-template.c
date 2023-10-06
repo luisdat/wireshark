@@ -8,7 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Ref 3GPP TS 37.355 version 17.3.0 Release 17
+ * Ref 3GPP TS 37.355 version 17.6.0 Release 17
  * http://www.3gpp.org
  */
 
@@ -2046,7 +2046,6 @@ lpp_mbs_beaconMeasElt_codePhase_fmt(gchar *s, guint32 v)
   snprintf(s, ITEM_LABEL_LENGTH, "%gms (%u)", codePhase, v);
 }
 
-const unit_name_string units_dbhz = { "dB-Hz", NULL };
 const unit_name_string units_pa = { "Pa", NULL };
 
 #include "packet-lpp-fn.c"

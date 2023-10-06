@@ -1,4 +1,4 @@
--- 3GPP TS 38.413 V17.3.0 (2022-12)
+-- 3GPP TS 38.413 V17.6.0 (2023-09)
 -- 9.4.5	Information Element Definitions
 -- **************************************************************
 --
@@ -44,6 +44,7 @@ IMPORTS
 	id-DL-NGU-UP-TNLInformation,
 	id-EndpointIPAddressAndPort,
 	id-EnergySavingIndication,
+	id-ExtendedMobilityInformation,
 	id-ExtendedPacketDelayBudget,
 	id-ExtendedRATRestrictionInformation,
 	id-ExtendedReportIntervalMDT,
@@ -57,6 +58,7 @@ IMPORTS
  	id-GlobalTWIF-ID,
 	id-GlobalW-AGF-ID,
 	id-GUAMIType,
+id-HashedUEIdentityIndexValue,
 	id-IncludeBeamMeasurementsIndication,
 	id-IntersystemSONInformationRequest,
 	id-IntersystemSONInformationReply,
@@ -144,6 +146,7 @@ IMPORTS
 	id-SurvivalTime,
 	id-TNLAssociationTransportLayerAddressNGRAN,
 	id-TAINSAGSupportList,
+	id-TargetHomeENB-ID,
 	id-TargetRNC-ID,
 	id-TraceCollectionEntityURI,
 	id-TSCTrafficCharacteristics,
@@ -160,6 +163,9 @@ IMPORTS
 	id-UserLocationInformationW-AGF,
 	id-EarlyMeasurement,
 	id-BeamMeasurementsReportConfiguration,
+	id-TAI,
+	id-HFCNode-ID-new,
+	id-GlobalCable-ID-new,
 	maxnoofAllowedAreas,
 	maxnoofAllowedCAGsperPLMN,
 	maxnoofAllowedS-NSSAIs,
@@ -805,7 +811,7 @@ CandidateCellID-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 
 CandidatePCI::= SEQUENCE {
 	candidatePCI			INTEGER (0..1007, ...),
-	candidateNRARFCN		INTEGER (0..3279165),
+	candidateNRARFCN		INTEGER (0..maxNRARFCN),
 	iE-Extensions			ProtocolExtensionContainer { { CandidatePCI-ExtIEs} }			OPTIONAL,
 	...
 }
@@ -1141,7 +1147,8 @@ CoreNetworkAssistanceInformationForInactive-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 	{ ID id-MicoAllPLMN									CRITICALITY ignore	EXTENSION MicoAllPLMN											PRESENCE optional	}|
 	{ ID id-NR-PagingeDRXInformation					CRITICALITY ignore	EXTENSION NR-PagingeDRXInformation						PRESENCE optional	}|
 	{ ID id-PagingCauseIndicationForVoiceService		CRITICALITY ignore	EXTENSION PagingCauseIndicationForVoiceService		PRESENCE optional	}|
-	{ ID id-PEIPSassistanceInformation					CRITICALITY ignore	EXTENSION PEIPSassistanceInformation						PRESENCE optional	},
+	{ ID id-PEIPSassistanceInformation					CRITICALITY ignore	EXTENSION PEIPSassistanceInformation						PRESENCE optional	}|
+	{ ID id-HashedUEIdentityIndexValue					CRITICALITY ignore	EXTENSION HashedUEIdentityIndexValue						PRESENCE optional	},
 	...
 }
 
@@ -1804,7 +1811,7 @@ Extended-AMFName-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
-ExtendedPacketDelayBudget ::= INTEGER (1..65535, ...)
+ExtendedPacketDelayBudget ::= INTEGER (1..65535, ..., 65536..109999)
 
 
 Extended-RANNodeName	 ::= SEQUENCE {
@@ -2033,6 +2040,17 @@ GBR-QosInformation-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 
 GlobalCable-ID ::= OCTET STRING
 
+GlobalCable-ID-new ::= SEQUENCE {
+	globalCable-ID			GlobalCable-ID,
+	tAI						TAI,
+	iE-Extensions			ProtocolExtensionContainer { { GlobalCable-ID-new-ExtIEs} }		OPTIONAL,
+	...
+}
+
+GlobalCable-ID-new-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	...
+}
+
 GlobalENB-ID ::= SEQUENCE {
 	pLMNidentity			PLMNIdentity,
 	eNB-ID					ENB-ID,
@@ -2075,6 +2093,7 @@ GlobalLine-ID ::= SEQUENCE {
 }
 
 GlobalLine-ID-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	{ ID id-TAI				CRITICALITY ignore	EXTENSION TAI							PRESENCE optional	},
 	...
 }
 
@@ -2263,7 +2282,21 @@ HandoverType ::= ENUMERATED {
 	fivegs-to-utran
 }
 
+HashedUEIdentityIndexValue ::= BIT STRING (SIZE(13, ...))
+
+
 HFCNode-ID ::= OCTET STRING
+
+HFCNode-ID-new ::= SEQUENCE {
+	hFCNode-ID			HFCNode-ID,
+	tAI					TAI,
+	iE-Extensions		ProtocolExtensionContainer { { HFCNode-ID-new-ExtIEs} }	OPTIONAL,
+	...
+}
+
+HFCNode-ID-new-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	...
+}
 
 HOReport::= SEQUENCE {
 	handoverReportType			ENUMERATED {ho-too-early, ho-to-wrong-cell, intersystem-ping-pong, ...},
@@ -2282,6 +2315,7 @@ HOReport::= SEQUENCE {
 }
 
 HOReport-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	{ ID id-ExtendedMobilityInformation				CRITICALITY ignore	EXTENSION ExtendedMobilityInformation				PRESENCE optional		},
 	...
 }
 
@@ -3302,11 +3336,11 @@ MBS-DistributionSetupRequestTransfer-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 
 MBS-DistributionSetupResponseTransfer ::= SEQUENCE {
 	mBS-SessionID								MBS-SessionID,
-	mBS-AreaSessionID							MBS-AreaSessionID				OPTIONAL,
-	sharedNGU-MulticastTNLInformation			MBS-SessionTNLInfo5GCItem		OPTIONAL,
+	mBS-AreaSessionID							MBS-AreaSessionID						OPTIONAL,
+	sharedNGU-MulticastTNLInformation			SharedNGU-MulticastTNLInformation		OPTIONAL,
 	mBS-QoSFlowsToBeSetupList					MBS-QoSFlowsToBeSetupList,
 	mBSSessionStatus							MBSSessionStatus,
-	mBS-ServiceArea								MBS-ServiceArea					OPTIONAL,
+	mBS-ServiceArea								MBS-ServiceArea							OPTIONAL,
 	iE-Extensions		ProtocolExtensionContainer { {MBS-DistributionSetupResponseTransfer-ExtIEs} }	OPTIONAL,
 	...
 }
@@ -3390,6 +3424,8 @@ MICOModeIndication ::= ENUMERATED {
 }
 
 MobilityInformation ::= BIT STRING (SIZE(16))
+
+ExtendedMobilityInformation ::= BIT STRING (SIZE(32))
 
 MobilityRestrictionList ::= SEQUENCE {
 	servingPLMN					PLMNIdentity,
@@ -5531,7 +5567,7 @@ RRCState ::= ENUMERATED {
 RSN ::= ENUMERATED {v1, v2, ...}
 
 RIMInformationTransfer ::= SEQUENCE {
-	targetRANNodeID				TargetRANNodeID,
+	targetRANNodeID-RIM			TargetRANNodeID-RIM,
 	sourceRANNodeID				SourceRANNodeID,
 	rIMInformation				RIMInformation,
 	iE-Extensions				ProtocolExtensionContainer { {RIMInformationTransfer-ExtIEs} }	OPTIONAL,
@@ -5773,7 +5809,7 @@ S-NSSAI-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 }
 
 SONConfigurationTransfer ::= SEQUENCE {
-	targetRANNodeID				TargetRANNodeID,
+	targetRANNodeID-SON			TargetRANNodeID-SON,
 	sourceRANNodeID				SourceRANNodeID,
 	sONInformation				SONInformation,
 	xnTNLConfigurationInfo		XnTNLConfigurationInfo										OPTIONAL,
@@ -6074,6 +6110,18 @@ TargeteNB-ID-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
+TargetHomeENB-ID ::= SEQUENCE {
+	pLMNidentity		PLMNIdentity,
+	homeENB-ID			BIT STRING (SIZE(28)),
+	selected-EPS-TAI	EPS-TAI,
+	iE-Extensions		ProtocolExtensionContainer { {TargetHomeENB-ID-ExtIEs} } OPTIONAL,
+	...
+}
+
+TargetHomeENB-ID-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	...
+}
+
 TargetID ::= CHOICE {
 	targetRANNodeID			TargetRANNodeID,
 	targeteNB-ID			TargeteNB-ID,
@@ -6081,7 +6129,8 @@ TargetID ::= CHOICE {
 }
 
 TargetID-ExtIEs NGAP-PROTOCOL-IES ::= {
-	{ID id-TargetRNC-ID		CRITICALITY reject	TYPE TargetRNC-ID PRESENCE mandatory },
+	{ID id-TargetRNC-ID			CRITICALITY reject	TYPE TargetRNC-ID 		PRESENCE mandatory }|
+	{ID id-TargetHomeENB-ID		CRITICALITY reject	TYPE TargetHomeENB-ID	PRESENCE mandatory },
 	...
 }
 
@@ -6141,6 +6190,28 @@ TargetRANNodeID ::= SEQUENCE {
 }
 
 TargetRANNodeID-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	...
+}
+
+TargetRANNodeID-RIM ::= SEQUENCE {
+	globalRANNodeID		GlobalRANNodeID,
+	selectedTAI			TAI,
+	iE-Extensions		ProtocolExtensionContainer { {TargetRANNodeID-RIM-ExtIEs} } OPTIONAL,
+	...
+}
+
+TargetRANNodeID-RIM-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	...
+}
+
+TargetRANNodeID-SON ::= SEQUENCE {
+	globalRANNodeID		GlobalRANNodeID,
+	selectedTAI			TAI,
+	iE-Extensions		ProtocolExtensionContainer { {TargetRANNodeID-SON-ExtIEs} } OPTIONAL,
+	...
+}
+
+TargetRANNodeID-SON-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
 	{ID id-NR-CGI	CRITICALITY ignore	EXTENSION NR-CGI PRESENCE optional },
 	...
 }
@@ -6392,7 +6463,7 @@ UEAppLayerMeasInfoItem-ExtIEs NGAP-PROTOCOL-EXTENSION::= {
 UEAppLayerMeasConfigInfo ::= SEQUENCE {
 	qoEReference								QoEReference,
 	serviceType								ServiceType,
-	areaScopeOfQMC							AreaScopeOfQMC,
+	areaScopeOfQMC							AreaScopeOfQMC									OPTIONAL,
 	measCollEntityIPAddress					TransportLayerAddress,
 	qoEMeasurementStatus						ENUMERATED {ongoing,...}					OPTIONAL,
 	containerForAppLayerMeasConfig			OCTET STRING (SIZE(1..8000))				OPTIONAL,
@@ -6730,6 +6801,7 @@ UserLocationInformationN3IWF ::= SEQUENCE {
 }
 
 UserLocationInformationN3IWF-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	{ ID id-TAI			CRITICALITY ignore	EXTENSION TAI							PRESENCE optional	},
 	...
 }
 
@@ -6742,6 +6814,7 @@ UserLocationInformationTNGF ::= SEQUENCE {
 }
 
 UserLocationInformationTNGF-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	{ ID id-TAI			CRITICALITY ignore	EXTENSION TAI							PRESENCE optional	},
 	...
 }
 
@@ -6754,6 +6827,7 @@ UserLocationInformationTWIF ::= SEQUENCE {
 }
 
 UserLocationInformationTWIF-ExtIEs NGAP-PROTOCOL-EXTENSION ::= {
+	{ ID id-TAI			CRITICALITY ignore	EXTENSION TAI							PRESENCE optional	},
 	...
 }
 
@@ -6764,7 +6838,9 @@ UserLocationInformationW-AGF ::= CHOICE {
 }
 
 UserLocationInformationW-AGF-ExtIEs NGAP-PROTOCOL-IES ::= {
-	{ ID id-GlobalCable-ID 	CRITICALITY 	ignore 	TYPE 	GlobalCable-ID 	PRESENCE 	mandatory },
+	{ ID id-GlobalCable-ID 	CRITICALITY 	ignore 	TYPE 	GlobalCable-ID 		PRESENCE 	mandatory }|
+	{ ID id-HFCNode-ID-new 	CRITICALITY 	ignore 	TYPE 	HFCNode-ID-new 		PRESENCE 	mandatory }|
+	{ ID id-GlobalCable-ID-new 	CRITICALITY ignore 	TYPE 	GlobalCable-ID-new 	PRESENCE 	mandatory },
 	...
 }
 

@@ -1839,50 +1839,50 @@ s7comm_get_szl_id_index_description_text(guint16 id, guint16 idx)
     const gchar* str = NULL;
     switch (id) {
         case 0x0111:
-            str = val_to_str(idx, szl_0111_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0111_index_names, "No description available");
             break;
         case 0x0112:
-            str = val_to_str(idx, szl_0112_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0112_index_names, "No description available");
             break;
         case 0x0113:
-            str = val_to_str(idx, szl_0113_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0113_index_names, "No description available");
             break;
         case 0x0114:
-            str = val_to_str(idx, szl_0114_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0114_index_names, "No description available");
             break;
         case 0x0115:
-            str = val_to_str(idx, szl_0115_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0115_index_names, "No description available");
             break;
         case 0x0116:
-            str = val_to_str(idx, szl_0116_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0116_index_names, "No description available");
             break;
         case 0x0118:
-            str = val_to_str(idx, szl_0118_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0118_index_names, "No description available");
             break;
         case 0x0119:
-            str = val_to_str(idx, szl_0119_0174_ledid_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0119_0174_ledid_index_names, "No description available");
             break;
         case 0x0121:
-            str = val_to_str(idx, szl_0121_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0121_index_names, "No description available");
             break;
         case 0x0222:
-            str = val_to_str(idx, szl_0222_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0222_index_names, "No description available");
             break;
         case 0x0524:
-            str = val_to_str(idx, szl_0524_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0524_index_names, "No description available");
             break;
         case 0x0131:
-            str = val_to_str(idx, szl_0131_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0131_index_names, "No description available");
             break;
         case 0x0132:
-            str = val_to_str(idx, szl_0132_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0132_index_names, "No description available");
             break;
         case 0x0174:
-            str = val_to_str(idx, szl_0119_0174_ledid_index_names, "No description available");
+            str = val_to_str_const(idx, szl_0119_0174_ledid_index_names, "No description available");
             break;
         case 0x011c:
         case 0x031c:
-            str = val_to_str(idx, szl_xy1c_index_names, "No description available");
+            str = val_to_str_const(idx, szl_xy1c_index_names, "No description available");
             break;
     }
     return str;
@@ -5158,13 +5158,13 @@ s7comm_szl_xy91_0000_register(int proto)
           NULL, HFILL }},
         { &hf_s7comm_szl_0091_0000_logadr,
         { "Logadr", "s7comm.szl.0091.0000.logadr", FT_UINT16, BASE_DEC, NULL, 0x0,
-          "Logadr (First assigned logical I/O address (base address)", HFILL }},
+          "Logadr (First assigned logical I/O address (base address))", HFILL }},
         { &hf_s7comm_szl_0091_0000_solltyp,
         { "Expected type", "s7comm.szl.0091.0000.exptype", FT_UINT16, BASE_HEX, NULL, 0x0,
-          "Solltyp (PROFINET IO: expected (configured) type, otherwise reserved", HFILL }},
+          "Solltyp (PROFINET IO: expected (configured) type, otherwise reserved)", HFILL }},
         { &hf_s7comm_szl_0091_0000_isttyp,
         { "Actual type", "s7comm.szl.0091.0000.acttype", FT_UINT16, BASE_HEX, NULL, 0x0,
-          "Isttyp (PROFINET IO: actual type, otherwise reserved", HFILL }},
+          "Isttyp (PROFINET IO: actual type, otherwise reserved)", HFILL }},
         /* Field depends on the first byte of the SZL-ID */
         { &hf_s7comm_szl_0091_0000_res1,
         { "Reserved", "s7comm.szl.0091.0000.res1", FT_UINT16, BASE_HEX, NULL, 0x0,
@@ -5685,7 +5685,7 @@ s7comm_szl_0424_0000_register(int proto)
           "ae (B#16#FF)", HFILL }},
         { &hf_s7comm_szl_0424_0000_bzu_id,
         { "bzu-id", "s7comm.szl.0424.0000.bzu_id", FT_UINT8, BASE_HEX, NULL, 0x0,
-          "bzu-id (ID of the mode change divided into 4 bits, Bit 0 to 3: Requested mode, Bit 4 to 7: Previous mode", HFILL }},
+          "bzu-id (ID of the mode change divided into 4 bits, Bit 0 to 3: Requested mode, Bit 4 to 7: Previous mode)", HFILL }},
         { &hf_s7comm_szl_0424_0000_bzu_id_req,
         { "Requested mode", "s7comm.szl.0424.0000.bzu_id.req", FT_UINT8, BASE_HEX, VALS(szl_0424_0000_bzu_id_names), 0x0f,
           "bzu-id Requested mode", HFILL }},

@@ -64,6 +64,7 @@
  * RFC 7839: Access-Network-Identifier Option in DHCP
  * RFC 8357: Generalized UDP Source Port for DHCP Relay
  * RFC 8910: Captive-Portal Identification in DHCP and Router Advertisements (RAs)
+ * RFC 8925: IPv6-Only Preferred Option for DHCPv4
  * draft-ietf-dhc-fqdn-option-07.txt
  * TFTP Server Address Option for DHCPv4 [draft-raj-dhc-tftp-addr-option-06.txt: https://tools.ietf.org/html/draft-raj-dhc-tftp-addr-option-06]
  * BOOTP and DHCP Parameters
@@ -86,6 +87,23 @@
  *     https://web.archive.org/web/20150307135117/http://www.broadband-forum.org/technical/download/TR-111.pdf
  * Boot Server Discovery Protocol (BSDP)
  *     https://opensource.apple.com/source/bootp/bootp-198.1/Documentation/BSDP.doc
+ * [MS-DHCPE] DHCPv4 Option Code 77 (0x4D) - User Class Option
+ *     https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dhcpe/fe8a2dd4-1e8c-4546-bacd-4ae10de02058
+ *
+ *  * Copyright 2023, Colin McInnes <colin.mcinnes [AT] vecima.com>
+ * Added additional CableLabs Vendor Class IDs (Option 60) to CableLabs heuristic from:
+ * Remote PHY Specification
+ *     https://www.cablelabs.com/specifications/CM-SP-R-PHY
+ * Flexible MAC Architecture System Specification
+ *     https://www.cablelabs.com/specifications/CM-SP-FMA-SYS
+ * Data-Over-Cable Service Interface Specifications, eDOCSIS Specification
+ *     https://www.cablelabs.com/specifications/CM-SP-eDOCSIS
+ * Data-Over-Cable Service Interface Specifications, IPv4 and IPv6 eRouter Specification
+ *     https://www.cablelabs.com/specifications/CM-SP-eRouter
+ * OpenCable Tuning Resolver Interface Specification
+ *     https://www.cablelabs.com/specifications/OC-SP-TRIF
+ * DPoE Demarcation Device Specification
+ *     https://www.cablelabs.com/specifications/DPoE-SP-DEMARCv1.0
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -173,6 +191,7 @@ static int hf_dhcp_client_identifier_duid_llt_hw_type = -1;
 static int hf_dhcp_client_identifier_duid_ll_hw_type = -1;
 static int hf_dhcp_client_identifier_time = -1;
 static int hf_dhcp_client_identifier_link_layer_address = -1;
+static int hf_dhcp_client_identifier_link_layer_address_ether = -1;
 static int hf_dhcp_client_identifier_enterprise_num = -1;
 static int hf_dhcp_client_identifier = -1;
 static int hf_dhcp_client_identifier_type = -1;
@@ -416,6 +435,13 @@ static int hf_dhcp_option77_user_class = -1;				/* 77 User Class instance */
 static int hf_dhcp_option77_user_class_length = -1;			/* 77 length of User Class instance */
 static int hf_dhcp_option77_user_class_data = -1;			/* 77 data of User Class instance */
 static int hf_dhcp_option77_user_class_text = -1;			/* 77 User class text */
+static int hf_dhcp_option77_user_class_binary_data_length = -1;	/* 77, Microsoft */
+static int hf_dhcp_option77_user_class_binary_data = -1;		/* 77, Microsoft */
+static int hf_dhcp_option77_user_class_padding = -1;			/* 77, Microsoft */
+static int hf_dhcp_option77_user_class_name_length = -1;		/* 77, Microsoft */
+static int hf_dhcp_option77_user_class_name = -1;				/* 77, Microsoft */
+static int hf_dhcp_option77_user_class_description_length = -1;	/* 77, Microsoft */
+static int hf_dhcp_option77_user_class_description = -1;		/* 77, Microsoft */
 static int hf_dhcp_option_slp_directory_agent_value = -1;		/* 78 */
 static int hf_dhcp_option_slp_directory_agent_slpda_address = -1;	/* 78 */
 static int hf_dhcp_option_slp_service_scope_value = -1;			/* 79 */
@@ -560,7 +586,8 @@ static int hf_dhcp_option_cl_dss_id = -1;				/* 123 CL */
 static int hf_dhcp_option_vi_class_cl_address_mode = -1;		/* 124 */
 static int hf_dhcp_option_vi_class_enterprise = -1;			/* 124 */
 static int hf_dhcp_option_vi_class_data_length = -1;			/* 124 */
-static int hf_dhcp_option_vi_class_data = -1;				/* 124 */
+static int hf_dhcp_option_vi_class_data_item_length = -1;		/* 124 */
+static int hf_dhcp_option_vi_class_data_item_data = -1;			/* 124 */
 
 static int hf_dhcp_option125_enterprise = -1;
 static int hf_dhcp_option125_length = -1;
@@ -659,6 +686,7 @@ static gint ett_dhcp_option63_suboption = -1;
 static gint ett_dhcp_option77_instance = -1;
 static gint ett_dhcp_option82_suboption = -1;
 static gint ett_dhcp_option82_suboption9 = -1;
+static gint ett_dhcp_option124_vendor_class_data_item = -1;
 static gint ett_dhcp_option125_suboption = -1;
 static gint ett_dhcp_option125_tr111_suboption = -1;
 static gint ett_dhcp_option125_cl_suboption = -1;
@@ -722,6 +750,8 @@ typedef struct dhcp_option_data
 	const char *dhcp_type;
 	const guint8 *vendor_class_id;
 } dhcp_option_data_t;
+
+#define DHCP_HW_IS_ETHER(hwtype, length) ((hwtype == 1 || hwtype == 6) && length == 6)
 
 /* RFC2937 The Name Service Search Option for DHCP */
 #define RFC2937_LOCAL_NAMING_INFORMATION			   0
@@ -990,6 +1020,17 @@ static gint dhcp_uuid_endian = ENC_LITTLE_ENDIAN;
 static const enum_val_t dhcp_uuid_endian_vals[] = {
 	{ "Little Endian", "Little Endian",	ENC_LITTLE_ENDIAN},
 	{ "Big Endian",	 "Big Endian", ENC_BIG_ENDIAN },
+	{ NULL, NULL, 0 }
+};
+
+#define DHCP_SECS_ENDIAN_AUTODETECT -1
+
+static gint dhcp_secs_endian = DHCP_SECS_ENDIAN_AUTODETECT;
+
+static const enum_val_t dhcp_secs_endian_vals[] = {
+	{ "Autodetect", "Autodetect", DHCP_SECS_ENDIAN_AUTODETECT},
+	{ "Little Endian", "Little Endian", ENC_LITTLE_ENDIAN},
+	{ "Big Endian", "Big Endian", ENC_BIG_ENDIAN },
 	{ NULL, NULL, 0 }
 };
 
@@ -1488,7 +1529,7 @@ static struct opt_info default_dhcp_opt[DHCP_OPT_NUM] = {
 /* 105 */ { "Removed/unassigned",			opaque, NULL },
 /* 106 */ { "Removed/unassigned",			opaque, NULL },
 /* 107 */ { "Removed/unassigned",			opaque, NULL },
-/* 108 */ { "Removed/Unassigned",			opaque, NULL },
+/* 108 */ { "IPv6-Only Preferred",			opaque, NULL },
 /* 109 */ { "Unassigned",				opaque, NULL },
 /* 110 */ { "Removed/Unassigned",			opaque, NULL },
 /* 111 */ { "Unassigned",				opaque, NULL },
@@ -1686,7 +1727,7 @@ static void* uat_dhcp_record_copy_cb(void* n, const void* o, size_t siz _U_) {
 	return new_record;
 }
 
-static gboolean uat_dhcp_record_update_cb(void* r, char** err) {
+static bool uat_dhcp_record_update_cb(void* r, char** err) {
 	uat_dhcp_record_t* rec = (uat_dhcp_record_t *)r;
 
 	if ((rec->opt == 0) || (rec->opt >=DHCP_OPT_NUM-1)) {
@@ -2330,6 +2371,10 @@ dissect_dhcpopt_client_identifier(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 			if (length > 8) {
 				proto_tree_add_string(tree, hf_dhcp_client_identifier_link_layer_address, tvb, offset + 8,
 					length - 13, tvb_arphrdaddr_to_str(pinfo->pool, tvb, offset+8, length-13, hwtype));
+				if(DHCP_HW_IS_ETHER(hwtype, length-13)) {
+					proto_tree_add_item(tree, hf_dhcp_client_identifier_link_layer_address_ether,
+						tvb, offset+8, length-13, ENC_NA);
+				}
 			}
 			break;
 		case DUID_EN:
@@ -2354,6 +2399,10 @@ dissect_dhcpopt_client_identifier(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 			if (length > 4) {
 				proto_tree_add_string(tree, hf_dhcp_client_identifier_link_layer_address, tvb, offset + 4,
 					length - 9, tvb_arphrdaddr_to_str(pinfo->pool, tvb, offset+4, length-9, hwtype));
+				if(DHCP_HW_IS_ETHER(hwtype, length-9)) {
+					proto_tree_add_item(tree, hf_dhcp_client_identifier_link_layer_address_ether,
+						tvb, offset+4, length-9, ENC_NA);
+				}
 			}
 			break;
 		}
@@ -2379,6 +2428,35 @@ dissect_dhcpopt_user_class_information(tvbuff_t *tvb, packet_info *pinfo, proto_
 	if (uci_len < 2) {
 		expert_add_info_format(pinfo, tree, &ei_dhcp_bad_length, "length isn't >= 2");
 		return 1;
+	}
+
+	/* First byte is the length of User Class data. If it is zero, then let's assume this
+	 * is a Microsoft variant that has the two-byte length field with most-significant byte
+	 * as zero.
+	 */
+	guint16 ms_data_length = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
+	if (ms_data_length <= 0xff) {
+		/* MSB is zero, this is Microsoft */
+		proto_tree_add_uint(tree, hf_dhcp_option77_user_class_binary_data_length, tvb, offset, 2, ms_data_length);
+		offset += 2;
+		proto_tree_add_item(tree, hf_dhcp_option77_user_class_binary_data, tvb, offset, ms_data_length, ENC_STRING);
+		offset += ms_data_length;
+		/* User Class Binary Data is padded to 4-byte boundary */
+		guint16 padding_length = (4 - (ms_data_length % 4)) & 0x3;
+		if (padding_length > 0) {
+			proto_tree_add_item(tree, hf_dhcp_option77_user_class_padding, tvb, offset, padding_length, ENC_NA);
+			offset += padding_length;
+		}
+		guint32 len;
+		proto_tree_add_item_ret_uint(tree, hf_dhcp_option77_user_class_name_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
+		offset += 2;
+		proto_tree_add_item(tree, hf_dhcp_option77_user_class_name, tvb, offset, len, ENC_UTF_16);
+		offset += len;
+		proto_tree_add_item_ret_uint(tree, hf_dhcp_option77_user_class_description_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
+		offset += 2;
+		proto_tree_add_item(tree, hf_dhcp_option77_user_class_description, tvb, offset, len, ENC_UTF_16);
+
+		return tvb_captured_length(tvb);
 	}
 
 	while (tvb_reported_length_remaining(tvb, offset) > 0) {
@@ -3076,6 +3154,10 @@ dissect_dhcpopt_vi_vendor_class(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 {
 	int offset = 0;
 	int data_len;
+	int s_end;
+	proto_item *eti;
+	proto_tree *e_tree;
+	proto_tree *vcdi_tree;
 
 	if (tvb_reported_length(tvb) == 1) {
 		/* CableLab specific */
@@ -3085,16 +3167,31 @@ dissect_dhcpopt_vi_vendor_class(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 	while (tvb_reported_length_remaining(tvb, offset)  >= 5) {
 
-		proto_tree_add_item(tree, hf_dhcp_option_vi_class_enterprise, tvb, offset, 4, ENC_BIG_ENDIAN);
+		eti = proto_tree_add_item(tree, hf_dhcp_option_vi_class_enterprise, tvb, offset, 4, ENC_BIG_ENDIAN);
+		e_tree = proto_item_add_subtree(eti, ett_dhcp_option);
 		offset += 4;
-		proto_tree_add_item(tree, hf_dhcp_option_vi_class_data_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+		proto_tree_add_item(e_tree, hf_dhcp_option_vi_class_data_length, tvb, offset, 1, ENC_BIG_ENDIAN);
 		data_len = tvb_get_guint8(tvb, offset);
 		offset += 1;
 
-		proto_tree_add_item(tree, hf_dhcp_option_vi_class_data, tvb, offset, data_len, ENC_ASCII);
+		s_end = offset + data_len;
+		if ( tvb_reported_length_remaining(tvb, s_end) < 0) {
+			break;
+		}
 
-		/* look for next enterprise number */
-		offset += data_len;
+		while (offset < s_end) {
+			vcdi_tree = proto_tree_add_subtree(e_tree, tvb, offset, data_len, ett_dhcp_option124_vendor_class_data_item, NULL, "Vendor Class Data Item");
+
+			data_len = tvb_get_guint8(tvb, offset);
+			proto_tree_add_item(vcdi_tree, hf_dhcp_option_vi_class_data_item_length, tvb, offset, 1, ENC_NA);
+			offset += 1;
+			proto_tree_add_item(vcdi_tree, hf_dhcp_option_vi_class_data_item_data, tvb, offset, data_len, ENC_NA);
+
+			/* look for next vendor-class-data-item */
+			offset += data_len;
+		}
+
+		/* loop for the next Enterprise number */
 	}
 
 	if (tvb_reported_length_remaining(tvb, offset) > 0) {
@@ -3540,10 +3637,8 @@ dhcp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v_
 			}
 		}
 		else {
-			if (dhcp_handle_basic_types(pinfo, o82_v_tree, vti, tvb, o82_opt[idx].info.ftype,
-						     suboptoff, subopt_len, o82_opt[idx].info.phf, &default_hfs) == 0) {
-				expert_add_info_format(pinfo, vti, &hf_dhcp_subopt_unknown_type, "ERROR, please report: Unknown subopt type handler %d", subopt);
-			}
+			dhcp_handle_basic_types(pinfo, o82_v_tree, vti, tvb, o82_opt[idx].info.ftype,
+						     suboptoff, subopt_len, o82_opt[idx].info.phf, &default_hfs);
 		}
 	}
 
@@ -4504,11 +4599,30 @@ dissect_cablelabs_vendor_info_heur( tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	dhcp_option_data_t *option_data = (dhcp_option_data_t*)data;
 	proto_tree* vendor_tree;
 
+	/* Vendor Class IDs
+	 * DOCSIS - docsis
+	 * CableHome - CableHome
+	 * OpenCable2.0 - OpenCable2.0
+	 * PacketCable - pktc
+	 * DEMARC - DEMARC
+	 * sRouter - SROUTER
+	 * Remote PHY - RPD
+	 * eDOCSIS - PTA or ECM
+	 * OpenCable TRIF - TR
+	 */
+
 	if ((option_data->vendor_class_id != NULL) &&
 		((strncmp((const gchar*)option_data->vendor_class_id, "pktc", strlen("pktc")) == 0) ||
 		 (strncmp((const gchar*)option_data->vendor_class_id, "docsis", strlen("docsis")) == 0) ||
 		 (strncmp((const gchar*)option_data->vendor_class_id, "OpenCable2.0", strlen("OpenCable2.0")) == 0) ||
-		 (strncmp((const gchar*)option_data->vendor_class_id, "CableHome", strlen("CableHome")) == 0))) {
+		 (strncmp((const gchar*)option_data->vendor_class_id, "CableHome", strlen("CableHome")) == 0) ||
+		 (strncmp((const gchar*)option_data->vendor_class_id, "RPD", strlen("RPD")) == 0) ||
+		 (strncmp((const gchar*)option_data->vendor_class_id, "RMD", strlen("RMD")) == 0) ||
+		 (strncmp((const gchar*)option_data->vendor_class_id, "ECM", strlen("ECM")) == 0) ||
+		 (strncmp((const gchar*)option_data->vendor_class_id, "PTA", strlen("PTA")) == 0) ||
+		 (strncmp((const gchar*)option_data->vendor_class_id, "DEMARC", strlen("DEMARC")) == 0) ||
+		 (strncmp((const gchar*)option_data->vendor_class_id, "TR", strlen("TR")) == 0) ||
+		 (strncmp((const gchar*)option_data->vendor_class_id, "SROUTER", strlen("SROUTER")) == 0))) {
 		/* CableLabs standard - see www.cablelabs.com/projects */
 		proto_item_append_text(tree, " (CableLabs)");
 		vendor_tree = proto_item_add_subtree(tree, ett_dhcp_option);
@@ -6224,7 +6338,7 @@ dissect_docsis_cm_cap(packet_info *pinfo, proto_tree *v_tree, tvbuff_t *tvb, int
 	guint8	   *val_other  = NULL;
 	guint	    off	       = voff;
 
-	asc_val = (guint8*)wmem_alloc0(wmem_packet_scope(), 4);
+	asc_val = (guint8*)wmem_alloc0(pinfo->pool, 4);
 
 	if (opt125)
 	{
@@ -7114,15 +7228,21 @@ dissect_dhcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	/*
 	 * Windows (98, XP and Vista tested) sends the "secs" value on
 	 * the wire formatted as little-endian. See if the LE value
-	 * makes sense.
+	 * makes sense, if autodetect is used.
 	 */
-	secs = tvb_get_letohs(tvb, 8);
-	if (secs > 0 && secs <= 0xff) {
-		ti = proto_tree_add_uint(bp_tree, hf_dhcp_secs, tvb, 8, 2, secs);
-		expert_add_info_format(pinfo, ti, &ei_dhcp_secs_le, "Seconds elapsed appears to be encoded as little-endian");
-	} else {
-		proto_tree_add_item(bp_tree, hf_dhcp_secs, tvb,
-			    8, 2, ENC_BIG_ENDIAN);
+	if (dhcp_secs_endian == DHCP_SECS_ENDIAN_AUTODETECT) {
+		secs = tvb_get_letohs(tvb, 8);
+		if (secs > 0 && secs <= 0xff) {
+			ti = proto_tree_add_uint(bp_tree, hf_dhcp_secs, tvb, 8, 2, secs);
+			expert_add_info_format(pinfo, ti, &ei_dhcp_secs_le, "Seconds elapsed appears to be encoded as little-endian");
+		} else {
+			proto_tree_add_item(bp_tree, hf_dhcp_secs, tvb,
+					8, 2, ENC_BIG_ENDIAN);
+		}
+	}
+	else {
+		/* Use whatever endianness is configured */
+		proto_tree_add_item(bp_tree, hf_dhcp_secs, tvb, 8, 2, dhcp_secs_endian);
 	}
 	flags = tvb_get_ntohs(tvb, 10);
 	fi = proto_tree_add_bitmask(bp_tree, tvb, 10, hf_dhcp_flags,
@@ -7533,7 +7653,7 @@ proto_register_dhcp(void)
 
 		{ &hf_dhcp_pkt_mta_cap_len,
 		  { "MTA DC Length", "dhcp.vendor.pktc.mta_cap_len",
-		    FT_UINT8, BASE_DEC, NULL, 0x0,
+		    FT_UINT16, BASE_DEC, NULL, 0x0,
 		    "PacketCable MTA Device Capabilities Length", HFILL }},
 
 		{ &hf_dhcp_pkt_mta_cap_type,
@@ -7873,6 +7993,11 @@ proto_register_dhcp(void)
 		    FT_STRING, BASE_NONE, NULL, 0x0,
 		    NULL, HFILL }},
 
+		{ &hf_dhcp_client_identifier_link_layer_address_ether,
+		  { "Link layer address (Ethernet)", "dhcp.client_id.link_layer_address_ether",
+		    FT_ETHER, BASE_NONE, NULL, 0x0,
+		    NULL, HFILL }},
+
 		{ &hf_dhcp_client_identifier_enterprise_num,
 		  { "Enterprise-number", "dhcp.client_id.enterprise_num",
 		    FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x0,
@@ -7950,7 +8075,7 @@ proto_register_dhcp(void)
 
 		{ &hf_dhcp_option_value_boolean,
 		  { "Value", "dhcp.option.value.bool",
-		    FT_BOOLEAN, BASE_NONE, TFS(&tfs_true_false), 0x00,
+		    FT_BOOLEAN, BASE_NONE, NULL, 0x00,
 		    "Boolean DHCP/BOOTP option value", HFILL }},
 
 		{ &hf_dhcp_option_padding,
@@ -8838,7 +8963,7 @@ proto_register_dhcp(void)
 
 		{ &hf_dhcp_option63_value_boolean,
 		  { "Value", "dhcp.option.novell_options.value.bool",
-		    FT_BOOLEAN, BASE_NONE, TFS(&tfs_true_false), 0x00,
+		    FT_BOOLEAN, BASE_NONE, NULL, 0x00,
 		    "Option 63: Suboption Boolean value", HFILL }},
 
 		{ &hf_dhcp_option63_broadcast,
@@ -8961,6 +9086,41 @@ proto_register_dhcp(void)
 		  { "User Class Data (Text)", "dhcp.option.user_class.text",
 		    FT_STRING, BASE_NONE, NULL, 0x0,
 		    "Text of User Class Instance", HFILL }},
+
+		{ &hf_dhcp_option77_user_class_binary_data_length,
+		  { "User Class Binary Data Length", "dhcp.option.user_class_binary_data_length",
+		    FT_UINT16, BASE_DEC, NULL, 0x0,
+		    "Length of User Class Binary Data (Microsoft)", HFILL }},
+
+		{ &hf_dhcp_option77_user_class_binary_data,
+		  { "User Class Binary Data", "dhcp.option.user_class_binary_data",
+		    FT_STRING, BASE_NONE, NULL, 0x0,
+		    "User Class Binary Data (Microsoft)", HFILL }},
+
+		{ &hf_dhcp_option77_user_class_padding,
+		  { "User Class padding", "dhcp.option.user_class_padding",
+		    FT_BYTES, BASE_NONE, NULL, 0x0,
+		    "User Class padding (Microsoft)", HFILL }},
+
+		{ &hf_dhcp_option77_user_class_name_length,
+		  { "User Class Name Length", "dhcp.option.user_class_name_length",
+		    FT_UINT16, BASE_DEC, NULL, 0x0,
+		    "Length of User Class Name (Microsoft)", HFILL }},
+
+		{ &hf_dhcp_option77_user_class_name,
+		  { "User Class Name", "dhcp.option.user_class_name",
+		    FT_STRINGZPAD, BASE_NONE, NULL, 0x0,
+		    "User Class Name (Microsoft)", HFILL }},
+
+		{ &hf_dhcp_option77_user_class_description_length,
+		  { "User Class Description Length", "dhcp.option.user_class_description_length",
+		    FT_UINT16, BASE_DEC, NULL, 0x0,
+		    "Length of User Class Description (Microsoft)", HFILL }},
+
+		{ &hf_dhcp_option77_user_class_description,
+		  { "User Class Description", "dhcp.option.user_class_description",
+		    FT_STRINGZPAD, BASE_NONE, NULL, 0x0,
+		    "User Class Description (Microsoft)", HFILL }},
 
 		{ &hf_dhcp_option_slp_directory_agent_value,
 		  { "Value", "dhcp.option.slp_directory_agent.value",
@@ -9591,7 +9751,7 @@ proto_register_dhcp(void)
 		    "Option 123: Altitude type", HFILL }},
 
 		{ &hf_dhcp_option_rfc3825_map_datum,
-		  { "Map Datum", "dhcp.option.cl_dss_id.option",
+		  { "Map Datum", "dhcp.option.rfc3825.map_datum",
 		    FT_UINT8, BASE_DEC, VALS(map_datum_type_values), 0x0,
 		    "Option 123: Map Datum", HFILL }},
 
@@ -9621,13 +9781,18 @@ proto_register_dhcp(void)
 		    "Option 124: Enterprise", HFILL }},
 
 		{ &hf_dhcp_option_vi_class_data_length,
-		  { "CableLab Address Mode", "dhcp.option.vi_class.length",
+		  { "Length", "dhcp.option.vi_class.length",
 		    FT_UINT8, BASE_DEC, NULL, 0x0,
 		    "Option 124: Length", HFILL }},
 
-		{ &hf_dhcp_option_vi_class_data,
-		  { "NetInfo Parent Server Tag", "dhcp.option.vi_class.data",
-		    FT_STRINGZ, BASE_NONE, NULL, 0x0,
+		{ &hf_dhcp_option_vi_class_data_item_length,
+		  { "Length", "dhcp.option.vi_class.vendor_class_data.item.length",
+		    FT_UINT8, BASE_DEC, NULL, 0x0,
+		    "Option 124: Length", HFILL }},
+
+		{ &hf_dhcp_option_vi_class_data_item_data,
+		  { "Data", "dhcp.option.vi_class.vendor_class_data.item.data",
+		    FT_BYTES, BASE_NONE, NULL, 0x0,
 		    "Option 124: Data", HFILL }},
 
 		{ &hf_dhcp_option125_enterprise,
@@ -10155,6 +10320,7 @@ proto_register_dhcp(void)
 		&ett_dhcp_option77_instance,
 		&ett_dhcp_option82_suboption,
 		&ett_dhcp_option82_suboption9,
+		&ett_dhcp_option124_vendor_class_data_item,
 		&ett_dhcp_option125_suboption,
 		&ett_dhcp_option125_tr111_suboption,
 		&ett_dhcp_option125_cl_suboption,
@@ -10277,6 +10443,13 @@ proto_register_dhcp(void)
 				       dhcp_uuid_endian_vals,
 				       FALSE);
 
+	prefs_register_enum_preference(dhcp_module, "secs.endian",
+				       "Endianness of seconds elapsed field",
+				       "Endianness applied to seconds elapsed field",
+				       &dhcp_secs_endian,
+				       dhcp_secs_endian_vals,
+				       FALSE);
+
 	prefs_register_obsolete_preference(dhcp_module, "displayasstring");
 
 	dhcp_uat = uat_new("Custom DHCP/BootP Options (Excl. suboptions)",
@@ -10311,54 +10484,54 @@ proto_reg_handoff_dhcp(void)
 	dissector_add_uint_range_with_preference("udp.port", DHCP_UDP_PORT_RANGE, dhcp_handle);
 
 	/* Create dissection function handles for all DHCP/BOOTP options */
-	dhcpopt_basic_handle = create_dissector_handle( dissect_dhcpopt_basic_type, -1 );
+	dhcpopt_basic_handle = create_dissector_handle( dissect_dhcpopt_basic_type, proto_dhcp );
 	range_convert_str(wmem_epan_scope(), &dhcpopt_basictype_range, DHCP_OPTION_BASICTYPE_RANGE, 0xFF);
 	dissector_add_uint_range("dhcp.option", dhcpopt_basictype_range, dhcpopt_basic_handle);
 
-	dissector_add_uint("dhcp.option", 21, create_dissector_handle( dissect_dhcpopt_policy_filter, -1 ));
-	dissector_add_uint("dhcp.option", 33, create_dissector_handle( dissect_dhcpopt_static_route, -1 ));
-	dissector_add_uint("dhcp.option", 43, create_dissector_handle( dissect_dhcpopt_vendor_specific_info, -1 ));
-	dissector_add_uint("dhcp.option", 52, create_dissector_handle( dissect_dhcpopt_option_overload, -1 ));
-	dissector_add_uint("dhcp.option", 53, create_dissector_handle( dissect_dhcpopt_dhcp, -1 ));
-	dissector_add_uint("dhcp.option", 55, create_dissector_handle( dissect_dhcpopt_param_request_list, -1 ));
-	dissector_add_uint("dhcp.option", 60, create_dissector_handle( dissect_dhcpopt_vendor_class_identifier, -1 ));
-	dissector_add_uint("dhcp.option", 61, create_dissector_handle( dissect_dhcpopt_client_identifier, -1 ));
-	dissector_add_uint("dhcp.option", 63, create_dissector_handle( dissect_dhcpopt_netware_ip, -1 ));
-	dissector_add_uint("dhcp.option", 77, create_dissector_handle( dissect_dhcpopt_user_class_information, -1 ));
-	dissector_add_uint("dhcp.option", 78, create_dissector_handle( dissect_dhcpopt_slp_directory_agent, -1 ));
-	dissector_add_uint("dhcp.option", 79, create_dissector_handle( dissect_dhcpopt_slp_service_scope, -1 ));
-	dissector_add_uint("dhcp.option", 81, create_dissector_handle( dissect_dhcpopt_client_full_domain_name, -1 ));
-	dissector_add_uint("dhcp.option", 82, create_dissector_handle( dissect_dhcpopt_relay_agent_info, -1 ));
-	dissector_add_uint("dhcp.option", 83, create_dissector_handle( dissect_dhcpopt_isns, -1 ));
-	dissector_add_uint("dhcp.option", 85, create_dissector_handle( dissect_dhcpopt_novell_servers, -1 ));
-	dissector_add_uint("dhcp.option", 90, create_dissector_handle( dissect_dhcpopt_dhcp_authentication, -1 ));
-	dissector_add_uint("dhcp.option", 93, create_dissector_handle( dissect_dhcpopt_client_architecture, -1 ));
-	dissector_add_uint("dhcp.option", 94, create_dissector_handle( dissect_dhcpopt_client_network_interface_id, -1 ));
-	dissector_add_uint("dhcp.option", 97, create_dissector_handle( dissect_dhcpopt_client_identifier_uuid, -1 ));
-	dissector_add_uint("dhcp.option", 99, create_dissector_handle( dissect_dhcpopt_civic_location, -1 ));
-	dissector_add_uint("dhcp.option", 114, create_dissector_handle( dissect_dhcpopt_dhcp_captive_portal, -1 ));
-	dissector_add_uint("dhcp.option", 117, create_dissector_handle( dissect_dhcpopt_name_server_search, -1 ));
-	dissector_add_uint("dhcp.option", 119, create_dissector_handle( dissect_dhcpopt_dhcp_domain_search, -1 ));
-	dissector_add_uint("dhcp.option", 120, create_dissector_handle( dissect_dhcpopt_sip_servers, -1 ));
-	dissector_add_uint("dhcp.option", 121, create_dissector_handle( dissect_dhcpopt_classless_static_route, -1 ));
+	dissector_add_uint("dhcp.option", 21, create_dissector_handle( dissect_dhcpopt_policy_filter, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 33, create_dissector_handle( dissect_dhcpopt_static_route, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 43, create_dissector_handle( dissect_dhcpopt_vendor_specific_info, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 52, create_dissector_handle( dissect_dhcpopt_option_overload, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 53, create_dissector_handle( dissect_dhcpopt_dhcp, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 55, create_dissector_handle( dissect_dhcpopt_param_request_list, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 60, create_dissector_handle( dissect_dhcpopt_vendor_class_identifier, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 61, create_dissector_handle( dissect_dhcpopt_client_identifier, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 63, create_dissector_handle( dissect_dhcpopt_netware_ip, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 77, create_dissector_handle( dissect_dhcpopt_user_class_information, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 78, create_dissector_handle( dissect_dhcpopt_slp_directory_agent, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 79, create_dissector_handle( dissect_dhcpopt_slp_service_scope, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 81, create_dissector_handle( dissect_dhcpopt_client_full_domain_name, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 82, create_dissector_handle( dissect_dhcpopt_relay_agent_info, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 83, create_dissector_handle( dissect_dhcpopt_isns, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 85, create_dissector_handle( dissect_dhcpopt_novell_servers, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 90, create_dissector_handle( dissect_dhcpopt_dhcp_authentication, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 93, create_dissector_handle( dissect_dhcpopt_client_architecture, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 94, create_dissector_handle( dissect_dhcpopt_client_network_interface_id, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 97, create_dissector_handle( dissect_dhcpopt_client_identifier_uuid, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 99, create_dissector_handle( dissect_dhcpopt_civic_location, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 114, create_dissector_handle( dissect_dhcpopt_dhcp_captive_portal, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 117, create_dissector_handle( dissect_dhcpopt_name_server_search, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 119, create_dissector_handle( dissect_dhcpopt_dhcp_domain_search, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 120, create_dissector_handle( dissect_dhcpopt_sip_servers, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 121, create_dissector_handle( dissect_dhcpopt_classless_static_route, proto_dhcp ));
 	/* The PacketCable CCC option number can vary. Still handled through preference */
-	dissector_add_uint("dhcp.option", 122, create_dissector_handle( dissect_dhcpopt_packetcable_ccc, -1 ));
+	dissector_add_uint("dhcp.option", 122, create_dissector_handle( dissect_dhcpopt_packetcable_ccc, proto_dhcp ));
 
-	dissector_add_uint("dhcp.option", 123, create_dissector_handle( dissect_dhcpopt_coordinate_based_location, -1 ));
-	dissector_add_uint("dhcp.option", 124, create_dissector_handle( dissect_dhcpopt_vi_vendor_class, -1 ));
-	dissector_add_uint("dhcp.option", 125, create_dissector_handle( dissect_dhcpopt_vi_vendor_specific_info, -1 ));
-	dissector_add_uint("dhcp.option", 145, create_dissector_handle( dissect_dhcpopt_forcerenew_nonce, -1 ));
-	dissector_add_uint("dhcp.option", 146, create_dissector_handle( dissect_dhcpopt_rdnss, -1 ));
-	dissector_add_uint("dhcp.option", 151, create_dissector_handle( dissect_dhcpopt_bulk_lease_status_code, -1 ));
-	dissector_add_uint("dhcp.option", 152, create_dissector_handle( dissect_dhcpopt_bulk_lease_base_time, -1 ));
-	dissector_add_uint("dhcp.option", 154, create_dissector_handle( dissect_dhcpopt_bulk_lease_query_start, -1 ));
-	dissector_add_uint("dhcp.option", 155, create_dissector_handle( dissect_dhcpopt_bulk_lease_query_end, -1 ));
-	dissector_add_uint("dhcp.option", 158, create_dissector_handle( dissect_dhcpopt_pcp_server, -1 ));
-	dissector_add_uint("dhcp.option", 159, create_dissector_handle( dissect_dhcpopt_portparams, -1 ));
-	dissector_add_uint("dhcp.option", 160, create_dissector_handle( dissect_dhcpopt_dhcp_captive_portal, -1 ));
-	dissector_add_uint("dhcp.option", 212, create_dissector_handle( dissect_dhcpopt_6RD_option, -1 ));
-	dissector_add_uint("dhcp.option", 242, create_dissector_handle( dissect_dhcpopt_avaya_ip_telephone, -1 ));
-	dissector_add_uint("dhcp.option", 249, create_dissector_handle( dissect_dhcpopt_classless_static_route, -1 ));
+	dissector_add_uint("dhcp.option", 123, create_dissector_handle( dissect_dhcpopt_coordinate_based_location, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 124, create_dissector_handle( dissect_dhcpopt_vi_vendor_class, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 125, create_dissector_handle( dissect_dhcpopt_vi_vendor_specific_info, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 145, create_dissector_handle( dissect_dhcpopt_forcerenew_nonce, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 146, create_dissector_handle( dissect_dhcpopt_rdnss, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 151, create_dissector_handle( dissect_dhcpopt_bulk_lease_status_code, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 152, create_dissector_handle( dissect_dhcpopt_bulk_lease_base_time, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 154, create_dissector_handle( dissect_dhcpopt_bulk_lease_query_start, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 155, create_dissector_handle( dissect_dhcpopt_bulk_lease_query_end, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 158, create_dissector_handle( dissect_dhcpopt_pcp_server, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 159, create_dissector_handle( dissect_dhcpopt_portparams, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 160, create_dissector_handle( dissect_dhcpopt_dhcp_captive_portal, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 212, create_dissector_handle( dissect_dhcpopt_6RD_option, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 242, create_dissector_handle( dissect_dhcpopt_avaya_ip_telephone, proto_dhcp ));
+	dissector_add_uint("dhcp.option", 249, create_dissector_handle( dissect_dhcpopt_classless_static_route, proto_dhcp ));
 
 	/* Create heuristic dissection for DHCP vendor class id */
 	heur_dissector_add( "dhcp.vendor_id", dissect_packetcable_mta_vendor_id_heur, "PacketCable MTA", "packetcable_mta_dhcp", proto_dhcp, HEURISTIC_ENABLE );
@@ -10382,8 +10555,8 @@ proto_reg_handoff_dhcp(void)
 	heur_dissector_add( "dhcp.vendor_info", dissect_cisco_vendor_info_heur, "Cisco", "cisco_info_dhcp", proto_dhcp, HEURISTIC_ENABLE );
 
 	/* Create dissection function handles for DHCP Enterprise dissection */
-	dissector_add_uint("dhcp.enterprise", 4491, create_dissector_handle( dissect_vendor_cl_suboption, -1 ));
-	dissector_add_uint("dhcp.enterprise", 3561, create_dissector_handle( dissect_vendor_tr111_suboption, -1 ));
+	dissector_add_uint("dhcp.enterprise", 4491, create_dissector_handle( dissect_vendor_cl_suboption, proto_dhcp ));
+	dissector_add_uint("dhcp.enterprise", 3561, create_dissector_handle( dissect_vendor_tr111_suboption, proto_dhcp ));
 }
 
 /*

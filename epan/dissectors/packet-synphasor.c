@@ -174,6 +174,7 @@ static expert_field ei_synphasor_data_error		= EI_INIT;
 static expert_field ei_synphasor_pmu_not_sync		= EI_INIT;
 
 static dissector_handle_t synphasor_udp_handle;
+static dissector_handle_t synphasor_tcp_handle;
 
 /* the different frame types for this protocol */
 enum FrameType {
@@ -1211,7 +1212,7 @@ static gint dissect_PHSCALE(tvbuff_t *tvb, proto_tree *tree, gint offset, gint c
 
 		data_flag_tree = proto_tree_add_subtree_format(single_phasor_scaling_and_flags_tree, tvb, offset, 4,
 							       ett_conf_phflags, NULL, "Phasor Data flags: %s",
-							       conf_phasor_type[tvb_get_guint8(tvb, offset + 2)].strptr);
+							       val_to_str_const(tvb_get_guint8(tvb, offset + 2), conf_phasor_type, "Unknown"));
 
 		/* first and second bytes - phasor modification flags*/
 		phasor_flag1_tree = proto_tree_add_subtree_format(data_flag_tree, tvb, offset, 2, ett_conf_phmod_flags,
@@ -1853,7 +1854,7 @@ static int dissect_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
 	frame_type = tvb_get_guint8(tvb, 1) >> 4;
 
-	col_add_fstr(pinfo->cinfo, COL_INFO, "%s", val_to_str_const(frame_type, typenames, "invalid packet type"));
+	col_add_str(pinfo->cinfo, COL_INFO, val_to_str_const(frame_type, typenames, "invalid packet type"));
 
 	/* CFG-2, CFG3, and DATA frames need special treatment during the first run:
 	 * For CFG-2 & CFG-3 frames, a 'config_frame' struct is created to hold the
@@ -2274,7 +2275,7 @@ void proto_register_synphasor(void)
 	/* Data type for command frame */
 		{ &hf_command,
 		{ "Command", "synphasor.command", FT_UINT16, BASE_HEX|BASE_RANGE_STRING,
-		  RVALS(command_names), 0xFFFF, NULL, HFILL }},
+		  RVALS(command_names), 0x0, NULL, HFILL }},
 
       /* Generated from convert_proto_tree_add_text.pl */
       { &hf_synphasor_data, { "Data", "synphasor.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
@@ -2346,6 +2347,7 @@ void proto_register_synphasor(void)
 
 	/* Registering protocol to be called by another dissector */
 	synphasor_udp_handle = register_dissector("synphasor", dissect_udp, proto_synphasor);
+	synphasor_tcp_handle = register_dissector("synphasor.tcp", dissect_tcp, proto_synphasor);
 
 	proto_register_field_array(proto_synphasor, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
@@ -2357,13 +2359,9 @@ void proto_register_synphasor(void)
 /* called at startup and when the preferences change */
 void proto_reg_handoff_synphasor(void)
 {
-	dissector_handle_t synphasor_tcp_handle;
-
-	synphasor_tcp_handle = create_dissector_handle(dissect_tcp, proto_synphasor);
 	dissector_add_for_decode_as("rtacser.data", synphasor_udp_handle);
 	dissector_add_uint_with_preference("udp.port", SYNPHASOR_UDP_PORT, synphasor_udp_handle);
 	dissector_add_uint_with_preference("tcp.port", SYNPHASOR_TCP_PORT, synphasor_tcp_handle);
-
 } /* proto_reg_handoff_synphasor() */
 
 /*

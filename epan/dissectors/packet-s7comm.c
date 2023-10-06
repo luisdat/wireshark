@@ -1429,6 +1429,8 @@ static int * const s7comm_diagdata_registerflag_fields[] = {
     NULL
 };
 
+static heur_dissector_list_t s7comm_heur_subdissector_list;
+
 static expert_field ei_s7comm_data_blockcontrol_block_num_invalid = EI_INIT;
 static expert_field ei_s7comm_ud_blockinfo_block_num_ascii_invalid = EI_INIT;
 
@@ -5267,11 +5269,23 @@ static guint32
 s7comm_decode_ud_pbc_bsend_subfunc(tvbuff_t *tvb,
                              proto_tree *data_tree,
                              guint32 dlength,
-                             guint32 offset)
+                             guint32 offset,
+                             packet_info *pinfo,
+                             proto_tree *tree)
 {
     proto_tree_add_item(data_tree, hf_s7comm_pbc_bsend_len, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
     proto_tree_add_item(data_tree, hf_s7comm_userdata_data, tvb, offset, dlength - 2, ENC_NA);
+
+    /* dissect data */
+    if (tvb_reported_length_remaining(tvb, offset) > 0) {
+        struct tvbuff *next_tvb = tvb_new_subset_remaining(tvb,  offset);
+        heur_dtbl_entry_t *hdtbl_entry;
+        if (!dissector_try_heuristic(s7comm_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL)) {
+            call_data_dissector(next_tvb, pinfo, data_tree);
+        }
+    }
+
     offset += (dlength - 2);
 
     return offset;
@@ -6470,7 +6484,8 @@ s7comm_decode_ud_data(tvbuff_t *tvb,
                       guint8 seq_num,
                       guint8 data_unit_ref,
                       guint8 last_data_unit,
-                      guint32 offset)
+                      guint32 offset,
+                      proto_tree *root_tree)
 {
     proto_item *item = NULL;
     proto_tree *data_tree = NULL;
@@ -6568,7 +6583,7 @@ s7comm_decode_ud_data(tvbuff_t *tvb,
                     next_tvb = new_tvb;
                     offset = 0;
                 } else { /* make a new subset */
-                    next_tvb = tvb_new_subset_length_caplen(tvb, offset, -1, -1);
+                    next_tvb = tvb_new_subset_length(tvb, offset, -1);
                     col_append_fstr(pinfo->cinfo, COL_INFO, " (S7COMM fragment%s)", str_fragadd);
                     proto_item_append_text(data_tree, " (S7COMM fragment%s)", str_fragadd);
                     offset = 0;
@@ -6635,7 +6650,7 @@ s7comm_decode_ud_data(tvbuff_t *tvb,
                         offset = s7comm_decode_ud_security_subfunc(next_tvb, data_tree, length_rem, offset);
                         break;
                     case S7COMM_UD_FUNCGROUP_PBC_BSEND:
-                        offset = s7comm_decode_ud_pbc_bsend_subfunc(next_tvb, data_tree, length_rem, offset);
+                        offset = s7comm_decode_ud_pbc_bsend_subfunc(next_tvb, data_tree, length_rem, offset, pinfo, root_tree);
                         break;
                     case S7COMM_UD_FUNCGROUP_TIME:
                         offset = s7comm_decode_ud_time_subfunc(next_tvb, data_tree, type, subfunc, ret_val, length_rem, offset);
@@ -6668,7 +6683,8 @@ s7comm_decode_ud(tvbuff_t *tvb,
                  proto_tree *tree,
                  guint16 plength,
                  guint16 dlength,
-                 guint32 offset)
+                 guint32 offset,
+                 proto_tree *root_tree)
 {
     proto_item *item = NULL;
     proto_tree *param_tree = NULL;
@@ -6835,7 +6851,7 @@ s7comm_decode_ud(tvbuff_t *tvb,
     }
     offset += plength;
 
-    offset = s7comm_decode_ud_data(tvb, pinfo, tree, dlength, type, funcgroup, subfunc, seq_num, data_unit_ref, last_data_unit, offset);
+    offset = s7comm_decode_ud_data(tvb, pinfo, tree, dlength, type, funcgroup, subfunc, seq_num, data_unit_ref, last_data_unit, offset, root_tree);
 
     return offset;
 }
@@ -7098,7 +7114,7 @@ dissect_s7comm(tvbuff_t *tvb,
             s7comm_decode_req_resp(tvb, pinfo, s7comm_tree, plength, dlength, offset, rosctr);
             break;
         case S7COMM_ROSCTR_USERDATA:
-            s7comm_decode_ud(tvb, pinfo, s7comm_tree, plength, dlength, offset);
+            s7comm_decode_ud(tvb, pinfo, s7comm_tree, plength, dlength, offset, tree);
             break;
     }
     /* Add the errorcode from header as last entry in info column */
@@ -7217,7 +7233,7 @@ proto_register_s7comm (void)
         { "Address", "s7comm.param.item.address", FT_UINT24, BASE_HEX, NULL, 0x0,
           NULL, HFILL }},
         { &hf_s7comm_item_address_byte,
-        { "Byte Address", "s7comm.param.item.address.byte", FT_UINT24, BASE_DEC, NULL, 0x7fff8,
+        { "Byte Address", "s7comm.param.item.address.byte", FT_UINT24, BASE_DEC, NULL, 0x07fff8,
           NULL, HFILL }},
         { &hf_s7comm_item_address_bit,
         { "Bit Address", "s7comm.param.item.address.bit", FT_UINT24, BASE_DEC, NULL, 0x000007,
@@ -7636,10 +7652,10 @@ proto_register_s7comm (void)
         /* Organization block local data */
         { &hf_s7comm_ob_ev_class,
         { "OB Event class", "s7comm.ob.ev_class", FT_UINT8, BASE_HEX, NULL, 0x0,
-          "OB Event class (Bits 0-3 = 1 (Coming event), Bits 4-7 = 1 (Event class 1)", HFILL }},
+          "OB Event class (Bits 0-3 = 1 (Coming event), Bits 4-7 = 1 (Event class 1))", HFILL }},
         { &hf_s7comm_ob_scan_1,
         { "OB Scan 1", "s7comm.ob.scan_1", FT_UINT8, BASE_HEX, NULL, 0x0,
-          "OB Scan 1 (1=Cold restart scan 1 of OB 1), 3=Scan 2-n of OB 1)", HFILL }},
+          "OB Scan 1 (1=Cold restart scan 1 of OB 1), (3=Scan 2-n of OB 1)", HFILL }},
         { &hf_s7comm_ob_strt_inf,
         { "OB Start info", "s7comm.ob.strt_info", FT_UINT8, BASE_HEX, NULL, 0x0,
           "OB Start info (OB n has started)", HFILL }},
@@ -8567,6 +8583,7 @@ proto_register_s7comm (void)
     expert_register_field_array(expert_s7comm, ei, array_length(ei));
 
     register_init_routine(s7comm_defragment_init);
+    s7comm_heur_subdissector_list = register_heur_dissector_list("s7comm-bsend", proto_s7comm);
 }
 
 /* Register this protocol */

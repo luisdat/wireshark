@@ -132,6 +132,9 @@ static gint ett_c15ch_second_level_sub3 = -1;
 static gint ett_c15ch_second_level_sub4 = -1;
 static int proto_c15ch_second_level = -1;
 
+static dissector_handle_t c15ch_hbeat_handle   = NULL;
+static dissector_handle_t c15ch_handle         = NULL;
+
 static dissector_handle_t general_sccp_handle  = NULL;
 static dissector_handle_t general_isup_handle  = NULL;
 static dissector_handle_t general_q931_handle  = NULL;
@@ -4075,7 +4078,7 @@ static void add_digits_string_info_col(tvbuff_t *tvb,
     const char ZERO_C = '0';
 
     tvb_ensure_bytes_exist(tvb, first_offset, num_digits);
-    ch_buff = (char *) wmem_alloc(wmem_packet_scope(), num_digits + 1); /*include space for terminating null*/
+    ch_buff = (char *) wmem_alloc(pinfo->pool, num_digits + 1); /*include space for terminating null*/
     for ( i = 0; i < num_digits; i++ )
     {
         guint curr_digit = tvb_get_guint8(tvb, i + first_offset);
@@ -4239,7 +4242,7 @@ static int dissect_c15ch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
         proto_tree_add_item(c15ch_tree, hf_c15ch_realtime, tvb, 32, 4, ENC_BIG_ENDIAN);
     }
 
-    next_tvb = tvb_new_subset_length_caplen(tvb, HEADER_SZ, -1, payload_length);
+    next_tvb = tvb_new_subset_length(tvb, HEADER_SZ, payload_length);
     /* call dissector to dissect the rest of the packet, based on msg_type */
     retv = HEADER_SZ + dissector_try_uint(c15ch_dissector_table, msg_type, next_tvb, pinfo, tree);
     return retv;
@@ -4321,7 +4324,7 @@ static int dissect_c15ch_clli(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 
     gint clli_siz;
     guchar * clli_string;
-    clli_string = tvb_get_stringz_enc(wmem_packet_scope(), tvb, 0, &clli_siz, ENC_ASCII );
+    clli_string = tvb_get_stringz_enc(pinfo->pool, tvb, 0, &clli_siz, ENC_ASCII );
     if ( (clli_siz > 1) && (clli_siz <= 25 ) )
     {
         col_clear(pinfo->cinfo, COL_INFO);
@@ -4406,18 +4409,18 @@ static int dissect_c15ch_cp_state_ch(tvbuff_t *tvb, packet_info *pinfo, proto_tr
     newpm_value = tvb_get_ntohl(tvb, 4);
 
     col_add_fstr(pinfo->cinfo, COL_INFO, "Type: CP_STATE_CH, %s --> ",
-        val_to_str_ext(oldpm_value, &c15_cp_state_pm_types_ext, "Unknown") );
+        val_to_str_ext_const(oldpm_value, &c15_cp_state_pm_types_ext, "Unknown") );
 
     col_append_str(pinfo->cinfo, COL_INFO,
-        val_to_str_ext(newpm_value, &c15_cp_state_pm_types_ext, "Unknown") );
+        val_to_str_ext_const(newpm_value, &c15_cp_state_pm_types_ext, "Unknown") );
 
     if (tree)
     {
         ti = proto_tree_add_item(tree, hf_c15ch_cp_state_ch, tvb, 0, 40, ENC_NA);
         proto_item_append_text(ti, ", Old PM Type: %s",
-            val_to_str_ext(oldpm_value, &c15_cp_state_pm_types_ext, "Unknown"));
+            val_to_str_ext_const(oldpm_value, &c15_cp_state_pm_types_ext, "Unknown"));
         proto_item_append_text(ti, ", New PM Type: %s",
-            val_to_str_ext(newpm_value, &c15_cp_state_pm_types_ext, "Unknown"));
+            val_to_str_ext_const(newpm_value, &c15_cp_state_pm_types_ext, "Unknown"));
 
         c15ch_cp_state_ch_tree = proto_item_add_subtree(ti, ett_c15ch_second_level);
         proto_tree_add_item(c15ch_cp_state_ch_tree, hf_c15ch_cp_state_ch_oldpm,
@@ -4464,7 +4467,7 @@ static int dissect_c15ch_dest_digits(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 }
 
 
-static int dissect_c15ch_echo_cancel(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+static int dissect_c15ch_echo_cancel(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     proto_item * ti = NULL;
     proto_tree * c15ch_echo_cancel_tree = NULL;
@@ -4576,7 +4579,7 @@ static int dissect_c15ch_echo_cancel(tvbuff_t *tvb, packet_info *pinfo _U_, prot
         pc_val = tvb_get_ntohl( tvb, 19 );
         loop_val = tvb_get_ntohl( tvb, 23 );
         slot_val = tvb_get_ntohl( tvb, 27 );
-        loc_string = wmem_strdup_printf(wmem_packet_scope(), "%d  %d  %d  %d", pm_val, pc_val, loop_val, slot_val );
+        loc_string = wmem_strdup_printf(pinfo->pool, "%d  %d  %d  %d", pm_val, pc_val, loop_val, slot_val );
         ti = proto_tree_add_string(c15ch_echo_cancel_tree, hf_c15ch_echo_cancel_location, tvb, 15, (27 + 4 - 15) + 1, loc_string);
         loc_tree = proto_item_add_subtree (ti, ett_c15ch_second_level_sub4);
 
@@ -4606,7 +4609,7 @@ static int dissect_c15ch_encap_isup(tvbuff_t *tvb, packet_info *pinfo, proto_tre
                             tvb, 1, 4, ENC_BIG_ENDIAN);
 
         /*length of ISUP portion == expected length == 268 */
-        next_tvb = tvb_new_subset_length_caplen(tvb, 5, 268, 268);
+        next_tvb = tvb_new_subset_length(tvb, 5, 268);
         call_dissector(general_isup_handle, next_tvb, pinfo, tree);
     }
 
@@ -4631,14 +4634,14 @@ static int dissect_c15ch_isup(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 
     col_clear(pinfo->cinfo, COL_INFO);
     col_append_fstr(pinfo->cinfo, COL_INFO, ", Msg Type: %s",
-        val_to_str_ext(msgtype_value, &c15_isup_types_ext, "Unknown"));
+        val_to_str_ext_const(msgtype_value, &c15_isup_types_ext, "Unknown"));
 
     if (tree)
     {
 
         ti = proto_tree_add_item(tree, hf_c15ch_isup, tvb, 0, 324, ENC_NA);
         proto_item_append_text(ti, ", Msg Type: %s",
-            val_to_str_ext(msgtype_value, &c15_isup_types_ext, "Unknown"));
+            val_to_str_ext_const(msgtype_value, &c15_isup_types_ext, "Unknown"));
         c15ch_isup_tree = proto_item_add_subtree(ti, ett_c15ch_second_level);
         proto_tree_add_item(c15ch_isup_tree, hf_c15ch_isup_direction,
                             tvb, 0, 1, ENC_BIG_ENDIAN);
@@ -4681,14 +4684,14 @@ static int dissect_c15ch_isup(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                             tvb, 41, 8, ENC_NA);
 
         /*length of ISUP portion == expected length == 271 */
-        next_tvb = tvb_new_subset_length_caplen(tvb, 49, 271, 271);
+        next_tvb = tvb_new_subset_length(tvb, 49, 271);
         call_dissector(general_isup_handle, next_tvb, pinfo, tree);
     }
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, C15_LABEL);
     col_clear(pinfo->cinfo, COL_INFO);
     col_add_fstr(pinfo->cinfo, COL_INFO, "Type: ISUP, Msg Type: %s",
-        val_to_str_ext(msgtype_value, &c15_isup_types_ext, "Unknown Type") );
+        val_to_str_ext_const(msgtype_value, &c15_isup_types_ext, "Unknown Type") );
 
     return tvb_reported_length(tvb);
 }
@@ -4736,15 +4739,15 @@ static int dissect_c15ch_nitnxlate(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
     /* sitestring */
     str_start = 12;
-    site_string = tvb_get_stringz_enc(wmem_packet_scope(), tvb, str_start, &site_str_len, ENC_ASCII);
+    site_string = tvb_get_stringz_enc(pinfo->pool, tvb, str_start, &site_str_len, ENC_ASCII);
 
     /* subsitestring */
     str_start = 17;
-    subsite_string = tvb_get_stringz_enc(wmem_packet_scope(), tvb, str_start, &subsite_str_len, ENC_ASCII);
+    subsite_string = tvb_get_stringz_enc(pinfo->pool, tvb, str_start, &subsite_str_len, ENC_ASCII);
 
     /* equipname */
     str_start = 22;
-    equipname_string = (gchar * )tvb_get_stringz_enc(wmem_packet_scope(), tvb, str_start, &equipname_str_len, ENC_ASCII);
+    equipname_string = (gchar * )tvb_get_stringz_enc(pinfo->pool, tvb, str_start, &equipname_str_len, ENC_ASCII);
 
     frame_val = tvb_get_ntohl( tvb, 31 );
     shelf_val = tvb_get_ntohl( tvb, 35 );
@@ -4975,7 +4978,7 @@ static int dissect_c15ch_ntwk_conn(tvbuff_t *tvb, packet_info *pinfo, proto_tree
         from_pc_val = tvb_get_guint8( tvb, 9 );
         from_loop_val = tvb_get_guint8( tvb, 10 );
         from_slot_val = tvb_get_guint8( tvb, 11 );
-        from_loc_string = wmem_strdup_printf(wmem_packet_scope(), "%d  %d  %d  %d", from_pm_val, from_pc_val, from_loop_val, from_slot_val );
+        from_loc_string = wmem_strdup_printf(pinfo->pool, "%d  %d  %d  %d", from_pm_val, from_pc_val, from_loop_val, from_slot_val );
         ti = proto_tree_add_string(c15ch_ntwk_conn_tree, hf_c15ch_ntwk_conn_fromlocation, tvb, 8, (11 - 8) + 1,
                                 from_loc_string);
         old_loc_tree = proto_item_add_subtree (ti, ett_c15ch_second_level_sub1);
@@ -5015,7 +5018,7 @@ static int dissect_c15ch_ntwk_conn(tvbuff_t *tvb, packet_info *pinfo, proto_tree
         to_pc_val = tvb_get_guint8( tvb, 32 );
         to_loop_val = tvb_get_guint8( tvb, 33 );
         to_slot_val = tvb_get_guint8( tvb, 34 );
-        to_loc_string = wmem_strdup_printf(wmem_packet_scope(), "%d  %d  %d  %d", to_pm_val, to_pc_val, to_loop_val, to_slot_val );
+        to_loc_string = wmem_strdup_printf(pinfo->pool, "%d  %d  %d  %d", to_pm_val, to_pc_val, to_loop_val, to_slot_val );
         ti = proto_tree_add_string(c15ch_ntwk_conn_tree, hf_c15ch_ntwk_conn_tolocation, tvb, 31, (34 - 31) + 1,
                                 to_loc_string);
         new_loc_tree = proto_item_add_subtree (ti, ett_c15ch_second_level_sub3);
@@ -5377,7 +5380,7 @@ static int dissect_c15ch_q931(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                             tvb, 9, 4, ENC_BIG_ENDIAN);
         if (q931_msg_len && bytes_to_skip)
         {
-            next_tvb = tvb_new_subset_length_caplen(tvb, 13 + bytes_to_skip, q931_msg_len - bytes_to_skip, q931_msg_len - bytes_to_skip);
+            next_tvb = tvb_new_subset_length(tvb, 13 + bytes_to_skip, q931_msg_len - bytes_to_skip);
             call_dissector(general_q931_handle, next_tvb, pinfo, tree);
         }
     }
@@ -5564,8 +5567,7 @@ static int dissect_c15ch_sccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                             tvb, 298, 4, ENC_BIG_ENDIAN);
 
         /* skip bytes to get to SCCP message type */
-        next_tvb = tvb_new_subset_length_caplen(tvb, 23 + 2,
-                                    275 - 2, 275 - 2);
+        next_tvb = tvb_new_subset_length(tvb, 23 + 2, 275 - 2);
 
         /* sccp dissector call */
         call_dissector(general_sccp_handle, next_tvb, pinfo, tree);
@@ -5737,9 +5739,9 @@ static int dissect_c15ch_cp_event(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
         ti = proto_tree_add_item(tree, hf_c15ch_cp_event, tvb, 0, 28, ENC_NA);
 
         proto_item_append_text(ti, ", PM Type: %s",
-            val_to_str_ext(pm_value, &c15_pm_types_ext, "Unknown"));
+            val_to_str_ext_const(pm_value, &c15_pm_types_ext, "Unknown"));
         proto_item_append_text(ti, ", Event Type: %s",
-            val_to_str_ext(event_value, &c15_event_types_ext, "Unknown"));
+            val_to_str_ext_const(event_value, &c15_event_types_ext, "Unknown"));
         c15ch_cp_event_tree = proto_item_add_subtree(ti, ett_c15ch_second_level);
 
         proto_tree_add_item(c15ch_cp_event_tree, hf_c15ch_cp_event_pm,
@@ -7352,6 +7354,8 @@ void proto_register_c15ch_hbeat(void)
         );
     proto_register_field_array(proto_c15ch_hbeat, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
+
+    c15ch_hbeat_handle = register_dissector("c15hbeat", dissect_c15ch_hbeat, proto_c15ch_hbeat);
 }
 
 
@@ -11870,6 +11874,8 @@ void proto_register_c15ch(void)
     proto_register_field_array(proto_c15ch, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
+    c15ch_handle = register_dissector("c15.ch", dissect_c15ch, proto_c15ch);
+
     /* second level dissector */
     proto_c15ch_second_level = proto_register_protocol(
         "C15 Call History Protocol",
@@ -11917,19 +11923,15 @@ void proto_register_c15ch(void)
 /* heartbeat dissector */
 void proto_reg_handoff_c15ch_hbeat(void)
 {
-    static dissector_handle_t c15ch_hbeat_handle;
-    c15ch_hbeat_handle = create_dissector_handle(dissect_c15ch_hbeat, proto_c15ch_hbeat);
     dissector_add_uint("ethertype", ETHERTYPE_C15_HBEAT, c15ch_hbeat_handle);
 }
 
 /* c15 non-heartbeat dissectors : first-level, second-level, and third-level */
 void proto_reg_handoff_c15ch(void)
 {
-    dissector_handle_t c15ch_handle;
     dissector_handle_t c15ch_second_level_handle;
     dissector_handle_t c15ch_third_level_handle;
     /* first level */
-    c15ch_handle = create_dissector_handle(dissect_c15ch, proto_c15ch);
     dissector_add_uint("ethertype", ETHERTYPE_C15_CH, c15ch_handle);
 
     /* second_level */

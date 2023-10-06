@@ -53,9 +53,10 @@ static int opt_syntax_tree = 0;
 static int opt_timer = 0;
 static long opt_optimize = 1;
 static int opt_show_types = 0;
+static int opt_dump_refs = 0;
 
-static gdouble elapsed_expand = 0;
-static gdouble elapsed_compile = 0;
+static gint64 elapsed_expand = 0;
+static gint64 elapsed_compile = 0;
 
 /*
  * Report an error in command-line arguments.
@@ -107,6 +108,11 @@ print_usage(int status)
     fprintf(fp, "  -t, --timer         print elapsed compilation time\n");
     fprintf(fp, "  -0, --optimize=0    do not optimize (check syntax)\n");
     fprintf(fp, "      --types         show field value types\n");
+    /* NOTE: References are loaded during runtime and dftest only does compilation.
+     * Unless some static reference data is hard-coded at compile time during
+     * development the --refs option to dftest is useless because it will just
+     * print empty reference vectors. */
+    fprintf(fp, "      --refs          dump some runtime data structures\n");
     fprintf(fp, "  -h, --help          display this help and exit\n");
     fprintf(fp, "  -v, --version       print version\n");
     fprintf(fp, "\n");
@@ -149,35 +155,36 @@ print_warnings(dfilter_t *df)
 static void
 print_elapsed(void)
 {
-    printf("\nElapsed: %.f µs (%.f µs + %.f µs)\n",
-            (elapsed_expand + elapsed_compile) * 1000 * 1000,
-            elapsed_expand * 1000 * 1000,
-            elapsed_compile * 1000 * 1000);
+    printf("\nElapsed: %"PRId64" µs (%"PRId64" µs + %"PRId64" µs)\n",
+            elapsed_expand + elapsed_compile,
+            elapsed_expand,
+            elapsed_compile);
 }
 
 static char *
-expand_filter(const char *text, GTimer *timer)
+expand_filter(const char *text)
 {
     char *expanded = NULL;
-    char *err_msg = NULL;
+    df_error_t *err = NULL;
+    gint64 start;
 
-    g_timer_start(timer);
-    expanded = dfilter_expand(text, &err_msg);
-    g_timer_stop(timer);
-    elapsed_expand = g_timer_elapsed(timer, NULL);
+    start = g_get_monotonic_time();
+    expanded = dfilter_expand(text, &err);
     if (expanded == NULL) {
-        fprintf(stderr, "Error: %s\n", err_msg);
-        g_free(err_msg);
+        fprintf(stderr, "Error: %s\n", err->msg);
+        df_error_free(&err);
     }
+    elapsed_expand = g_get_monotonic_time() - start;
     return expanded;
 }
 
 static gboolean
-compile_filter(const char *text, dfilter_t **dfp, GTimer *timer)
+compile_filter(const char *text, dfilter_t **dfp)
 {
     unsigned df_flags = 0;
     gboolean ok;
     df_error_t *df_err = NULL;
+    gint64 start;
 
     if (opt_optimize > 0)
         df_flags |= DF_OPTIMIZE;
@@ -188,19 +195,17 @@ compile_filter(const char *text, dfilter_t **dfp, GTimer *timer)
     if (opt_lemon)
         df_flags |= DF_DEBUG_LEMON;
 
-    g_timer_start(timer);
-    ok = dfilter_compile_real(text, dfp, &df_err, df_flags, "dftest");
-    g_timer_stop(timer);
-    elapsed_compile = g_timer_elapsed(timer, NULL);
-
+    start = g_get_monotonic_time();
+    ok = dfilter_compile_full(text, dfp, &df_err, df_flags, "dftest");
     if (!ok) {
         fprintf(stderr, "Error: %s\n", df_err->msg);
         if (df_err->loc.col_start >= 0) {
             fprintf(stderr, "  %s\n  ", text);
             putloc(stderr, df_err->loc);
         }
-        dfilter_error_free(df_err);
+        df_error_free(&df_err);
     }
+    elapsed_compile = g_get_monotonic_time() - start;
     return ok;
 }
 
@@ -211,7 +216,6 @@ main(int argc, char **argv)
     char        *text = NULL;
     char        *expanded_text = NULL;
     dfilter_t   *df = NULL;
-    GTimer      *timer = NULL;
     int          exit_status = EXIT_FAILURE;
 
     /*
@@ -248,6 +252,7 @@ main(int argc, char **argv)
         { "verbose",  ws_no_argument,   0,  'V' },
         { "optimize", ws_required_argument, 0, 1000 },
         { "types",    ws_no_argument,   0, 2000 },
+        { "refs",     ws_no_argument,   0, 3000 },
         { NULL,       0,                0,  0   }
     };
     int opt;
@@ -293,6 +298,9 @@ main(int argc, char **argv)
                 break;
             case 2000:
                 opt_show_types = 1;
+                break;
+            case 3000:
+                opt_dump_refs = 1;
                 break;
             case 'v':
                 show_help_header(NULL);
@@ -395,10 +403,8 @@ main(int argc, char **argv)
 
     printf("Filter:\n %s\n\n", text);
 
-    timer = g_timer_new();
-
     /* Expand macros. */
-    expanded_text = expand_filter(text, timer);
+    expanded_text = expand_filter(text);
     if (expanded_text == NULL) {
         exit_status = WS_EXIT_INVALID_FILTER;
         goto out;
@@ -408,7 +414,7 @@ main(int argc, char **argv)
         printf("Filter (after expansion):\n %s\n\n", expanded_text);
 
     /* Compile it */
-    if (!compile_filter(expanded_text, &df, timer)) {
+    if (!compile_filter(expanded_text, &df)) {
         exit_status = WS_EXIT_INVALID_FILTER;
         goto out;
     }
@@ -430,6 +436,9 @@ main(int argc, char **argv)
     uint16_t dump_flags = 0;
     if (opt_show_types)
         dump_flags |= DF_DUMP_SHOW_FTYPE;
+    if (opt_dump_refs)
+        dump_flags |= DF_DUMP_REFERENCES;
+
     dfilter_dump(stdout, df, dump_flags);
 
     print_warnings(df);
@@ -444,7 +453,5 @@ out:
     dfilter_free(df);
     g_free(text);
     g_free(expanded_text);
-    if (timer != NULL)
-        g_timer_destroy(timer);
     exit(exit_status);
 }

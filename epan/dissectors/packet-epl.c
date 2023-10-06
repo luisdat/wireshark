@@ -582,10 +582,10 @@ static const value_string epl_device_profiles[] = {
 
 /* EPL Device Profiles loading */
 /* User Access Table Checkers */
-static gboolean epl_profile_uat_fld_fileopen_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
-static gboolean epl_uat_fld_cn_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
-static gboolean epl_uat_fld_uint16dec_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
-static gboolean epl_uat_fld_uint32hex_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
+static bool epl_profile_uat_fld_fileopen_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
+static bool epl_uat_fld_cn_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
+static bool epl_uat_fld_uint16dec_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
+static bool epl_uat_fld_uint32hex_check_cb(void *, const char *, unsigned, const void *, const void *, char **);
 
 /* DeviceType:Path User Access Table */
 struct device_profile_uat_assoc {
@@ -602,7 +602,7 @@ static guint ndevice_profile_uat = 0;
 
 static void *device_profile_uat_copy_cb(void *, const void *, size_t);
 static void device_profile_uat_free_cb(void *);
-static gboolean device_profile_uat_update_record(void *, char **);
+static bool device_profile_uat_update_record(void *, char **);
 static void device_profile_parse_uat(void);
 
 UAT_DEC_CB_DEF(device_profile_list_uats, device_type, struct device_profile_uat_assoc)
@@ -643,7 +643,7 @@ static void nodeid_profile_list_uats_nodeid_set_cb(void *, const char *, unsigne
 static void nodeid_profile_list_uats_nodeid_tostr_cb(void *, char **, unsigned *, const void*, const void*);
 static void *nodeid_profile_uat_copy_cb(void *, const void *, size_t);
 static void nodeid_profile_uat_free_cb(void *);
-static gboolean nodeid_profile_uat_update_record(void *, char **);
+static bool nodeid_profile_uat_update_record(void *, char **);
 static void nodeid_profile_parse_uat(void);
 
 UAT_FILENAME_CB_DEF(nodeid_profile_list_uats, path, struct nodeid_profile_uat_assoc)
@@ -961,7 +961,8 @@ static const value_string sod_idx_names[] = {
 	{0x10300009, "Valid_BOOL"},
 
 	{0x10500000, "NMT_RelativeLatencyDiff_AU32"},
-	{0x10500000, "RelativeLatencyDiff"},
+	/* TODO: same value, so effectively hidden.  Is there another value?
+	{0x10500000, "RelativeLatencyDiff"}, */
 
 	{0x11010000, "DIA_NMTTelegrCount_REC"},
 	{0x11010001, "IsochrCyc_U32"},
@@ -1818,6 +1819,7 @@ static expert_field ei_sendseq_value          = EI_INIT;
 static expert_field ei_real_length_differs    = EI_INIT;
 
 static dissector_handle_t epl_handle;
+static dissector_handle_t epl_udp_handle;
 
 static gboolean show_cmd_layer_for_duplicated = FALSE;
 static gboolean show_pdo_meta_info = FALSE;
@@ -1919,7 +1921,7 @@ static wmem_map_t *epl_profiles_by_device, *epl_profiles_by_nodeid, *epl_profile
 static struct profile *epl_default_profile;
 static const char *epl_default_profile_path = NULL, *epl_default_profile_path_last = NULL;
 
-static gboolean
+static bool
 profile_del_cb(wmem_allocator_t *pool _U_, wmem_cb_event_t event _U_, void *_profile)
 {
 	struct profile *profile = (struct profile*)_profile;
@@ -3018,7 +3020,7 @@ dissect_epl_soa(proto_tree *epl_tree, tvbuff_t *tvb, packet_info *pinfo, gint of
 	offset += 1;
 
 	col_append_fstr(pinfo->cinfo, COL_INFO, "(%s)->%3d",
-					rval_to_str(svid, soa_svid_id_vals, "Unknown"), target);
+					rval_to_str_const(svid, soa_svid_id_vals, "Unknown"), target);
 
 	/* append info entry with flag information */
 	col_append_fstr(pinfo->cinfo, COL_INFO, "  F:EA=%d,ER=%d  ",
@@ -3126,7 +3128,7 @@ dissect_epl_asnd(proto_tree *epl_tree, tvbuff_t *tvb, packet_info *pinfo, gint o
 	flags2 = tvb_get_guint8(tvb, offset + 1);
 
 	col_append_fstr(pinfo->cinfo, COL_INFO, "(%s) ",
-			rval_to_str(svid, asnd_svid_id_vals, "Unknown"));
+			rval_to_str_const(svid, asnd_svid_id_vals, "Unknown"));
 
 	/* append info entry with flag information for sres/ires frames */
 	if ((svid == EPL_ASND_IDENTRESPONSE) || (svid == EPL_ASND_STATUSRESPONSE))
@@ -3813,13 +3815,13 @@ dissect_epl_sdo_sequence(proto_tree *epl_tree, tvbuff_t *tvb, packet_info *pinfo
 	offset += 3;
 
 	col_append_fstr(pinfo->cinfo, COL_INFO, "Seq:%02d%s,%02d%s",
-					seq_recv >> EPL_ASND_SDO_SEQ_MASK, val_to_str(seq_recv & EPL_ASND_SDO_SEQ_CON_MASK, epl_sdo_init_abbr_vals, "x"),
-					seq_send >> EPL_ASND_SDO_SEQ_MASK, val_to_str(seq_send & EPL_ASND_SDO_SEQ_CON_MASK, epl_sdo_init_abbr_vals, "x"));
+					seq_recv >> EPL_ASND_SDO_SEQ_MASK, val_to_str_const(seq_recv & EPL_ASND_SDO_SEQ_CON_MASK, epl_sdo_init_abbr_vals, "x"),
+					seq_send >> EPL_ASND_SDO_SEQ_MASK, val_to_str_const(seq_send & EPL_ASND_SDO_SEQ_CON_MASK, epl_sdo_init_abbr_vals, "x"));
 
 	seq_recv &= EPL_ASND_SDO_SEQ_CON_MASK;
 	seq_send &= EPL_ASND_SDO_SEQ_CON_MASK;
 
-	col_append_fstr(pinfo->cinfo, COL_INFO, "(%s) ", val_to_str((seq_recv << 8) | seq_send, epl_sdo_init_con_vals, "Invalid"));
+	col_append_fstr(pinfo->cinfo, COL_INFO, "(%s) ", val_to_str_const((seq_recv << 8) | seq_send, epl_sdo_init_con_vals, "Invalid"));
 
 	return offset;
 }
@@ -6120,7 +6122,7 @@ proto_register_epl(void)
 		},
 		{ &hf_epl_asnd_sdo_cmd_abort_code,
 			{ "SDO Transfer Abort", "epl.asnd.sdo.cmd.abort.code",
-				FT_UINT8, BASE_HEX | BASE_EXT_STRING,
+				FT_UINT32, BASE_HEX | BASE_EXT_STRING,
 				&sdo_cmd_abort_code_ext, 0x00, NULL, HFILL }
 		},
 		{ &hf_epl_asnd_sdo_cmd_data_index,
@@ -6356,6 +6358,7 @@ proto_register_epl(void)
 
 	/* Registering protocol to be called by another dissector */
 	epl_handle = register_dissector("epl", dissect_epl, proto_epl);
+	epl_udp_handle = register_dissector("epl.udp", dissect_epludp, proto_epl);
 
 	/* Required function calls to register the header fields and subtrees used */
 	proto_register_field_array(proto_epl, hf, array_length(hf));
@@ -6450,8 +6453,6 @@ proto_register_epl(void)
 void
 proto_reg_handoff_epl(void)
 {
-	dissector_handle_t epl_udp_handle = create_dissector_handle(dissect_epludp, proto_epl);
-
 	dissector_add_uint("ethertype", ETHERTYPE_EPL_V2, epl_handle);
 	dissector_add_uint_with_preference("udp.port", UDP_PORT_EPL, epl_udp_handle);
         apply_prefs();
@@ -6464,7 +6465,7 @@ proto_reg_handoff_epl(void)
 }
 
 
-static gboolean
+static bool
 epl_uat_fld_uint16dec_check_cb(void *_record _U_, const char *str, guint len _U_, const void *chk_data _U_, const void *fld_data _U_, char **err)
 {
 	guint16 val;
@@ -6476,7 +6477,7 @@ epl_uat_fld_uint16dec_check_cb(void *_record _U_, const char *str, guint len _U_
 	return TRUE;
 }
 
-static gboolean
+static bool
 epl_uat_fld_uint32hex_check_cb(void *_record _U_, const char *str, guint len _U_, const void *chk_data _U_, const void *fld_data _U_, char **err)
 {
 	guint32 val;
@@ -6488,7 +6489,7 @@ epl_uat_fld_uint32hex_check_cb(void *_record _U_, const char *str, guint len _U_
 	return TRUE;
 }
 
-static gboolean
+static bool
 epl_profile_uat_fld_fileopen_check_cb(void *record _U_, const char *path, guint len, const void *chk_data _U_, const void *fld_data _U_, char **err)
 {
 	const char *supported = "Only" IF_LIBXML(" *.xdd, *.xdc and") " *.eds profiles supported.";
@@ -6604,7 +6605,7 @@ device_profile_parse_uat(void)
 	}
 }
 
-static gboolean
+static bool
 device_profile_uat_update_record(void *_record _U_, char **err _U_)
 {
 	return TRUE;
@@ -6688,7 +6689,7 @@ nodeid_profile_parse_uat(void)
 }
 
 
-static gboolean
+static bool
 nodeid_profile_uat_update_record(void *_record _U_, char **err _U_)
 {
 	return TRUE;
@@ -6735,7 +6736,7 @@ nodeid_profile_list_uats_nodeid_tostr_cb(void *_rec, char **out_ptr, unsigned *o
 	}
 }
 
-static gboolean
+static bool
 epl_uat_fld_cn_check_cb(void *record _U_, const char *str, guint len _U_, const void *u1 _U_, const void *u2 _U_, char **err)
 {
 	guint8 nodeid;

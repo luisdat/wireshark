@@ -73,7 +73,7 @@ tap_lte_rlc_packet(void *pct, packet_info *pinfo _U_, epan_dissect_t *edt _U_, c
 
     /* Add address if unique and have space for it */
     if (is_unique && (th->num_hdrs < MAX_SUPPORTED_CHANNELS)) {
-        /* Copy the tap stuct in as next header */
+        /* Copy the tap struct in as next header */
         /* Need to take a deep copy of the tap struct, it may not be valid
            to read after this function returns? */
         th->rlchdrs[th->num_hdrs] = g_new(rlc_lte_tap_info,1);
@@ -116,6 +116,7 @@ rlc_lte_tap_info *select_rlc_lte_session(capture_file *cf,
 
     /* Dissect the data from the current frame. */
     if (!cf_read_current_record(cf)) {
+        dfilter_free(sfcode);
         return NULL;  /* error reading the record */
     }
 
@@ -127,6 +128,7 @@ rlc_lte_tap_info *select_rlc_lte_session(capture_file *cf,
         fprintf(stderr, "wireshark: Couldn't register rlc_lte_graph tap: %s\n",
                 error_string->str);
         g_string_free(error_string, TRUE);
+        dfilter_free(sfcode);
         exit(1);   /* XXX: fix this */
     }
 

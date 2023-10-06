@@ -1521,7 +1521,7 @@ dissect_diameter_3gpp_access_network_information(tvbuff_t *tvb, packet_info *pin
     int offset = 0;
     int length = tvb_reported_length(tvb);
 
-    dissect_sip_p_access_network_info_header(tvb, tree, offset, length);
+    dissect_sip_p_access_network_info_header(tvb, pinfo, tree, offset, length);
 
     return length;
 }
@@ -2805,9 +2805,11 @@ dissect_diameter_3gpp_sm_rp_ui(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     diam_sub_dis_t *diam_sub_dis_inf = (diam_sub_dis_t*)data;
     guint32 cmd = 0;
     gboolean save_writable = col_get_writable(pinfo->cinfo, -1 /* All */);
+    gboolean parent_message_is_request = TRUE;
 
     if (diam_sub_dis_inf) {
         cmd = diam_sub_dis_inf->cmd_code;
+        parent_message_is_request = diam_sub_dis_inf->parent_message_is_request;
     }
 
     col_set_writable(pinfo->cinfo, -1, FALSE);
@@ -2820,8 +2822,11 @@ dissect_diameter_3gpp_sm_rp_ui(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
              * mobile originated short messages from a mobile user to a Service Centre
              *
              */
-            /*pinfo->link_dir = P2P_DIR_UL;*/
-            pinfo->p2p_dir = P2P_DIR_RECV;
+            if (parent_message_is_request) {
+                pinfo->p2p_dir = P2P_DIR_RECV;
+            } else {
+                pinfo->p2p_dir = P2P_DIR_SENT;
+            }
             call_dissector(gsm_sms_handle, tvb, pinfo, tree);
             break;
         case 8388646:
@@ -2829,7 +2834,11 @@ dissect_diameter_3gpp_sm_rp_ui(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
              * SMS-GMSC and the serving MME or SGSN(transiting an SMS Router, if present)
              * or IP-SM-GW to forward mobile terminated short messages.
              */
-            pinfo->p2p_dir = P2P_DIR_SENT;
+            if (parent_message_is_request) {
+                pinfo->p2p_dir = P2P_DIR_SENT;
+            } else {
+                pinfo->p2p_dir = P2P_DIR_RECV;
+            }
             call_dissector(gsm_sms_handle, tvb, pinfo, tree);
             break;
         default:
@@ -4169,7 +4178,7 @@ proto_register_diameter_3gpp(void)
         },
         { &hf_diameter_3gpp_qos_signalling_ind,
             { "Signalling indication", "diameter.3gpp.qos.signalling_ind",
-            FT_BOOLEAN, SEP_DOT, TFS(&diameter_3gpp_qos_signalling_ind_value), 0x10,
+            FT_BOOLEAN, 8, TFS(&diameter_3gpp_qos_signalling_ind_value), 0x10,
             NULL, HFILL }
         },
         { &hf_diameter_3gpp_qos_max_bitrate_downl_ext,
@@ -4194,7 +4203,7 @@ proto_register_diameter_3gpp(void)
         },
         { &hf_diameter_3gpp_qos_pre_emption_vulnerability,
             { "Pre-emption vulnerability", "diameter.3gpp.qos.pre_emption_vulnerability",
-            FT_BOOLEAN, SEP_DOT, TFS(&tfs_set_notset), 0x01,
+            FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x01,
             NULL, HFILL }
         },
         { &hf_diameter_3gpp_qos_priority_level,
@@ -4204,7 +4213,7 @@ proto_register_diameter_3gpp(void)
         },
         { &hf_diameter_3gpp_qos_pre_emption_capability,
             { "Pre-emption capability", "diameter.3gpp.qos.pre_emption_capability",
-            FT_BOOLEAN, SEP_DOT, TFS(&tfs_set_notset), 0x40,
+            FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x40,
             NULL, HFILL }
         },
         { &hf_diameter_3gpp_ulr_flags,

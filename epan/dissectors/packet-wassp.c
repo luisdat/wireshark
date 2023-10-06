@@ -3841,9 +3841,9 @@ static const value_string mu_resv0_strings[] =
 
 static const value_string mu_action_field_strings[] =
 {
-	{ 0x0000, "SSID" },
-	{ 0x2000, "Redirect With Vlan ID" },
-	{ 0x3000, "Vlan ID" },
+	{ 0x0, "SSID" },
+	{ 0x2, "Redirect With Vlan ID" },
+	{ 0x3, "Vlan ID" },
 	{ 0, NULL }
 };
 
@@ -4118,6 +4118,9 @@ static int hf_lsb_wh_addr4 = -1;                   // 6 bytes
 
 
 
+/* Our dissector handle */
+static dissector_handle_t wassp_handle;
+
 /* Dissector handles used in dissector registration */
 static dissector_handle_t data_handle;
 static dissector_handle_t eth_handle;
@@ -4357,6 +4360,7 @@ static int  dissect_wassp(tvbuff_t *, packet_info *, proto_tree *);
 /* Dissector registration routines */
 void proto_register_wassp(void);
 void proto_reg_handoff_wassp(void);
+static int dissect_wassp_static(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_);
 
 static int g_wassp_ver = 0;
 static reassembly_table  wassp_reassembled_table;
@@ -5189,7 +5193,7 @@ int dissect_wassp_tlv(proto_tree *wassp_tree, tvbuff_t *tvb, packet_info *pinfo,
 		case EID_CONFIG:                       // 10
 		case EID_ALARM:                        // 38
 			/* Dissect SNMP encoded configuration */
-			dissector_try_uint(wassp_dissector_table, WASSP_SNMP, tvb_new_subset_length_caplen(tvb, offset + TLV_VALUE, -1, length - 4), pinfo, tlv_tree);
+			dissector_try_uint(wassp_dissector_table, WASSP_SNMP, tvb_new_subset_length(tvb, offset + TLV_VALUE, length - 4), pinfo, tlv_tree);
 			offset += length;
 			break;
 
@@ -5580,7 +5584,7 @@ int dissect_wassp_tlv(proto_tree *wassp_tree, tvbuff_t *tvb, packet_info *pinfo,
 		default:
 			/* If tlv isn't in the list, then just display the raw data*/
 			proto_tree_add_item(tlv_tree, hf_wassp_tlv_value_octext, tvb, offset + TLV_VALUE, length - 4, ENC_NA);
-			call_dissector(data_handle, tvb_new_subset_length_caplen(tvb, offset + TLV_VALUE, -1, length - 4), pinfo, wassp_tree);
+			call_dissector(data_handle, tvb_new_subset_length(tvb, offset + TLV_VALUE, length - 4), pinfo, wassp_tree);
 			offset += length;
 		}
 
@@ -5737,7 +5741,7 @@ static int dissect_wassp_mu(proto_tree *wassp_tree, tvbuff_t *tvb, packet_info *
 		case WASSP_MU_Data:
 		case WASSP_MU_Eap_Last:
 			/* Dissect the WASSP MU ethernet frame */
-			call_dissector(eth_handle, tvb_new_subset_length_caplen(tvb, offset, -1, plength), pinfo, wassp_mu_tree);
+			call_dissector(eth_handle, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_mu_tree);
 			offset += plength;
 			break;
 		case WASSP_MU_Roam_Notify:
@@ -5746,7 +5750,7 @@ static int dissect_wassp_mu(proto_tree *wassp_tree, tvbuff_t *tvb, packet_info *
 			break;
 		default:
 			/* Dissect the WASSP MU payload as data by default */
-			call_dissector(data_handle, tvb_new_subset_length_caplen(tvb, offset, -1, plength), pinfo, wassp_mu_tree);
+			call_dissector(data_handle, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_mu_tree);
 			offset += plength;
 			break;
 		}
@@ -5841,12 +5845,12 @@ static void dissect_unfragmented_wassp(tvbuff_t *tvb, packet_info *pinfo, proto_
 			goto tlv_dissect;
 		case WASSP_RU_Stats_Notify:                      // 14
 			/* Dissect SNMP encoded RU statistics */
-			dissector_try_uint(wassp_dissector_table, WASSP_SNMP, tvb_new_subset_length_caplen(tvb, offset, -1, plength), pinfo, wassp_tree);
+			dissector_try_uint(wassp_dissector_table, WASSP_SNMP, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_tree);
 			offset += plength;
 			goto data_dissect;
 		case WASSP_LBS_TAG_REPORT:                       // 55
 			lsbHeaderMagic = tvb_get_ntohs(tvb, 36);
-			call_dissector(ip_handle, tvb_new_subset_length_caplen(tvb, offset, -1, plength), pinfo, wassp_tree);
+			call_dissector(ip_handle, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_tree);
 			if (lsbHeaderMagic == LBS_HDR_MAGIC)
 				offset = decode_lbs_tag_header(wassp_tree, tvb, offset + 28);
 			else
@@ -5866,7 +5870,7 @@ tlv_dissect:
 		offset = dissect_wassp_tlv(wassp_tree, tvb, pinfo, offset, ru_msg_type);
 data_dissect:
 		/* Call data dissector on any remaining bytes */
-		call_dissector(data_handle, tvb_new_subset_length_caplen(tvb, offset, -1, -1), pinfo, wassp_tree);
+		call_dissector(data_handle, tvb_new_subset_length(tvb, offset, -1), pinfo, wassp_tree);
 	}
 }
 
@@ -5929,7 +5933,7 @@ static int dissect_wassp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree )
 
 	save_fragmented = pinfo->fragmented;
 
-	ti = proto_tree_add_item(tree, proto_wassp, tvb, offset, -1, FALSE);
+	ti = proto_tree_add_item(tree, proto_wassp, tvb, offset, -1, ENC_NA);
 	wassp_tree = proto_item_add_subtree(ti, ett_wassp);
 
 	if (ru_msg_type == WASSP_RU_Discov)  /* UDP port = 13907, ap discover tlv, decode AP discover header */
@@ -6005,7 +6009,7 @@ static int dissect_wassp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree )
 		else
 		{
 			col_append_fstr(pinfo->cinfo, COL_INFO, " (Message fragment %u)", seq_number);
-			next_tvb = tvb_new_subset_length_caplen(tvb, WASSP_HDR_LEN, -1, -1);
+			next_tvb = tvb_new_subset_length(tvb, WASSP_HDR_LEN, -1);
 		}
 	}
 
@@ -6815,15 +6819,15 @@ void proto_register_wassp(void)
 		{
 			&hf_cos_priority_txq,
 			{
-				"COS Priority and TxQ", "wassp.cos_priority_txq",FT_UINT8,  BASE_CUSTOM,  CF_FUNC(cos_priority_txq_print),
-				0xff, "Cos Priority and Transmit Queue", HFILL
+				"COS Priority and TxQ", "wassp.cos_priority_txq", FT_UINT8,  BASE_CUSTOM,  CF_FUNC(cos_priority_txq_print),
+				0x0, "Cos Priority and Transmit Queue", HFILL
 			}
 		},
 		{
 			&hf_cos_rateid,
 			{
 				"COS In&Out Rate Id", "wassp.rate_id", FT_UINT8,  BASE_CUSTOM,  CF_FUNC(cos_rate_id_print),
-				0xff, "Cos In&Out Rate Id", HFILL
+				0x0, "Cos In&Out Rate Id", HFILL
 			}
 		},
 		{
@@ -7024,6 +7028,8 @@ void proto_register_wassp(void)
 	proto_wassp = proto_register_protocol("Wireless Access Station Session Protocol", "WASSP", "wassp");
 	/* Register wassp protocol fields */
 	proto_register_field_array(proto_wassp, hf, array_length(hf));
+	/* Register dissector handle */
+	wassp_handle = register_dissector("wassp", dissect_wassp_static, proto_wassp);
 	/* Register wassp protocol sub-trees */
 	proto_register_subtree_array(ett, array_length(ett));
 	wassp_dissector_table = register_dissector_table("wassp.subd", "WASSP subdissectors", proto_wassp, FT_UINT16, BASE_DEC);
@@ -7075,9 +7081,6 @@ dissect_wassp_static(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 void
 proto_reg_handoff_wassp(void)
 {
-	dissector_handle_t wassp_handle;
-
-	wassp_handle = create_dissector_handle(dissect_wassp_static, proto_wassp);
 	dissector_add_uint_range_with_preference("udp.port", PORT_WASSP_RANGE, wassp_handle);
 	heur_dissector_add("udp", dissect_wassp_heur, "WASSP over UDP", "wassp_udp", proto_wassp, HEURISTIC_DISABLE);
 

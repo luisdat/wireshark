@@ -53,6 +53,9 @@
 #include <epan/reassemble.h>
 #include <epan/strutil.h>
 #include "zlib.h"
+#include <epan/crc32-tvb.h>
+#include <wsutil/crc32.h>
+#include <gcrypt.h>
 
 void proto_register_rtps(void);
 void proto_reg_handoff_rtps(void);
@@ -206,6 +209,12 @@ typedef struct _rtps_dissector_data {
   gint position_in_batch;
 } rtps_dissector_data;
 
+typedef struct _rtps_tvb_field {
+  tvbuff_t *tvb;
+  gint tvb_offset;
+  gint tvb_len;
+} rtps_tvb_field;
+
 static const value_string type_object_kind [] = {
   { RTI_CDR_TYPE_OBJECT_TYPE_KIND_NO_TYPE,          "NO_TYPE" },
   { RTI_CDR_TYPE_OBJECT_TYPE_KIND_BOOLEAN_TYPE,     "BOOLEAN_TYPE" },
@@ -250,6 +259,7 @@ static gboolean enable_rtps_reassembly = FALSE;
 static gboolean enable_user_data_dissection = FALSE;
 static gboolean enable_max_array_data_type_elements = TRUE;
 static gboolean enable_max_data_type_elements = TRUE;
+static gboolean enable_rtps_crc_check = FALSE;
 static dissector_table_t rtps_type_name_table;
 
 /***************************************************************************/
@@ -452,10 +462,11 @@ static dissector_table_t rtps_type_name_table;
 #define PID_DATA_TAGS                           (0x1003)
 #define PID_ENDPOINT_SECURITY_INFO              (0x1004)
 #define PID_PARTICIPANT_SECURITY_INFO           (0x1005)
-#define PID_PARTICIPANT_SECURITY_DIGITAL_SIGNATURE_ALGO     (0x1006)
-#define PID_PARTICIPANT_SECURITY_KEY_ESTABLISHMENT_ALGO     (0x1007)
-#define PID_PARTICIPANT_SECURITY_SYMMETRIC_CIPHER_ALGO      (0x1008)
-#define PID_ENDPOINT_SECURITY_SYMMETRIC_CIPHER_ALGO         (0x1009)
+#define PID_IDENTITY_STATUS_TOKEN                           (0x1006)
+#define PID_PARTICIPANT_SECURITY_DIGITAL_SIGNATURE_ALGO     (0x1010)
+#define PID_PARTICIPANT_SECURITY_KEY_ESTABLISHMENT_ALGO     (0x1011)
+#define PID_PARTICIPANT_SECURITY_SYMMETRIC_CIPHER_ALGO      (0x1012)
+#define PID_ENDPOINT_SECURITY_SYMMETRIC_CIPHER_ALGO         (0x1013)
 
 #define PID_TYPE_OBJECT_LB                      (0x8021)
 
@@ -678,6 +689,13 @@ static dissector_table_t rtps_type_name_table;
 #define RTPS_VENDOR_ECLIPSE_STRING       "Eclipse Foundation - Cyclone DDS"
 #define RTPS_VENDOR_GURUM                (0x0111)
 #define RTPS_VENDOR_GURUM_STRING         "GurumNetworks Ltd. - GurumDDS"
+#define RTPS_VENDOR_RUST                 (0x0112)
+#define RTPS_VENDOR_RUST_STRING          "Atostek - RustDDS"
+#define RTPS_VENDOR_ZRDDS                (0x0113)
+#define RTPS_VENDOR_ZRDDS_STRING         "Nanjing Zhenrong Software Technology Co. - ZRDDS"
+#define RTPS_VENDOR_DUST                 (0x0114)
+#define RTPS_VENDOR_DUST_STRING          "S2E Software Systems B.V. - Dust DDS"
+
 
 /* Data encapsulation */
 #define ENCAPSULATION_CDR_BE            (0x0000)
@@ -775,19 +793,20 @@ static dissector_table_t rtps_type_name_table;
 
 #define SECURITY_SYMMETRIC_CIPHER_BIT_AES128_GCM         0x00000001
 #define SECURITY_SYMMETRIC_CIPHER_BIT_AES256_GCM         0x00000002
-#define SECURITY_SYMMETRIC_CIPHER_BIT_CUSTOM_ALGORITHM   0x80000000
+#define SECURITY_SYMMETRIC_CIPHER_BIT_CUSTOM_ALGORITHM   0x40000000
 
 #define SECURITY_DIGITAL_SIGNATURE_BIT_RSASSAPSSMGF1SHA256_2048_SHA256  0x00000001
 #define SECURITY_DIGITAL_SIGNATURE_BIT_RSASSAPKCS1V15_2048_SHA256       0x00000002
 #define SECURITY_DIGITAL_SIGNATURE_BIT_ECDSA_P256_SHA256                0x00000004
 #define SECURITY_DIGITAL_SIGNATURE_BIT_ECDSA_P384_SHA384                0x00000008
-#define SECURITY_DIGITAL_SIGNATURE_BIT_CUSTOM_ALGORITHM                 0x80000000
+#define SECURITY_DIGITAL_SIGNATURE_BIT_CUSTOM_ALGORITHM                 0x40000000
 
 #define SECURITY_KEY_ESTABLISHMENT_BIT_DHE_MODP2048256     0x00000001
 #define SECURITY_KEY_ESTABLISHMENT_BIT_ECDHECEUM_P256      0x00000002
 #define SECURITY_KEY_ESTABLISHMENT_BIT_ECDHECEUM_P384      0x00000004
-#define SECURITY_KEY_ESTABLISHMENT_BIT_CUSTOM_ALGORITHM    0x80000000
+#define SECURITY_KEY_ESTABLISHMENT_BIT_CUSTOM_ALGORITHM    0x40000000
 
+#define SECURITY_ALGORITHM_BIT_COMPATIBILITY_MODE     0x80000000
 
 #define TOPIC_INFO_ADD_GUID                      (0x01)
 #define TOPIC_INFO_ADD_TYPE_NAME                 (0x02)
@@ -1024,6 +1043,7 @@ static int hf_rtps_secure_secure_data                       = -1;
 static int hf_rtps_param_enable_authentication              = -1;
 static int hf_rtps_param_builtin_endpoint_qos               = -1;
 static int hf_rtps_secure_dataheader_transformation_kind    = -1;
+static int hf_rtps_secure_dataheader_transformation_key_revision_id    = -1;
 static int hf_rtps_secure_dataheader_transformation_key_id  = -1;
 static int hf_rtps_secure_dataheader_plugin_sec_header      = -1;
 static int hf_rtps_secure_datatag_plugin_sec_tag            = -1;
@@ -1183,6 +1203,8 @@ static int hf_rtps_flag_data_present_v1                         = -1;
 static int hf_rtps_flag_multisubmessage                         = -1;
 static int hf_rtps_flag_endianness                              = -1;
 static int hf_rtps_flag_additional_authenticated_data           = -1;
+static int hf_rtps_flag_protected_with_psk                      = -1;
+static int hf_rtps_flag_vendor_specific_content                 = -1;
 static int hf_rtps_flag_status_info                             = -1;
 static int hf_rtps_flag_data_present_v2                         = -1;
 static int hf_rtps_flag_inline_qos_v2                           = -1;
@@ -1259,8 +1281,7 @@ static int hf_rtps_flag_secure_service_request_reader           = -1;
 static int hf_rtps_flag_security_access_protected               = -1;
 static int hf_rtps_flag_security_discovery_protected            = -1;
 static int hf_rtps_flag_security_submessage_protected           = -1;
-static int hf_rtps_param_endpoint_security_symmetric_cipher_algorithms_used_bit                                       = -1;
-static int hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_used_bit                  = -1;
+static int hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_required_mask                  = -1;
 static int hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_key_exchange_used_bit     = -1;
 static int hf_rtps_param_participant_security_symmetric_cipher_algorithms_supported_mask    = -1;
 static int hf_rtps_flag_security_symmetric_cipher_mask_aes128_gcm                           = -1;
@@ -1270,21 +1291,18 @@ static int hf_rtps_param_compression_id_mask                                    
 static int hf_rtps_flag_compression_id_zlib                                                 = -1;
 static int hf_rtps_flag_compression_id_bzip2                                                = -1;
 static int hf_rtps_flag_compression_id_lz4                                                  = -1;
-static int hf_rtps_param_participant_security_digital_signature_algorithms_trust_chain_supported_mask                   = -1;
-static int hf_rtps_param_participant_security_digital_signature_algorithms_trust_chain_used_mask                        = -1;
-static int hf_rtps_param_participant_security_digital_signature_algorithms_auth_supported_mask                          = -1;
+static int hf_rtps_param_crypto_algorithm_requirements_trust_chain                          = -1;
+static int hf_rtps_param_crypto_algorithm_requirements_message_auth                         = -1;
 static int hf_rtps_flag_security_digital_signature_mask_rsassapssmgf1sha256_2048_sha256    = -1;
 static int hf_rtps_flag_security_digital_signature_mask_rsassapkcs1v15_2048_sha256         = -1;
 static int hf_rtps_flag_security_digital_signature_mask_ecdsa_p256_sha256                  = -1;
 static int hf_rtps_flag_security_digital_signature_mask_ecdsa_p384_sha384                  = -1;
 static int hf_rtps_flag_security_digital_signature_mask_custom_algorithm                   = -1;
-static int hf_rtps_param_participant_security_key_establishment_algorithms_supported_mask  = -1;
-static int hf_rtps_param_participant_security_key_establishment_algorithms_preferred_bit   = -1;
-static int hf_rtps_param_participant_security_digital_signature_algorithms_auth_used_bit   = -1;
 static int hf_rtps_flag_security_key_establishment_mask_dhe_modp2048256                    = -1;
 static int hf_rtps_flag_security_key_establishment_mask_ecdheceum_p256                     = -1;
 static int hf_rtps_flag_security_key_establishment_mask_ecdheceum_p384                     = -1;
 static int hf_rtps_flag_security_key_establishment_mask_custom_algorithm                   = -1;
+static int hf_rtps_flag_security_algorithm_compatibility_mode                              = -1;
 static int hf_rtps_flag_security_payload_protected                                        = -1;
 static int hf_rtps_flag_endpoint_security_attribute_flag_is_read_protected                = -1;
 static int hf_rtps_flag_endpoint_security_attribute_flag_is_write_protected               = -1;
@@ -1303,6 +1321,7 @@ static int hf_rtps_param_plugin_endpoint_security_attributes_mask               
 static int hf_rtps_flag_participant_security_attribute_flag_is_rtps_protected             = -1;
 static int hf_rtps_flag_participant_security_attribute_flag_is_discovery_protected        = -1;
 static int hf_rtps_flag_participant_security_attribute_flag_is_liveliness_protected       = -1;
+static int fh_rtps_flag_participant_security_attribute_flag_key_revisions_enabled         = -1;
 static int hf_rtps_flag_participant_security_attribute_flag_is_valid                      = -1;
 static int hf_rtps_param_participant_security_attributes_mask                             = -1;
 static int hf_rtps_flag_plugin_participant_security_attribute_flag_is_rtps_encrypted              = -1;
@@ -1346,7 +1365,9 @@ static int hf_rtps_reassembled_length                           = -1;
 static int hf_rtps_reassembled_data                             = -1;
 static int hf_rtps_encapsulation_extended_compression_options   = -1;
 static int hf_rtps_message_length                               = -1;
-static int hf_rtps_header_extension_checksum                    = -1;
+static int hf_rtps_header_extension_checksum_crc32c             = -1;
+static int hf_rtps_header_extension_checksum_crc64              = -1;
+static int hf_rtps_header_extension_checksum_md5                = -1;
 static int hf_rtps_uextension                                   = -1;
 static int hf_rtps_wextension                                   = -1;
 static int hf_rtps_writer_group_oid                             = -1;
@@ -1435,8 +1456,10 @@ static gint ett_rtps_info_remaining_items                       = -1;
 static gint ett_rtps_data_encapsulation_options                 = -1;
 static gint ett_rtps_decompressed_serialized_data               = -1;
 static gint ett_rtps_instance_transition_data                   = -1;
+static gint ett_rtps_crypto_algorithm_requirements              = -1;
 
 static expert_field ei_rtps_sm_octets_to_next_header_error = EI_INIT;
+static expert_field ei_rtps_checksum_check_error = EI_INIT;
 static expert_field ei_rtps_port_invalid = EI_INIT;
 static expert_field ei_rtps_ip_invalid = EI_INIT;
 static expert_field ei_rtps_parameter_value_invalid = EI_INIT;
@@ -1471,6 +1494,9 @@ static const value_string vendor_vals[] = {
   { RTPS_VENDOR_EPROSIMA,      RTPS_VENDOR_EPROSIMA_STRING},
   { RTPS_VENDOR_ECLIPSE,       RTPS_VENDOR_ECLIPSE_STRING},
   { RTPS_VENDOR_GURUM,         RTPS_VENDOR_GURUM_STRING},
+  { RTPS_VENDOR_RUST,          RTPS_VENDOR_RUST_STRING},
+  { RTPS_VENDOR_ZRDDS,         RTPS_VENDOR_ZRDDS_STRING},
+  { RTPS_VENDOR_DUST,          RTPS_VENDOR_DUST_STRING},
   { 0, NULL }
 };
 
@@ -1841,6 +1867,7 @@ static const value_string parameter_id_v2_vals[] = {
   { PID_PARTICIPANT_SECURITY_KEY_ESTABLISHMENT_ALGO,    "PID_PARTICIPANT_SECURITY_KEY_ESTABLISHMENT_ALGO" },
   { PID_PARTICIPANT_SECURITY_SYMMETRIC_CIPHER_ALGO,     "PID_PARTICIPANT_SECURITY_SYMMETRIC_CIPHER_ALGO" },
   { PID_ENDPOINT_SECURITY_SYMMETRIC_CIPHER_ALGO,        "PID_ENDPOINT_SECURITY_SYMMETRIC_CIPHER_ALGO" },
+  { PID_IDENTITY_STATUS_TOKEN,          "PID_IDENTITY_STATUS_TOKEN"},
   { PID_DOMAIN_ID,                      "PID_DOMAIN_ID" },
   { PID_DOMAIN_TAG,                     "PID_DOMAIN_TAG" },
   { PID_GROUP_COHERENT_SET,             "PID_GROUP_COHERENT_SET" },
@@ -2050,31 +2077,6 @@ static const value_string acknowledgement_kind_vals[] = {
   { APPLICATION_EXPLICIT_ACKNOWLEDGMENT,  "APPLICATION_EXPLICIT_ACKNOWLEDGMENT" },
   { 0, NULL }
 };
-
-static const value_string security_symmetric_cipher_bit_vals[] = {
-  { SECURITY_SYMMETRIC_CIPHER_BIT_AES128_GCM, "AES128_GCM"},
-  { SECURITY_SYMMETRIC_CIPHER_BIT_AES256_GCM, "AES256_GCM"},
-  { SECURITY_SYMMETRIC_CIPHER_BIT_CUSTOM_ALGORITHM, "Custom Algorithm"},
-  {0, NULL}
-};
-
-static const value_string security_digital_signature_bit_vals[] = {
-  { SECURITY_DIGITAL_SIGNATURE_BIT_RSASSAPSSMGF1SHA256_2048_SHA256, "RSASSAPSSMGF1SHA256_2048_SHA256"},
-  { SECURITY_DIGITAL_SIGNATURE_BIT_RSASSAPKCS1V15_2048_SHA256,      "RSASSAPKCS1V15_2048_SHA256"},
-  { SECURITY_DIGITAL_SIGNATURE_BIT_ECDSA_P256_SHA256,               "ECDSA_P256_SHA256"},
-  { SECURITY_DIGITAL_SIGNATURE_BIT_ECDSA_P384_SHA384,               "ECDSA_P384_SHA384"},
-  { SECURITY_DIGITAL_SIGNATURE_BIT_CUSTOM_ALGORITHM,                "Custom Algorithm"},
-  { 0, NULL}
-};
-
-static const value_string security_key_establishment_bit_vals[] = {
-  { SECURITY_KEY_ESTABLISHMENT_BIT_DHE_MODP2048256, "DHE_MODP2048256" },
-  { SECURITY_KEY_ESTABLISHMENT_BIT_ECDHECEUM_P256, "ECDHECEUM_P256" },
-  { SECURITY_KEY_ESTABLISHMENT_BIT_ECDHECEUM_P384, "ECDHECEUM_P384" },
-  { SECURITY_KEY_ESTABLISHMENT_BIT_CUSTOM_ALGORITHM, "Custom Algorithm" },
-  { 0, NULL}
-};
-
 
 static int* const TYPE_FLAG_FLAGS[] = {
   &hf_rtps_flag_typeflag_nested,                /* Bit 2 */
@@ -2462,13 +2464,13 @@ static int* const SECURE_FLAGS[] = {
 };
 
 static int* const SECURE_PREFIX_FLAGS[] = {
-  &hf_rtps_flag_reserved80,                     /* Bit 7 */
+  &hf_rtps_flag_vendor_specific_content,        /* Bit 7 */
   &hf_rtps_flag_reserved40,                     /* Bit 6 */
   &hf_rtps_flag_reserved20,                     /* Bit 5 */
   &hf_rtps_flag_reserved10,                     /* Bit 4 */
   &hf_rtps_flag_reserved08,                     /* Bit 3 */
-  &hf_rtps_flag_reserved04,                     /* Bit 2 */
-  &hf_rtps_flag_additional_authenticated_data,   /* Bit 1 */
+  &hf_rtps_flag_protected_with_psk,             /* Bit 2 */
+  &hf_rtps_flag_additional_authenticated_data,  /* Bit 1 */
   &hf_rtps_flag_endianness,                     /* Bit 0 */
   NULL
 };
@@ -2506,6 +2508,7 @@ static int* const PLUGIN_ENDPOINT_SECURITY_INFO_FLAGS[] = {
 };
 static int* const PARTICIPANT_SECURITY_INFO_FLAGS[] = {
   &hf_rtps_flag_participant_security_attribute_flag_is_valid,                     /* Bit 31 */
+  &fh_rtps_flag_participant_security_attribute_flag_key_revisions_enabled,        /* Bit 3 */
   &hf_rtps_flag_participant_security_attribute_flag_is_liveliness_protected,      /* Bit 2 */
   &hf_rtps_flag_participant_security_attribute_flag_is_discovery_protected,       /* Bit 1 */
   &hf_rtps_flag_participant_security_attribute_flag_is_rtps_protected,            /* Bit 0 */
@@ -2619,6 +2622,7 @@ static int* const ENDPOINT_SECURITY_ATTRIBUTES[] = {
 
 
 static int* const SECURITY_SIMMETRIC_CIPHER_MASK_FLAGS[] = {
+  &hf_rtps_flag_security_algorithm_compatibility_mode,
   &hf_rtps_flag_security_symmetric_cipher_mask_custom_algorithm,
   &hf_rtps_flag_security_symmetric_cipher_mask_aes256_gcm,
   &hf_rtps_flag_security_symmetric_cipher_mask_aes128_gcm,
@@ -2633,6 +2637,7 @@ static int* const COMPRESSION_ID_MASK_FLAGS[] = {
 };
 
 static int* const SECURITY_KEY_ESTABLISHMENT_MASK_FLAGS[] = {
+  &hf_rtps_flag_security_algorithm_compatibility_mode,
   &hf_rtps_flag_security_key_establishment_mask_custom_algorithm,
   &hf_rtps_flag_security_key_establishment_mask_ecdheceum_p384,
   &hf_rtps_flag_security_key_establishment_mask_ecdheceum_p256,
@@ -2641,6 +2646,7 @@ static int* const SECURITY_KEY_ESTABLISHMENT_MASK_FLAGS[] = {
 };
 
 static int* const SECURITY_DIGITAL_SIGNATURE_MASK_FLAGS[] = {
+  &hf_rtps_flag_security_algorithm_compatibility_mode,
   &hf_rtps_flag_security_digital_signature_mask_custom_algorithm,
   &hf_rtps_flag_security_digital_signature_mask_ecdsa_p384_sha384,
   &hf_rtps_flag_security_digital_signature_mask_ecdsa_p256_sha256,
@@ -2672,6 +2678,9 @@ static int* const HEADER_EXTENSION_MASK_FLAGS[] = {
 #define RTPS_SERVICE_REQUEST_ID_PROTODATA_KEY   1
 #define RTPS_DATA_SESSION_FINAL_PROTODATA_KEY   2
 #define RTPS_CURRENT_SUBMESSAGE_COL_DATA_KEY    3
+#define RTPS_ROOT_MESSAGE_KEY                   4
+
+#define RTPS_CHECKSUM_MAX_LEN                   16
 
 /* End of TCP get DomainId feature constants */
 
@@ -2791,13 +2800,16 @@ static const fragment_items rtps_frag_items = {
     "RTPS fragments"
 };
 
-static guint32 check_offset_addition(guint32 offset, guint32 value, proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
+static const true_false_string tfs_little_big_endianness = { "Little-Endian", "Big-Endian" };
+
+static gint check_offset_addition(gint offset, guint32 value, proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
 {
-    if (offset > G_MAXUINT32 - value) {
+    gint new_offset = offset + (gint)value;
+    if (new_offset < offset) {
         proto_tree_add_expert_format(tree, pinfo, &ei_rtps_value_too_large, tvb, 0, 0, "Offset value too large: %u", value);
         THROW(ReportedBoundsError);
     }
-    return offset + value;
+    return new_offset;
 }
 
 static void rtps_util_dissect_parameter_header(tvbuff_t * tvb, gint * offset,
@@ -2814,6 +2826,27 @@ static void rtps_util_dissect_parameter_header(tvbuff_t * tvb, gint * offset,
     *member_length = tvb_get_guint32(tvb, *offset, encoding);
     *offset += 4;
   }
+}
+
+static gint dissect_crypto_algorithm_requirements(proto_tree *tree , tvbuff_t* tvb,
+    gint offset, gint encoding, int* const *flags) {
+  proto_tree_add_bitmask(
+      tree,
+      tvb,
+      offset,
+      hf_rtps_param_crypto_algorithm_requirements_trust_chain,
+      ett_rtps_flags, flags,
+      encoding);
+  offset += 4;
+  proto_tree_add_bitmask(
+      tree,
+      tvb,
+      offset,
+      hf_rtps_param_crypto_algorithm_requirements_message_auth,
+      ett_rtps_flags, flags,
+      encoding);
+  offset += 4;
+  return offset;
 }
 
 static gint dissect_mutable_member(proto_tree *tree , tvbuff_t * tvb, gint offset, guint encoding, guint encoding_version,
@@ -4590,7 +4623,7 @@ static void rtps_util_add_transport_info(proto_tree *tree,
     proto_tree *xport_info_tree;
 
     xport_info_tree = proto_tree_add_subtree_format(tree, tvb, offset, 8, ett_rtps_transport_info, NULL,
-            "transportInfo %d: %s", transport_index,val_to_str(classId, ndds_transport_class_id_vals, "unknown"));
+            "transportInfo %d: %s", transport_index, val_to_str_const(classId, ndds_transport_class_id_vals, "unknown"));
 
     proto_tree_add_item(xport_info_tree, hf_rtps_transportInfo_classId, tvb,
       offset, 4, encoding);
@@ -4727,10 +4760,10 @@ static void rtps_util_add_product_version(proto_tree *tree, tvbuff_t *tvb, gint 
   if (vendor_id == RTPS_VENDOR_RTI_DDS) {
     if (major < 5 && revision == 0) {
       subtree = proto_tree_add_subtree_format(tree, tvb, offset, 4, ett_rtps_product_version, NULL,
-              "Product version: %d.%d%c", major, minor, release);
+              "Product version: %d.%d%s", major, minor, format_char(wmem_packet_scope(), release));
     } else if (major < 5 && revision > 0) {
           subtree = proto_tree_add_subtree_format(tree, tvb, offset, 4, ett_rtps_product_version, NULL,
-              "Product version: %d.%d%c rev%d", major, minor, release, revision);
+              "Product version: %d.%d%s rev%d", major, minor, format_char(wmem_packet_scope(), release), revision);
     } else {
           subtree = proto_tree_add_subtree_format(tree, tvb, offset, 4, ett_rtps_product_version, NULL,
               "Product version: %d.%d.%d.%d", major, minor, release, revision);
@@ -4934,7 +4967,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
     ++tk_id;
   }
 
-  (void) g_strlcpy(type_name, rtps_util_typecode_id_to_string(tk_id), 40);
+  (void) g_strlcpy(type_name, rtps_util_typecode_id_to_string(tk_id), sizeof(type_name));
 
     /* Structure of the typecode data:
      *
@@ -5105,7 +5138,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
                     member_name, -1, NULL, ndds_40_hack);
         }
         /* Finally prints the name of the struct (if provided) */
-        (void) g_strlcpy(type_name, "}", 40);
+        (void) g_strlcpy(type_name, "}", sizeof(type_name));
         break;
 
     } /* end of case UNION */
@@ -5276,7 +5309,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
           }
         }
         /* Finally prints the name of the struct (if provided) */
-        (void) g_strlcpy(type_name, "}", 40);
+        (void) g_strlcpy(type_name, "}", sizeof(type_name));
         break;
       }
 
@@ -5368,7 +5401,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
         offset += 4;
         alias_name = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, alias_name_length, ENC_ASCII);
         offset = check_offset_addition(offset, alias_name_length, tree, NULL, tvb);
-        (void) g_strlcpy(type_name, alias_name, 40);
+        (void) g_strlcpy(type_name, alias_name, sizeof(type_name));
         break;
     }
 
@@ -5403,7 +5436,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
         if (tk_id == RTI_CDR_TK_VALUE_PARAM) {
           type_id_name = "valueparam";
         }
-        snprintf(type_name, 40, "%s '%s'", type_id_name, value_name);
+        snprintf(type_name, sizeof(type_name), "%s '%s'", type_id_name, value_name);
         break;
     }
   } /* switch(tk_id) */
@@ -5567,7 +5600,7 @@ static gint rtps_util_add_type_library_type(proto_tree *tree,
   long_number = tvb_get_guint32(tvb, offset_tmp, encoding);
   name = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_tmp+4, long_number, ENC_ASCII);
   if (info)
-    (void) g_strlcpy(info->member_name, name, long_number);
+    (void) g_strlcpy(info->member_name, name, sizeof(info->member_name));
 
   proto_item_append_text(tree, " %s", name);
   offset = check_offset_addition(offset, member_length, tree, NULL, tvb);
@@ -5743,13 +5776,13 @@ static gint rtps_util_add_type_member(proto_tree *tree,
   proto_item_append_text(tree, " %s (ID: %d)", name, member_id);
   if (member_object) {
     member_object->member_id = member_id;
-    (void) g_strlcpy(member_object->member_name, name, long_number < 256 ? long_number : 256);
+    (void) g_strlcpy(member_object->member_name, name, sizeof(member_object->member_name));
     member_object->type_id = member_type_id;
   }
   if (info && info->extensibility == EXTENSIBILITY_MUTABLE) {
       mutable_member_mapping * mutable_mapping = NULL;
       mutable_mapping = wmem_new(wmem_file_scope(), mutable_member_mapping);
-      (void) g_strlcpy(mutable_mapping->member_name, name, long_number < 256 ? long_number : 256);
+      (void) g_strlcpy(mutable_mapping->member_name, name, sizeof(mutable_mapping->member_name));
       mutable_mapping->struct_type_id = info->type_id;
       mutable_mapping->member_type_id = member_type_id;
       mutable_mapping->member_id = member_id;
@@ -5804,7 +5837,7 @@ static gint rtps_util_add_type_union_member(proto_tree *tree,
     union_member_mapping * mapping = NULL;
 
     mapping = wmem_new(wmem_file_scope(), union_member_mapping);
-    (void) g_strlcpy(mapping->member_name, object.member_name, 256);
+    (void) g_strlcpy(mapping->member_name, object.member_name, sizeof(mapping->member_name));
     mapping->member_type_id = object.type_id;
     mapping->discriminator = HASHMAP_DISCRIMINATOR_CONSTANT;
     mapping->union_type_id = union_type_id + mapping->discriminator;
@@ -5817,7 +5850,7 @@ static gint rtps_util_add_type_union_member(proto_tree *tree,
     union_member_mapping * mapping = NULL;
 
     mapping = wmem_new(wmem_file_scope(), union_member_mapping);
-    (void) g_strlcpy(mapping->member_name, object.member_name, 256);
+    (void) g_strlcpy(mapping->member_name, object.member_name, sizeof(mapping->member_name));
     mapping->member_type_id = object.type_id;
     mapping->discriminator = -1;
     mapping->union_type_id = union_type_id + mapping->discriminator;
@@ -5837,7 +5870,7 @@ static gint rtps_util_add_type_union_member(proto_tree *tree,
     ti = proto_tree_add_item(labels, hf_rtps_type_object_union_label, tvb, offset_tmp, 4, encoding);
     offset_tmp += 4;
 
-    (void) g_strlcpy(mapping->member_name, object.member_name, 256);
+    (void) g_strlcpy(mapping->member_name, object.member_name, sizeof(mapping->member_name));
     mapping->member_type_id = object.type_id;
     mapping->discriminator = discriminator_case;
     mapping->union_type_id = union_type_id + discriminator_case;
@@ -7578,13 +7611,15 @@ static gboolean dissect_parameter_sequence_rti_dds(proto_tree *rtps_parameter_tr
 
     case PID_ENDPOINT_SECURITY_SYMMETRIC_CIPHER_ALGO: {
         ENSURE_LENGTH(4);
-        proto_tree_add_item(
+        proto_tree_add_bitmask(
             rtps_parameter_tree,
-            hf_rtps_param_endpoint_security_symmetric_cipher_algorithms_used_bit,
             tvb,
             offset,
-            4,
+            hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_required_mask,
+            ett_rtps_flags,
+            SECURITY_SIMMETRIC_CIPHER_MASK_FLAGS,
             encoding);
+
       break;
     }
 
@@ -7599,76 +7634,45 @@ static gboolean dissect_parameter_sequence_rti_dds(proto_tree *rtps_parameter_tr
             SECURITY_SIMMETRIC_CIPHER_MASK_FLAGS,
             encoding);
         offset += 4;
-        proto_tree_add_item(
+        proto_tree_add_bitmask(
             rtps_parameter_tree,
-            hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_used_bit,
             tvb,
             offset,
-            4,
+            hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_required_mask,
+            ett_rtps_flags,
+            SECURITY_SIMMETRIC_CIPHER_MASK_FLAGS,
             encoding);
         offset += 4;
-        proto_tree_add_item(
+        proto_tree_add_bitmask(
             rtps_parameter_tree,
-            hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_key_exchange_used_bit,
             tvb,
             offset,
-            4,
+            hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_key_exchange_used_bit,
+            ett_rtps_flags,
+            SECURITY_SIMMETRIC_CIPHER_MASK_FLAGS,
             encoding);
       break;
     }
 
     case PID_PARTICIPANT_SECURITY_KEY_ESTABLISHMENT_ALGO: {
         ENSURE_LENGTH(8);
-        proto_tree_add_bitmask(
-            rtps_parameter_tree,
-            tvb,
-            offset,
-            hf_rtps_param_participant_security_key_establishment_algorithms_supported_mask,
-            ett_rtps_flags, SECURITY_KEY_ESTABLISHMENT_MASK_FLAGS,
-            encoding);
-        offset += 4;
-        proto_tree_add_item(
-            rtps_parameter_tree,
-            hf_rtps_param_participant_security_key_establishment_algorithms_preferred_bit,
-            tvb, offset,
-            4,
-            encoding);
+        proto_tree *sub_tree = proto_tree_add_subtree(rtps_parameter_tree, tvb, offset, 4,
+            ett_rtps_crypto_algorithm_requirements, NULL, "Shared Secret");
+        dissect_crypto_algorithm_requirements(sub_tree, tvb, offset,
+            encoding, SECURITY_KEY_ESTABLISHMENT_MASK_FLAGS);
       break;
     }
 
     case PID_PARTICIPANT_SECURITY_DIGITAL_SIGNATURE_ALGO: {
         ENSURE_LENGTH(16);
-        proto_tree_add_bitmask(
-            rtps_parameter_tree,
-            tvb,
-            offset,
-            hf_rtps_param_participant_security_digital_signature_algorithms_trust_chain_supported_mask,
-            ett_rtps_flags, SECURITY_DIGITAL_SIGNATURE_MASK_FLAGS,
-            encoding);
-        offset += 4;
-        proto_tree_add_bitmask(
-            rtps_parameter_tree,
-            tvb,
-            offset,
-            hf_rtps_param_participant_security_digital_signature_algorithms_trust_chain_used_mask,
-            ett_rtps_flags, SECURITY_DIGITAL_SIGNATURE_MASK_FLAGS,
-            encoding);
-        offset += 4;
-        proto_tree_add_bitmask(
-            rtps_parameter_tree,
-            tvb,
-            offset,
-            hf_rtps_param_participant_security_digital_signature_algorithms_auth_supported_mask,
-            ett_rtps_flags, SECURITY_DIGITAL_SIGNATURE_MASK_FLAGS,
-            encoding);
-        offset += 4;
-        proto_tree_add_item(
-            rtps_parameter_tree,
-            hf_rtps_param_participant_security_digital_signature_algorithms_auth_used_bit,
-            tvb,
-            offset,
-            4,
-            encoding);
+        proto_tree *sub_tree = proto_tree_add_subtree(rtps_parameter_tree, tvb, offset, 4,
+            ett_rtps_crypto_algorithm_requirements, NULL, "Trust Chain");
+        offset = dissect_crypto_algorithm_requirements(sub_tree, tvb, offset,
+            encoding, SECURITY_DIGITAL_SIGNATURE_MASK_FLAGS);
+        sub_tree = proto_tree_add_subtree(rtps_parameter_tree, tvb, offset, 4,
+            ett_rtps_crypto_algorithm_requirements, NULL, "Message Authentication");
+        dissect_crypto_algorithm_requirements(sub_tree, tvb, offset,
+            encoding, SECURITY_DIGITAL_SIGNATURE_MASK_FLAGS);
       break;
     }
 
@@ -10567,11 +10571,30 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, gint off
 #define RTPS_HE_CHECKSUM_1_FLAG        (0x40)
 #define RTPS_HE_PARAMETERS_FLAG        (0x80)
 
+#define RTPS_HE_CHECKSUM_CRC32        RTPS_HE_CHECKSUM_2_FLAG
+#define RTPS_HE_CHECKSUM_CRC64        RTPS_HE_CHECKSUM_1_FLAG
+#define RTPS_HE_CHECKSUM_MD5          (RTPS_HE_CHECKSUM_1_FLAG | RTPS_HE_CHECKSUM_2_FLAG)
+
   guint8 checksum_type = 0;
   gint initial_offset = offset;
+  guint checksum_flags = PROTO_CHECKSUM_NO_FLAGS;
+  gboolean is_crc_supported = true;
+  /*Checksum can be CRC32, CRC64 and MD5 */
+  union _calculated_checksum {
+    uint8_t md5[RTPS_CHECKSUM_MAX_LEN];
+    uint32_t crc32c;
+    uint64_t crc64;
+  } calculated_checksum, he_checksum;
 
   ++offset;
-  proto_tree_add_bitmask_value(tree, tvb, offset, hf_rtps_header_extension_flags, ett_rtps_flags, HEADER_EXTENSION_MASK_FLAGS, flags);
+  proto_tree_add_bitmask_value(
+      tree,
+      tvb,
+      offset,
+      hf_rtps_header_extension_flags,
+      ett_rtps_flags,
+      HEADER_EXTENSION_MASK_FLAGS,
+      flags);
   ++offset;
   proto_tree_add_item(tree, hf_rtps_sm_octets_to_next_header, tvb, offset, 2, encoding);
   offset += 2;
@@ -10597,23 +10620,114 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, gint off
   checksum_type = (flags & (RTPS_HE_CHECKSUM_2_FLAG | RTPS_HE_CHECKSUM_1_FLAG));
   if (checksum_type != 0) {
     gint checksum_len = 0;
+
+    /* Adds the CRC of the RTPS message */
     switch (checksum_type) {
       /* 32-bit checksum */
-      case RTPS_HE_CHECKSUM_2_FLAG:
+      case RTPS_HE_CHECKSUM_CRC32:
         checksum_len = 4;
         break;
+
       /* 64-bit checksum */
-      case RTPS_HE_CHECKSUM_1_FLAG:
+      case RTPS_HE_CHECKSUM_CRC64:
         checksum_len = 8;
+        is_crc_supported = false;
         break;
+
       /* 128-bit checksum */
-      case (RTPS_HE_CHECKSUM_2_FLAG | RTPS_HE_CHECKSUM_1_FLAG):
+      case RTPS_HE_CHECKSUM_MD5:
         checksum_len = 16;
         break;
-    default:
-      break;
+      default:
+        break;
     }
-    proto_tree_add_item(tree, hf_rtps_header_extension_checksum, tvb, offset, checksum_len, encoding);
+
+    /* If the check CRC feature is enabled */
+    if (enable_rtps_crc_check && is_crc_supported) {
+      char* tvb_zero_checksum = NULL;
+      rtps_tvb_field *rtps_root = NULL;
+
+      checksum_flags = PROTO_CHECKSUM_VERIFY;
+      rtps_root = (rtps_tvb_field*)p_get_proto_data(pinfo->pool, pinfo, proto_rtps, RTPS_ROOT_MESSAGE_KEY);
+      if (rtps_root != NULL) {
+        /* The checksum in the wire is the checksum of the RTPS message with the
+         * checksum field set to 0. To calculate the checksum of the RTPS message
+         * we need to set those bytes to 0 in a separate buffer.
+         */
+        tvb_zero_checksum = wmem_alloc0_array(wmem_packet_scope(), char, rtps_root->tvb_len);
+        tvb_memcpy(
+            rtps_root->tvb,
+            tvb_zero_checksum,
+            rtps_root->tvb_offset,
+            rtps_root->tvb_len);
+
+        /* Set checksum bytes to 0 */
+        memset(tvb_zero_checksum + offset, 0, checksum_len);
+        switch (checksum_type) {
+          case RTPS_HE_CHECKSUM_CRC32:
+            /* Checksum is always big endian */
+            he_checksum.crc32c = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+            calculated_checksum.crc32c = crc32c_calculate_no_swap(
+                tvb_zero_checksum,
+                rtps_root->tvb_len,
+                CRC32C_PRELOAD);
+            calculated_checksum.crc32c ^= CRC32C_PRELOAD;
+            break;
+
+          case RTPS_HE_CHECKSUM_CRC64:
+            /* CRC64 is not supported yet */
+            break;
+
+          case RTPS_HE_CHECKSUM_MD5:
+            tvb_memcpy(
+                tvb,
+                &he_checksum.md5,
+                offset,
+                checksum_len);
+            gcry_md_hash_buffer(
+                GCRY_MD_MD5,
+                calculated_checksum.md5,
+                tvb_zero_checksum,
+                rtps_root->tvb_len);
+            break;
+
+          default:
+              break;
+        }
+      }
+    }
+    switch (checksum_type) {
+      case RTPS_HE_CHECKSUM_CRC32:
+        proto_tree_add_checksum(
+            tree,
+            tvb,
+            offset,
+            hf_rtps_header_extension_checksum_crc32c,
+            -1,
+            &ei_rtps_checksum_check_error,
+            pinfo,
+            calculated_checksum.crc32c,
+            ENC_BIG_ENDIAN,
+            checksum_flags);
+        break;
+      case RTPS_HE_CHECKSUM_MD5:
+        proto_tree_add_checksum_bytes(
+            tree,
+            tvb,
+            offset,
+            hf_rtps_header_extension_checksum_md5,
+            -1,
+            &ei_rtps_checksum_check_error,
+            pinfo,
+            calculated_checksum.md5,
+            checksum_len,
+            checksum_flags);
+        break;
+
+      case RTPS_HE_CHECKSUM_CRC64:
+      default:
+          break;
+    }
     offset += checksum_len;
   }
   if ((flags & RTPS_HE_PARAMETERS_FLAG) == RTPS_HE_PARAMETERS_FLAG) {
@@ -13174,9 +13288,18 @@ static void dissect_SECURE_PREFIX(tvbuff_t *tvb, packet_info *pinfo _U_, gint of
   sec_data_header_tree = proto_tree_add_subtree_format(tree, tvb, offset, octets_to_next_header,
           ett_rtps_secure_dataheader_tree, NULL, "Secure Data Header");
 
+  /* Transformation Kind field used to be 4 bytes. Now it is splitted:
+   * - 3 bytes: Transformation Key Revision
+   * - 1 byte: Transformation Kind
+   * A single byte is enough for Transformation Kind since it only has five possible values (0-4).
+   */
+  proto_tree_add_item(sec_data_header_tree, hf_rtps_secure_dataheader_transformation_key_revision_id, tvb,
+          offset, 3, ENC_BIG_ENDIAN);
+  offset += 3;
+
   proto_tree_add_item(sec_data_header_tree, hf_rtps_secure_dataheader_transformation_kind, tvb,
-          offset, 4, ENC_BIG_ENDIAN);
-  offset += 4;
+          offset, 1, ENC_BIG_ENDIAN);
+  offset += 1;
 
   proto_tree_add_item(sec_data_header_tree, hf_rtps_secure_dataheader_transformation_key_id, tvb,
           offset, 4, encoding);
@@ -13477,6 +13600,7 @@ static gboolean dissect_rtps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
   gboolean is_domain_id_calculated = FALSE;
   const char* not_accuracy_str = "";
   gint length_remaining = 0;
+  rtps_tvb_field rtps_root;
 
   /* Check 'RTPS' signature:
    * A header is invalid if it has less than 16 octets
@@ -13498,6 +13622,11 @@ static gboolean dissect_rtps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
   /* No fields have been set in GUID yet. */
   guid.fields_present = 0;
 
+  /* Save the begining of the RTPS message */
+  rtps_root.tvb = tvb;
+  rtps_root.tvb_offset = offset;
+  rtps_root.tvb_len = tvb_reported_length_remaining(tvb, offset);
+  p_set_proto_data(pinfo->pool, pinfo, proto_rtps, RTPS_ROOT_MESSAGE_KEY, (gpointer*)&rtps_root);
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "RTPS");
   col_clear(pinfo->cinfo, COL_INFO);
 
@@ -15068,37 +15197,37 @@ void proto_register_rtps(void) {
 
     { &hf_rtps_expects_inline_qos,
       { "Inline QoS", "rtps.expects_inline_qos",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+        FT_BOOLEAN, 8, NULL, 0,
         NULL, HFILL }
     },
 
     { &hf_rtps_presentation_coherent_access,
       { "Coherent Access", "rtps.presentation.coherent_access",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+        FT_BOOLEAN, 8, NULL, 0,
         NULL, HFILL }
     },
 
     { &hf_rtps_presentation_ordered_access,
       { "Ordered Access", "rtps.presentation.ordered_access",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+        FT_BOOLEAN, 8, NULL, 0,
         NULL, HFILL }
     },
 
     { &hf_rtps_direct_communication,
       { "Direct Communication", "rtps.direct_communication",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+        FT_BOOLEAN, 8, NULL, 0,
         NULL, HFILL }
     },
 
     { &hf_rtps_expects_ack,
       { "expectsAck", "rtps.expects_ack",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+        FT_BOOLEAN, 8, NULL, 0,
         NULL, HFILL }
     },
 
     { &hf_rtps_expects_virtual_heartbeat,
       { "expectsVirtualHB", "rtps.expects_virtual_heartbeat",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+        FT_BOOLEAN, 8, NULL, 0,
         NULL, HFILL }
     },
 
@@ -15210,7 +15339,7 @@ void proto_register_rtps(void) {
 
     { &hf_rtps_disable_positive_ack,
       { "disablePositiveAcks", "rtps.disable_positive_ack",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+        FT_BOOLEAN, 8, NULL, 0,
         NULL, HFILL }
     },
 
@@ -15640,7 +15769,7 @@ void proto_register_rtps(void) {
 
     { &hf_rtps_encapsulation_kind, {
         "kind", "rtps.encapsulation_kind",
-        FT_UINT16, BASE_HEX, VALS(participant_message_data_kind), 0, NULL, HFILL }
+        FT_UINT32, BASE_HEX, VALS(participant_message_data_kind), 0, NULL, HFILL }
     },
 
     { &hf_rtps_octets_to_inline_qos, {
@@ -15854,12 +15983,20 @@ void proto_register_rtps(void) {
         FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x02, NULL, HFILL }
     },
     { &hf_rtps_flag_endianness, {
-        "Endianness bit", "rtps.flag.endianness",
-        FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x01, NULL, HFILL }
+        "Endianness", "rtps.flag.endianness",
+        FT_BOOLEAN, 8, TFS(&tfs_little_big_endianness), 0x01, NULL, HFILL }
     },
     { &hf_rtps_flag_additional_authenticated_data, {
-        "Additional Authenticated Data bit", "rtps.flag.additional_authenticated_data",
+        "Additional Authenticated Data", "rtps.flag.additional_authenticated_data",
         FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x02, NULL, HFILL }
+    },
+    { &hf_rtps_flag_protected_with_psk, {
+        "Message protected with PSK", "rtps.flag.message_protected_with_psk",
+        FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x04, NULL, HFILL }
+    },
+    { &hf_rtps_flag_vendor_specific_content, {
+        "Vendor-Specific Content", "rtps.flag.vendor_specific_content",
+        FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x80, NULL, HFILL }
     },
     { &hf_rtps_flag_inline_qos_v2, {
         "Inline QoS", "rtps.flag.inline_qos",
@@ -15969,8 +16106,16 @@ void proto_register_rtps(void) {
         "Header Extension Message Length", "rtps.flag.header_extension.message_length",
         FT_BOOLEAN, 8, TFS(&tfs_set_notset), RTPS_HE_MESSAGE_LENGTH_FLAG, NULL, HFILL }
     },
-    { &hf_rtps_header_extension_checksum, {
-        "Header Extension Checksum", "rtps.header_extension.checksum",
+    { &hf_rtps_header_extension_checksum_crc32c, {
+        "Header Extension Checksum CRC-32C", "rtps.header_extension.checksum_crc32c",
+        FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }
+    },
+    { &hf_rtps_header_extension_checksum_crc64, {
+        "Header Extension Checksum CRC64", "rtps.header_extension.checksum_crc64",
+        FT_UINT64, BASE_HEX, NULL, 0, NULL, HFILL }
+    },
+    { &hf_rtps_header_extension_checksum_md5, {
+        "Header Extension Checksum MD5", "rtps.header_extension.checksum_md5",
         FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }
     },
     { &hf_rtps_uextension, {
@@ -16162,7 +16307,7 @@ void proto_register_rtps(void) {
     },
     { &hf_rtps_type_object_element_shared,
       { "Element shared", "rtps.type_object.shared",
-          FT_BOOLEAN, 8, TFS(&tfs_true_false), 0,
+          FT_BOOLEAN, 8, NULL, 0,
           NULL, HFILL }
     },
     { &hf_rtps_flag_typeflag_final, {
@@ -16279,27 +16424,21 @@ void proto_register_rtps(void) {
         "Bitmask representing the EndpointSecurityAttributes flags in PID_ENDPOINT_SECURITY_INFO",
         HFILL }
     },
-    { &hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_used_bit, {
-        "Builtin Endpoints Used Bit", "rtps.param.participant_security_symmetric_cipher_algorithms.builtin_endpoints_used_bit",
-        FT_UINT32, BASE_HEX, VALS(security_symmetric_cipher_bit_vals), 0,
-        "Enum representing the Symmetric Cipher algorithm the builtin endpoints use",
-        HFILL }
-    },
-    { &hf_rtps_param_endpoint_security_symmetric_cipher_algorithms_used_bit, {
-        "Used Bit", "rtps.param.endpoint_security_symmetric_cipher_algorithm.used_bit",
-        FT_UINT32, BASE_HEX, VALS(security_symmetric_cipher_bit_vals), 0,
-        "Enum representing the Symmetric Cipher algorithm the endpoint uses",
+    { &hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_required_mask, {
+        "Builtin Endpoints Required Mask", "rtps.param.participant_security_symmetric_cipher_algorithms.builtin_endpoints_used_bit",
+        FT_UINT32, BASE_HEX, NULL, 0,
+        "Bitmask representing the Symmetric Cipher algorithm the builtin endpoints use",
         HFILL }
     },
     { &hf_rtps_param_participant_security_symmetric_cipher_algorithms_builtin_endpoints_key_exchange_used_bit, {
-        "Key Exchange Builtin Endpoints Used Bit", "rtps.param.participant_security_symmetric_cipher_algorithms.builtin_endpoints_key_exchange_used_bit",
-        FT_UINT32, BASE_HEX, VALS(security_symmetric_cipher_bit_vals), 0,
-        "Enum representing the Symmetric Cipher algorithm the key exchange builtin endpoints use",
+        "Key Exchange Builtin Endpoints Required Mask", "rtps.param.participant_security_symmetric_cipher_algorithms.builtin_endpoints_key_exchange_required_mask",
+        FT_UINT32, BASE_HEX, NULL, 0,
+        "Bitmask representing the Symmetric Cipher algorithm the key exchange builtin endpoints require",
         HFILL }
     },
     { &hf_rtps_param_participant_security_symmetric_cipher_algorithms_supported_mask, {
-        "Supported Mask", "rtps.param.participant_security_symmetric_cipher_algorithms.supported_mask",
-        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing Symmetric Cipher algorithms the participant supports",
+        "Supported Mask", "rtps.param.security_symmetric_cipher_algorithms.supported_mask",
+        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing supported Symmetric Cipher algorithms",
 		HFILL }
     },
     { &hf_rtps_param_compression_id_mask, {
@@ -16330,21 +16469,6 @@ void proto_register_rtps(void) {
         "Custom Algorithm", "rtps.flag.security_symmetric_cipher_mask.custom_algorithm",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), SECURITY_SYMMETRIC_CIPHER_BIT_CUSTOM_ALGORITHM, NULL, HFILL }
     },
-    { &hf_rtps_param_participant_security_key_establishment_algorithms_preferred_bit, {
-        "Preferred Bit", "rtps.param.participant_security_key_establishment_algorithms.preferred_bit",
-        FT_UINT32, BASE_HEX, VALS(security_key_establishment_bit_vals), 0,
-        "Enum representing the Key Establishment algorithm the participant will use if it is the authentication initiator",  HFILL }
-    },
-    { &hf_rtps_param_participant_security_digital_signature_algorithms_auth_used_bit, {
-        "Authentication Used Bit", "rtps.participant_security_digital_signature_algorithms.auth_used_bit",
-        FT_UINT32, BASE_HEX, VALS(security_digital_signature_bit_vals), 0,
-        "Enum representing the Digital Signature algorithm the participant will use during Authentication",  HFILL }
-    },
-    { &hf_rtps_param_participant_security_key_establishment_algorithms_supported_mask, {
-        "Supported Mask", "rtps.param.participant_security_key_establishment_algorithms.supported_mask",
-        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing the Key Establishment algorithms the participant supports",
-		HFILL }
-    },
     { &hf_rtps_flag_security_key_establishment_mask_dhe_modp2048256, {
         "DHE_MODP2048256", "rtps.flag.security_key_establishment_mask.dhe_modp2048256",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), SECURITY_KEY_ESTABLISHMENT_BIT_DHE_MODP2048256, NULL, HFILL }
@@ -16361,21 +16485,21 @@ void proto_register_rtps(void) {
         "Custom Algorithm", "rtps.flag.security_key_establishment_mask.custom_algorithm",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), SECURITY_KEY_ESTABLISHMENT_BIT_CUSTOM_ALGORITHM, NULL, HFILL }
     },
+    { &hf_rtps_flag_security_algorithm_compatibility_mode, {
+        "Compatibility Mode", "rtps.flag.security_algorithm_compatibility_mode",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), SECURITY_ALGORITHM_BIT_COMPATIBILITY_MODE, NULL, HFILL }
+    },
     { &hf_rtps_flag_plugin_endpoint_security_attribute_flag_is_payload_encrypted, {
         "Submessage Encrypted", "rtps.flag.security.info.plugin_submessage_encrypted",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000001, NULL, HFILL }
     },
-    { &hf_rtps_param_participant_security_digital_signature_algorithms_trust_chain_supported_mask, {
-        "Trust Chain Supported Mask", "rtps.param.participant_security_digital_signature_algorithms.trust_chain_supported_mask",
-        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing the Trust Chain Digital Signature algorithms the participant supports", HFILL }
+    { &hf_rtps_param_crypto_algorithm_requirements_trust_chain, {
+        "Supported", "rtps.param.crypto_algorithm_requirements.supported",
+        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing the trust chain", HFILL }
     },
-    { &hf_rtps_param_participant_security_digital_signature_algorithms_trust_chain_used_mask, {
-        "Trust Chain Used Mask", "rtps.param.participant_security_digital_signature_algorithms.trust_chain_used_mask",
-        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing the Digital Signature algorithms the participant will use to build its Trust Chain", HFILL }
-    },
-    { &hf_rtps_param_participant_security_digital_signature_algorithms_auth_supported_mask, {
-        "Authentication Supported Mask", "rtps.param.participant_security_digital_signature_algorithms.auth_supported_mask",
-        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing the Authentication Digital Signature algorithms the participant supports", HFILL }
+    { &hf_rtps_param_crypto_algorithm_requirements_message_auth, {
+        "Required", "rtps.param.crypto_algorithm_requirements.required",
+        FT_UINT32, BASE_HEX, 0, 0, "Bitmask representing the message authentication", HFILL }
     },
     { &hf_rtps_flag_security_digital_signature_mask_rsassapssmgf1sha256_2048_sha256, {
         "RSASSAPSSMGF1SHA256_2048_SHA256", "rtps.flag.security_digital_signature_mask.rsassapssmgf1sha256_2048_sha256",
@@ -16428,6 +16552,10 @@ void proto_register_rtps(void) {
         "Liveliness Protected", "rtps.flag.security.info.participant_liveliness_protected",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000004, NULL, HFILL }
     },
+    { &fh_rtps_flag_participant_security_attribute_flag_key_revisions_enabled,{
+        "Key Revisions Enabled", "rtps.flag.security.info.key_revisions_enabled",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000008, NULL, HFILL }
+    },
     { &hf_rtps_flag_participant_security_attribute_flag_is_valid,{
         "Mask Valid", "rtps.flag.security.info.participant_mask_valid",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x80000000, NULL, HFILL }
@@ -16476,7 +16604,7 @@ void proto_register_rtps(void) {
     },
     { &hf_rtps_param_enable_authentication,
       { "Authentication enabled", "rtps.secure.enable_authentication",
-        FT_BOOLEAN, 32, TFS(&tfs_true_false), 0, NULL, HFILL }
+        FT_BOOLEAN, 32, NULL, 0, NULL, HFILL }
     },
     { &hf_rtps_param_builtin_endpoint_qos,
       { "Built-in Endpoint QoS", "rtps.param.builtin_endpoint_qos",
@@ -16500,7 +16628,12 @@ void proto_register_rtps(void) {
     },
     { &hf_rtps_secure_dataheader_transformation_kind, {
         "Transformation Kind", "rtps.secure.data_header.transformation_kind",
-        FT_INT32, BASE_DEC, VALS(secure_transformation_kind), 0,
+        FT_INT8, BASE_DEC, VALS(secure_transformation_kind), 0,
+        NULL, HFILL }
+    },
+    { &hf_rtps_secure_dataheader_transformation_key_revision_id, {
+        "Transformation Key Revision Id", "rtps.secure.data_header.transformation_key_revision_id",
+        FT_INT24, BASE_DEC, NULL, 0,
         NULL, HFILL }
     },
     { &hf_rtps_secure_dataheader_transformation_key_id, {
@@ -16622,7 +16755,7 @@ void proto_register_rtps(void) {
 #endif
     { &hf_rtps_param_topic_query_publication_enable,
       { "Enable", "rtps.param.topic_query_publication_enable",
-        FT_BOOLEAN, 8, TFS(&tfs_true_false), 0, NULL, HFILL }
+        FT_BOOLEAN, 8, NULL, 0, NULL, HFILL }
     },
     { &hf_rtps_param_topic_query_publication_sessions,
       { "Number of sessions", "rtps.param.topic_query_publication_sessions",
@@ -17012,7 +17145,8 @@ void proto_register_rtps(void) {
     &ett_rtps_info_remaining_items,
     &ett_rtps_data_encapsulation_options,
     &ett_rtps_decompressed_serialized_data,
-    &ett_rtps_instance_transition_data
+    &ett_rtps_instance_transition_data,
+    &ett_rtps_crypto_algorithm_requirements
   };
 
   static ei_register_info ei[] = {
@@ -17029,6 +17163,7 @@ void proto_register_rtps(void) {
      { &pid_type_csonsistency_invalid_size, { "rtps.pid_type_consistency_invalid_size", PI_MALFORMED, PI_ERROR, "PID_TYPE_CONSISTENCY invalid size. Has a size of %d bytes. Expected %d or %d bytes.", EXPFILL }},
      { &ei_rtps_uncompression_error, { "rtps.uncompression_error", PI_PROTOCOL, PI_WARN, "Unable to uncompress the compressed payload.", EXPFILL }},
      { &ei_rtps_value_too_large, { "rtps.value_too_large", PI_MALFORMED, PI_ERROR, "Length value goes past the end of the packet", EXPFILL }},
+     { &ei_rtps_checksum_check_error, { "rtps.checksum_error", PI_CHECKSUM, PI_ERROR, "Error: Unexpected checksum", EXPFILL }},
   };
 
   module_t *rtps_module;
@@ -17094,8 +17229,13 @@ void proto_register_rtps(void) {
       "Enables the reassembly of DATA_FRAG submessages.",
       &enable_rtps_reassembly);
 
+prefs_register_bool_preference(rtps_module, "enable_rtps_checksum_check",
+      "Enable RTPS Checksum check (Only CRC-32C and MD5 supported)",
+      "Detects the RTPS packets with invalid checksums (Only CRC-32C and MD5 supported)",
+      &enable_rtps_crc_check);
+
   rtps_type_name_table = register_dissector_table("rtps.type_name", "RTPS Type Name",
-          proto_rtps, FT_STRING, BASE_NONE);
+          proto_rtps, FT_STRING, STRING_CASE_SENSITIVE);
 
   registry = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), hash_by_guid, compare_by_guid);
   dissection_infos = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_int64_hash, g_int64_equal);

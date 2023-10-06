@@ -47,6 +47,8 @@
 void proto_register_ltp(void);
 void proto_reg_handoff_ltp(void);
 
+static dissector_handle_t ltp_handle;
+
 #define LTP_MIN_DATA_BUFFER  5
 
 /// Unique session identifier
@@ -650,7 +652,14 @@ dissect_data_segment(proto_tree *ltp_tree, tvbuff_t *tvb,packet_info *pinfo,int 
 
 	if (segment_size >= tvb_captured_length(tvb)) {
 		/* did not capture the entire packet */
+		/* XXX: expert info instead? Distinguish between segment_size
+		 * >= reported_length (i.e., bogus reported data_length) and
+		 * too short capture? */
 		proto_tree_add_string(ltp_data_tree, hf_ltp_partial_packet, tvb, 0, 0, "<increase capture size?>");
+		/* data_len is subtracted from the return value to set the
+		 * header length, so report the number of data bytes available.
+		 */
+		*data_len = tvb_captured_length_remaining(tvb, frame_offset);
 		return tvb_captured_length(tvb);
 	}
 
@@ -1405,13 +1414,13 @@ ltp_endp_packet(void *tapdata _U_, packet_info *pinfo _U_, epan_dissect_t *edt _
 }
 
 static gboolean
-ltp_filter_valid(packet_info *pinfo)
+ltp_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
 	return proto_is_frame_protocol(pinfo->layers, "ltp");
 }
 
 static gchar*
-ltp_build_filter(packet_info *pinfo)
+ltp_build_filter(packet_info *pinfo, void *user_data _U_)
 {
 	gchar *result = NULL;
 	int layer_num = 1;
@@ -1887,9 +1896,11 @@ proto_register_ltp(void)
 	expert_ltp = expert_register_protocol(proto_ltp);
 	expert_register_field_array(expert_ltp, ei, array_length(ei));
 
+	ltp_handle = register_dissector("ltp", dissect_ltp, proto_ltp);
+
 	set_address(&ltp_addr_receiver, AT_STRINGZ, (int) strlen(ltp_conv_receiver) + 1, ltp_conv_receiver);
 	register_conversation_table(proto_ltp, TRUE, ltp_conv_packet, ltp_endp_packet);
-	register_conversation_filter("ltp", "LTP", ltp_filter_valid, ltp_build_filter);
+	register_conversation_filter("ltp", "LTP", ltp_filter_valid, ltp_build_filter, NULL);
 	ltp_tap = register_tap("ltp");
 
 	static const reassembly_table_functions ltp_session_reassembly_table_functions = {
@@ -1907,9 +1918,6 @@ proto_register_ltp(void)
 void
 proto_reg_handoff_ltp(void)
 {
-	dissector_handle_t ltp_handle;
-
-	ltp_handle = create_dissector_handle(dissect_ltp, proto_ltp);
 	bundle_handle = find_dissector_add_dependency("bundle", proto_ltp);
 
 	dissector_add_uint_with_preference("udp.port", LTP_PORT, ltp_handle);

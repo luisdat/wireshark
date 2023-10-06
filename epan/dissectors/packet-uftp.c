@@ -125,6 +125,8 @@
 void proto_register_uftp(void);
 void proto_reg_handoff_uftp(void);
 
+static dissector_handle_t uftp_handle;
+
 static int proto_uftp = -1;
 #define UFTP_PORT   1044 /* Not IANA registered */
 
@@ -1429,7 +1431,7 @@ static int dissect_uftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
     proto_tree_add_item(uftp_tree, hf_uftp_destaddr, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
-    next_tvb = tvb_new_subset_length_caplen(tvb, offset, -1, blsize);
+    next_tvb = tvb_new_subset_length(tvb, offset, blsize);
 
     switch (mes_type) {
         case ANNOUNCE:
@@ -1855,7 +1857,7 @@ void proto_register_uftp(void)
         },
         { &hf_uftp_fileseg_seq_num,
             { "Sequence Number", "uftp.fileseg.seq_num",
-            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }
+            FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_uftp_fileseg_data,
             { "Data", "uftp.fileseg.data",
@@ -2209,15 +2211,13 @@ void proto_register_uftp(void)
     proto_register_subtree_array(ett, array_length(ett));
     expert_uftp = expert_register_protocol(proto_uftp);
     expert_register_field_array(expert_uftp, ei, array_length(ei));
+    uftp_handle = register_dissector("uftp", dissect_uftp, proto_uftp);
 }
 
 void proto_reg_handoff_uftp(void)
 {
-    static dissector_handle_t uftp_handle;
-
     uftp4_handle = find_dissector("uftp4");
     uftp5_handle = find_dissector("uftp5");
-    uftp_handle = create_dissector_handle(dissect_uftp, proto_uftp);
     dissector_add_uint_with_preference("udp.port", UFTP_PORT, uftp_handle);
 }
 

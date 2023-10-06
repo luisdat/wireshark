@@ -308,6 +308,11 @@ development of Wireshark scripts and plugins.
 %else
   -DENABLE_NGHTTP2=OFF \
 %endif
+%if %{with nghttp3}
+  -DENABLE_NGHTTP3=ON \
+%else
+  -DENABLE_NGHTTP3=OFF \
+%endif
 %if %{with sdjournal}
   -DBUILD_sdjournal=ON \
 %else
@@ -350,13 +355,8 @@ development of Wireshark scripts and plugins.
 
 %cmake_install
 %cmake_install --component Development
-
 %if %{with guides}
-%if %{with ninja}
-%ninja_install install_guides -C %{__cmake_builddir}
-%else
-make DESTDIR=$RPM_BUILD_ROOT install_guides -C %{__cmake_builddir}
-%endif
+%cmake_install --component UserGuide
 %endif
 
 # If we're being installed in an unusual prefix tell the loader where
@@ -446,13 +446,13 @@ update-mime-database %{_datadir}/mime &> /dev/null || :
 %endif
 
 %{_libdir}/lib*.so*
-# Don't pick up the cmake files here
-%exclude %{_libdir}/wireshark/cmake
 %{_libdir}/wireshark
 # Don't pick up the wireshark (GUI) man page here
 %exclude %{_mandir}/man1/wireshark.*
 %{_mandir}/man1/*
 %{_mandir}/man4/*
+
+%config(noreplace) %{_datadir}/wireshark/diameter/Custom.xml
 %{_datadir}/wireshark
 
 %if 0%{?install_ld_so_conf}
@@ -478,10 +478,13 @@ update-mime-database %{_datadir}/mime &> /dev/null || :
 
 %files devel
 %{_includedir}/wireshark
-%{_libdir}/wireshark/cmake
+%{_libdir}/cmake/wireshark
 %{_libdir}/pkgconfig/wireshark.pc
 
 %changelog
+* Wed Jun 14 2023 Joao Valverde
+- Update CMake devel files path
+
 * Wed Aug 24 2022 Joao Valverde
 - Add Qt6 support with Fedora build dependencies
 

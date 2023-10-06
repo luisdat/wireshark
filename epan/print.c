@@ -78,7 +78,9 @@ struct _output_fields {
     GPtrArray    *fields;
     GHashTable   *field_indicies;
     GPtrArray   **field_values;
+    wmem_map_t   *protocolfilter;
     gchar         quote;
+    gboolean      escape;
     gboolean      includes_col_fields;
 };
 
@@ -89,7 +91,7 @@ static void proto_tree_write_node_ek(proto_node *node, write_json_data *data);
 static const guint8 *get_field_data(GSList *src_list, field_info *fi);
 static void pdml_write_field_hex_value(write_pdml_data *pdata, field_info *fi);
 static void json_write_field_hex_value(write_json_data *pdata, field_info *fi);
-static gboolean print_hex_data_buffer(print_stream_t *stream, const guchar *cp,
+static bool print_hex_data_buffer(print_stream_t *stream, const guchar *cp,
                                       guint length, packet_char_enc encoding,
                                       guint hexdump_options);
 static void write_specified_fields(fields_format format,
@@ -135,7 +137,7 @@ void print_cache_field_handles(void)
 }
 
 gboolean
-proto_tree_print(print_dissections_e print_dissections, gboolean print_hex,
+proto_tree_print(print_dissections_e print_dissections, bool print_hex,
                  epan_dissect_t *edt, GHashTable *output_only_tables,
                  print_stream_t *stream)
 {
@@ -312,7 +314,7 @@ static gboolean check_protocolfilter(wmem_map_t *protocolfilter, const char *str
 }
 
 void
-write_pdml_proto_tree(output_fields_t* fields, wmem_map_t *protocolfilter, epan_dissect_t *edt, column_info *cinfo, FILE *fh, gboolean use_color)
+write_pdml_proto_tree(output_fields_t* fields, epan_dissect_t *edt, column_info *cinfo, FILE *fh, gboolean use_color)
 {
     write_pdml_data data;
     const color_filter_t *cfp;
@@ -339,7 +341,7 @@ write_pdml_proto_tree(output_fields_t* fields, wmem_map_t *protocolfilter, epan_
         data.level    = 0;
         data.fh       = fh;
         data.src_list = edt->pi.data_src;
-        data.filter   = protocolfilter;
+        data.filter   = fields ? fields->protocolfilter : NULL;
 
         proto_tree_children_foreach(edt->tree, proto_tree_write_node_pdml,
                                     &data);
@@ -353,8 +355,7 @@ write_pdml_proto_tree(output_fields_t* fields, wmem_map_t *protocolfilter, epan_
 
 void
 write_ek_proto_tree(output_fields_t* fields,
-                    gboolean print_summary, gboolean print_hex,
-                    wmem_map_t *protocolfilter,
+                    bool print_summary, bool print_hex,
                     epan_dissect_t *edt,
                     column_info *cinfo,
                     FILE *fh)
@@ -396,7 +397,7 @@ write_ek_proto_tree(output_fields_t* fields,
         if (fields == NULL || fields->fields == NULL) {
             /* Write out all fields */
             data.src_list = edt->pi.data_src;
-            data.filter = protocolfilter;
+            data.filter = fields ? fields->protocolfilter : NULL;
             data.print_hex = print_hex;
             proto_tree_write_node_ek(edt->tree, &data);
         } else {
@@ -572,7 +573,7 @@ proto_tree_write_node_pdml(proto_node *node, gpointer data)
             fputs("\" show=\"\" value=\"",  pdata->fh);
             break;
         default:
-            dfilter_string = fvalue_to_string_repr(NULL, &fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
+            dfilter_string = fvalue_to_string_repr(NULL, fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
             if (dfilter_string != NULL) {
 
                 fputs("\" show=\"", pdata->fh);
@@ -591,32 +592,32 @@ proto_tree_write_node_pdml(proto_node *node, gpointer data)
                 fputs("\" value=\"", pdata->fh);
 
                 if (fi->hfinfo->bitmask!=0) {
-                    switch (fvalue_type_ftenum(&fi->value)) {
+                    switch (fvalue_type_ftenum(fi->value)) {
                         case FT_INT8:
                         case FT_INT16:
                         case FT_INT24:
                         case FT_INT32:
-                            fprintf(pdata->fh, "%X", (guint) fvalue_get_sinteger(&fi->value));
+                            fprintf(pdata->fh, "%X", (guint) fvalue_get_sinteger(fi->value));
                             break;
                         case FT_CHAR:
                         case FT_UINT8:
                         case FT_UINT16:
                         case FT_UINT24:
                         case FT_UINT32:
-                            fprintf(pdata->fh, "%X", fvalue_get_uinteger(&fi->value));
+                            fprintf(pdata->fh, "%X", fvalue_get_uinteger(fi->value));
                             break;
                         case FT_INT40:
                         case FT_INT48:
                         case FT_INT56:
                         case FT_INT64:
-                            fprintf(pdata->fh, "%" PRIX64, fvalue_get_sinteger64(&fi->value));
+                            fprintf(pdata->fh, "%" PRIX64, fvalue_get_sinteger64(fi->value));
                             break;
                         case FT_UINT40:
                         case FT_UINT48:
                         case FT_UINT56:
                         case FT_UINT64:
                         case FT_BOOLEAN:
-                            fprintf(pdata->fh, "%" PRIX64, fvalue_get_uinteger64(&fi->value));
+                            fprintf(pdata->fh, "%" PRIX64, fvalue_get_uinteger64(fi->value));
                             break;
                         default:
                             ws_assert_not_reached();
@@ -736,7 +737,7 @@ write_json_index(json_dumper *dumper, epan_dissect_t *edt)
 void
 write_json_proto_tree(output_fields_t* fields,
                       print_dissections_e print_dissections,
-                      gboolean print_hex, wmem_map_t *protocolfilter,
+                      bool print_hex,
                       epan_dissect_t *edt, column_info *cinfo,
                       proto_node_children_grouper_func node_children_grouper,
                       json_dumper *dumper)
@@ -758,7 +759,7 @@ write_json_proto_tree(output_fields_t* fields,
     if (fields == NULL || fields->fields == NULL) {
         /* Write out all fields */
         data.src_list = edt->pi.data_src;
-        data.filter = protocolfilter;
+        data.filter = fields ? fields->protocolfilter : NULL;
         data.print_hex = print_hex;
         data.print_text = TRUE;
         if (print_dissections == print_dissections_none) {
@@ -820,13 +821,13 @@ write_json_proto_node_list(GSList *proto_node_list_head, write_json_data *pdata)
         gboolean is_filtered = pdata->filter != NULL && !check_protocolfilter(pdata->filter, json_key, &filter_flags);
 
         field_info *fi = first_value->finfo;
-        char *value_string_repr = fvalue_to_string_repr(NULL, &fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
+        char *value_string_repr = fvalue_to_string_repr(NULL, fi->value, FTREPR_JSON, fi->hfinfo->display);
         gboolean has_children = any_has_children(node_values_list);
 
         // We assume all values of a json key have roughly the same layout. Thus we can use the first value to derive
         // attributes of all the values.
         gboolean has_value = value_string_repr != NULL;
-        gboolean is_pseudo_text_field = fi->hfinfo->id == 0;
+        gboolean is_pseudo_text_field = fi->hfinfo->id == hf_text_only;
 
         wmem_free(NULL, value_string_repr); // fvalue_to_string_repr returns allocated buffer
 
@@ -954,32 +955,32 @@ write_json_proto_node_hex_dump(proto_node *node, write_json_data *pdata)
     json_dumper_begin_array(pdata->dumper);
 
     if (fi->hfinfo->bitmask!=0) {
-        switch (fvalue_type_ftenum(&fi->value)) {
+        switch (fvalue_type_ftenum(fi->value)) {
             case FT_INT8:
             case FT_INT16:
             case FT_INT24:
             case FT_INT32:
-                json_dumper_value_anyf(pdata->dumper, "\"%X\"", (guint) fvalue_get_sinteger(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%X\"", (guint) fvalue_get_sinteger(fi->value));
                 break;
             case FT_CHAR:
             case FT_UINT8:
             case FT_UINT16:
             case FT_UINT24:
             case FT_UINT32:
-                json_dumper_value_anyf(pdata->dumper, "\"%X\"", fvalue_get_uinteger(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%X\"", fvalue_get_uinteger(fi->value));
                 break;
             case FT_INT40:
             case FT_INT48:
             case FT_INT56:
             case FT_INT64:
-                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_sinteger64(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_sinteger64(fi->value));
                 break;
             case FT_UINT40:
             case FT_UINT48:
             case FT_UINT56:
             case FT_UINT64:
             case FT_BOOLEAN:
-                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_uinteger64(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_uinteger64(fi->value));
                 break;
             default:
                 ws_assert_not_reached();
@@ -992,7 +993,7 @@ write_json_proto_node_hex_dump(proto_node *node, write_json_data *pdata)
     json_dumper_value_anyf(pdata->dumper, "%" PRId32, fi->start);
     json_dumper_value_anyf(pdata->dumper, "%" PRId32, fi->length);
     json_dumper_value_anyf(pdata->dumper, "%" PRIu64, fi->hfinfo->bitmask);
-    json_dumper_value_anyf(pdata->dumper, "%" PRId32, (gint32)fvalue_type_ftenum(&fi->value));
+    json_dumper_value_anyf(pdata->dumper, "%" PRId32, (gint32)fvalue_type_ftenum(fi->value));
 
     json_dumper_end_array(pdata->dumper);
 }
@@ -1031,8 +1032,10 @@ write_json_proto_node_value(proto_node *node, write_json_data *pdata)
 {
     field_info *fi = node->finfo;
     // Get the actual value of the node as a string.
-    char *value_string_repr = fvalue_to_string_repr(NULL, &fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
+    char *value_string_repr = fvalue_to_string_repr(NULL, fi->value, FTREPR_JSON, fi->hfinfo->display);
 
+    //TODO: Have FTREPR_JSON include quotes where appropriate and use json_dumper_value_anyf() here,
+    // so we can output booleans and numbers and not only strings.
     json_dumper_value_string(pdata->dumper, value_string_repr);
 
     wmem_free(NULL, value_string_repr);
@@ -1266,32 +1269,32 @@ static void
 ek_write_hex(field_info *fi, write_json_data *pdata)
 {
     if (fi->hfinfo->bitmask != 0) {
-        switch (fvalue_type_ftenum(&fi->value)) {
+        switch (fvalue_type_ftenum(fi->value)) {
             case FT_INT8:
             case FT_INT16:
             case FT_INT24:
             case FT_INT32:
-                json_dumper_value_anyf(pdata->dumper, "\"%X\"", (guint) fvalue_get_sinteger(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%X\"", (guint) fvalue_get_sinteger(fi->value));
                 break;
             case FT_CHAR:
             case FT_UINT8:
             case FT_UINT16:
             case FT_UINT24:
             case FT_UINT32:
-                json_dumper_value_anyf(pdata->dumper, "\"%X\"", fvalue_get_uinteger(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%X\"", fvalue_get_uinteger(fi->value));
                 break;
             case FT_INT40:
             case FT_INT48:
             case FT_INT56:
             case FT_INT64:
-                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_sinteger64(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_sinteger64(fi->value));
                 break;
             case FT_UINT40:
             case FT_UINT48:
             case FT_UINT56:
             case FT_UINT64:
             case FT_BOOLEAN:
-                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_uinteger64(&fi->value));
+                json_dumper_value_anyf(pdata->dumper, "\"%" PRIX64 "\"", fvalue_get_uinteger64(fi->value));
                 break;
             default:
                 ws_assert_not_reached();
@@ -1306,12 +1309,8 @@ ek_write_field_value(field_info *fi, write_json_data* pdata)
 {
     gchar label_str[ITEM_LABEL_LENGTH];
     char *dfilter_string;
-    const nstime_t *t;
-    struct tm *tm;
-#ifndef _WIN32
-    struct tm tm_time;
-#endif
-    char time_string[sizeof("YYYY-MM-DDTHH:MM:SS")];
+    char time_buf[NSTIME_ISO8601_BUFSIZE];
+    size_t time_len;
 
     /* Text label */
     if (fi->hfinfo->id == hf_text_only && fi->rep) {
@@ -1332,48 +1331,21 @@ ek_write_field_value(field_info *fi, write_json_data* pdata)
             json_dumper_value_string(pdata->dumper, NULL);
             break;
         case FT_BOOLEAN:
-            if (fi->value.value.uinteger64)
+            if (fvalue_get_uinteger64(fi->value))
                 json_dumper_value_anyf(pdata->dumper, "true");
             else
                 json_dumper_value_anyf(pdata->dumper, "false");
             break;
         case FT_ABSOLUTE_TIME:
-            t = fvalue_get_time(&fi->value);
-#ifdef _WIN32
-            /*
-             * Do not use gmtime_s(), as it will call and
-             * exception handler if the time we're providing
-             * is < 0, and that will, by default, exit.
-             * ("Programmers not bothering to check return
-             * values?  Try new Microsoft Visual Studio,
-             * with Parameter Validation(R)!  Kill insufficiently
-             * careful programs - *and* the processes running them -
-             * fast!")
-             *
-             * We just want to report this as an unrepresentable
-             * time.  It fills in a per-thread structure, which
-             * is sufficiently thread-safe for our purposes.
-             */
-            tm = gmtime(&t->secs);
-#else
-            /*
-             * Use gmtime_r(), because the Single UNIX Specification
-             * does *not* guarantee that gmtime() is thread-safe.
-             * Perhaps it is on all platforms on which we run, but
-             * this way we don't have to check.
-             */
-            tm = gmtime_r(&t->secs, &tm_time);
-#endif
-            if (tm != NULL) {
-                /* Some platforms (MinGW-w64) do not support %F or %T. */
-                strftime(time_string, sizeof(time_string), "%Y-%m-%dT%H:%M:%S", tm);
-                json_dumper_value_anyf(pdata->dumper, "\"%s.%09uZ\"", time_string, t->nsecs);
+            time_len = nstime_to_iso8601(time_buf, sizeof(time_buf), fvalue_get_time(fi->value));
+            if (time_len != 0) {
+                json_dumper_value_anyf(pdata->dumper, "\"%s\"", time_buf);
             } else {
                 json_dumper_value_anyf(pdata->dumper, "\"Not representable\"");
             }
             break;
         default:
-            dfilter_string = fvalue_to_string_repr(NULL, &fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
+            dfilter_string = fvalue_to_string_repr(NULL, fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
             if (dfilter_string != NULL) {
                 json_dumper_value_string(pdata->dumper, dfilter_string);
             }
@@ -1499,10 +1471,25 @@ static void
 proto_tree_write_node_ek(proto_node *node, write_json_data *pdata)
 {
     GHashTable *attr_table  = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GHashTableIter iter;
+    gpointer key, value;
     ek_fill_attr(node, attr_table, pdata);
 
     // Print attributes
-    g_hash_table_foreach(attr_table, process_ek_attrs, pdata);
+    g_hash_table_iter_init(&iter, attr_table);
+    while (g_hash_table_iter_next (&iter, &key, &value)) {
+        process_ek_attrs(key, value, pdata);
+        g_hash_table_iter_remove(&iter);
+        /* We lookup a list in the table, append to it, and re-insert it; as
+         * g_slist_append() can change the start pointer of the list we can't
+         * just append to the list without replacing the old value. In turn,
+         * that means we can't set the value_destroy_func when creating
+         * the hash table, because on re-insertion that would destroy the
+         * nodes of the old list, which are still being used by the new list.
+         * So free it here.
+         */
+        g_slist_free((GSList*)value);
+    }
     g_hash_table_destroy(attr_table);
 }
 
@@ -1888,6 +1875,9 @@ print_escaped_csv(FILE *fh, const char *unescaped_string)
         case '\t':
             fputs("\\t", fh);
             break;
+        case '\v':
+            fputs("\\v", fh);
+            break;
         default:
             fputc(*p, fh);
         }
@@ -1970,7 +1960,7 @@ json_write_field_hex_value(write_json_data *pdata, field_info *fi)
     }
 }
 
-gboolean
+bool
 print_hex_data(print_stream_t *stream, epan_dissect_t *edt, guint hexdump_options)
 {
     gboolean      multiple_sources;
@@ -2015,12 +2005,12 @@ print_hex_data(print_stream_t *stream, epan_dissect_t *edt, guint hexdump_option
     return TRUE;
 }
 
-static gboolean print_hex_data_line(void *stream, const char *line)
+static bool print_hex_data_line(void *stream, const char *line)
 {
     return print_line(stream, 0, line);
 }
 
-static gboolean print_hex_data_buffer(print_stream_t *stream, const guchar *cp,
+static bool print_hex_data_buffer(print_stream_t *stream, const guchar *cp,
                                       guint length, packet_char_enc encoding,
                                       guint hexdump_options)
 {
@@ -2068,8 +2058,6 @@ void output_fields_free(output_fields_t* fields)
     g_free(fields);
 }
 
-#define COLUMN_FIELD_FILTER  "_ws.col."
-
 void output_fields_add(output_fields_t *fields, const gchar *field)
 {
     gchar *field_copy;
@@ -2092,14 +2080,38 @@ void output_fields_add(output_fields_t *fields, const gchar *field)
 
 }
 
+/*
+ * Returns TRUE if the field did not exist yet (or existed with the same
+ * filter_flags value), FALSE if the field was in the protocolfilter with
+ * a different flag.
+ */
+bool
+output_fields_add_protocolfilter(output_fields_t* fields, const char* field, pf_flags filter_flags)
+{
+    void* value;
+    bool ret = TRUE;
+    if (!fields->protocolfilter) {
+        fields->protocolfilter = wmem_map_new(wmem_epan_scope(), wmem_str_hash, g_str_equal);
+    }
+    if (wmem_map_lookup_extended(fields->protocolfilter, field, NULL, &value)) {
+        if (GPOINTER_TO_UINT(value) != (guint)filter_flags) {
+            ret = FALSE;
+        }
+    }
+    wmem_map_insert(fields->protocolfilter, field, GINT_TO_POINTER(filter_flags));
+
+    /* See if we have a column as a field entry */
+    if (!strncmp(field, COLUMN_FIELD_FILTER, strlen(COLUMN_FIELD_FILTER)))
+        fields->includes_col_fields = TRUE;
+
+    return ret;
+}
+
 static void
 output_field_check(void *data, void *user_data)
 {
     gchar *field = (gchar *)data;
     GSList **invalid_fields = (GSList **)user_data;
-
-    if (!strncmp(field, COLUMN_FIELD_FILTER, strlen(COLUMN_FIELD_FILTER)))
-        return;
 
     if (!proto_registrar_get_byname(field)) {
         *invalid_fields = g_slist_prepend(*invalid_fields, field);
@@ -2107,15 +2119,23 @@ output_field_check(void *data, void *user_data)
 
 }
 
+static void
+output_field_check_protocolfilter(void* key, void* value _U_, void* user_data)
+{
+    output_field_check(key, user_data);
+}
+
 GSList *
 output_fields_valid(output_fields_t *fields)
 {
     GSList *invalid_fields = NULL;
-    if (fields->fields == NULL) {
-        return NULL;
+    if (fields->fields != NULL) {
+        g_ptr_array_foreach(fields->fields, output_field_check, &invalid_fields);
     }
 
-    g_ptr_array_foreach(fields->fields, output_field_check, &invalid_fields);
+    if (fields->protocolfilter != NULL) {
+        wmem_map_foreach(fields->protocolfilter, output_field_check_protocolfilter, &invalid_fields);
+    }
 
     return invalid_fields;
 }
@@ -2232,6 +2252,19 @@ gboolean output_fields_set_option(output_fields_t *info, gchar *option)
         }
         return TRUE;
     }
+    else if (0 == strcmp(option_name, "escape")) {
+        switch (*option_value) {
+        case 'n':
+            info->escape = FALSE;
+            break;
+        case 'y':
+            info->escape = TRUE;
+            break;
+        default:
+            return FALSE;
+        }
+        return TRUE;
+    }
 
     return FALSE;
 }
@@ -2292,7 +2325,7 @@ static void format_field_values(output_fields_t* fields, gpointer field_index, g
     indx = GPOINTER_TO_UINT(field_index) - 1;
 
     if (fields->field_values[indx] == NULL) {
-        fields->field_values[indx] = g_ptr_array_new();
+        fields->field_values[indx] = g_ptr_array_new_with_free_func(g_free);
     }
 
     /* Essentially: fieldvalues[indx] is a 'GPtrArray *' with each array entry */
@@ -2317,24 +2350,16 @@ static void format_field_values(output_fields_t* fields, gpointer field_index, g
         if (g_ptr_array_len(fv_p) != 0) {
             /*
              * This isn't the first occurrence, so there's already a
-             * value in the array, which won't be used; free the
-             * first (only) element in the array, and then remove
-             * it - this value will replace it.
+             * value in the array, which won't be used; remove the
+             * first (only) element in the array (which will free it,
+             * as we created the GPtrArray with a free func) -
+             * this value will replace it.
              */
-            g_free(g_ptr_array_index(fv_p, 0));
             g_ptr_array_set_size(fv_p, 0);
         }
         break;
     case 'a':
         /* print the value of all accurrences of the field */
-        if (g_ptr_array_len(fv_p) != 0) {
-            /*
-             * This isn't the first occurrence. so add the "aggregator"
-             * character as a separator between the previous element
-             * and this element.
-             */
-            g_ptr_array_add(fv_p, (gpointer)ws_strdup_printf("%c", fields->aggregator));
-        }
         break;
     default:
         ws_assert_not_reached();
@@ -2370,12 +2395,9 @@ static void proto_tree_get_node_field_values(proto_node *node, gpointer data)
     }
 }
 
-static void write_specified_fields(fields_format format, output_fields_t *fields, epan_dissect_t *edt, column_info *cinfo, FILE *fh, json_dumper *dumper)
+static void write_specified_fields(fields_format format, output_fields_t *fields, epan_dissect_t *edt, column_info *cinfo _U_, FILE *fh, json_dumper *dumper)
 {
     gsize     i;
-    gint      col;
-    gchar    *col_name;
-    gpointer  field_index;
 
     write_field_data_t data;
 
@@ -2419,22 +2441,6 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
     proto_tree_children_foreach(edt->tree, proto_tree_get_node_field_values,
                                 &data);
 
-    /* Add columns to fields */
-    if (fields->includes_col_fields) {
-        for (col = 0; col < cinfo->num_cols; col++) {
-            if (!get_column_visible(col))
-                continue;
-            /* Prepend COLUMN_FIELD_FILTER as the field name */
-            col_name = ws_strdup_printf("%s%s", COLUMN_FIELD_FILTER, cinfo->columns[col].col_title);
-            field_index = g_hash_table_lookup(fields->field_indicies, col_name);
-            g_free(col_name);
-
-            if (NULL != field_index) {
-                format_field_values(fields, field_index, g_strdup(get_column_text(cinfo, col)));
-            }
-        }
-    }
-
     switch (format) {
     case FORMAT_CSV:
         for(i = 0; i < fields->fields->len; ++i) {
@@ -2452,9 +2458,15 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
 
                 /* Output the array of (partial) field values */
                 for (j = 0; j < g_ptr_array_len(fv_p); j++ ) {
+                    if (j != 0) {
+                        fputc(fields->aggregator, fh);
+                    }
                     str = (gchar *)g_ptr_array_index(fv_p, j);
-                    print_escaped_csv(fh, str);
-                    g_free(str);
+                    if (fields->escape) {
+                        print_escaped_csv(fh, str);
+                    } else {
+                        fputs(str, fh);
+                    }
                 }
                 if (fields->quote != '\0') {
                     fputc(fields->quote, fh);
@@ -2475,14 +2487,13 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
                 fv_p = fields->field_values[i];
 
                 /* Output the array of (partial) field values */
-                for (j = 0; j < (g_ptr_array_len(fv_p)); j+=2 ) {
+                for (j = 0; j < (g_ptr_array_len(fv_p)); j++ ) {
                     str = (gchar *)g_ptr_array_index(fv_p, j);
 
                     fprintf(fh, "  <field name=\"%s\" value=", field);
                     fputs("\"", fh);
                     print_escaped_xml(fh, str);
                     fputs("\"/>\n", fh);
-                    g_free(str);
                 }
                 g_ptr_array_free(fv_p, TRUE);  /* get ready for the next packet */
                 fields->field_values[i] = NULL;
@@ -2504,10 +2515,9 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
                 json_dumper_begin_array(dumper);
 
                 /* Output the array of (partial) field values */
-                for (j = 0; j < (g_ptr_array_len(fv_p)); j += 2) {
+                for (j = 0; j < (g_ptr_array_len(fv_p)); j++ ) {
                     str = (gchar *) g_ptr_array_index(fv_p, j);
                     json_dumper_value_string(dumper, str);
-                    g_free(str);
                 }
 
                 json_dumper_end_array(dumper);
@@ -2532,10 +2542,9 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
                 json_dumper_begin_array(dumper);
 
                 /* Output the array of (partial) field values */
-                for (j = 0; j < (g_ptr_array_len(fv_p)); j += 2) {
+                for (j = 0; j < (g_ptr_array_len(fv_p)); j++ ) {
                     str = (gchar *)g_ptr_array_index(fv_p, j);
                     json_dumper_value_string(dumper, str);
-                    g_free(str);
                 }
 
                 json_dumper_end_array(dumper);
@@ -2598,25 +2607,25 @@ gchar* get_node_field_value(field_info* fi, epan_dissect_t* edt)
         case FT_BYTES:
             {
                 gchar *ret;
-                const guint8 *bytes = fvalue_get_bytes(&fi->value);
+                const guint8 *bytes = fvalue_get_bytes_data(fi->value);
                 if (bytes) {
-                    dfilter_string = (gchar *)wmem_alloc(NULL, 3*fvalue_length(&fi->value));
+                    dfilter_string = (gchar *)wmem_alloc(NULL, 3*fvalue_length2(fi->value));
                     switch (fi->hfinfo->display) {
                     case SEP_DOT:
-                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length(&fi->value), '.');
+                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length2(fi->value), '.');
                         break;
                     case SEP_DASH:
-                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length(&fi->value), '-');
+                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length2(fi->value), '-');
                         break;
                     case SEP_COLON:
-                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length(&fi->value), ':');
+                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length2(fi->value), ':');
                         break;
                     case SEP_SPACE:
-                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length(&fi->value), ' ');
+                        ret = bytes_to_hexstr_punct(dfilter_string, bytes, fvalue_length2(fi->value), ' ');
                         break;
                     case BASE_NONE:
                     default:
-                        ret = bytes_to_hexstr(dfilter_string, bytes, fvalue_length(&fi->value));
+                        ret = bytes_to_hexstr(dfilter_string, bytes, fvalue_length2(fi->value));
                         break;
                     }
                     *ret = '\0';
@@ -2633,7 +2642,7 @@ gchar* get_node_field_value(field_info* fi, epan_dissect_t* edt)
             }
             break;
         default:
-            dfilter_string = fvalue_to_string_repr(NULL, &fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
+            dfilter_string = fvalue_to_string_repr(NULL, fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
             if (dfilter_string != NULL) {
                 gchar* ret = g_strdup(dfilter_string);
                 wmem_free(NULL, dfilter_string);
@@ -2693,7 +2702,9 @@ output_fields_t* output_fields_new(void)
     fields->fields              = NULL; /*Do lazy initialisation */
     fields->field_indicies      = NULL;
     fields->field_values        = NULL;
+    fields->protocolfilter      = NULL;
     fields->quote               ='\0';
+    fields->escape              = TRUE;
     fields->includes_col_fields = FALSE;
     return fields;
 }

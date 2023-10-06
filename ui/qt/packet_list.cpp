@@ -82,7 +82,7 @@
 #ifdef Q_OS_WIN
 #include "wsutil/file_util.h"
 #include <QSysInfo>
-#include <Uxtheme.h>
+#include <uxtheme.h>
 #endif
 
 // To do:
@@ -96,7 +96,6 @@
 static PacketList *gbl_cur_packet_list = NULL;
 
 const int max_comments_to_fetch_ = 20000000; // Arbitrary
-const int tail_update_interval_ = 100; // Milliseconds.
 const int overlay_update_interval_ = 100; // 250; // Milliseconds.
 
 
@@ -132,10 +131,33 @@ packet_list_select_row_from_data(frame_data *fdata_needle)
          */
         gbl_cur_packet_list->selectionModel()->clearSelection();
         gbl_cur_packet_list->selectionModel()->setCurrentIndex(model->index(row, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        gbl_cur_packet_list->scrollTo(gbl_cur_packet_list->currentIndex(), PacketList::PositionAtCenter);
         return TRUE;
     }
 
     return FALSE;
+}
+
+/*
+ * Given a field_info, select the field (which will scroll to it in
+ * the main ProtoTree, etc.) This is kind of an odd place for it,
+ * but we call this when performing Find Packet in lieu of changing the
+ * selected frame (the function above), because we found a match in the
+ * same frame as the currently selected one.
+ */
+gboolean
+packet_list_select_finfo(field_info *fi)
+{
+    if (! gbl_cur_packet_list || ! gbl_cur_packet_list->model())
+        return FALSE;
+
+    if (fi) {
+        FieldInformation finfo(fi, gbl_cur_packet_list);
+        emit gbl_cur_packet_list->fieldSelected(&finfo);
+    } else {
+        emit gbl_cur_packet_list->fieldSelected(0);
+    }
+    return TRUE;
 }
 
 void
@@ -201,12 +223,11 @@ PacketList::PacketList(QWidget *parent) :
     create_far_overlay_(true),
     mouse_pressed_at_(QModelIndex()),
     capture_in_progress_(false),
-    tail_timer_id_(0),
     tail_at_end_(0),
-    rows_inserted_(false),
     columns_changed_(false),
     set_column_visibility_(false),
-    frozen_rows_(QModelIndexList()),
+    frozen_current_row_(QModelIndex()),
+    frozen_selected_rows_(QModelIndexList()),
     cur_history_(-1),
     in_history_(false),
     finfo_array(NULL)
@@ -359,7 +380,7 @@ void PacketList::colorsChanged()
     }
 
     // Set the style sheet
-    if(prefs.gui_qt_packet_list_hover_style) {
+    if(prefs.gui_packet_list_hover_style) {
         setStyleSheet(active_style + inactive_style + hover_style);
     } else {
         setStyleSheet(active_style + inactive_style);
@@ -394,7 +415,7 @@ void PacketList::drawRow (QPainter *painter, const QStyleOptionViewItem &option,
 {
     QTreeView::drawRow(painter, option, index);
 
-    if (prefs.gui_qt_packet_list_separator) {
+    if (prefs.gui_packet_list_separator) {
         QRect rect = visualRect(index);
 
         painter->setPen(QColor(Qt::white));
@@ -408,6 +429,11 @@ void PacketList::setProtoTree (ProtoTree *proto_tree) {
     connect(proto_tree_, SIGNAL(goToPacket(int)), this, SLOT(goToPacket(int)));
     connect(proto_tree_, SIGNAL(relatedFrame(int,ft_framenum_type_t)),
             &related_packet_delegate_, SLOT(addRelatedFrame(int,ft_framenum_type_t)));
+}
+
+bool PacketList::uniqueSelectActive()
+{
+    return selectionModel()->selectedRows(0).count() == 1 ? true : false;
 }
 
 bool PacketList::multiSelectActive()
@@ -554,18 +580,23 @@ void PacketList::selectionChanged (const QItemSelection & selected, const QItemS
     }
 
     if (cap_file_->search_in_progress) {
-        match_data  mdata;
         field_info *fi = NULL;
 
         if (cap_file_->string && cap_file_->decode_data) {
             // The tree where the target string matched one of the labels was discarded in
             // match_protocol_tree() so we have to search again in the latest tree.
-            if (cf_find_string_protocol_tree(cap_file_, cap_file_->edt->tree, &mdata)) {
-                fi = mdata.finfo;
-            }
-        } else if (cap_file_->search_pos != 0) {
+            fi = cf_find_string_protocol_tree(cap_file_, cap_file_->edt->tree);
+        } else if (cap_file_->search_len != 0) {
             // Find the finfo that corresponds to our byte.
-            fi = proto_find_field_from_offset(cap_file_->edt->tree, cap_file_->search_pos,
+            // The match can span multiple fields (and a single byte can
+            // match more than one field.) Our behavior is to find the last
+            // field in the tree (so hopefully spanning fewer bytes) that
+            // matches the last byte in the search match.
+            // (regex search can find a zero length match not at the
+            // start of the frame if lookbehind is used, but
+            // proto_find_field_from_offset doesn't match such a field
+            // and it's not clear which field we would want to match.)
+            fi = proto_find_field_from_offset(cap_file_->edt->tree, cap_file_->search_pos + cap_file_->search_len - 1,
                                               cap_file_->edt->tvb);
         }
 
@@ -762,24 +793,9 @@ void PacketList::ctxDecodeAsDialog()
     da_dialog->show();
 }
 
-// Auto scroll if:
-// - We're not at the end
-// - We are capturing
-// - actionGoAutoScroll in the main UI is checked.
-// - It's been more than tail_update_interval_ ms since we last scrolled
-// - The last user-set vertical scrollbar position was at the end.
-
-// Using a timer assumes that we can save CPU overhead by updating
-// periodically. If that's not the case we can dispense with it and call
-// scrollToBottom() from rowsInserted().
 void PacketList::timerEvent(QTimerEvent *event)
 {
-    if (event->timerId() == tail_timer_id_) {
-        if (rows_inserted_ && capture_in_progress_ && tail_at_end_) {
-            scrollToBottom();
-            rows_inserted_ = false;
-        }
-    } else if (event->timerId() == overlay_timer_id_) {
+    if (event->timerId() == overlay_timer_id_) {
         if (!capture_in_progress_) {
             if (create_near_overlay_) drawNearOverlay();
             if (create_far_overlay_) drawFarOverlay();
@@ -916,8 +932,10 @@ void PacketList::keyPressEvent(QKeyEvent *event)
     bool handled = false;
     // If scrolling up/down, want to preserve horizontal scroll extent.
     if (event->key() == Qt::Key_Down     || event->key() == Qt::Key_Up ||
-        event->key() == Qt::Key_PageDown || event->key() == Qt::Key_PageUp)
+        event->key() == Qt::Key_PageDown || event->key() == Qt::Key_PageUp ||
+        event->key() == Qt::Key_End      || event->key() == Qt::Key_Home )
     {
+        // XXX: Why allow jumping to the left if the first column is current?
         if (currentIndex().isValid() && currentIndex().column() > 0) {
             int pos = horizontalScrollBar()->value();
             QTreeView::keyPressEvent(event);
@@ -1102,6 +1120,8 @@ frame_data *PacketList::getFDataForRow(int row) const
 void PacketList::columnsChanged()
 {
     columns_changed_ = true;
+    column_register_fields();
+    mainApp->emitAppSignal(MainApplication::FieldsChanged);
     if (!cap_file_) {
         // Keep columns_changed_ = true until we load a capture file.
         return;
@@ -1195,23 +1215,24 @@ void PacketList::preferencesChanged()
     setTextElideMode(elide_mode);
 }
 
+void PacketList::freezePacketList(bool changing_profile)
+{
+    changing_profile_ = changing_profile;
+    freeze(true);
+}
+
 void PacketList::recolorPackets()
 {
     packet_list_model_->resetColorized();
     redrawVisiblePackets();
 }
 
-/* Enable autoscroll timer. Note: must be called after the capture is started,
- * otherwise the timer will not be executed. */
+// Enable autoscroll.
 void PacketList::setVerticalAutoScroll(bool enabled)
 {
     tail_at_end_ = enabled;
     if (enabled && capture_in_progress_) {
         scrollToBottom();
-        if (tail_timer_id_ == 0) tail_timer_id_ = startTimer(tail_update_interval_);
-    } else if (tail_timer_id_ != 0) {
-        killTimer(tail_timer_id_);
-        tail_timer_id_ = 0;
     }
 }
 
@@ -1230,44 +1251,74 @@ void PacketList::captureFileReadFinished()
     }
 }
 
-void PacketList::freeze()
+bool PacketList::freeze(bool keep_current_frame)
 {
+    if (!cap_file_ || model() == Q_NULLPTR) {
+        // No capture file or already frozen
+        return false;
+    }
+
+    frame_data *current_frame = cap_file_->current_frame;
     column_state_ = header()->saveState();
     setHeaderHidden(true);
-    frozen_rows_ = selectedIndexes();
+    frozen_current_row_ = currentIndex();
+    frozen_selected_rows_ = selectionModel()->selectedRows();
     selectionModel()->clear();
     setModel(Q_NULLPTR);
     // It looks like GTK+ sends a cursor-changed signal at this point but Qt doesn't
     // call selectionChanged.
     related_packet_delegate_.clear();
 
+    if (keep_current_frame) {
+        cap_file_->current_frame = current_frame;
+    }
+
     /* Clears packet list as well as byteview */
     emit framesSelected(QList<int>());
+
+    return true;
 }
 
-void PacketList::thaw(bool restore_selection)
+bool PacketList::thaw(bool restore_selection)
 {
+    if (!cap_file_ || model() != Q_NULLPTR) {
+        // No capture file or not frozen
+        return false;
+    }
+
     setHeaderHidden(false);
     // Note that if we have a current sort status set in the header,
     // this will automatically try to sort the model (we don't want
     // that to happen if we're in the middle of reading the file).
     setModel(packet_list_model_);
 
-    // Resetting the model resets our column widths so we restore them here.
-    // We don't reapply the recent settings because the user could have
-    // resized the columns manually since they were initially loaded.
-    header()->restoreState(column_state_);
+    if (changing_profile_) {
+        // When changing profile the new recent settings must be applied to the columns.
+        applyRecentColumnWidths();
+        setColumnVisibility();
+        changing_profile_ = false;
+    } else {
+        // Resetting the model resets our column widths so we restore them here.
+        // We don't reapply the recent settings because the user could have
+        // resized the columns manually since they were initially loaded.
+        header()->restoreState(column_state_);
+    }
 
-    if (restore_selection && frozen_rows_.length() > 0 && selectionModel()) {
+    if (restore_selection && frozen_selected_rows_.length() > 0 && selectionModel()) {
         /* This updates our selection, which redissects the current packet,
          * which is needed when we're called from MainWindow::layoutPanes.
          * Also, this resets all ProtoTree and ByteView data */
         clearSelection();
-        foreach (QModelIndex idx, frozen_rows_) {
+        setCurrentIndex(frozen_current_row_);
+        foreach (QModelIndex idx, frozen_selected_rows_) {
             selectionModel()->select(idx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
         }
+        scrollTo(currentIndex(), PositionAtCenter);
     }
-    frozen_rows_ = QModelIndexList();
+    frozen_current_row_ = QModelIndex();
+    frozen_selected_rows_ = QModelIndexList();
+
+    return true;
 }
 
 void PacketList::clear() {
@@ -1535,6 +1586,7 @@ void PacketList::setCaptureFile(capture_file *cf)
         }
     }
     create_near_overlay_ = true;
+    changing_profile_ = false;
     sortByColumn(-1, Qt::AscendingOrder);
 }
 
@@ -1585,14 +1637,12 @@ void PacketList::goPreviousPacket(void)
     scrollViewChanged(false);
 }
 
-void PacketList::goFirstPacket(bool user_selected) {
+void PacketList::goFirstPacket(void) {
     if (packet_list_model_->rowCount() < 1) return;
     selectionModel()->setCurrentIndex(packet_list_model_->index(0, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     scrollTo(currentIndex());
 
-    if (user_selected) {
-        scrollViewChanged(false);
-    }
+    scrollViewChanged(false);
 }
 
 void PacketList::goLastPacket(void) {
@@ -1612,6 +1662,7 @@ void PacketList::goToPacket(int packet, int hf_id)
     int row = packet_list_model_->packetNumberToRow(packet);
     if (row >= 0) {
         selectionModel()->setCurrentIndex(packet_list_model_->index(row, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        scrollTo(currentIndex(), PositionAtCenter);
         proto_tree_->goToHfid(hf_id);
     }
 
@@ -1734,7 +1785,7 @@ void PacketList::applyTimeShift()
 {
     packet_list_model_->resetColumns();
     redrawVisiblePackets();
-    // XXX emit packetDissectionChanged(); ?
+    emit packetDissectionChanged();
 }
 
 void PacketList::updatePackets(bool redraw)
@@ -1927,8 +1978,14 @@ void PacketList::vScrollBarActionTriggered(int)
 
 void PacketList::scrollViewChanged(bool at_end)
 {
-    if (capture_in_progress_ && prefs.capture_auto_scroll) {
-        emit packetListScrolled(at_end);
+    if (capture_in_progress_) {
+        // We want to start auto scrolling when the user scrolls to (or past)
+        // the end only if recent.capture_auto_scroll is set.
+        // We want to stop autoscrolling if the user scrolls up or uses
+        // Go to Packet regardless of the preference setting.
+        if (recent.capture_auto_scroll || !at_end) {
+            emit packetListScrolled(at_end);
+        }
     }
 }
 
@@ -2102,15 +2159,29 @@ void PacketList::drawFarOverlay()
     }
 }
 
+// Auto scroll if:
+// - We are capturing
+// - actionGoAutoScroll in the main UI is checked.
+
+// actionGoAutoScroll in the main UI:
+// - Is set to the value of recent.capture_auto_scroll when beginning a capture
+// - Can be triggered manually by the user
+// - Is turned on if the last user-set vertical scrollbar position is at the
+//   end and recent.capture_auto_scroll is enabled
+// - Is turned off if the last user-set vertical scrollbar is not at the end,
+//   or if one of the Go to Packet actions is used (XXX: Should keyboard
+//   navigation in keyPressEvent turn it off for similar reasons?)
 void PacketList::rowsInserted(const QModelIndex &parent, int start, int end)
 {
     QTreeView::rowsInserted(parent, start, end);
-    rows_inserted_ = true;
+    if (capture_in_progress_ && tail_at_end_) {
+        scrollToBottom();
+    }
 }
 
 void PacketList::resizeAllColumns(bool onlyTimeFormatted)
 {
-    if (!cap_file_ || cap_file_->state == FILE_CLOSED)
+    if (!cap_file_ || cap_file_->state == FILE_CLOSED || cap_file_->state == FILE_READ_PENDING)
         return;
 
     for (int col = 0; col < cap_file_->cinfo.num_cols; col++) {

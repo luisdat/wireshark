@@ -12,11 +12,10 @@
 #ifndef __FILE_H__
 #define __FILE_H__
 
-#include <errno.h>
-
 #include <wiretap/wtap.h>
 #include <epan/epan.h>
 #include <epan/print.h>
+#include <epan/fifo_string_cache.h>
 #include <ui/packet_range.h>
 
 #ifdef __cplusplus
@@ -77,8 +76,10 @@ typedef struct {
     const char    *string;
     size_t         string_len;
     capture_file  *cf;
-    gboolean       frame_matched;
     field_info    *finfo;
+    field_info    *prev_finfo;
+    gboolean       frame_matched;
+    gboolean       halt;
 } match_data;
 
 /**
@@ -144,10 +145,10 @@ cf_status_t cf_reload(capture_file *cf);
  * Read all packets of a capture file into the internal structures.
  *
  * @param cf the capture file to be read
- * @param from_save reread asked from cf_save_records
+ * @param reloading reread asked for from cf_save_records()
  * @return one of cf_read_status_t
  */
-cf_read_status_t cf_read(capture_file *cf, gboolean from_save);
+cf_read_status_t cf_read(capture_file *cf, gboolean reloading);
 
 /**
  * Read the metadata and raw data for a record.  It will pop
@@ -189,7 +190,8 @@ gboolean cf_read_current_record(capture_file *cf);
  * @return one of cf_read_status_t
  */
 cf_read_status_t cf_continue_tail(capture_file *cf, volatile int to_read,
-                                  wtap_rec *rec, Buffer *buf, int *err);
+                                  wtap_rec *rec, Buffer *buf, int *err,
+                                  fifo_string_cache_t *frame_dup_cache, GChecksum *frame_cksum);
 
 /**
  * Fake reading packets from the "end" of a capture file.
@@ -208,7 +210,8 @@ void cf_fake_continue_tail(capture_file *cf);
  * @return one of cf_read_status_t
  */
 cf_read_status_t cf_finish_tail(capture_file *cf, wtap_rec *rec,
-                                Buffer *buf, int *err);
+                                Buffer *buf, int *err,
+                                fifo_string_cache_t *frame_dup_cache, GChecksum *frame_cksum);
 
 /**
  * Determine whether this capture file (or a range of it) can be written
@@ -512,21 +515,22 @@ cf_print_status_t cf_write_json_packets(capture_file *cf, print_args_t *print_ar
  * @param cf the capture file
  * @param string the string to find
  * @param dir direction in which to search
+ * @param multiple whether to look for the next occurrence of the same string
+ * in the current packet, or to only match once per frame
  * @return TRUE if a packet was found, FALSE otherwise
  */
 gboolean cf_find_packet_protocol_tree(capture_file *cf, const char *string,
-                                      search_direction dir);
+                                      search_direction dir, bool multiple);
 
 /**
- * Find field with a label that contains text string cfile->sfilter.
+ * Find field with a label that contains the text string cfile->sfilter in
+ * a protocol tree.
  *
  * @param cf the capture file
  * @param tree the protocol tree
- * @param mdata the first field (mdata->finfo) that matched the string
- * @return TRUE if a packet was found, FALSE otherwise
+ * @return The first field in the tree that matched the string if found, NULL otherwise
  */
-extern gboolean cf_find_string_protocol_tree(capture_file *cf, proto_tree *tree,
-                                             match_data *mdata);
+extern field_info* cf_find_string_protocol_tree(capture_file *cf, proto_tree *tree);
 
 /**
  * Find packet whose summary line contains a specified text string.

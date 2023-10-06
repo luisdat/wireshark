@@ -2407,7 +2407,7 @@ dissect_gtpv2_mei(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, proto
      * a default digit set of 0-9 returning "?" for overdecadic digits a pointer to the EP
      * allocated string will be returned.
      */
-    proto_tree_add_item_ret_display_string(tree, hf_gtpv2_mei, tvb, offset, length, ENC_BCD_DIGITS_0_9, pinfo->pool, &mei_str);
+    proto_tree_add_item_ret_display_string(tree, hf_gtpv2_mei, tvb, offset, length, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN, pinfo->pool, &mei_str);
     proto_item_append_text(item, "%s", mei_str);
 }
 
@@ -4306,7 +4306,7 @@ dissect_gtpv2_mm_context_common_data(tvbuff_t *tvb, packet_info *pinfo, proto_tr
     offset += 1;
     /* (m+2) to r Mobile Equipment Identity (MEI) */
     if (mei_len) {
-        proto_tree_add_item(tree, hf_gtpv2_mei, tvb, offset, mei_len, ENC_BCD_DIGITS_0_9);
+        proto_tree_add_item(tree, hf_gtpv2_mei, tvb, offset, mei_len, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
         offset += mei_len;
     }
     return offset;
@@ -5288,7 +5288,7 @@ dissect_complete_request_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     offset += 1;
 
     /* Add the Complete Request Message */
-    new_tvb = tvb_new_subset_length_caplen(tvb, offset, length-1, length-1);
+    new_tvb = tvb_new_subset_length(tvb, offset, length-1);
     call_dissector(nas_eps_handle, new_tvb, pinfo, tree);
 
 }
@@ -10533,7 +10533,7 @@ void proto_register_gtpv2(void)
         },
         {&hf_gtpv2_charging_characteristic,
          {"Charging Characteristic", "gtpv2.charging_characteristic",
-          FT_UINT16, BASE_HEX, NULL, 0xffff,
+          FT_UINT16, BASE_HEX, NULL, 0x0,
           NULL, HFILL}
         },
         {&hf_gtpv2_bearer_flag_ppc,
@@ -10767,7 +10767,7 @@ void proto_register_gtpv2(void)
         },
         { &hf_gtpv2_mm_context_apn_rte_ctrl_sts_len,
         { "Length of APN Rate Control Statuses", "gtpv2.mm_context.apn_rte_ctrl_sts_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
+            FT_UINT16, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_gtpv2_mm_context_cnr_len,
@@ -11801,7 +11801,7 @@ void proto_register_gtpv2(void)
       },
       { &hf_gtpv2_secondary_rat_usage_data_report_rat_type,
           {"RAT Type", "gtpv2.secondary_rat_usage_data_report.rat_type",
-          FT_UINT8, BASE_DEC, VALS(gtpv2_secondary_rat_type_vals), 0xFF,
+          FT_UINT8, BASE_DEC, VALS(gtpv2_secondary_rat_type_vals), 0x0,
           NULL, HFILL}
       },
       { &hf_gtpv2_secondary_rat_usage_data_report_start_timestamp,
@@ -12310,7 +12310,7 @@ void proto_register_gtpv2(void)
           NULL, HFILL }
       },
       { &hf_gtpv2_ext_tra_info_loi_pcf_n15,
-      { "N15", "gtpv2.ext_tra_info_loi.pcf.n25",
+      { "N15", "gtpv2.ext_tra_info_loi.pcf.n15",
           FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x04,
           NULL, HFILL }
       },
@@ -12574,12 +12574,6 @@ void proto_register_gtpv2(void)
     expert_gtpv2 = expert_register_protocol(proto_gtpv2);
     expert_register_field_array(expert_gtpv2, ei, array_length(ei));
 
-    /* AVP Code: 22 3GPP-User-Location-Info */
-    dissector_add_uint("diameter.3gpp", 22, create_dissector_handle(dissect_diameter_3gpp_uli, proto_gtpv2));
-
-    /* AVP Code: 2820 Presence-Reporting-Area-Elements-List */
-    dissector_add_uint("diameter.3gpp", 2820, create_dissector_handle(dissect_diameter_3gpp_presence_reporting_area_elements_list, proto_gtpv2));
-
     register_dissector("gtpv2", dissect_gtpv2, proto_gtpv2);
     /* Dissector table for private extensions */
     gtpv2_priv_ext_dissector_table = register_dissector_table("gtpv2.priv_ext", "GTPv2 Private Extension", proto_gtpv2, FT_UINT16, BASE_DEC);
@@ -12597,6 +12591,13 @@ proto_reg_handoff_gtpv2(void)
     nas_eps_handle = find_dissector_add_dependency("nas-eps", proto_gtpv2);
 
     radius_register_avp_dissector(VENDOR_THE3GPP, 22, dissect_radius_user_loc);
+
+    /* AVP Code: 22 3GPP-User-Location-Info */
+    dissector_add_uint("diameter.3gpp", 22, create_dissector_handle(dissect_diameter_3gpp_uli, proto_gtpv2));
+
+    /* AVP Code: 2820 Presence-Reporting-Area-Elements-List */
+    dissector_add_uint("diameter.3gpp", 2820, create_dissector_handle(dissect_diameter_3gpp_presence_reporting_area_elements_list, proto_gtpv2));
+
 }
 
 /*

@@ -14,7 +14,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -201,7 +200,7 @@ const gchar *get_conn_cfilter(void) {
          *
          * Display names may be of the following format:
          *
-         *    [protoco./] [hostname] : [:] displaynumber [.screennumber]
+         *    [protocol./] [hostname] : [:] displaynumber [.screennumber]
          *
          * A string with exactly two colons separating hostname
          * from the display indicates a DECnet style name.  Colons

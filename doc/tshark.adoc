@@ -176,7 +176,7 @@ have elapsed. Floating point values (e.g. 0.5) are allowed.
 were written.
 
 *filesize*:__value__ Stop writing to a capture file after it reaches a size of
-__value__ kB.  If this option is used together with the -b option, *TShark*
+__value__ kB.  If this option is used together with the *-b* option, *TShark*
 will stop writing to the current capture file and switch to the next one if
 filesize is reached.  When reading a capture file, *TShark* will stop reading
 the file after the number of bytes read exceeds this number (the complete
@@ -242,6 +242,10 @@ every hour on the hour.
 *packets*:__value__ switch to the next file after it contains __value__
 packets.
 
+*printname*:__filename__ print the name of the most recently written file
+to __filename__ after the file is closed. __filename__ can be `stdout` or `-`
+for standard output, or `stderr` for standard error.
+
 *nametimenum*:__value__ Choose between two save filename templates.  If
 __value__ is 1, make running file number part before start time part; this is
 the original and default behaviour (e.g. log_00001_20230714164426.pcap).  If
@@ -266,7 +270,7 @@ system or interface on which you're capturing might silently limit the
 capture buffer size to a lower value or raise it to a higher value.
 
 This is available on UNIX-compatible systems, such as Linux, macOS,
-\*BSD, Solaris, and AIX, with libpcap 1.0.0 or later, and on Windows. 
+\*BSD, Solaris, and AIX, with libpcap 1.0.0 or later, and on Windows.
 It is not available on UNIX-compatible systems with earlier versions of
 libpcap.
 
@@ -294,38 +298,12 @@ may differ from *-a packets:*<capture packet count>.
 Run with the given configuration profile.
 --
 
--d  <layer type>==<selector>,<decode-as protocol>::
-+
---
-Like Wireshark's *Decode As...* feature, this lets you specify how a
-layer type should be dissected.  If the layer type in question (for example,
-*tcp.port* or *udp.port* for a TCP or UDP port number) has the specified
-selector value, packets should be dissected as the specified protocol.
-
-Example: *tshark -d tcp.port==8888,http* will decode any traffic running over
-TCP port 8888 as HTTP.
-
-Example: *tshark -d tcp.port==8888:3,http* will decode any traffic running over
-TCP ports 8888, 8889 or 8890 as HTTP.
-
-Example: *tshark -d tcp.port==8888-8890,http* will decode any traffic running
-over TCP ports 8888, 8889 or 8890 as HTTP.
-
-Using an invalid selector or protocol will print out a list of valid selectors
-and protocol names, respectively.
-
-Example: *tshark -d .* is a quick way to get a list of valid selectors.
-
-Example: *tshark -d ethertype==0x0800.* is a quick way to get a list of
-protocols that can be selected with an ethertype.
---
-
 -D|--list-interfaces::
 +
 --
 Print a list of the interfaces on which *TShark* can capture, and
 exit.  For each network interface, a number and an interface name,
-possibly followed by a text description of the interface, is printed. 
+possibly followed by a text description of the interface, is printed.
 The interface name or the number can be supplied to the *-i* flag to
 specify an interface on which to capture.  The number can be useful on
 Windows systems, where the interfaces have long names that usually
@@ -338,9 +316,9 @@ contain a GUID.
 Add a field to the list of fields to display if *-T ek|fields|json|pdml*
 is selected.  This option can be used multiple times on the command line.
 At least one field must be provided if the *-T fields* option is
-selected. Column names may be used prefixed with "_ws.col."
+selected. Column types may be used prefixed with "_ws.col."
 
-Example: *tshark -e frame.number -e ip.addr -e udp -e _ws.col.Info*
+Example: *tshark -e frame.number -e ip.addr -e udp -e _ws.col.info*
 
 Fields are separated by tab characters by default.  *-E* controls the
 format of the printed fields.
@@ -384,6 +362,11 @@ option may be used.
 
 *quote=d|s|n* Set the quote character to use to surround fields.  *d*
 uses double-quotes, *s* single-quotes, *n* no quotes (the default).
+
+*escape=y|n* If *y*, the whitespace control characters (tab, line feed,
+carriage return, form feed, and vertical tab) and backspace will be
+replaced in field values by C-style escapes, e.g. "\n" for line feed.
+If *n*, field value strings will be printed as-is.  Defaults to *y*.
 --
 
 -f  <capture filter>::
@@ -449,6 +432,13 @@ Field 3:: "decode as" name, e.g. "http"
 
 *defaultprefs*  Dumps a default preferences file to stdout.
 
+*dissectors*  Dumps a list of registered dissectors to stdout.  There is
+one record per line.  The fields are tab-delimited.
+
+[horizontal]
+Field 1:: dissector name
+Field 2:: dissector description
+
 *dissector-tables*  Dumps a list of dissector tables to stdout.  There
 is one record per line.  The fields are tab-delimited.
 
@@ -462,6 +452,8 @@ Field 6:: "decode as" support
 
 *elastic-mapping*  Dumps the ElasticSearch mapping file to stdout. Fields
 falling in the default case (string) won't be mapped.
+
+*enterprises* Dumps the IANA Private Enterprise Number (PEN) table.
 
 *fieldcount*  Dumps the number of header fields to stdout.
 
@@ -488,6 +480,15 @@ Field 6:: base for display (for integer types); "parent bitfield width" for FT_B
 Field 7:: bitmask: format: hex: 0x....
 Field 8:: blurb describing field
 
+An optional search prefix argument can be given to
+*fields*, in which case the output is limited to protocols and fields whose
+abbreviation starts with the search prefix.
+
+.Search Output
+[horizontal]
+Field 1:: protocol or field abbreviation
+Field 2:: descriptive protocol or field name
+
 *folders* Dumps various folders used by *TShark*.  This is essentially the
 same data reported in Wireshark's About | Folders tab.
 There is one record per line.  The fields are tab-delimited.
@@ -508,10 +509,15 @@ There is one record per line.  The fields are tab-delimited.
 
 [horizontal]
 Field 1:: underlying dissector (e.g. "tcp")
-Field 2:: name of heuristic decoder (e.g. ucp")
+Field 2:: name of heuristic decoder (e.g. "ucp")
 Field 3:: heuristic enabled (e.g. "T" or "F")
+Field 4:: heuristic enabled by default (e.g. "T" or "F")
+Field 5:: heuristic short name (e.g. "ucp_tcp")
+Field 6:: heuristic display name (e.g. "UCP over TCP")
 
 *help* Displays the available report types.
+
+*manuf* Dumps the MAC address lookup table in `manuf` format.
 
 *plugins* Dumps the plugins currently installed.
 There is one record per line.  The fields are tab-delimited.
@@ -530,6 +536,11 @@ or HTML or whatever.  There is one record per line.  The fields are tab-delimite
 Field 1:: protocol name
 Field 2:: protocol short name
 Field 3:: protocol filter name
+Field 4:: protocol enabled (e.g. "T" or "F")
+Field 5:: protocol enabled by default (e.g. "T" or "F")
+Field 6:: protocol can toggle (e.g. "T" or "F")
+
+*services* Dumps the TCP, UDP, and SCTP transport service (port) table.
 
 *values* Dumps the value_strings, range_strings or true/false strings
 for fields that have them.  There is one record per line.  Fields are
@@ -645,15 +656,6 @@ Lower-level protocols must be explicitly specified in the filter.
 Example: *tshark -J "tcp http"*
 --
 
--K  <keytab>::
-+
---
-Load kerberos crypto keys from the specified keytab file.
-This option can be used multiple times to load keys from several files.
-
-Example: *tshark -K krb5.keytab*
---
-
 -l::
 +
 --
@@ -679,41 +681,6 @@ standard output buffer containing that data fills up.
 --
 List the data link types supported by the interface and exit.  The reported
 link types can be used for the *-y* option.
---
-
--n::
-+
---
-Disable network object name resolution (such as hostname, TCP and UDP port
-names); the *-N* option might override this one.
---
-
--N  <name resolving flags>::
-+
---
-Turn on name resolving only for particular types of addresses and port
-numbers, with name resolving for other types of addresses and port
-numbers turned off.  This option overrides *-n* if both *-N* and *-n*
-are present.  This option and *-n* override the options from the preferences,
-including preferences set via the *-o* option.  If both *-N* and *-n* options
-are not present, the values from the preferences are used, which default to
-*d*, *m*, and *N* turned on and the other options turned off. (NB, *N* does
-not actually do anything without *n* enabled as well.)
-
-The argument is a string that may contain the letters:
-
-*d* to enable resolution from captured DNS packets
-
-*m* to enable MAC address resolution
-
-*n* to enable network address resolution
-
-*N* to enable using external resolvers (e.g., DNS) for network address
-resolution; no effect without *n* also enabled
-
-*t* to enable transport-layer port number resolution
-
-*v* to enable VLAN IDs to names resolution
 --
 
 -o  <preference>:<value>::
@@ -789,10 +756,8 @@ done, the continuous count of packets captured shown when saving a
 capture to a file, and the final message giving the count of packets
 captured.  Only true errors are displayed on the standard error.
 
-only display true errors; don't display the
-initial message indicating the.  This outputs less
-than the *-q* option, so the interface name and total packet
-count and the end of a capture are not sent to stderr.
+This outputs less than the *-q* option, so the interface name and total
+packet count and the end of a capture are not sent to stderr.
 
 When reading a capture file, or when capturing and not saving to a file,
 don't print packet information; this is useful if you're using a *-z*
@@ -815,8 +780,8 @@ particular: those that can be read without seeking backwards).
 Cause the specified filter (which uses the syntax of read/display filters,
 rather than that of capture filters) to be applied during the first pass of
 analysis. Packets not matching the filter are not considered for future
-passes. Only makes sense with multiple passes, see -2. For regular filtering
-on single-pass dissect see -Y instead.
+passes. Only makes sense with multiple passes, see *-2*. For regular filtering
+on single-pass dissect see *-Y* instead.
 
 Note that forward-looking fields such as 'response in frame #' cannot be used
 with this filter, since they will not have been calculate when this filter is
@@ -843,47 +808,6 @@ the default snapshot length is used if provided.
 +
 --
 Set the line separator to be printed between packets.
---
-
--t  a|ad|adoy|d|dd|e|r|u|ud|udoy::
-+
---
-Set the format of the packet timestamp printed in summary lines.
-The format can be one of:
-
-*a* absolute: The absolute time, as local time in your time zone,
-is the actual time the packet was captured, with no date displayed
-
-*ad* absolute with date: The absolute date, displayed as YYYY-MM-DD,
-and time, as local time in your time zone, is the actual time and date
-the packet was captured
-
-*adoy* absolute with date using day of year: The absolute date,
-displayed as YYYY/DOY, and time, as local time in your time zone,
-is the actual time and date the packet was captured
-
-*d* delta: The delta time is the time since the previous packet was
-captured
-
-*dd* delta_displayed: The delta_displayed time is the time since the
-previous displayed packet was captured
-
-*e* epoch: The time in seconds since epoch (Jan 1, 1970 00:00:00)
-
-*r* relative: The relative time is the time elapsed between the first packet
-and the current packet
-
-*u* UTC: The absolute time, as UTC, is the actual time the packet was
-captured, with no date displayed
-
-*ud* UTC with date: The absolute date, displayed as YYYY-MM-DD,
-and time, as UTC, is the actual time and date the packet was captured
-
-*udoy* UTC with date using day of year: The absolute date, displayed
-as YYYY/DOY, and time, as UTC, is the actual time and date the packet
-was captured
-
-The default format is relative.
 --
 
 -T  ek|fields|json|jsonraw|pdml|ps|psml|tabs|text::
@@ -936,7 +860,7 @@ Example of usage:
 
 *pdml* Packet Details Markup Language, an XML-based format for the
 details of a decoded packet.  This information is equivalent to the
-packet details printed with the *-V* option.  Using the --color option
+packet details printed with the *-V* option.  Using the *--color* option
 will add color attributes to *pdml* output.  These attributes are
 nonstandard.
 
@@ -947,7 +871,7 @@ depending on whether the *-V* option was specified.
 *psml* Packet Summary Markup Language, an XML-based format for the summary
 information of a decoded packet.  This information is equivalent to the
 information shown in the one-line summary printed by default.
-Using the --color option will add color attributes to *pdml* output. These
+Using the *--color* option will add color attributes to *pdml* output. These
 attributes are nonstandard.
 
 *tabs* Similar to the default *text* report except the human-readable one-line
@@ -963,28 +887,18 @@ whether the *-V* option was specified.  This is the default.
 +
 --
 Specifies the directory into which temporary files (including capture
-files) are to be written.  The default behavior on UNIX-compatible sytems,
+files) are to be written.  The default behavior on UNIX-compatible systems,
 such as Linux, macOS, \*BSD, Solaris, and AIX, is to use the environment
 variable __$TMPDIR__ if set, and the system default, typically __/tmp__, if it
 is not.  On Windows, the __%TEMP%__ environment variable is used, which
 typically defaults to __%USERPROFILE%\AppData\Local\Temp__.
 --
 
--u <seconds type>::
-+
---
-Specifies the seconds type.  Valid choices are:
-
-*s* for seconds
-
-*hms* for hours, minutes and seconds
---
-
 -U <tap name>::
 +
 --
 PDUs export, exports PDUs from infile to outfile according to the tap
-name given. Use -Y to filter.
+name given. Use *-Y* to filter.
 
 Enter an empty tap name "" or a tap name of ? to get a list of available
 names.
@@ -1008,7 +922,7 @@ Cause *TShark* to print a view of the packet details.
 Write raw packet data to __outfile__ or to the standard output if
 __outfile__ is '-'.
 
-NOTE: -w provides raw packet data, not text.  If you want text output
+NOTE: *-w* provides raw packet data, not text.  If you want text output
 you need to redirect stdout (e.g. using '>'), don't use the *-w*
 option for this.
 --
@@ -1082,7 +996,7 @@ Enable hexdump without printing any ASCII dump text.
 
 *help*::
 
-Display --hexdump specific help then exit.
+Display *--hexdump* specific help then exit.
 
 The use of *--hexdump <hexoption>* is particularly useful to generate output
 that can be used to create a pcap or pcapng file from a capture file type such
@@ -1161,8 +1075,8 @@ depend upon (e.g., fragments), are not printed but are written to file;
 packets not matching the filter nor depended upon are discarded rather
 than being printed or written.
 
-Use this instead of -R for filtering using single-pass analysis. If doing
-two-pass analysis (see -2) then only packets matching the read filter (if there
+Use this instead of *-R* for filtering using single-pass analysis. If doing
+two-pass analysis (see *-2*) then only packets matching the read filter (if there
 is one) will be checked against this filter.
 --
 
@@ -1176,7 +1090,7 @@ For example,
 
 will reset session every 100000 packets.
 
-This feature does not support -2 two-pass analysis
+This feature does not support *-2* two-pass analysis
 --
 
 -z  <statistics>::
@@ -1531,7 +1445,7 @@ Calculate the distribution of F1AP packets, grouped by packet types.
 *-z* f5_tmm_dist,tree[,__filter__]::
 +
 --
-Calculate the F5 Ethernet trailer Traffic Managment Microkernel distribution.
+Calculate the F5 Ethernet trailer Traffic Management Microkernel distribution.
 Displayed information is the number of packets and bytes, grouped by the TMM
 slot and number, whether packets are ingress or egress, and whether there is
 a flow ID and virtual server name, a flow ID without virtual server name, or
@@ -1606,10 +1520,14 @@ __mode__ specifies the output mode.  It can be one of:
   ebcdic EBCDIC output with dots for non-printable characters
   hex    Hexadecimal and ASCII data with offsets
   raw    Hexadecimal data
+  utf-8  UTF-8 output with REPLACEMENT CHARACTERs for invalid sequences
   yaml   YAML format
 
-Since the output in *ascii* or *ebcdic* mode may contain newlines, the length
-of each section of output plus a newline precedes each section of output.
+Since the output in *ascii*, *ebcdic*, or *utf-8* mode may contain newlines,
+each section of output is preceded by its length in bytes plus a newline.
+(Note that for *utf-8* this is not UTF-8 characters, and may be different
+than the length as transmitted due to the substitution of replacement
+characters for invalid sequences.)
 
 __filter__ specifies the stream to be displayed. There are three formats:
 
@@ -1713,7 +1631,7 @@ can be one of:
   dtap_mm    DTAP Mobility Management
   dtap_rr    DTAP Radio Resource Management
   dtap_sacch SACCH Radio Resource Management
-  dtap_sm    DTAP GPRS Session Managment
+  dtap_sm    DTAP GPRS Session Management
   dtap_sms   DTAP Short Message Service
   dtap_ss    DTAP Supplementary Services
   dtap_tp    DTAP Special Conformance Testing Functions
@@ -2051,6 +1969,13 @@ Calculate statistics on IPv4 addresses, with source and destination addresses
 separated into separate categories.
 --
 
+*-z* ip_ttl,tree[,__filter__]::
++
+--
+Calculate statistics on the time to live (TTL) values that occur for each
+IPv4 source address.
+--
+
 *-z* ip6_dests,tree[,__filter__]::
 +
 --
@@ -2077,6 +2002,13 @@ Calculate statistics on port types that occur on IPv6 packets.
 Calculate statistics on IPv6 addresses, with source and destination addresses
 separated into separate categories.
 --
+
+*-z* ip6_hop,tree[,__filter__]::
++
+--
+Calculate statistics on the hop limits that occur for each IPv6 source address.
+--
+
 
 *-z* isup_msg,tree[,__filter__]::
 +
@@ -2214,7 +2146,7 @@ MGCP packets exchanged by the host at IP address 1.2.3.4 .
 *-z* mtp3,msus[,__filter__]::
 +
 --
-Calculate statisics on MTP3 MSUs. For each combination of originating
+Calculate statistics on MTP3 MSUs. For each combination of originating
 point code, destination point code, and service indicator, calculates
 the total number of MSUs, the total bytes, and the average bytes per MSU.
 --
@@ -2555,7 +2487,7 @@ configuring color filters.
 --
 If a key appears multiple times in an object, only write it a single time with
 as value a json array containing all the separate values. (Only works with
--T json)
+*-T json*)
 --
 
 --elastic-mapping-filter <protocol>,<protocol>,...::
@@ -2582,29 +2514,15 @@ before the file extension.
 This interface is subject to change, adding the possibility to filter on files.
 --
 
---enable-protocol <proto_name>::
+--print-timers::
 +
 --
-Enable dissection of proto_name.
+Output JSON containing elapsed times for each pass tshark does to process a capture
+file and the sum elapsed time for all passes. The per-pass output contains the total
+elapsed time and aggregate counters for per-packet operations (dissection and filtering).
 --
 
---disable-protocol <proto_name>::
-+
---
-Disable dissection of proto_name.
---
-
---enable-heuristic <short_name>::
-+
---
-Enable dissection of heuristic protocol.
---
-
---disable-heuristic <short_name>::
-+
---
-Disable dissection of heuristic protocol.
---
+include::dissection-options.adoc[tag=!not_tshark]
 
 include::diagnostic-options.adoc[]
 

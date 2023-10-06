@@ -13,6 +13,7 @@ set -e -u -o pipefail
 
 eval "$(brew shellenv)"
 
+HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE:-}
 # Update to last brew release
 if [ -z "$HOMEBREW_NO_AUTO_UPDATE" ] ; then
     brew update
@@ -122,6 +123,8 @@ fi
 
 install_formulae "${ACTUAL_LIST[@]}"
 
+# Install python modules
+pip3 install pytest pytest-xdist
 
 if [ $INSTALL_DMG_DEPS -ne 0 ] ; then
     pip3 install dmgbuild

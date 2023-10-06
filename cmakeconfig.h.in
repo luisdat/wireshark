@@ -34,6 +34,9 @@
 /* Link Wireshark libraries statically */
 #cmakedefine ENABLE_STATIC 1
 
+/* Enable AddressSanitizer (and LeakSanitizer on clang/gcc) */
+#cmakedefine ENABLE_ASAN 1
+
 /* Enable AirPcap */
 #cmakedefine HAVE_AIRPCAP 1
 
@@ -45,6 +48,18 @@
 
 /* Define to 1 if you have the `timespec_get` function. */
 #cmakedefine HAVE_TIMESPEC_GET 1
+
+/* Define to 1 if you have the `localtime_r` function. */
+#cmakedefine HAVE_LOCALTIME_R 1
+
+/* Define to 1 if you have the `gmtime_r` function. */
+#cmakedefine HAVE_GMTIME_R 1
+
+/* Define to 1 if you have the `timegm` function. */
+#cmakedefine HAVE_TIMEGM 1
+
+/* Define to 1 if you have the `tzset` function. */
+#cmakedefine HAVE_TZSET 1
 
 /* Define to use the MaxMind DB library */
 #cmakedefine HAVE_MAXMINDDB 1
@@ -94,11 +109,11 @@
 /* Define to use kerberos */
 #cmakedefine HAVE_KERBEROS 1
 
-/* Define to use PCRE2 library */
-#define HAVE_PCRE2 1
-
 /* Define to use nghttp2 */
 #cmakedefine HAVE_NGHTTP2 1
+
+/* Define to use nghttp3 */
+#cmakedefine HAVE_NGHTTP3 1
 
 /* Define to use the libcap library */
 #cmakedefine HAVE_LIBCAP 1
@@ -220,6 +235,12 @@
 /* Define to 1 if you have the `pcap_set_tstamp_type' function. */
 #cmakedefine HAVE_PCAP_SET_TSTAMP_TYPE 1
 
+/* Define to 1 if you have the `PCAP_ERROR_PROMISC_PERM_DENIED' symbol. */
+#cmakedefine HAVE_PCAP_ERROR_PROMISC_PERM_DENIED 1
+
+/* Define to 1 if you have the `PCAP_WARNING_TSTAMP_TYPE_NOTSUP' symbol. */
+#cmakedefine HAVE_PCAP_WARNING_TSTAMP_TYPE_NOTSUP 1
+
 /* Define to 1 if you have the <pwd.h> header file. */
 #cmakedefine HAVE_PWD_H 1
 
@@ -231,6 +252,9 @@
 
 /* Define to 1 if you have the bcg729 library. */
 #cmakedefine HAVE_BCG729 1
+
+/* Define to 1 if you have the opencore-amrnb library. */
+#cmakedefine HAVE_AMRNB 1
 
 /* Define to 1 if you have the ilbc library. */
 #cmakedefine HAVE_ILBC 1
@@ -285,6 +309,9 @@
 
 /* Define to 1 if you have the <sys/wait.h> header file. */
 #cmakedefine HAVE_SYS_WAIT_H 1
+
+/* Define if tm_gmtoff field exists in struct tm */
+#cmakedefine HAVE_STRUCT_TM_TM_GMTOFF 1
 
 /* Define if tm_zone field exists in struct tm */
 #cmakedefine HAVE_STRUCT_TM_TM_ZONE 1
@@ -345,9 +372,7 @@
 #  endif
 #endif
 
-#ifdef HAVE_PCRE2
 #define PCRE2_CODE_UNIT_WIDTH  8
-#endif
 
 /*
  * If HAVE_PCAP_REMOTE is defined, it forces the WinPcap header files to

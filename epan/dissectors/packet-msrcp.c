@@ -19,6 +19,8 @@
 void proto_register_msrcp(void);
 void proto_reg_handoff_msrcp(void);
 
+static dissector_handle_t msrcp_handle;
+
 #define MSRCP_PORT 3343
 #define MSRCP_REQUEST 0
 #define MSRCP_RESPONSE 1
@@ -192,12 +194,12 @@ dissect_msrcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "MSRCP");
     col_clear(pinfo->cinfo, COL_INFO);
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s ID %d (0x%X)",
-        val_to_str(type, packettypenames, "MSRCP"), seq, seq);
+        val_to_str_const(type, packettypenames, "MSRCP"), seq, seq);
 
 
     ti = proto_tree_add_item(tree, proto_msrcp, tvb, 0, -1, ENC_BIG_ENDIAN);
     proto_item_append_text(ti, "Type %s",
-        val_to_str(type, packettypenames, "MSRCP"));
+        val_to_str_const(type, packettypenames, "MSRCP"));
     msrcp_tree = proto_item_add_subtree(ti, ett_msrcp);
 
     if (type == MSRCP_REQUEST || type == MSRCP_RESPONSE)
@@ -363,14 +365,13 @@ proto_register_msrcp(void)
     proto_register_subtree_array(ett, array_length(ett));
     expert_msrcp = expert_register_protocol(proto_msrcp);
     expert_register_field_array(expert_msrcp, ei, array_length(ei));
+
+    msrcp_handle = register_dissector("msrcp", dissect_msrcp, proto_msrcp);
 }
 
 void
 proto_reg_handoff_msrcp(void)
 {
-    static dissector_handle_t msrcp_handle;
-
     eth_handle = find_dissector_add_dependency("eth_withoutfcs", proto_msrcp);
-    msrcp_handle = create_dissector_handle(dissect_msrcp, proto_msrcp);
     dissector_add_uint("udp.port", MSRCP_PORT, msrcp_handle);
 }

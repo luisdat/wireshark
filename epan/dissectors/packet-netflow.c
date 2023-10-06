@@ -113,7 +113,7 @@
  *
  * December 2015: uhei:  Add Barracuda NGFirewall extensions
  * used documentation found at:
- * https://techlib.barracuda.com/NG61/ConfigAuditReportingIPFIX
+ * https://campus.barracuda.com/download/pdf/article/41116166
  *
  * December 2017: uhei
  * Updated IEs from https://www.iana.org/assignments/ipfix/ipfix.xhtml
@@ -128,7 +128,6 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/ipproto.h>
-#include <wiretap/wtap.h>
 #include <epan/sminmpec.h>
 #include <epan/to_str.h>
 #include <epan/expert.h>
@@ -178,6 +177,8 @@ static range_t *global_netflow_ports = NULL;
 static range_t *global_ipfix_ports = NULL;
 
 static gboolean netflow_preference_desegment = TRUE;
+
+static gboolean netflow_preference_tcpflags_1byte_cwr = FALSE;
 
 /*
  * Flowset (template) ID's
@@ -792,6 +793,17 @@ static const value_string v9_v10_template_types[] = {
     { 489, "bgpLargeCommunity" },
     { 490, "bgpSourceLargeCommunityList" },
     { 491, "bgpDestinationLargeCommunityList" },
+    { 492, "srhFlagsIPv6" },
+    { 493, "srhTagIPv6" },
+    { 494, "srhSegmentIPv6" },
+    { 495, "srhActiveSegmentIPv6" },
+    { 496, "srhSegmentIPv6BasicList" },
+    { 497, "srhSegmentIPv6ListSection" },
+    { 498, "srhSegmentsIPv6Left" },
+    { 499, "srhIPv6Section" },
+    { 500, "srhIPv6ActiveSegmentType" },
+    { 501, "srhSegmentIPv6LocatorLength" },
+    { 502, "srhSegmentIPv6EndpointBehavior" },
 
     /* Ericsson NAT Logging */
     { 24628, "NAT_LOG_FIELD_IDX_CONTEXT_ID" },
@@ -1720,6 +1732,24 @@ static const value_string v10_template_types_ixia[] = {
     {  309, "GTP Downlink QCI/QFI"},
     {  310, "GTP Uplink APN/DNN"},
     {  311, "GTP Downlink APN/DNN"},
+    {  312, "GTP NSSAI SD"},
+    {  313, "GTP NSSAI SST"},
+    {  314, "GTP 5QI - UP"},
+    {  315, "GTP 5QI - DOWN"},
+    {  316, "STUN Response"},
+    {  317, "STUN Reflexive Transport Address IPv6"},
+    {  318, "STUN Reflexive Transport Address IPv4"},
+    {  319, "STUN Reflexive Transport Address Port"},
+    {  320, "HTTP Alternative Service"},
+    {  321, "Unidirectional Flow"},
+    {  322, "TLS Server Random"},
+    {  323, "TLS Session ID"},
+    {  324, "SIP To"},
+    {  325, "SIP From"},
+    {  326, "SIP Call ID"},
+    {  327, "SIP Content Type"},
+    {  328, "SIP Route"},
+    {  329, "SIP Geolocation"},
     { 0, NULL }
 };
 static value_string_ext v10_template_types_ixia_ext = VALUE_STRING_EXT_INIT(v10_template_types_ixia);
@@ -2391,6 +2421,8 @@ static int      ett_tcpflags            = -1;
 static int      ett_subtemplate_list    = -1;
 static int      ett_resiliency          = -1;
 static int      ett_data_link_frame_sec = -1;
+static int      ett_srhflagsipv6        = -1;
+
 /*
  * cflow header
  */
@@ -2501,6 +2533,8 @@ static int      hf_cflow_tcpflags_rst                               = -1;
 static int      hf_cflow_tcpflags_psh                               = -1;
 static int      hf_cflow_tcpflags_ack                               = -1;
 static int      hf_cflow_tcpflags_urg                               = -1;
+static int      hf_cflow_tcpflags_ece                               = -1;
+static int      hf_cflow_tcpflags_cwr                               = -1;
 static int      hf_cflow_tcpflags16_fin                             = -1;
 static int      hf_cflow_tcpflags16_syn                             = -1;
 static int      hf_cflow_tcpflags16_rst                             = -1;
@@ -2927,6 +2961,26 @@ static int      hf_cflow_bgp_large_community                        = -1;      /
 static int      hf_cflow_bgp_source_large_community_list            = -1;      /* ID: 490 */
 static int      hf_cflow_bgp_destination_large_community_list       = -1;      /* ID: 491 */
 
+static int      hf_cflow_srh_flags_ipv6                             = -1;      /* ID: 492 */
+static int      hf_cflow_srh_flags_ipv6_reserved                    = -1;      /* Reserved / Unassigned RFC8754 */
+static int      hf_cflow_srh_flags_ipv6_oflag                       = -1;      /* O-Flag RFC9259 */
+static int      hf_cflow_srh_tag_ipv6                               = -1;      /* ID: 493 */
+static int      hf_cflow_srh_segment_ipv6                           = -1;      /* ID: 494 */
+static int      hf_cflow_srh_active_segment_ipv6                    = -1;      /* ID: 495 */
+static int      hf_cflow_srh_segment_ipv6_basic_list                = -1;      /* ID: 496 */
+static int      hf_cflow_srh_segment_ipv6_list_section              = -1;      /* ID: 497 */
+static int      hf_cflow_srh_segments_ipv6_left                     = -1;      /* ID: 498 */
+static int      hf_cflow_srh_ipv6_section                           = -1;      /* ID: 499 */
+static int      hf_cflow_srh_ipv6_active_segment_type               = -1;      /* ID: 500 */
+static int      hf_cflow_srh_segment_ipv6_locator_length            = -1;      /* ID: 501 */
+static int      hf_cflow_srh_segment_ipv6_endpoint_behaviour        = -1;      /* ID: 502 */
+
+static int * const srh_flags_ipv6[] = {
+        &hf_cflow_srh_flags_ipv6_reserved,
+        &hf_cflow_srh_flags_ipv6_oflag,
+        NULL
+};
+
 static int      hf_cflow_mpls_label                                 = -1;
 static int      hf_cflow_mpls_exp                                   = -1;
 static int      hf_cflow_mpls_bos                                   = -1;
@@ -3222,7 +3276,7 @@ static int      hf_pie_ntop_num_pkts_ttl_96_128        = -1;
 static int      hf_pie_ntop_num_pkts_ttl_128_160       = -1;
 static int      hf_pie_ntop_num_pkts_ttl_160_192       = -1;
 static int      hf_pie_ntop_num_pkts_ttl_192_224       = -1;
-static int      hf_pie_ntop_num_pkts_ttl_224_225       = -1;
+static int      hf_pie_ntop_num_pkts_ttl_224_255       = -1;
 static int      hf_pie_ntop_gtpv1_rai_lac              = -1;
 static int      hf_pie_ntop_gtpv1_rai_rac              = -1;
 static int      hf_pie_ntop_gtpv1_uli_mcc              = -1;
@@ -3532,6 +3586,24 @@ static int      hf_pie_ixia_gtp_up_QCI_QFI              = -1;
 static int      hf_pie_ixia_gtp_down_QCI_QFI            = -1;
 static int      hf_pie_ixia_gtp_up_APN_DNN              = -1;
 static int      hf_pie_ixia_gtp_down_APN_DNN            = -1;
+static int      hf_pie_ixia_gtp_NSSAI_SD                = -1;
+static int      hf_pie_ixia_gtp_NSSAI_SST               = -1;
+static int      hf_pie_ixia_gtp_5QI_up                  = -1;
+static int      hf_pie_ixia_gtp_5QI_down                = -1;
+static int      hf_pie_ixia_stun_response               = -1;
+static int      hf_pie_ixia_stun_reflexive_ta_ipv4      = -1;
+static int      hf_pie_ixia_stun_reflexive_ta_ipv6      = -1;
+static int      hf_pie_ixia_stun_reflexive_ta_port      = -1;
+static int      hf_pie_ixia_http_alt_svc                = -1;
+static int      hf_pie_ixia_unidirectional              = -1;
+static int      hf_pie_ixia_http_tls_server_rand        = -1;
+static int      hf_pie_ixia_http_tls_session_id         = -1;
+static int      hf_pie_ixia_sip_to                      = -1;
+static int      hf_pie_ixia_sip_from                    = -1;
+static int      hf_pie_ixia_sip_call_id                 = -1;
+static int      hf_pie_ixia_sip_content_type            = -1;
+static int      hf_pie_ixia_sip_route                   = -1;
+static int      hf_pie_ixia_sip_geolocation             = -1;
 
 static int      hf_pie_netscaler                                         = -1;
 static int      hf_pie_netscaler_roundtriptime                           = -1;
@@ -3969,6 +4041,18 @@ static const value_string special_nat_event_type[] = {
 
 static int * const tcp_flags[] = {
     &hf_cflow_tcpflags_reserved,
+    &hf_cflow_tcpflags_urg,
+    &hf_cflow_tcpflags_ack,
+    &hf_cflow_tcpflags_psh,
+    &hf_cflow_tcpflags_rst,
+    &hf_cflow_tcpflags_syn,
+    &hf_cflow_tcpflags_fin,
+    NULL
+};
+
+static int * const tcp_flags_cwr[] = {
+    &hf_cflow_tcpflags_cwr,
+    &hf_cflow_tcpflags_ece,
     &hf_cflow_tcpflags_urg,
     &hf_cflow_tcpflags_ack,
     &hf_cflow_tcpflags_psh,
@@ -5342,7 +5426,9 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case 6: /* TCP flags */
-            if (length == 1) {
+            if (length == 1 && netflow_preference_tcpflags_1byte_cwr) {
+                ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_tcpflags, ett_tcpflags, tcp_flags_cwr, ENC_NA);
+            } else if (length == 1) {
                 ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_tcpflags, ett_tcpflags, tcp_flags, ENC_NA);
             } else {
                 ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_tcpflags16, ett_tcpflags, tcp_flags16, ENC_NA);
@@ -7828,6 +7914,49 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             ti = proto_tree_add_item(pdutree, hf_cflow_bgp_destination_large_community_list ,
                                      tvb, offset, length, ENC_NA);
             break;
+        case 492:  /* srhFlagsIPv6 */
+            ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_srh_flags_ipv6, ett_srhflagsipv6, srh_flags_ipv6, ENC_NA);
+            break;
+        case 493:  /* srhTagIPv6 */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_tag_ipv6,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case 494:  /* srhSegmentIPv6 */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_segment_ipv6,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case 495:  /* srhActiveSegmentIPv6 */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_active_segment_ipv6,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case 496:  /* srhSegmentIPv6BasicList */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_segment_ipv6_basic_list,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case 497:  /* srhSegmentIPv6ListSection */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_segment_ipv6_list_section,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case 498:  /* srhSegmentsIPv6Left */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_segments_ipv6_left,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case 499:  /* srhIPv6Section */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_ipv6_section,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case 500:  /* srhIPv6ActiveSegmentType */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_ipv6_active_segment_type,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case 501:  /* srhSegmentIPv6LocatorLength */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_segment_ipv6_locator_length,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case 502:  /* srhSegmentIPv6EndpointBehavior */
+            ti = proto_tree_add_item(pdutree, hf_cflow_srh_segment_ipv6_endpoint_behaviour,
+                                     tvb, offset, length, ENC_NA);
+            break;
 
 
 #if 0
@@ -9436,7 +9565,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case (NTOP_BASE + 341):           /* NUM_PKTS_TTL_224_255 */
         case ((VENDOR_NTOP << 16) | 341): /* NUM_PKTS_TTL_224_255 */
-            ti = proto_tree_add_item(pdutree, hf_pie_ntop_num_pkts_ttl_224_225,
+            ti = proto_tree_add_item(pdutree, hf_pie_ntop_num_pkts_ttl_224_255,
                                      tvb, offset, length, ENC_BIG_ENDIAN);
             break;
 
@@ -10914,6 +11043,79 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_down_APN_DNN,
                                      tvb, offset, length, ENC_ASCII);
             break;
+        case ((VENDOR_IXIA << 16) | 312):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_NSSAI_SD,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 313):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_NSSAI_SST,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 314):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_5QI_up,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 315):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_5QI_down,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 316):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_stun_response,
+                                     tvb, offset, length, ENC_NA);
+            dissect_v10_pdu_subtemplate_list(tvb, pinfo, ti, offset, length, hdrinfo_p);
+            break;
+        case ((VENDOR_IXIA << 16) | 317):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_stun_reflexive_ta_ipv6,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case ((VENDOR_IXIA << 16) | 318):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_stun_reflexive_ta_ipv4,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case ((VENDOR_IXIA << 16) | 319):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_stun_reflexive_ta_port,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 320):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_alt_svc,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 321):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_unidirectional,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 322):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_tls_server_rand,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 323):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_tls_session_id,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 324):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_to,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 325):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_from,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 326):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_call_id,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 327):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_content_type,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 328):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_route,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 329):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_geolocation,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
             /* END Ixia Communications */
 
             /* START Netscaler Communications */
@@ -12318,7 +12520,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             if (length == 2){
                 proto_tree_add_item_ret_uint (juniper_resilincy_tree, hf_pie_juniper_cpid_16bit,
                                                     tvb, offset, length, ENC_BIG_ENDIAN, &cpid);
-                proto_item_append_text (juniper_resilincy_tree, ": %s", val_to_str_ext(cpid, &v10_juniper_cpid_ext, " "));
+                proto_item_append_text (juniper_resilincy_tree, ": %s", val_to_str_ext_const(cpid, &v10_juniper_cpid_ext, " "));
 
                 ti = proto_tree_add_item_ret_uint (juniper_resilincy_tree, hf_pie_juniper_cpdesc_16bit,
                                                     tvb, offset, length, ENC_BIG_ENDIAN, &cpdesc);
@@ -12326,7 +12528,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             else if (length == 4){
                 proto_tree_add_item_ret_uint (juniper_resilincy_tree, hf_pie_juniper_cpid_32bit,
                                                     tvb, offset, length, ENC_BIG_ENDIAN, &cpid);
-                proto_item_append_text (juniper_resilincy_tree, ": %s", val_to_str_ext(cpid, &v10_juniper_cpid_ext, " "));
+                proto_item_append_text (juniper_resilincy_tree, ": %s", val_to_str_ext_const(cpid, &v10_juniper_cpid_ext, " "));
 
                 ti = proto_tree_add_item_ret_uint (juniper_resilincy_tree, hf_pie_juniper_cpdesc_32bit,
                                                     tvb, offset, length, ENC_BIG_ENDIAN, &cpdesc);
@@ -13367,6 +13569,16 @@ proto_register_netflow(void)
         {&hf_cflow_tcpflags_urg,
          {"URG", "cflow.tcpflags.urg",
           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x20,
+          NULL, HFILL}
+        },
+        {&hf_cflow_tcpflags_ece,
+         {"ECN Echo", "cflow.tcpflags.ece",
+          FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x40,
+          NULL, HFILL}
+        },
+        {&hf_cflow_tcpflags_cwr,
+         {"CWR", "cflow.tcpflags.cwr",
+          FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x80,
           NULL, HFILL}
         },
         {&hf_cflow_tcpflags16_fin,
@@ -15463,6 +15675,72 @@ proto_register_netflow(void)
            NULL, HFILL}
         },
 
+        { &hf_cflow_srh_flags_ipv6,
+          {"Segment Routing Header IPv6 Flags", "cflow.srh_flags_ipv6",
+           FT_UINT8, BASE_HEX, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_flags_ipv6_oflag,
+          {"OAM", "cflow.srh_flags_ipv6.oam",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x04,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_flags_ipv6_reserved,
+          {"Reserved", "cflow.srh_flags_ipv6.reserved",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), ~0x04,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_tag_ipv6,
+          {"Segment Routing Header IPv6 Tag", "cflow.srh_tag_ipv6",
+           FT_UINT16, BASE_HEX, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_segment_ipv6,
+          {"Segment Routing Header IPv6 Segment", "cflow.srh_segment_ipv6",
+           FT_IPv6, BASE_NONE, NULL, 0x0,
+           "Segment Address (IPv6)", HFILL}
+        },
+        { &hf_cflow_srh_active_segment_ipv6,
+          {"Segment Routing Header Active Segment", "cflow.srh_active_segment_ipv6",
+           FT_IPv6, BASE_NONE, NULL, 0x0,
+           "Active Segment Address (IPv6)", HFILL}
+        },
+        { &hf_cflow_srh_segment_ipv6_basic_list,
+          {"Segment Routing Header IPv6 Segment Basic List", "cflow.srh_segment_ipv6_basic_list",
+           FT_BYTES, BASE_NONE, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_segment_ipv6_list_section,
+          {"Segment Routing Header IPv6 Segment List Section", "cflow.srh_segment_ipv6_list_section",
+           FT_BYTES, BASE_NONE, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_segments_ipv6_left,
+          {"Segment Routing Header IPv6 Segments Left", "cflow.srh_segments_ipv6_left",
+           FT_UINT8, BASE_HEX, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_ipv6_section,
+          {"Segment Routing Header IPv6 Section", "cflow.srh_ipv6_section",
+           FT_BYTES, BASE_NONE, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_ipv6_active_segment_type,
+          {"Segment Routing Header IPv6 Active Segment Type", "cflow.srh_ipv6_active_segment_type",
+           FT_UINT8, BASE_HEX, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_segment_ipv6_locator_length,
+          {"Segment Routing Header IPv6 Segment Locator Length", "cflow.srh_segment_ipv6_locator_length",
+           FT_UINT8, BASE_HEX, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_srh_segment_ipv6_endpoint_behaviour,
+          {"Segment Routing Header IPv6 Endpoint Behaviour", "cflow.srh_segment_ipv6_endpoint_behaviour",
+           FT_BYTES, BASE_NONE, NULL, 0x0,
+           NULL, HFILL}
+        },
+
         /*
          * end pdu content storage
          */
@@ -17286,8 +17564,8 @@ proto_register_netflow(void)
           NULL, HFILL}
         },
         /* ntop, 35632 / 341 */
-        {&hf_pie_ntop_num_pkts_ttl_224_225,
-         {"# packets with TTL > 224 and <= 255", "cflow.pie.ntop.num_pkts_ttl_224_225",
+        {&hf_pie_ntop_num_pkts_ttl_224_255,
+         {"# packets with TTL > 224 and <= 255", "cflow.pie.ntop.num_pkts_ttl_224_255",
           FT_UINT32, BASE_DEC, NULL, 0x0,
           NULL, HFILL}
         },
@@ -19232,6 +19510,132 @@ proto_register_netflow(void)
           "Mobile Session Downlink Access Point Name or Data Network Name", HFILL}
         },
 
+        /* ixia, 3054 / 312 */
+        {&hf_pie_ixia_gtp_NSSAI_SD,
+         {"GTP NSSAI SD", "cflow.pie.ixia.gtp-NSSAI-SD",
+          FT_UINT32, BASE_DEC, NULL, 0x0,
+          "Mobile Session NSSAI Service Differentiator", HFILL}
+        },
+
+        /* ixia, 3054 / 313 */
+        {&hf_pie_ixia_gtp_NSSAI_SST,
+         {"GTP NSSAI SST", "cflow.pie.ixia.gtp-NSSAI-SST",
+          FT_UINT8, BASE_DEC, NULL, 0x0,
+          "Mobile Session NSSAI Slice/Service Type", HFILL}
+        },
+
+        /* ixia, 3054 / 314 */
+        {&hf_pie_ixia_gtp_5QI_up,
+         {"GTP Uplink 5QI", "cflow.pie.ixia.gtp-5QI-up",
+          FT_UINT8, BASE_DEC, NULL, 0x0,
+          "Mobile Session Uplink 5G QoS Identifier", HFILL}
+        },
+
+        /* ixia, 3054 / 315 */
+        {&hf_pie_ixia_gtp_5QI_down,
+         {"GTP Downlink 5QI", "cflow.pie.ixia.gtp-5QI-down",
+          FT_UINT8, BASE_DEC, NULL, 0x0,
+          "Mobile Session Downlink 5G QoS Identifier", HFILL}
+        },
+
+        /* ixia, 3054 / 316 */
+        {&hf_pie_ixia_stun_response,
+         {"STUN Response", "cflow.pie.ixia.stun-response",
+          FT_NONE, BASE_NONE, NULL, 0x0,
+          "List of STUN responses", HFILL}
+        },
+
+        /* ixia, 3054 / 317 */
+        {&hf_pie_ixia_stun_reflexive_ta_ipv6,
+         {"STUN IPv6 Address", "cflow.pie.ixia.stun-reflexive-ta-ipv6",
+          FT_IPv6, BASE_NONE, NULL, 0x0,
+          "STUN Reflexive Transport IPv6 Address", HFILL}
+        },
+
+        /* ixia, 3054 / 318 */
+        {&hf_pie_ixia_stun_reflexive_ta_ipv4,
+         {"STUN IPv4 Address", "cflow.pie.ixia.stun-reflexive-ta-ipv4",
+          FT_IPv4, BASE_NONE, NULL, 0x0,
+          "STUN Reflexive Transport IPv4 Address", HFILL}
+        },
+
+        /* ixia, 3054 / 319 */
+        {&hf_pie_ixia_stun_reflexive_ta_port,
+         {"STUN Port", "cflow.pie.ixia.stun-reflexive-ta-port",
+          FT_UINT16, BASE_DEC, NULL, 0x0,
+          "STUN Reflexive Transport Address Port", HFILL}
+        },
+
+        /* ixia, 3054 / 320 */
+        {&hf_pie_ixia_http_alt_svc,
+         {"HTTP Alt-svc", "cflow.pie.ixia.http-alt-svc",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "HTTP Alternative Service", HFILL}
+        },
+
+        /* ixia, 3054 / 321 */
+        {&hf_pie_ixia_unidirectional,
+         {"Unidirectional flow", "cflow.pie.ixia.flow-is-unidirectional",
+          FT_UINT8, BASE_DEC, NULL, 0x0,
+          "Flow is unidirectional - 1:True, 0:False", HFILL}
+        },
+
+        /* ixia, 3054 / 322 */
+        {&hf_pie_ixia_http_tls_server_rand,
+         {"TLS Server Random", "cflow.pie.ixia.tls-server-rand",
+          FT_BYTES, BASE_NONE, NULL, 0x0,
+          "SSL/TLS Server Random", HFILL}
+        },
+
+        /* ixia, 3054 / 323 */
+        {&hf_pie_ixia_http_tls_session_id,
+         {"TLS Session ID", "cflow.pie.ixia.tls-session-id",
+          FT_BYTES, BASE_NONE, NULL, 0x0,
+          "SSL/TLS Session ID", HFILL}
+        },
+
+        /* ixia, 3054 / 324 */
+        {&hf_pie_ixia_sip_to,
+         {"SIP To", "cflow.pie.ixia.sip-to",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "SIP Header To", HFILL}
+        },
+
+        /* ixia, 3054 / 325 */
+        {&hf_pie_ixia_sip_from,
+         {"SIP From", "cflow.pie.ixia.sip-from",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "SIP Header From", HFILL}
+        },
+
+        /* ixia, 3054 / 326 */
+        {&hf_pie_ixia_sip_call_id,
+         {"SIP Call ID", "cflow.pie.ixia.sip-call-id",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "SIP Header Call-ID", HFILL}
+        },
+
+        /* ixia, 3054 / 327 */
+        {&hf_pie_ixia_sip_content_type,
+         {"SIP Content Type", "cflow.pie.ixia.sip-content-type",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "SIP Header Content-Type", HFILL}
+        },
+
+        /* ixia, 3054 / 328 */
+        {&hf_pie_ixia_sip_route,
+         {"SIP Route", "cflow.pie.ixia.sip-route",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "SIP Header Route", HFILL}
+        },
+
+        /* ixia, 3054 / 329 */
+        {&hf_pie_ixia_sip_geolocation,
+         {"SIP Geolocation", "cflow.pie.ixia.sip-geolocation",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "SIP Header Geolocation", HFILL}
+        },
+
         /* Netscaler root (a hidden item to allow filtering) */
         {&hf_pie_netscaler,
          {"Netscaler", "cflow.pie.netscaler",
@@ -20360,31 +20764,31 @@ proto_register_netflow(void)
         /* Niagara Networks, 47729 / 101 */
         {&hf_pie_niagara_networks_sslserverversion,
          {"SslServerVersion", "cflow.pie.niagaranetworks.sslserverversion",
-          FT_UINT16, BASE_HEX, NULL, 0X0,
+          FT_UINT16, BASE_HEX, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 102 */
         {&hf_pie_niagara_networks_sslserverversiontext,
          {"SslServerVersionText", "cflow.pie.niagaranetworks.sslserverversiontext",
-          FT_STRING, BASE_NONE, NULL, 0X0,
+          FT_STRING, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 103 */
         {&hf_pie_niagara_networks_sslservercipher,
          {"SslServerCipher", "cflow.pie.niagaranetworks.sslservercipher",
-          FT_UINT16, BASE_HEX, NULL, 0X0,
+          FT_UINT16, BASE_HEX, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 104 */
         {&hf_pie_niagara_networks_sslserverciphertext,
          {"SslServerCipherText", "cflow.pie.niagaranetworks.sslserverciphertext",
-          FT_STRING, BASE_NONE, NULL, 0X0,
+          FT_STRING, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 105 */
         {&hf_pie_niagara_networks_sslconnectionencryptiontype,
          {"SslConnectionEncryptionType", "cflow.pie.niagaranetworks.sslconnectionencryptiontype",
-          FT_STRING, BASE_NONE, NULL, 0X0,
+          FT_STRING, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 106 */
@@ -20396,31 +20800,31 @@ proto_register_netflow(void)
         /* Niagara Networks, 47729 / 107 */
         {&hf_pie_niagara_networks_sslserversessionid,
          {"SslServerSessionId", "cflow.pie.niagaranetworks.sslserversessionid",
-          FT_BYTES, BASE_NONE, NULL, 0X0,
+          FT_BYTES, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 108 */
         {&hf_pie_niagara_networks_sslcertificateissuer,
          {"SslCertificateIssuer", "cflow.pie.niagaranetworks.sslcertificateissuer",
-          FT_STRING, BASE_NONE, NULL, 0X0,
+          FT_STRING, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 109 */
         {&hf_pie_niagara_networks_sslcertificateissuername,
          {"SslCertificateIssuerName", "cflow.pie.niagaranetworks.sslcertificateissuername",
-          FT_STRING, BASE_NONE, NULL, 0X0,
+          FT_STRING, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 110 */
         {&hf_pie_niagara_networks_sslcertificatesubject,
          {"SslCertificateSubject", "cflow.pie.niagaranetworks.sslcertificatesubject",
-          FT_STRING, BASE_NONE, NULL, 0X0,
+          FT_STRING, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 111 */
         {&hf_pie_niagara_networks_sslcertificatesubjectname,
          {"SslCertificateSubjectName", "cflow.pie.niagaranetworks.sslcertificatesubjectname",
-          FT_STRING, BASE_NONE, NULL, 0X0,
+          FT_STRING, BASE_NONE, NULL, 0x0,
           NULL, HFILL}
         },
         /* Niagara Networks, 47729 / 112 */
@@ -21130,7 +21534,7 @@ proto_register_netflow(void)
        /* Juniper Networks, 2636 / 137 */
         {&hf_pie_juniper_cpdesc_16bit,
          {"Juniper CPID Value", "cflow.pie.juniper.resiliency.cpdesc",
-          FT_UINT16, BASE_DEC, NULL, 0X03FF,
+          FT_UINT16, BASE_DEC, NULL, 0x03FF,
           NULL, HFILL}
         },
        /* Juniper Networks, 2636 / 137 */
@@ -21142,7 +21546,7 @@ proto_register_netflow(void)
        /* Juniper Networks, 2636 / 137 */
         {&hf_pie_juniper_cpdesc_32bit,
          {"Juniper CPID Value", "cflow.pie.juniper.resiliency.cpdesc",
-          FT_UINT32, BASE_DEC, NULL, 0X03FFFFFF,
+          FT_UINT32, BASE_DEC, NULL, 0x03FFFFFF,
           NULL, HFILL}
         },
 
@@ -21194,7 +21598,8 @@ proto_register_netflow(void)
         &ett_tcpflags,
         &ett_subtemplate_list,
         &ett_resiliency,
-        &ett_data_link_frame_sec
+        &ett_data_link_frame_sec,
+        &ett_srhflagsipv6
     };
 
     static ei_register_info ei[] = {
@@ -21282,6 +21687,11 @@ proto_register_netflow(void)
                                    10, &v9_tmplt_max_fields);
 
     prefs_register_bool_preference(netflow_module, "desegment", "Reassemble Netflow v10 messages spanning multiple TCP segments.", "Whether the Netflow/Ipfix dissector should reassemble messages spanning multiple TCP segments.  To use this option, you must also enable \"Allow subdissectors to reassemble TCP streams\" in the TCP protocol settings.", &netflow_preference_desegment);
+
+    prefs_register_bool_preference(netflow_module, "tcpflags_1byte_cwr",
+                                   "TCP flags: Decode first two bits of 1 byte TCP flags",
+                                   "Whether the first two bits of 1 byte TCP flags should be decoded as CWR and ECE or reserved.",
+                                   &netflow_preference_tcpflags_1byte_cwr);
 
     v9_v10_tmplt_table = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), v9_v10_tmplt_table_hash, v9_v10_tmplt_table_equal);
 }

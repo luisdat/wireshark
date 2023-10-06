@@ -15,7 +15,7 @@
  *
  * Based on the RANAP dissector
  *
- * References: 3GPP TS 36.413 V17.3.0 (2022-12)
+ * References: 3GPP TS 36.413 V17.5.0 (2023-06)
  */
 
 #include "config.h"
@@ -591,6 +591,7 @@ static int hf_s1ap_encryptionAlgorithms_Reserved = -1;
 static int hf_s1ap_integrityProtectionAlgorithms_EIA1 = -1;
 static int hf_s1ap_integrityProtectionAlgorithms_EIA2 = -1;
 static int hf_s1ap_integrityProtectionAlgorithms_EIA3 = -1;
+static int hf_s1ap_integrityProtectionAlgorithms_EIA7 = -1;
 static int hf_s1ap_integrityProtectionAlgorithms_Reserved = -1;
 static int hf_s1ap_SerialNumber_gs = -1;
 static int hf_s1ap_SerialNumber_msg_code = -1;
@@ -709,7 +710,6 @@ static int hf_s1ap_HandoverFlag_PDU = -1;         /* HandoverFlag */
 static int hf_s1ap_s1ap_HandoverRestrictionList_PDU = -1;  /* HandoverRestrictionList */
 static int hf_s1ap_HandoverType_PDU = -1;         /* HandoverType */
 static int hf_s1ap_Masked_IMEISV_PDU = -1;        /* Masked_IMEISV */
-static int hf_s1ap_s1ap_ImmediateMDT_PDU = -1;    /* ImmediateMDT */
 static int hf_s1ap_InformationOnRecommendedCellsAndENBsForPaging_PDU = -1;  /* InformationOnRecommendedCellsAndENBsForPaging */
 static int hf_s1ap_IntersystemMeasurementConfiguration_PDU = -1;  /* IntersystemMeasurementConfiguration */
 static int hf_s1ap_s1ap_IntersystemSONConfigurationTransfer_PDU = -1;  /* IntersystemSONConfigurationTransfer */
@@ -5903,7 +5903,8 @@ dissect_s1ap_ENBname(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, pr
   gboolean is_ascii;
 
   offset = dissect_per_PrintableString(tvb, offset, actx, tree, hf_index,
-                                          1, 150, TRUE);
+                                          1, 150, TRUE,
+                                          &parameter_tvb);
 
 
   if (!parameter_tvb)
@@ -7297,6 +7298,7 @@ dissect_s1ap_IntegrityProtectionAlgorithms(tvbuff_t *tvb _U_, int offset _U_, as
       &hf_s1ap_integrityProtectionAlgorithms_EIA1,
       &hf_s1ap_integrityProtectionAlgorithms_EIA2,
       &hf_s1ap_integrityProtectionAlgorithms_EIA3,
+      &hf_s1ap_integrityProtectionAlgorithms_EIA7,
       &hf_s1ap_integrityProtectionAlgorithms_Reserved,
       NULL
     };
@@ -7398,6 +7400,8 @@ static const value_string s1ap_T_subcarrierSpacingSSB_vals[] = {
   {   2, "kHz60" },
   {   3, "kHz120" },
   {   4, "kHz240" },
+  {   5, "kHz480" },
+  {   6, "kHz960" },
   { 0, NULL }
 };
 
@@ -7405,7 +7409,7 @@ static const value_string s1ap_T_subcarrierSpacingSSB_vals[] = {
 static int
 dissect_s1ap_T_subcarrierSpacingSSB(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
-                                     5, NULL, TRUE, 0, NULL);
+                                     5, NULL, TRUE, 2, NULL);
 
   return offset;
 }
@@ -7998,14 +8002,14 @@ dissect_s1ap_ListeningSubframePattern(tvbuff_t *tvb _U_, int offset _U_, asn1_ct
 
 
 static const value_string s1ap_LoggingInterval_vals[] = {
-  {   0, "ms128" },
-  {   1, "ms256" },
-  {   2, "ms512" },
-  {   3, "ms1024" },
-  {   4, "ms2048" },
-  {   5, "ms3072" },
-  {   6, "ms4096" },
-  {   7, "ms6144" },
+  {   0, "ms1280" },
+  {   1, "ms2560" },
+  {   2, "ms5120" },
+  {   3, "ms10240" },
+  {   4, "ms20480" },
+  {   5, "ms30720" },
+  {   6, "ms40960" },
+  {   7, "ms61440" },
   { 0, NULL }
 };
 
@@ -8546,7 +8550,8 @@ dissect_s1ap_MMEname(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, pr
   gboolean is_ascii;
 
   offset = dissect_per_PrintableString(tvb, offset, actx, tree, hf_index,
-                                          1, 150, TRUE);
+                                          1, 150, TRUE,
+                                          &parameter_tvb);
 
 
   if (!parameter_tvb)
@@ -11560,7 +11565,8 @@ dissect_s1ap_UnlicensedSpectrumRestriction(tvbuff_t *tvb _U_, int offset _U_, as
 static int
 dissect_s1ap_URI_Address(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_VisibleString(tvb, offset, actx, tree, hf_index,
-                                          NO_BOUND, NO_BOUND, FALSE);
+                                          NO_BOUND, NO_BOUND, FALSE,
+                                          NULL);
 
   return offset;
 }
@@ -15684,14 +15690,6 @@ static int dissect_Masked_IMEISV_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, 
   offset += 7; offset >>= 3;
   return offset;
 }
-int dissect_s1ap_ImmediateMDT_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
-  asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, TRUE, pinfo);
-  offset = dissect_s1ap_ImmediateMDT(tvb, offset, &asn1_ctx, tree, hf_s1ap_s1ap_ImmediateMDT_PDU);
-  offset += 7; offset >>= 3;
-  return offset;
-}
 static int dissect_InformationOnRecommendedCellsAndENBsForPaging_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
@@ -18737,9 +18735,13 @@ void proto_register_s1ap(void) {
       { "128-EIA3", "s1ap.integrityProtectionAlgorithms.EIA3",
         FT_BOOLEAN, 16, TFS(&tfs_supported_not_supported), 0x2000,
         NULL, HFILL }},
+    { &hf_s1ap_integrityProtectionAlgorithms_EIA7,
+      { "EIA7", "s1ap.integrityProtectionAlgorithms.EIA7",
+        FT_BOOLEAN, 16, TFS(&tfs_supported_not_supported), 0x0200,
+        NULL, HFILL }},
     { &hf_s1ap_integrityProtectionAlgorithms_Reserved,
       { "Reserved", "s1ap.integrityProtectionAlgorithms.Reserved",
-        FT_UINT16, BASE_HEX, NULL, 0x1fff,
+        FT_UINT16, BASE_HEX, NULL, 0x1dff,
         NULL, HFILL }},
     { &hf_s1ap_SerialNumber_gs,
       { "Geographical Scope", "s1ap.SerialNumber.gs",
@@ -19208,10 +19210,6 @@ void proto_register_s1ap(void) {
     { &hf_s1ap_Masked_IMEISV_PDU,
       { "Masked-IMEISV", "s1ap.Masked_IMEISV",
         FT_BYTES, BASE_NONE, NULL, 0,
-        NULL, HFILL }},
-    { &hf_s1ap_s1ap_ImmediateMDT_PDU,
-      { "ImmediateMDT", "s1ap.ImmediateMDT_element",
-        FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_s1ap_InformationOnRecommendedCellsAndENBsForPaging_PDU,
       { "InformationOnRecommendedCellsAndENBsForPaging", "s1ap.InformationOnRecommendedCellsAndENBsForPaging_element",

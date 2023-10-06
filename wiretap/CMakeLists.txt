@@ -81,9 +81,10 @@ set(WIRETAP_C_MODULE_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/pcap-common.c
 	${CMAKE_CURRENT_SOURCE_DIR}/peekclassic.c
 	${CMAKE_CURRENT_SOURCE_DIR}/peektagged.c
-	${CMAKE_CURRENT_SOURCE_DIR}/rfc7468.c
 	${CMAKE_CURRENT_SOURCE_DIR}/pppdump.c
 	${CMAKE_CURRENT_SOURCE_DIR}/radcom.c
+	${CMAKE_CURRENT_SOURCE_DIR}/rfc7468.c
+	${CMAKE_CURRENT_SOURCE_DIR}/rtpdump.c
 	${CMAKE_CURRENT_SOURCE_DIR}/ruby_marshal.c
 	${CMAKE_CURRENT_SOURCE_DIR}/snoop.c
 	${CMAKE_CURRENT_SOURCE_DIR}/stanag4607.c
@@ -150,7 +151,7 @@ file(GENERATE
 )
 add_custom_command(
 	OUTPUT wtap_modules.c
-	COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/make-regs.py wtap_modules wtap_modules.c @wtap_modules.in.txt
+	COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/make-regs.py wtap_modules wtap_modules.c @wtap_modules.in.txt
 	DEPENDS ${CMAKE_SOURCE_DIR}/tools/make-regs.py ${WIRETAP_MODULE_FILES}
 		"${CMAKE_CURRENT_BINARY_DIR}/wtap_modules.in.txt"
 	COMMENT "Making wtap_modules.c"

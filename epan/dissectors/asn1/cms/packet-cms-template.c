@@ -45,7 +45,7 @@ static gint ett_cms = -1;
 
 static dissector_handle_t cms_handle = NULL;
 
-static int dissect_cms_OCTET_STRING(gboolean implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) ; /* XXX kill a compiler warning until asn2wrs stops generating these silly wrappers */
+static int dissect_cms_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) ; /* XXX kill a compiler warning until asn2wrs stops generating these silly wrappers */
 
 struct cms_private_data {
   const char *object_identifier_id;
@@ -209,4 +209,3 @@ void proto_reg_handoff_cms(void) {
   dissector_add_string("media_type", "application/vnd.de-dke-k461-ic1+xml; encap=cms-tr03109-zlib", content_info_handle);
   dissector_add_string("media_type", "application/hgp;encap=cms", content_info_handle);
 }
-

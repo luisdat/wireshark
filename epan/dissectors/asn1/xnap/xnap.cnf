@@ -1,6 +1,6 @@
 # xnap.cnf
 # xnap conformation file
-# Copyright 2018-2022 Pascal Quantin
+# Copyright 2018-2023 Pascal Quantin
 
 #.OPT
 PER
@@ -243,11 +243,11 @@ ProtocolExtensionID TYPE = FT_UINT8 DISPLAY = BASE_DEC|BASE_EXT_STRING STRINGS =
 
     subtree = proto_item_add_subtree(actx->created_item, ett_xnap_RRC_Context);
     if ((xnap_dissect_target_ng_ran_container_as == XNAP_NG_RAN_CONTAINER_AUTOMATIC &&
-         target_ranmode_id == GlobalNG_RANNode_ID_gNB) &&
+         target_ranmode_id == GlobalNG_RANNode_ID_gNB) ||
         (xnap_dissect_target_ng_ran_container_as == XNAP_NG_RAN_CONTAINER_GNB)) {
       dissect_nr_rrc_HandoverPreparationInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
     } else if ((xnap_dissect_target_ng_ran_container_as == XNAP_NG_RAN_CONTAINER_AUTOMATIC &&
-                target_ranmode_id == GlobalNG_RANNode_ID_ng_eNB) &&
+                target_ranmode_id == GlobalNG_RANNode_ID_ng_eNB) ||
                (xnap_dissect_target_ng_ran_container_as == XNAP_NG_RAN_CONTAINER_NG_ENB)) {
       dissect_lte_rrc_HandoverPreparationInformation_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
     }
@@ -633,15 +633,6 @@ BluetoothName TYPE=FT_STRING DISPLAY = BASE_NONE
 #.TYPE_ATTR
 ExtendedPacketDelayBudget DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(xnap_ExtendedPacketDelayBudget_fmt)
 
-#.FN_BODY ImmediateMDT-EUTRA VAL_PTR = &parameter_tvb
-  tvbuff_t *parameter_tvb = NULL;
-  proto_tree *subtree;
-%(DEFAULT_BODY)s
-  if (parameter_tvb) {
-    subtree = proto_item_add_subtree(actx->created_item, ett_xnap_ImmediateMDT_EUTRA);
-    dissect_s1ap_ImmediateMDT_PDU(parameter_tvb, actx->pinfo, subtree, NULL);
-  }
-
 #.TYPE_ATTR
 M7period DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=&units_minutes
 
@@ -930,6 +921,14 @@ TSCAssistanceInformation/periodicity DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=&
 
 #.TYPE_ATTR
 QosMonitoringReportingFrequency DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=&units_seconds
+
+#.FN_BODY MDTMode-EUTRA VAL_PTR = &mdt_mode_eutra_tvb
+  tvbuff_t *mdt_mode_eutra_tvb = NULL;
+%(DEFAULT_BODY)s
+  if (mdt_mode_eutra_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_xnap_MDTMode_EUTRA);
+    dissect_s1ap_MDTMode_PDU(mdt_mode_eutra_tvb, actx->pinfo, subtree, NULL);
+  }
 
 #.END
 
@@ -1527,6 +1526,10 @@ id-CoverageModificationCause                                        ProtocolIE-I
 id-AdditionalListofPDUSessionResourceChangeConfirmInfo-SNterminated ProtocolIE-ID
 id-UERLFReportContainerLTEExtension                                 ProtocolIE-ID
 id-ExcessPacketDelayThresholdConfiguration                          ProtocolIE-ID
+id-HashedUEIdentityIndexValue                                       ProtocolIE-ID
+id-QosFlowMappingIndication                                         ProtocolIE-ID
+id-Full-and-Short-I-RNTI-Profile-List                               ProtocolIE-ID
+
 
 #.REGISTER
 
@@ -1788,6 +1791,8 @@ MDTPLMNModificationList                           N xnap.ies id-ManagementBasedM
 F1-terminatingIAB-donorIndicator                  N xnap.ies id-F1-terminatingIAB-donorIndicator
 SCGreconfigNotification                           N xnap.ies id-SCGreconfigNotification
 UERLFReportContainerLTEExtension                  N xnap.ies id-UERLFReportContainerLTEExtension
+HashedUEIdentityIndexValue                        N xnap.ies id-HashedUEIdentityIndexValue
+Full-and-Short-I-RNTI-Profile-List                N xnap.ies id-Full-and-Short-I-RNTI-Profile-List
 
 #XNAP-PROTOCOL-EXTENSION
 Additional-UL-NG-U-TNLatUPF-List                                 N xnap.extension id-Additional-UL-NG-U-TNLatUPF-List
@@ -1906,6 +1911,7 @@ BeamMeasurementsReportConfiguration                              N xnap.extensio
 CoverageModificationCause                                        N xnap.extension id-CoverageModificationCause
 AdditionalListofPDUSessionResourceChangeConfirmInfo-SNterminated N xnap.extension id-AdditionalListofPDUSessionResourceChangeConfirmInfo-SNterminated
 ExcessPacketDelayThresholdConfiguration                          N xnap.extension id-ExcessPacketDelayThresholdConfiguration
+QoSFlowMappingIndication                                         N xnap.extension id-QosFlowMappingIndication
 
 #XNAP-ELEMENTARY-PROCEDURE
 HandoverRequest                            N xnap.proc.imsg id-handoverPreparation

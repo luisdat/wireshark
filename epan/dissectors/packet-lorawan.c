@@ -24,6 +24,8 @@
 void proto_reg_handoff_lorawan(void);
 void proto_register_lorawan(void);
 
+static dissector_handle_t lorawan_handle;
+
 static int proto_lorawan = -1;
 static int hf_lorawan_msgtype_type = -1;
 static int hf_lorawan_mac_header_type = -1;
@@ -380,7 +382,7 @@ byte_array_reverse(GByteArray *arr)
 	}
 }
 
-static gboolean
+static bool
 root_keys_update_cb(void *r, char **err)
 {
 	root_key_t *rec = (root_key_t *)r;
@@ -462,7 +464,7 @@ root_keys_free_cb(void *r)
 	g_byte_array_free(rec->appkey, TRUE);
 }
 
-static gboolean
+static bool
 session_keys_update_cb(void *r, char **err)
 {
 	session_key_t *rec = (session_key_t*)r;
@@ -665,7 +667,7 @@ static void
 cf_coords_lng_custom(gchar *buffer, guint32 value)
 {
 	gint32 coord_int = (value < 0x00800000) ? ((gint32)value) : ((gint32)value - 0x01000000);
-	gdouble coord_double = coord_int * 90. / 0x00800000;
+	gdouble coord_double = coord_int * 180. / 0x00800000;
 
 	snprintf(buffer, ITEM_LABEL_LENGTH, "%.5f%c", fabs(coord_double), (coord_double >= 0) ? 'E' : 'W');
 }
@@ -732,7 +734,7 @@ dissect_lorawan_mac_commands(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
 		if (uplink) {
 			tf = proto_tree_add_item(mac_command_tree, hf_lorawan_mac_command_uplink_type, tvb, current_offset, 1, ENC_NA);
 			current_offset++;
-			proto_item_append_text(tf, " (%s)", val_to_str(command, lorawan_mac_uplink_commandnames, "RFU"));
+			proto_item_append_text(tf, " (%s)", val_to_str_const(command, lorawan_mac_uplink_commandnames, "RFU"));
 			switch (command) {
 				case LORAWAN_MAC_COMMAND_UP_LINK_CHECK_REQ:
 				case LORAWAN_MAC_COMMAND_UP_DUTY_ANS:
@@ -792,7 +794,7 @@ dissect_lorawan_mac_commands(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
 		} else {
 			tf = proto_tree_add_item(mac_command_tree, hf_lorawan_mac_command_downlink_type, tvb, current_offset, 1, ENC_NA);
 			current_offset++;
-			proto_item_append_text(tf, " (%s)", val_to_str(command, lorawan_mac_downlink_commandnames, "RFU"));
+			proto_item_append_text(tf, " (%s)", val_to_str_const(command, lorawan_mac_downlink_commandnames, "RFU"));
 			switch (command) {
 				case LORAWAN_MAC_COMMAND_DOWN_LINK_CHECK_ANS:
 					field_tree = proto_item_add_subtree(tf, ett_lorawan_mac_command);
@@ -899,7 +901,7 @@ dissect_lorawan_beacon(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree _
 	guint16 calc_crc1, calc_crc2;
 	nstime_t utctime;
 
-	proto_tree_add_string(tree, hf_lorawan_msgtype_type, tvb, current_offset, 0, val_to_str(LORAWAN_MAC_BEACON, lorawan_ftypenames, "RFU"));
+	proto_tree_add_string(tree, hf_lorawan_msgtype_type, tvb, current_offset, 0, val_to_str_const(LORAWAN_MAC_BEACON, lorawan_ftypenames, "RFU"));
 
 	if (length == 17) {
 		calc_crc1 = crc16_r3_ccitt_tvb(tvb, 0, 6);
@@ -1160,9 +1162,11 @@ dissect_lorawan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void *d
 
 	/* MAC header */
 	guint8 mac_ftype = LORAWAN_MAC_FTYPE(tvb_get_guint8(tvb, current_offset));
-	proto_tree_add_string(lorawan_tree, hf_lorawan_msgtype_type, tvb, current_offset, 0, val_to_str(mac_ftype, lorawan_ftypenames, "RFU"));
+	proto_tree_add_string(lorawan_tree, hf_lorawan_msgtype_type, tvb, current_offset, 0, val_to_str_const(mac_ftype, lorawan_ftypenames, "RFU"));
 	tf = proto_tree_add_item(lorawan_tree, hf_lorawan_mac_header_type, tvb, current_offset, 1, ENC_NA);
-	proto_item_append_text(tf, " (Message Type: %s, Major Version: %s)", val_to_str(mac_ftype, lorawan_ftypenames, "RFU"), val_to_str(LORAWAN_MAC_MAJOR(tvb_get_guint8(tvb, current_offset)), lorawan_majornames, "RFU"));
+	proto_item_append_text(tf, " (Message Type: %s, Major Version: %s)",
+						   val_to_str_const(mac_ftype, lorawan_ftypenames, "RFU"),
+						   val_to_str_const(LORAWAN_MAC_MAJOR(tvb_get_guint8(tvb, current_offset)), lorawan_majornames, "RFU"));
 
 	/* Validate MHDR fields for LoRaWAN packet, do not dissect malformed packets */
 	if ((tvb_get_guint8(tvb, current_offset) & (LORAWAN_MAC_MAJOR_MASK | LORAWAN_MAC_RFU_MASK)) != LORAWAN_MAC_MAJOR_R1) {
@@ -1839,7 +1843,7 @@ proto_register_lorawan(void)
 		"lorawan"		/* abbrev */
 	);
 
-	register_dissector("lorawan", dissect_lorawan, proto_lorawan);
+	lorawan_handle = register_dissector("lorawan", dissect_lorawan, proto_lorawan);
 
 	proto_register_field_array(proto_lorawan, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
@@ -1903,8 +1907,6 @@ proto_register_lorawan(void)
 void
 proto_reg_handoff_lorawan(void)
 {
-	dissector_handle_t lorawan_handle;
-	lorawan_handle = create_dissector_handle(dissect_lorawan, proto_lorawan);
 	dissector_add_uint("loratap.syncword", 0x34, lorawan_handle);
 	dissector_add_for_decode_as("udp.port", lorawan_handle);
 }

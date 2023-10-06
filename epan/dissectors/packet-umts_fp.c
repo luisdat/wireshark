@@ -237,6 +237,8 @@ static dissector_handle_t mac_fdd_edch_handle;
 static dissector_handle_t mac_fdd_edch_type2_handle;
 static dissector_handle_t mac_fdd_hsdsch_handle;
 static dissector_handle_t fp_handle;
+static dissector_handle_t fp_aal2_handle;
+
 
 static proto_tree *top_level_tree = NULL;
 
@@ -6138,7 +6140,7 @@ void proto_register_fp(void)
             },
             { &hf_fp_cfn,
               { "CFN",
-                "fp.cfn", FT_UINT8, BASE_DEC, NULL, 0xff,
+                "fp.cfn", FT_UINT8, BASE_DEC, NULL, 0x0,
                 "Connection Frame Number", HFILL
               }
             },
@@ -6156,7 +6158,7 @@ void proto_register_fp(void)
             },
             { &hf_fp_cfn_control,
               { "CFN control",
-                "fp.cfn-control", FT_UINT8, BASE_DEC, NULL, 0xff,
+                "fp.cfn-control", FT_UINT8, BASE_DEC, NULL, 0x0,
                 "Connection Frame Number Control", HFILL
               }
             },
@@ -6476,7 +6478,7 @@ void proto_register_fp(void)
             },
             { &hf_fp_edch_macis_flag,
               { "Flag",
-                "fp.edch.mac-is.lchid", FT_UINT8, BASE_HEX, 0, 0x01,
+                "fp.edch.mac-is.flag", FT_UINT8, BASE_HEX, 0, 0x01,
                 "Indicates if another entry follows", HFILL
               }
             },
@@ -6772,7 +6774,7 @@ void proto_register_fp(void)
             },
             { &hf_fp_duration,
               { "Duration (ms)",
-                "fp.pusch-set-id", FT_UINT8, BASE_DEC, NULL, 0x0,
+                "fp.pusch-duration", FT_UINT8, BASE_DEC, NULL, 0x0,
                 "Duration of the activation period of the PUSCH Set", HFILL
               }
             },
@@ -7071,6 +7073,7 @@ void proto_register_fp(void)
 
     /* Allow other dissectors to find this one by name. */
     fp_handle = register_dissector("fp", dissect_fp, proto_fp);
+    fp_aal2_handle = register_dissector("fp.aal2", dissect_fp_aal2, proto_fp);
 
     /* Preferences */
     fp_module = prefs_register_protocol(proto_fp, NULL);
@@ -7109,8 +7112,6 @@ void proto_register_fp(void)
 
 void proto_reg_handoff_fp(void)
 {
-    dissector_handle_t fp_aal2_handle;
-
     rlc_bcch_handle           = find_dissector_add_dependency("rlc.bcch", proto_fp);
     mac_fdd_rach_handle       = find_dissector_add_dependency("mac.fdd.rach", proto_fp);
     mac_fdd_fach_handle       = find_dissector_add_dependency("mac.fdd.fach", proto_fp);
@@ -7123,7 +7124,6 @@ void proto_reg_handoff_fp(void)
     heur_dissector_add("udp", heur_dissect_fp, "FP over UDP", "fp_udp", proto_fp, HEURISTIC_DISABLE);
     heur_dissector_add("fp_mux", heur_dissect_fp, "FP over FP Mux", "fp_fp_mux", proto_fp, HEURISTIC_ENABLE);
 
-    fp_aal2_handle = create_dissector_handle(dissect_fp_aal2, proto_fp);
     dissector_add_uint("atm.aal2.type", TRAF_UMTS_FP, fp_aal2_handle);
 }
 

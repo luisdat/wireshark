@@ -158,6 +158,7 @@ static gboolean               skip_radiotap             = FALSE;
 static gboolean               discard_all_secrets       = FALSE;
 static gboolean               discard_cap_comments      = FALSE;
 static gboolean               set_unused                = FALSE;
+static gboolean               discard_pkt_comments      = FALSE;
 
 static int                    do_strict_time_adjustment = FALSE;
 static struct time_adjustment strict_time_adj           = {NSTIME_INIT_ZERO, 0}; /* strict time adjustment */
@@ -419,7 +420,7 @@ set_strict_time_adj(char *optarg_str_p)
     /*
      * check for a negative adjustment
      * A negative strict adjustment value is a flag
-     * to adjust all frames by the specifed delta time.
+     * to adjust all frames by the specified delta time.
      */
     if (*optarg_str_p == '-') {
         strict_time_adj.is_negative = 1;
@@ -770,7 +771,7 @@ is_duplicate_rel_time(guint8* fd, guint32 len, const nstime_t *current) {
              * 1. 'continue' dup checking with the next cached frame.
              * 2. 'break' from looking for a duplicate of the current frame.
              * 3. Take the absolute value of the delta and see if that
-             * falls within the specifed dup time window.
+             * falls within the specified dup time window.
              *
              * Currently this code does option 1.  But it would pretty
              * easy to add yet-another-editcap-option to select one of
@@ -903,6 +904,10 @@ print_usage(FILE *output)
     fprintf(output, "                         when writing the output file.  Does not discard\n");
     fprintf(output, "                         comments added by \"--capture-comment\" in the same\n");
     fprintf(output, "                         command line.\n");
+    fprintf(output, "  --discard-packet-comments\n");
+    fprintf(output, "                         Discard all packet comments from the input file\n");
+    fprintf(output, "                         when writing the output file.  Does not discard\n");
+    fprintf(output, "                         comments added by \"-a\" in the same command line.\n");
     fprintf(output, "\n");
     fprintf(output, "Miscellaneous:\n");
     fprintf(output, "  -h, --help             display this help and exit.\n");
@@ -1197,6 +1202,7 @@ main(int argc, char *argv[])
 #define LONGOPT_CAPTURE_COMMENT      LONGOPT_BASE_APPLICATION+6
 #define LONGOPT_DISCARD_CAPTURE_COMMENT LONGOPT_BASE_APPLICATION+7
 #define LONGOPT_SET_UNUSED           LONGOPT_BASE_APPLICATION+8
+#define LONGOPT_DISCARD_PACKET_COMMENTS LONGOPT_BASE_APPLICATION+9
 
     static const struct ws_option long_options[] = {
         {"novlan", ws_no_argument, NULL, LONGOPT_NO_VLAN},
@@ -1209,6 +1215,7 @@ main(int argc, char *argv[])
         {"capture-comment", ws_required_argument, NULL, LONGOPT_CAPTURE_COMMENT},
         {"discard-capture-comment", ws_no_argument, NULL, LONGOPT_DISCARD_CAPTURE_COMMENT},
         {"set-unused", ws_no_argument, NULL, LONGOPT_SET_UNUSED},
+        {"discard-packet-comments", ws_no_argument, NULL, LONGOPT_DISCARD_PACKET_COMMENTS},
         {0, 0, 0, 0 }
     };
 
@@ -1393,6 +1400,12 @@ main(int argc, char *argv[])
             break;
         }
 
+        case LONGOPT_DISCARD_PACKET_COMMENTS:
+        {
+            discard_pkt_comments = TRUE;
+            break;
+        }
+
         case 'a':
         {
             guint frame_number;
@@ -1436,7 +1449,7 @@ main(int argc, char *argv[])
             nstime_t in_time;
 
             check_startstop = TRUE;
-            if ((0 < iso8601_to_nstime(&in_time, ws_optarg, ISO8601_DATETIME)) || (0 < unix_epoch_to_nstime(&in_time, ws_optarg))) {
+            if ((NULL != iso8601_to_nstime(&in_time, ws_optarg, ISO8601_DATETIME)) || (NULL != unix_epoch_to_nstime(&in_time, ws_optarg))) {
                 if (opt == 'A') {
                     nstime_copy(&starttime, &in_time);
                     have_starttime = TRUE;
@@ -1653,7 +1666,7 @@ main(int argc, char *argv[])
             goto clean_exit;
             break;
         }
-    } /* processing commmand-line options */
+    } /* processing command-line options */
 
 #ifdef DEBUG
     fprintf(stderr, "Optind = %i, argc = %i\n", ws_optind, argc);
@@ -1829,6 +1842,12 @@ main(int argc, char *argv[])
         if (add_selection(argv[i], &max_packet_number) == FALSE)
             break;
 
+    if (keep_em && max_selected == 0) {
+        fprintf(stderr, "editcap: must specify packets to keep when using -r\n");
+        ret = WS_EXIT_INVALID_OPTION;
+        goto clean_exit;
+    }
+
     if (!keep_em)
         max_packet_number = G_MAXUINT;
 
@@ -1930,10 +1949,13 @@ main(int argc, char *argv[])
                         ret = WRITE_ERROR;
                         goto clean_exit;
                     }
-                    nstime_add(&block_next, &secs_per_block); /* reset for next interval */
                     g_free(filename);
-                    filename = fileset_get_filename_by_pattern(block_cnt++, rec, fprefix, fsuffix);
+                    /* Use the interval start time for the filename. */
+                    temp_rec = *rec;
+                    temp_rec.ts = block_next;
+                    filename = fileset_get_filename_by_pattern(block_cnt++, &temp_rec, fprefix, fsuffix);
                     ws_assert(filename);
+                    nstime_add(&block_next, &secs_per_block); /* reset for next interval */
 
                     if (verbose)
                         fprintf(stderr, "Continuing writing in file %s\n", filename);
@@ -2323,14 +2345,30 @@ main(int argc, char *argv[])
                 }
             } /* random error mutation */
 
+            /* Discard all packet comments when writing */
+            if (discard_pkt_comments) {
+                temp_rec = *rec;
+                while (WTAP_OPTTYPE_SUCCESS == wtap_block_remove_nth_option_instance(rec->block, OPT_COMMENT, 0)) {
+                    temp_rec.block_was_modified = TRUE;
+                    continue;
+                }
+                rec = &temp_rec;
+            }
+
             /* Find a packet comment we may need to write */
             if (frames_user_comments) {
                 const char *comment =
                     (const char*)g_tree_lookup(frames_user_comments, GUINT_TO_POINTER(read_count));
-                /* XXX: What about comment changed to no comment? */
                 if (comment != NULL) {
                     /* Copy and change rather than modify returned rec */
                     temp_rec = *rec;
+
+                    /* Erase any existing comments before adding the new one */
+                    while (WTAP_OPTTYPE_SUCCESS == wtap_block_remove_nth_option_instance(rec->block, OPT_COMMENT, 0)) {
+                        temp_rec.block_was_modified = TRUE;
+                        continue;
+                    }
+
                     /* The comment is not modified by dumper, cast away. */
                     wtap_block_add_string_option(rec->block, OPT_COMMENT, (char *)comment, strlen((char *)comment));
                     temp_rec.block_was_modified = TRUE;
@@ -2377,6 +2415,9 @@ main(int argc, char *argv[])
 
     g_free(fprefix);
     g_free(fsuffix);
+
+    if (verbose)
+        fprintf(stderr, "Total selected: %d\n", written_count);
 
     if (read_err != 0) {
         /* Print a message noting that the read failed somewhere along the

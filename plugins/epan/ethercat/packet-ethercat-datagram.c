@@ -8,6 +8,8 @@
  * Copyright 1998 Gerald Combs
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * https://download.beckhoff.com/download/document/io/ethercat-development-products/ethercat_esc_datasheet_sec1_technology_2i3.pdf
  */
 
 /* Include files */
@@ -23,6 +25,7 @@ void proto_register_ecat(void);
 void proto_reg_handoff_ecat(void);
 
 static heur_dissector_list_t heur_subdissector_list;
+static dissector_handle_t ecat_handle;
 static dissector_handle_t ecat_mailbox_handle;
 
 /* Define the EtherCAT proto */
@@ -3095,11 +3098,11 @@ void proto_register_ecat(void)
            {"EEPROM Data 3 (0x50e)", "ecat.reg.data3",
            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL }
          },
+
          { &hf_ecat_reg_mio_ctrlstat,
            {"Phy MIO Ctrl/Status (0x510)", "ecat.reg.mio.ctrlstat",
            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL }
          },
-
          /* TODO: check these masks (ecat_esc_reg_510) against spec.
           * In particular hf_ecat_reg_mio_ctrlstat_offsphy is non-contiguous and overlaps wracc1 */
          { &hf_ecat_reg_mio_ctrlstat_wracc1,
@@ -3712,6 +3715,7 @@ void proto_register_ecat(void)
    proto_ecat_datagram = proto_register_protocol("EtherCAT datagram(s)", "ECAT", "ecat");
    proto_register_field_array(proto_ecat_datagram, hf, array_length(hf));
    proto_register_subtree_array(ett, array_length(ett));
+   ecat_handle = register_dissector("ecat", dissect_ecat_datagram, proto_ecat_datagram);
 
    /* Sub dissector code */
    heur_subdissector_list = register_heur_dissector_list("ecat.data", proto_ecat_datagram);
@@ -3720,11 +3724,8 @@ void proto_register_ecat(void)
 /* The registration hand-off routing */
 void proto_reg_handoff_ecat(void)
 {
-   dissector_handle_t ecat_handle;
-
    /* Register this dissector as a sub dissector to EtherCAT frame based on
       ether type. */
-   ecat_handle = create_dissector_handle(dissect_ecat_datagram, proto_ecat_datagram);
    dissector_add_uint("ecatf.type", 1 /* EtherCAT type */, ecat_handle);
 
    ecat_mailbox_handle = find_dissector_add_dependency("ecat_mailbox", proto_ecat_datagram);

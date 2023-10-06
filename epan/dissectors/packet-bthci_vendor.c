@@ -798,7 +798,7 @@ dissect_bthci_vendor_broadcom(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         col_add_fstr(pinfo->cinfo, COL_INFO, "Rcvd Broadcom ");
 
         event_code = tvb_get_guint8(tvb, offset);
-        description = val_to_str_ext_const(event_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%08x");
+        description = val_to_str_ext(event_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%08x");
         col_append_str(pinfo->cinfo, COL_INFO, description);
         proto_tree_add_item(main_tree, hf_broadcom_event_code, tvb, offset, 1, ENC_NA);
         offset += 1;
@@ -1395,7 +1395,7 @@ proto_register_bthci_vendor_broadcom(void)
             NULL, HFILL }
         },
         { &hf_broadcom_le_multi_advertising_instance_id,
-            { "Full Max",                                  "bthci_vendor.broadcom.le.multi_advertising.instance_id",
+            { "Instance Id",                                  "bthci_vendor.broadcom.le.multi_advertising.instance_id",
             FT_UINT8, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
@@ -1435,12 +1435,12 @@ proto_register_bthci_vendor_broadcom(void)
             NULL, HFILL }
         },
         { &hf_broadcom_le_multi_advertising_channel_map_38,
-            { "Channel 39",                                "bthci_vendor.broadcom.le.multi_advertising.channel_map.38",
+            { "Channel 38",                                "bthci_vendor.broadcom.le.multi_advertising.channel_map.38",
             FT_UINT8, BASE_HEX, NULL, 0x02,
             NULL, HFILL }
         },
         { &hf_broadcom_le_multi_advertising_channel_map_37,
-            { "Channel 39",                                "bthci_vendor.broadcom.le.multi_advertising.channel_map.37",
+            { "Channel 37",                                "bthci_vendor.broadcom.le.multi_advertising.channel_map.37",
             FT_UINT8, BASE_HEX, NULL, 0x01,
             NULL, HFILL }
         },
@@ -2106,9 +2106,9 @@ dissect_bthci_vendor_intel(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
         event_code = tvb_get_guint8(tvb, offset);
 
         if (try_val_to_str(event_code, intel_event_code_vals))
-            description = val_to_str_const(event_code, intel_event_code_vals, "Unknown 0x%08x");
+            description = val_to_str(event_code, intel_event_code_vals, "Unknown 0x%08x");
         else
-            description = val_to_str_ext_const(event_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%08x");
+            description = val_to_str_ext(event_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%08x");
         col_append_str(pinfo->cinfo, COL_INFO, description);
         proto_tree_add_item(main_tree, hf_intel_event_code, tvb, offset, 1, ENC_NA);
         offset += 1;

@@ -27,9 +27,6 @@
 #endif
 
 #include <sys/types.h>
-#ifdef HAVE_SYS_WAIT_H
-#include <sys/wait.h>
-#endif
 
 #include <glib.h>
 
@@ -671,7 +668,7 @@ extcap_get_help_for_ifname(const char *ifname)
 }
 
 GList *
-append_extcap_interface_list(GList *list, char **err_str _U_)
+append_extcap_interface_list(GList *list)
 {
     GList *interface_list = NULL;
     extcap_interface *data = NULL;
@@ -1949,7 +1946,7 @@ process_new_extcap(const char *extcap, char *output)
             ws_debug("Interface found %s\n", int_iter->call);
 
         /* Help is not necessarily stored with the interface, but rather with the version string.
-         * As the version string allways comes in front of the interfaces, this ensures, that it get's
+         * As the version string always comes in front of the interfaces, this ensures, that it gets
          * properly stored with the interface */
         if (int_iter->if_type == EXTCAP_SENTENCE_EXTCAP)
         {

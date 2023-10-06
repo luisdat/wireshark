@@ -44,6 +44,7 @@ struct wtap {
     guint                       next_interface_data;    /**< Next interface data that wtap_get_next_interface_description() will show */
     GArray                      *nrbs;                  /**< holds the Name Res Blocks, or NULL */
     GArray                      *dsbs;                  /**< An array of DSBs (of type wtap_block_t), or NULL if not supported. */
+    GArray                      *sysdig_meta_events;    /**< An array of Sysdig meta eventss (of type wtap_block_t), or NULL if not supported. */
 
     char                        *pathname;              /**< File pathname; might just be "-" */
 
@@ -73,6 +74,7 @@ struct wtap {
     wtap_new_ipv4_callback_t    add_new_ipv4;
     wtap_new_ipv6_callback_t    add_new_ipv6;
     wtap_new_secrets_callback_t add_new_secrets;
+    wtap_new_sysdig_meta_event_callback_t add_new_sysdig_meta_event;
     GPtrArray                   *fast_seek;
 };
 
@@ -95,7 +97,12 @@ struct wtap_dumper {
     WFILE_T                 fh;
     int                     file_type_subtype;
     int                     snaplen;
-    int                     encap;
+    int                     file_encap;      /* per-file, for those
+                                              * file formats that have
+                                              * per-file encapsulation
+                                              * types rather than per-packet
+                                              * encapsulation types
+                                              */
     wtap_compression_type   compression_type;
     gboolean                needs_reload;    /* TRUE if the file requires re-loading after saving with wtap */
     gint64                  bytes_dumped;
@@ -118,8 +125,10 @@ struct wtap_dumper {
      */
     const GArray            *nrbs_growing;          /**< A reference to an array of NRBs (of type wtap_block_t) */
     const GArray            *dsbs_growing;          /**< A reference to an array of DSBs (of type wtap_block_t) */
+    const GArray            *sysdig_mev_growing;    /**< A reference to an array of Sysdig meta events (of type wtap_block_t) */
     guint                   nrbs_growing_written;   /**< Number of already processed NRBs in nrbs_growing. */
     guint                   dsbs_growing_written;   /**< Number of already processed DSBs in dsbs_growing. */
+    guint                   sysdig_mev_growing_written; /**< Number of already processed meta events in sysdig_mev_growing. */
 };
 
 WS_DLL_PUBLIC gboolean wtap_dump_file_write(wtap_dumper *wdh, const void *buf,
@@ -353,6 +362,12 @@ wtapng_process_nrb(wtap *wth, wtap_block_t nrb);
 void
 wtapng_process_dsb(wtap *wth, wtap_block_t dsb);
 
+/**
+ * Invokes the callback with the given Sysdig meta event block.
+ */
+void
+wtapng_process_sysdig_mev(wtap *wth, wtap_block_t mev);
+
 void
 wtap_register_compatibility_file_subtype_name(const char *old_name,
     const char *new_name);
@@ -396,6 +411,33 @@ GArray* wtap_file_get_shb_for_new_file(wtap *wth);
  */
 WS_DLL_PUBLIC
 void wtap_add_generated_idb(wtap *wth);
+
+/**
+ * @brief Generate an IDB, given a set of dump parameters, using the
+ *      parameters' encapsulation type, snapshot length, and time stamp
+ *      resolution. For use when a dump file has a given encapsulation type,
+ *      and the source is not passing IDBs.
+ * @note This requires that the encapsulation type and time stamp
+ *      resolution not be per-packet; it will terminate the process
+ *      if either of them are.
+ *
+ * @param params The wtap dump parameters.
+ */
+
+wtap_block_t wtap_dump_params_generate_idb(const wtap_dump_params *params);
+
+/**
+ * @brief Generate an IDB, given a packet record, using the records's
+ *      encapsulation type and time stamp resolution, and the default
+ *      snap length for the encapsulation type. For use when a file has
+ *      per-packet encapsulation, and the source is not passing along IDBs.
+ * @note This requires that the record type be REC_TYPE_PACKET, and the
+ *      encapsulation type and time stamp resolution not be per-packet;
+ *      it will terminate the process if any of them are.
+ *
+ * @param rec The packet record.
+ */
+wtap_block_t wtap_rec_generate_idb(const wtap_rec *rec);
 
 /**
  * @brief Gets new name resolution info for new file, based on existing info.

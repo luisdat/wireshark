@@ -29,7 +29,7 @@
 
 #include <cli_main.h>
 
-static gchar* sshdump_extcap_interface;
+static char* sshdump_extcap_interface;
 #ifdef _WIN32
 #define DEFAULT_SSHDUMP_EXTCAP_INTERFACE "sshdump.exe"
 #else
@@ -96,7 +96,7 @@ static int ssh_loop_read(ssh_channel channel, FILE* fp)
 		if (nbytes == 0) {
 			break;
 		}
-		if (fwrite(buffer, 1, nbytes, fp) != (guint)nbytes) {
+		if (fwrite(buffer, 1, nbytes, fp) != (unsigned)nbytes) {
 			ws_warning("Error writing to fifo");
 			ret = EXIT_FAILURE;
 			goto end;
@@ -111,7 +111,7 @@ static int ssh_loop_read(ssh_channel channel, FILE* fp)
 			ws_warning("Error reading from channel");
 			goto end;
 		}
-		if (fwrite(buffer, 1, nbytes, stderr) != (guint)nbytes) {
+		if (fwrite(buffer, 1, nbytes, stderr) != (unsigned)nbytes) {
 			ws_warning("Error writing to stderr");
 			break;
 		}
@@ -125,7 +125,7 @@ end:
 	return ret;
 }
 
-static char* local_interfaces_to_filter(const guint16 remote_port)
+static char* local_interfaces_to_filter(const uint16_t remote_port)
 {
 	GSList* interfaces = local_interfaces_to_list();
 	char* filter = interfaces_list_to_filter(interfaces, remote_port);
@@ -134,15 +134,15 @@ static char* local_interfaces_to_filter(const guint16 remote_port)
 }
 
 static ssh_channel run_ssh_command(ssh_session sshs, const char* capture_command_select,
-		const char* capture_command, const char* privilege, gboolean noprom,
-		const char* iface, const char* cfilter, const guint32 count)
+		const char* capture_command, const char* privilege, bool noprom,
+		const char* iface, const char* cfilter, const uint32_t count)
 {
-	gchar* cmdline = NULL;
+	char* cmdline = NULL;
 	ssh_channel channel;
 	char** ifaces_array = NULL;
 	int ifaces_array_num = 0;
 	GString *ifaces_string;
-	gchar *ifaces;
+	char *ifaces = NULL;
 	char* quoted_iface = NULL;
 	char* quoted_filter = NULL;
 	char* count_str = NULL;
@@ -186,15 +186,17 @@ static ssh_channel run_ssh_command(ssh_session sshs, const char* capture_command
 			count_str ? count_str : "",
 			quoted_filter);
 	} else if (!g_strcmp0(capture_command_select, "dumpcap")) {
-		ifaces_array = g_strsplit(iface, " ", -1);
-		ifaces_string = g_string_new(NULL);
-		while (ifaces_array[ifaces_array_num])
-		{
-			quoted_iface = g_shell_quote(ifaces_array[ifaces_array_num]);
-			g_string_append_printf(ifaces_string, "-i %s ", quoted_iface);
-			ifaces_array_num++;
+		if (iface) {
+			ifaces_array = g_strsplit(iface, " ", -1);
+			ifaces_string = g_string_new(NULL);
+			while (ifaces_array[ifaces_array_num])
+			{
+				quoted_iface = g_shell_quote(ifaces_array[ifaces_array_num]);
+				g_string_append_printf(ifaces_string, "-i %s ", quoted_iface);
+				ifaces_array_num++;
+			}
+			ifaces = g_string_free(ifaces_string, false);
 		}
-		ifaces = g_string_free(ifaces_string, FALSE);
 		quoted_filter = g_shell_quote(cfilter ? cfilter : "");
 		if (count > 0)
 			count_str = ws_strdup_printf("-c %u", count);
@@ -202,7 +204,7 @@ static ssh_channel run_ssh_command(ssh_session sshs, const char* capture_command
 		cmdline = ws_strdup_printf("%s dumpcap %s %s -w - %s -f %s",
 			privilege,
 			noprom ? "-p" : "",
-			*ifaces ? ifaces : "",
+			ifaces ? ifaces : "",
 			count_str ? count_str : "",
 			quoted_filter);
 
@@ -228,7 +230,7 @@ static ssh_channel run_ssh_command(ssh_session sshs, const char* capture_command
 
 static int ssh_open_remote_connection(const ssh_params_t* params, const char* iface, const char* cfilter,
 	const char* capture_command_select, const char* capture_command, const char* privilege,
-	gboolean noprom, const guint32 count, const char* fifo)
+	bool noprom, const uint32_t count, const char* fifo)
 {
 	ssh_session sshs = NULL;
 	ssh_channel channel = NULL;
@@ -303,7 +305,7 @@ static char* interfaces_list_to_filter(GSList* interfaces, unsigned int remote_p
 		}
 		g_string_append_printf(filter, ") and port %u)", remote_port);
 	}
-	return g_string_free(filter, FALSE);
+	return g_string_free(filter, false);
 }
 
 static int list_config(char *interface, unsigned int remote_port)
@@ -410,15 +412,15 @@ int main(int argc, char *argv[])
 	char* remote_capture_command_select = NULL;
 	char* remote_capture_command = NULL;
 	char* remote_filter = NULL;
-	guint32 count = 0;
+	uint32_t count = 0;
 	int ret = EXIT_FAILURE;
 	extcap_parameters* extcap_conf = g_new0(extcap_parameters, 1);
 	char* help_url;
 	char* help_header = NULL;
 	char* priv = NULL;
 	char* priv_user = NULL;
-	gboolean noprom = FALSE;
-	gchar* interface_description = g_strdup("SSH remote capture");
+	bool noprom = false;
+	char* interface_description = g_strdup("SSH remote capture");
 
 	/* Initialize log handler early so we can have proper logging during startup. */
 	extcap_log_init("sshdump");
@@ -447,7 +449,7 @@ int main(int argc, char *argv[])
 	g_free(help_url);
 	add_libssh_info(extcap_conf);
 	if (g_strcmp0(sshdump_extcap_interface, DEFAULT_SSHDUMP_EXTCAP_INTERFACE)) {
-		gchar* temp = interface_description;
+		char* temp = interface_description;
 		interface_description = ws_strdup_printf("%s, custom version", interface_description);
 		g_free(temp);
 	}
@@ -588,7 +590,7 @@ int main(int argc, char *argv[])
 			break;
 
 		case OPT_REMOTE_NOPROM:
-			noprom = TRUE;
+			noprom = true;
 			break;
 
 		case ':':
@@ -643,6 +645,16 @@ int main(int argc, char *argv[])
 			privilege = g_strdup("");
 		}
 
+		// This may result in the use of a different port number than was given in
+		// the default filter string, as presented in the config dialog. The default
+		// given is always using the default SSH port since there's no remote SSH port
+		// given on the command line to get the extcap arguments.
+		// However the remote SSH port used here is the one given on the command line
+		// when the capture us started, which is the indended one.
+		// And this is only happening when no remote filter is specified on the command
+		// line to start the capture.
+		if (remote_filter == NULL)
+			remote_filter = local_interfaces_to_filter(ssh_params->port);
 		filter = concat_filters(extcap_conf->capture_filter, remote_filter);
 		ssh_params->debug = extcap_conf->debug;
 		ret = ssh_open_remote_connection(ssh_params, remote_interface,

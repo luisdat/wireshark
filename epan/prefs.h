@@ -141,10 +141,11 @@ typedef struct _e_prefs {
   color_t      gui_text_valid, gui_text_invalid, gui_text_deprecated;
   gboolean     restore_filter_after_following_stream;
   gint         gui_toolbar_main_style;
-  gchar       *gui_qt_font_name;
+  gchar       *gui_font_name;
   color_t      gui_active_fg;
   color_t      gui_active_bg;
   gint         gui_active_style;
+  gchar       *gui_browser_sslkeylog_path;
   color_t      gui_inactive_fg;
   color_t      gui_inactive_bg;
   gint         gui_inactive_style;
@@ -180,6 +181,7 @@ typedef struct _e_prefs {
   gboolean     gui_interfaces_show_hidden;
   gboolean     gui_interfaces_remote_display;
   gboolean     gui_io_graph_automatic_update;
+  gboolean     gui_io_graph_enable_legend;
   gboolean     gui_packet_details_show_byteview;
   gchar       *capture_device;
   gchar       *capture_devices_linktypes;
@@ -194,7 +196,6 @@ typedef struct _e_prefs {
   gboolean     capture_pcap_ng;
   gboolean     capture_real_time;
   guint        capture_update_interval;
-  gboolean     capture_auto_scroll; /* XXX - Move to recent */
   gboolean     capture_no_interface_load;
   gboolean     capture_no_extcap;
   gboolean     capture_show_info;
@@ -205,6 +206,8 @@ typedef struct _e_prefs {
   gboolean     enable_incomplete_dissectors_check;
   gboolean     incomplete_dissectors_check_debug;
   gboolean     strict_conversation_tracking_heuristics;
+  gboolean     ignore_dup_frames;
+  guint        ignore_dup_frames_cache_entries;
   gboolean     filter_expressions_old;  /* TRUE if old filter expressions preferences were loaded. */
   gboolean     gui_update_enabled;
   software_update_channel_e gui_update_channel;
@@ -212,11 +215,11 @@ typedef struct _e_prefs {
   gint         gui_debounce_timer;
   gchar       *saved_at_version;
   gboolean     unknown_prefs; /* unknown or obsolete pref(s) */
-  gboolean     gui_qt_packet_list_separator;
-  gboolean     gui_qt_packet_header_column_definition;
-  gboolean     gui_qt_packet_list_hover_style; /* Enable/Disable mouse-over colorization */
-  gboolean     gui_qt_show_selected_packet;
-  gboolean     gui_qt_show_file_load_time;
+  gboolean     gui_packet_list_separator;
+  gboolean     gui_packet_header_column_definition;
+  gboolean     gui_packet_list_hover_style; /* Enable/Disable mouse-over colorization */
+  gboolean     gui_show_selected_packet;
+  gboolean     gui_show_file_load_time;
   elide_mode_e gui_packet_list_elide_mode;
   gboolean     gui_packet_list_show_related;
   gboolean     gui_packet_list_show_minimap;

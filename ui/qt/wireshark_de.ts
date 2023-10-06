@@ -730,6 +730,14 @@
         <translation>Bytes in Hexadezimal anzeigen</translation>
     </message>
     <message>
+        <source>…as decimal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>…as octal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as bits</source>
         <translation>…als Bits</translation>
     </message>
@@ -981,7 +989,7 @@
     </message>
     <message>
         <source>Hash (RIPEMD160)</source>
-        <translation>Hash (RIPEMD160)</translation>
+        <translation type="vanished">Hash (RIPEMD160)</translation>
     </message>
     <message>
         <source>Hash (SHA1)</source>
@@ -1569,12 +1577,24 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Paketliste in Echtzeit aktualisieren</translation>
     </message>
     <message>
+        <source>Interval between updates (ms)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How often the capture notifies the GUI of new packets. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The interval between new packet updates. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Keep the packet list scrolled to the bottom while capturing.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Während der Aufzeichnung immer das aktuellste Paket in der Liste anzeigen.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Während der Aufzeichnung immer das aktuellste Paket in der Liste anzeigen.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Automatic scrolling in live capture</source>
-        <translation>Automatisches Scrollen während des Mitschnitts</translation>
+        <translation type="vanished">Automatisches Scrollen während des Mitschnitts</translation>
     </message>
     <message>
         <source>Don&apos;t load interfaces on startup</source>
@@ -2011,12 +2031,24 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Paketbytes als Hex Dump kopieren</translation>
     </message>
     <message>
+        <source>…as MIME Data</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>…as C String</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as printable ASCII characters and escape sequences.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as Printable Text</source>
-        <translation>…als druckbarer Text</translation>
+        <translation type="vanished">…als druckbarer Text</translation>
     </message>
     <message>
         <source>Copy only the printable text in the packet.</source>
-        <translation>Nur den druckbaren Text im Paket kopieren.</translation>
+        <translation type="vanished">Nur den druckbaren Text im Paket kopieren.</translation>
     </message>
     <message>
         <source>…as a Hex Stream</source>
@@ -2036,7 +2068,7 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     </message>
     <message>
         <source>…as Raw Binary</source>
-        <translation>...als Rohdaten</translation>
+        <translation type="vanished">...als Rohdaten</translation>
     </message>
     <message>
         <source>Copy packet bytes as application/octet-stream MIME data.</source>
@@ -2044,11 +2076,11 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     </message>
     <message>
         <source>…as Escaped String</source>
-        <translation>…als Zeichenkette mit Escape-Sequenzen</translation>
+        <translation type="vanished">…als Zeichenkette mit Escape-Sequenzen</translation>
     </message>
     <message>
         <source>Copy packet bytes as an escaped string.</source>
-        <translation>Paketbytes als Zeichenkette mit Escape-Sequezen kopieren</translation>
+        <translation type="vanished">Paketbytes als Zeichenkette mit Escape-Sequezen kopieren</translation>
     </message>
 </context>
 <context>
@@ -2308,6 +2340,17 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>Click OK to insert this filter</source>
         <translation>Zum Einfügen dieses Filter OK klicken</translation>
+    </message>
+</context>
+<context>
+    <name>DissectorSyntaxLineEdit</name>
+    <message>
+        <source>Dissector entry</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter a dissector %1</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -3707,6 +3750,29 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     </message>
 </context>
 <context>
+    <name>IOConsoleDialog</name>
+    <message>
+        <source>Dialog</source>
+        <translation type="unfinished">Dialog</translation>
+    </message>
+    <message>
+        <source>Enter code</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Evaluate</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished">Zurücksetzen</translation>
+    </message>
+    <message>
+        <source>Use %1 to evaluate.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>IOGraphDialog</name>
     <message>
         <source>Dialog</source>
@@ -3859,7 +3925,15 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     </message>
     <message>
         <source>Automatic Update</source>
-        <translation>Automatisches aktualisieren</translation>
+        <translation type="vanished">Automatisches aktualisieren</translation>
+    </message>
+    <message>
+        <source>Automatic update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable legend</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Reset</source>
@@ -4131,12 +4205,24 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Gefilterte Pakete</translation>
     </message>
     <message>
+        <source>Filtered events</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>All Packets</source>
         <translation>Alle Pakete</translation>
     </message>
     <message>
         <source>TCP Errors</source>
         <translation>TCP Fehler</translation>
+    </message>
+    <message>
+        <source>All Events</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Access Denied</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Hover over the graph for details.</source>
@@ -4147,12 +4233,24 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Keine Pakete im Intervall</translation>
     </message>
     <message>
+        <source>No events in interval</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Click to select packet</source>
         <translation>Klicken zur Paketauswahl</translation>
     </message>
     <message>
         <source>Packet</source>
         <translation>Paket</translation>
+    </message>
+    <message>
+        <source>Click to select event</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Event</source>
+        <translation type="unfinished">Ereignis</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -6581,14 +6679,6 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Systemeinstellungen verwenden</translation>
     </message>
     <message>
-        <source>Debounce Timer</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How long to wait (in milliseconds) before processing user input&lt;br/&gt;If you type quickly, consider lowering the value for a &apos;snappier&apos; experience.&lt;br/&gt; If you type slowly, consider increasing the value to avoid performance issues.&lt;br/&gt;This is currently used to delay searches in View -&gt; Internals -&gt; Supported Protocols and Preferences -&gt; Advanced menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Open Files In</source>
         <translation>Dateien öffnen in</translation>
     </message>
@@ -6666,6 +6756,72 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>New Pipe</source>
         <translation>Neue Pipe</translation>
+    </message>
+</context>
+<context>
+    <name>ManufDialog</name>
+    <message>
+        <source>MAC Address Blocks</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Search MAC address or address prefix. Special purpose bits are masked.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>MAC Address</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Search vendor name using a case-insentitive regular expression.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Vendor Name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Show short name column.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Short name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;small&gt;&lt;i&gt;A hint.&lt;/i&gt;&lt;/small&gt;</source>
+        <translation type="obsolete">&lt;small&gt;&lt;i&gt;Hinweis&lt;/i&gt;&lt;/small&gt;</translation>
+    </message>
+    <message>
+        <source>Select all</source>
+        <translation type="unfinished">Alle auswählen</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation type="unfinished">Kopieren</translation>
+    </message>
+    <message>
+        <source>Find</source>
+        <translation type="unfinished">Finden</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished">Zurücksetzen</translation>
+    </message>
+</context>
+<context>
+    <name>ManufTableModel</name>
+    <message>
+        <source>Address Block</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Short Name</source>
+        <translation type="unfinished">Kurzname</translation>
+    </message>
+    <message>
+        <source>Vendor Name</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -6959,6 +7115,13 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <source>Bytes %1-%2</source>
         <translation>Bytes %1-%2</translation>
     </message>
+    <message numerus="yes">
+        <source>%Ln byte(s)</source>
+        <translation type="unfinished">
+            <numerusform>%Ln Byte</numerusform>
+            <numerusform>%Ln Bytes</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>PacketFormatGroupBox</name>
@@ -7161,6 +7324,14 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>Remove &amp;ignored packets</source>
         <translation>&amp;Ignorierte Pakete löschen</translation>
+    </message>
+    <message>
+        <source>Include &amp;depended upon packets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Also include packets depended upon, such as those used to reassemble displayed packets</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>First &amp;to last marked</source>
@@ -7825,6 +7996,30 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Liste der Streams als YAML kopieren.</translation>
     </message>
     <message>
+        <source>Copy short names</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy short protocol names in use.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable unused protocols</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable all protocols but those listed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Re-enable unused protocols</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Re-enable protocols that were disabled in this dialog.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Protocol Hierarchy Statistics</source>
         <translation>Statistiken der Protokollhierarchie</translation>
     </message>
@@ -7841,12 +8036,36 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>als YAML</translation>
     </message>
     <message>
+        <source>protocol short names</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocols</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable unused</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Revert changes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>No display filter.</source>
         <translation>Kein Anzeigefilter.</translation>
     </message>
     <message>
         <source>Display filter: %1</source>
         <translation>Anzeigefilter: %1</translation>
+    </message>
+    <message>
+        <source>Unused protocols have been disabled.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocol changes have been reverted.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -10426,6 +10645,53 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     </message>
 </context>
 <context>
+    <name>SSLKeylogDialog</name>
+    <message>
+        <source>Dialog</source>
+        <translation type="unfinished">Dialog</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Browser file path</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Run your web browser with the SSLKEYLOG environment variable set to the file specified by the key log filename preference.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;Firefox and Chrome are known to work. If your desired browser is currently running, close it first before launching it below.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Pre)-Master-Secret log file path&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;TLS keys will be logged to this file.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Launch</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation type="unfinished">Speichern</translation>
+    </message>
+    <message>
+        <source>TLS Keylog</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Web Browser</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ScsiServiceResponseTimeDialog</name>
     <message>
         <source>&lt;small&gt;&lt;i&gt;Select a command and enter a filter if desired, then press Apply.&lt;/i&gt;&lt;/small&gt;</source>
@@ -10463,6 +10729,10 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Paket Bytes</translation>
     </message>
     <message>
+        <source>&lt;b&gt;Options:&lt;/b&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search for strings containing narrow (UTF-8 and ASCII) or wide (UTF-16) characters.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Zeichenketten suchen, die schmale (UTF-8 oder ASCII) or breite (UTF-16) Zeichen enthalten.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -10481,6 +10751,18 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>Case sensitive</source>
         <translation>Groß- / Kleinschreibung beachten</translation>
+    </message>
+    <message>
+        <source>Backwards</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search for a subsequent occurrence in the current packet before advancing to the next packet.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Multiple occurrences</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search for data using display filter syntax (e.g. ip.addr==10.1.1.1), a hexadecimal string (e.g. fffffda5), a plain string (e.g. My String) or a regular expression (e.g. colou?r).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -11134,6 +11416,10 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>Finding local interfaces</source>
         <translation>Lokale Schnittstellen finden</translation>
+    </message>
+    <message>
+        <source>Applying changed preferences</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>(Unknown action)</source>
@@ -11925,8 +12211,12 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Ungültige Framenummer.</translation>
     </message>
     <message>
+        <source>Time shifting is not available while capturing packets.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Time shifting is not available capturing packets.</source>
-        <translation>Verschieben des Zeitstempels kann nicht während der Aufzeichnung von Paketen durchgeführt werden.</translation>
+        <translation type="vanished">Verschieben des Zeitstempels kann nicht während der Aufzeichnung von Paketen durchgeführt werden.</translation>
     </message>
 </context>
 <context>
@@ -13233,6 +13523,22 @@ a:hover {
         <translation>Alle Paketkommentare in der Mitschnittdatei löschen</translation>
     </message>
     <message>
+        <source>Inject TLS Secrets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Embed used TLS secrets in the capture file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Discard All Secrets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Discard all decryption secrets in the capture file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&amp;Configuration Profiles…</source>
         <translation>Profile konfigurieren... (&amp;C)</translation>
     </message>
@@ -13649,6 +13955,22 @@ a:hover {
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Tenths of a millisecond</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hundredths of a millisecond</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tenths of a microsecond</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hundredths of a microsecond</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet &amp;Diagram</source>
         <translation>Paket&amp;diagramm</translation>
     </message>
@@ -13779,6 +14101,14 @@ a:hover {
     <message>
         <source>Credentials</source>
         <translation>Anmeldedaten</translation>
+    </message>
+    <message>
+        <source>MAC Address Blocks</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Browser (SSL Keylog)</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&amp;Options…</source>
@@ -14671,6 +15001,10 @@ a:hover {
         <translation>Bitte Warten während Wireshark initialisiert wird…</translation>
     </message>
     <message>
+        <source> before updating</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>There are no TLS Session Keys to save.</source>
         <translation>Es sind keine TLS Sitzungsschlüssel zum speichern vorhanden.</translation>
     </message>
@@ -14684,6 +15018,18 @@ a:hover {
     <message>
         <source>TLS Session Keys (*.keys *.txt);;All Files (</source>
         <translation>TLS Sitzungsschlüssel (*.keys *.txt);; Alle Dateien (</translation>
+    </message>
+    <message>
+        <source>No TLS Secrets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>There are no available secrets used to decrypt TLS traffic in the capture file.  Would you like to view information about how to decrypt TLS traffic on the wiki?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Are you sure you want to discard all decryption secrets?</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>No filter available. Try another %1.</source>

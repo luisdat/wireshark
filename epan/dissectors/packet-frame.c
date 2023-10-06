@@ -24,7 +24,6 @@
 #include <epan/prefs.h>
 #include <epan/to_str.h>
 #include <epan/sequence_analysis.h>
-#include <wiretap/wtap.h>
 #include <epan/tap.h>
 #include <epan/expert.h>
 #include <wsutil/wsgcrypt.h>
@@ -34,6 +33,7 @@
 #include <epan/proto_data.h>
 #include <epan/addr_resolv.h>
 #include <epan/wmem_scopes.h>
+#include <epan/column-info.h>
 
 #include "packet-frame.h"
 #include "packet-bblog.h"
@@ -49,12 +49,14 @@ static int proto_pkt_comment = -1;
 static int proto_syscall = -1;
 static int proto_bblog = -1;
 
-static int hf_frame_arrival_time = -1;
-static int hf_frame_shift_offset = -1;
+static int hf_frame_arrival_time_local = -1;
+static int hf_frame_arrival_time_utc = -1;
 static int hf_frame_arrival_time_epoch = -1;
+static int hf_frame_shift_offset = -1;
 static int hf_frame_time_delta = -1;
 static int hf_frame_time_delta_displayed = -1;
 static int hf_frame_time_relative = -1;
+static int hf_frame_time_relative_cap = -1;
 static int hf_frame_time_reference = -1;
 static int hf_frame_number = -1;
 static int hf_frame_len = -1;
@@ -222,9 +224,9 @@ static dissector_handle_t xml_handle;
 static gboolean show_file_off       = FALSE;
 static gboolean force_docsis_encap  = FALSE;
 static gboolean generate_md5_hash   = FALSE;
-static gboolean generate_epoch_time = TRUE;
 static gboolean generate_bits_field = TRUE;
 static gboolean disable_packet_size_limited_in_summary = FALSE;
+static guint    max_comment_lines   = 30;
 
 static const value_string p2p_dirs[] = {
 	{ P2P_DIR_UNKNOWN, "Unknown" },
@@ -402,14 +404,92 @@ frame_add_comment(wtap_block_t block _U_, guint option_id, wtap_opttype_e option
 {
 	fr_foreach_t *fr_user_data = (fr_foreach_t *)user_data;
 	proto_item *comment_item;
+	proto_item *hidden_item;
+	proto_tree *comments_tree;
+	gchar *newline;             /* location of next newline in comment */
+	gchar *ch;                  /* utility pointer */
+	guint i;                    /* track number of lines */
 
 	if (option_id == OPT_COMMENT) {
-		comment_item = proto_tree_add_string_format(fr_user_data->tree, hf_comments_text,
-							    fr_user_data->tvb, 0, 0,
-							    option->stringval,
-							    "%s", option->stringval);
-		expert_add_info_format(fr_user_data->pinfo, comment_item, &ei_comments_text,
+		ch = option->stringval;
+		newline = strchr(ch, '\n');
+		if (newline == NULL) {
+			/* Single-line comment, no special treatment needed */
+			comment_item = proto_tree_add_string_format(fr_user_data->tree,
+					hf_comments_text,
+					fr_user_data->tvb, 0, 0,
+					ch,
+					"%s", ch);
+		}
+		else {
+			/* Multi-line comment. Temporarily change the first
+			 * newline to a null so we only show the first line
+			 */
+			*newline = '\0';
+			comment_item = proto_tree_add_string_format(fr_user_data->tree,
+					hf_comments_text,
+					fr_user_data->tvb, 0, 0,
+					ch,
+					"%s [...]", ch);
+			comments_tree = proto_item_add_subtree(comment_item, ett_comments);
+			for (i = 0; i < max_comment_lines; i++) {
+				/* Add each line as a separate item under
+				 * the comment tree
+				 */
+				proto_tree_add_string_format(comments_tree, hf_comments_text,
+					fr_user_data->tvb, 0, 0,
+					ch,
+					"%s", ch);
+				if (newline == NULL) {
+					/* This was set in the previous loop
+					 * iteration; it means we've added the
+					 * final line
+					 */
+					break;
+				}
+				else {
+					/* Put back the newline we removed */
+					*newline = '\n';
+					ch = newline + 1;
+					if (*ch == '\0') {
+						break;
+					}
+					/* Find next newline to repeat the process
+					 * in the next iteration
+					 */
+					newline = strchr(ch, '\n');
+					if (newline != NULL) {
+						*newline = '\0';
+					}
+				}
+			}
+			if (i == max_comment_lines) {
+				/* Put back a newline if we still have one dangling */
+				if (newline != NULL) {
+					*newline = '\n';
+				}
+				/* Add truncation notice */
+				proto_tree_add_string_format(comments_tree, hf_comments_text,
+					fr_user_data->tvb, 0, 0,
+					"",
+					"[comment truncated at %d line%s]",
+					max_comment_lines,
+					plurality(max_comment_lines, "", "s"));
+			}
+			/* Add the original comment unchanged as a hidden
+			 * item, so searches still work like before
+			 */
+			hidden_item = proto_tree_add_string(comments_tree,
+					hf_comments_text,
+					fr_user_data->tvb, 0, 0,
+					option->stringval);
+			proto_item_set_hidden(hidden_item);
+
+			comment_item = comments_tree;
+		}
+		hidden_item = expert_add_info_format(fr_user_data->pinfo, comment_item, &ei_comments_text,
 				"%s",  option->stringval);
+		proto_item_set_hidden(hidden_item);
 	}
 	fr_user_data->n_changes++;
 	return TRUE;
@@ -922,8 +1002,9 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 			proto_tree_add_int(fh_tree, hf_frame_wtap_encap, tvb, 0, 0, pinfo->rec->rec_header.packet_header.pkt_encap);
 
 		if (pinfo->presence_flags & PINFO_HAS_TS) {
-			proto_tree_add_time(fh_tree, hf_frame_arrival_time, tvb,
-					    0, 0, &(pinfo->abs_ts));
+			proto_tree_add_time(fh_tree, hf_frame_arrival_time_local, tvb, 0, 0, &pinfo->abs_ts);
+			proto_tree_add_time(fh_tree, hf_frame_arrival_time_utc, tvb, 0, 0, &pinfo->abs_ts);
+			proto_tree_add_time(fh_tree, hf_frame_arrival_time_epoch, tvb, 0, 0, &pinfo->abs_ts);
 			if (pinfo->abs_ts.nsecs < 0 || pinfo->abs_ts.nsecs >= 1000000000) {
 				expert_add_info_format(pinfo, ti, &ei_arrive_time_out_of_range,
 								  "Arrival Time: Fractional second %09ld is invalid,"
@@ -933,11 +1014,6 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 			item = proto_tree_add_time(fh_tree, hf_frame_shift_offset, tvb,
 					    0, 0, &(pinfo->fd->shift_offset));
 			proto_item_set_generated(item);
-
-			if (generate_epoch_time) {
-				proto_tree_add_time(fh_tree, hf_frame_arrival_time_epoch, tvb,
-						    0, 0, &(pinfo->abs_ts));
-			}
 
 			if (proto_field_is_referenced(tree, hf_frame_time_delta)) {
 				nstime_t     del_cap_ts;
@@ -966,6 +1042,12 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 			if (pinfo->fd->ref_time) {
 				ti = proto_tree_add_item(fh_tree, hf_frame_time_reference, tvb, 0, 0, ENC_NA);
 				proto_item_set_generated(ti);
+			}
+
+			if (pinfo->rel_cap_ts_present) {
+				item = proto_tree_add_time(fh_tree, hf_frame_time_relative_cap, tvb,
+							   0, 0, &(pinfo->rel_cap_ts));
+				proto_item_set_generated(item);
 			}
 		}
 
@@ -1368,6 +1450,18 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 		proto_item_set_generated(ti);
 	}
 
+	/* Add the columns as fields. We have to do this here, so that
+	 * they're available for postdissectors that want all the fields.
+	 *
+	 * Note the coloring rule names are set after this, which means
+	 * that you can set a coloring rule based on the value of a column,
+	 * like _ws.col.protocol or _ws.col.info.
+	 * OTOH, if we created _ws.col.custom, and a custom column used
+	 * frame.coloring_rule.name, filtering with it wouldn't work -
+	 * but you can filter on that field directly, so that doesn't matter.
+	 */
+	col_dissect(tvb, pinfo, parent_tree);
+
 	/*  Call postdissectors if we have any (while trying to avoid another
 	 *  TRY/CATCH)
 	 */
@@ -1481,20 +1575,25 @@ void
 proto_register_frame(void)
 {
 	static hf_register_info hf[] = {
-		{ &hf_frame_arrival_time,
+		{ &hf_frame_arrival_time_local,
 		  { "Arrival Time", "frame.time",
 		    FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0,
-		    "Absolute time when this frame was captured", HFILL }},
+		    "Absolute time when this frame was captured, in local time", HFILL }},
+
+		{ &hf_frame_arrival_time_utc,
+		  { "UTC Arrival Time", "frame.time_utc",
+		    FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0,
+		    "Absolute time when this frame was captured, in Coordinated Universal Time (UTC)", HFILL }},
+
+		{ &hf_frame_arrival_time_epoch,
+		  { "Epoch Arrival Time", "frame.time_epoch",
+		    FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UNIX, NULL, 0x0,
+		    "Absolute time when this frame was captured, in Epoch time (also known as Unix time)", HFILL }},
 
 		{ &hf_frame_shift_offset,
 		  { "Time shift for this packet", "frame.offset_shift",
 		    FT_RELATIVE_TIME, BASE_NONE, NULL, 0x0,
 		    "Time shift applied to this packet", HFILL }},
-
-		{ &hf_frame_arrival_time_epoch,
-		  { "Epoch Time", "frame.time_epoch",
-		    FT_RELATIVE_TIME, BASE_NONE, NULL, 0x0,
-		    "Epoch time when this frame was captured", HFILL }},
 
 		{ &hf_frame_time_delta,
 		  { "Time delta from previous captured frame", "frame.time_delta",
@@ -1510,6 +1609,11 @@ proto_register_frame(void)
 		  { "Time since reference or first frame", "frame.time_relative",
 		    FT_RELATIVE_TIME, BASE_NONE, NULL, 0x0,
 		    "Time relative to time reference or first frame", HFILL }},
+
+		{ &hf_frame_time_relative_cap,
+		  { "Time since start of capturing", "frame.time_relative_capture_start",
+		    FT_RELATIVE_TIME, BASE_NONE, NULL, 0x0,
+		    "Time relative to the capture start", HFILL }},
 
 		{ &hf_frame_time_reference,
 		  { "This is a Time Reference frame", "frame.ref_time",
@@ -1910,7 +2014,7 @@ proto_register_frame(void)
 
 		{ &hf_frame_bblog_t_flags_goodput_in_progress,
 		  { "Goodput measurement in progress", "frame.bblog.t_flags_goodput_in_progress",
-		    FT_BOOLEAN, 32, TFS(&tfs_true_false), BBLOG_T_FLAGS_GPUTINPROG,
+		    FT_BOOLEAN, 32, NULL, BBLOG_T_FLAGS_GPUTINPROG,
 		    NULL, HFILL} },
 
 		{ &hf_frame_bblog_t_flags_more_to_come,
@@ -1965,12 +2069,12 @@ proto_register_frame(void)
 
 		{ &hf_frame_bblog_t_flags_unused_0,
 		  { "Unused 1", "frame.bblog.t_flags_unused_0",
-		    FT_BOOLEAN, 32, TFS(&tfs_true_false), BBLOG_T_FLAGS_UNUSED0,
+		    FT_BOOLEAN, 32, NULL, BBLOG_T_FLAGS_UNUSED0,
 		    NULL, HFILL} },
 
 		{ &hf_frame_bblog_t_flags_unused_1,
 		  { "Unused 2", "frame.bblog.t_flags_unused_1",
-		    FT_BOOLEAN, 32, TFS(&tfs_true_false), BBLOG_T_FLAGS_UNUSED1,
+		    FT_BOOLEAN, 32, NULL, BBLOG_T_FLAGS_UNUSED1,
 		    NULL, HFILL} },
 
 		{ &hf_frame_bblog_t_flags_lost_rtx_detection,
@@ -2273,10 +2377,7 @@ proto_register_frame(void)
 	    "Generate an MD5 hash of each frame",
 	    "Whether or not MD5 hashes should be generated for each frame, useful for finding duplicate frames.",
 	    &generate_md5_hash);
-	prefs_register_bool_preference(frame_module, "generate_epoch_time",
-	    "Generate an epoch time entry for each frame",
-	    "Whether or not an Epoch time entry should be generated for each frame.",
-	    &generate_epoch_time);
+	prefs_register_obsolete_preference(frame_module, "generate_epoch_time");
 	prefs_register_bool_preference(frame_module, "generate_bits_field",
 	    "Show the number of bits in the frame",
 	    "Whether or not the number of bits in the frame should be shown.",
@@ -2285,6 +2386,11 @@ proto_register_frame(void)
 	    "Disable 'packet size limited during capture' message in summary",
 	    "Whether or not 'packet size limited during capture' message in shown in Info column.",
 	    &disable_packet_size_limited_in_summary);
+	prefs_register_uint_preference(frame_module, "max_comment_lines",
+	    "Maximum number of lines to display for one packet comment",
+	    "Show at most this many lines of a multi-line packet comment"
+	    " (applied separately to each comment)",
+	    10, &max_comment_lines);
 
 	frame_tap=register_tap("frame");
 }

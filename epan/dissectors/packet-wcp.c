@@ -162,6 +162,7 @@ static expert_field ei_wcp_invalid_window_offset = EI_INIT;
 static expert_field ei_wcp_buffer_too_long = EI_INIT;
 /* static expert_field ei_wcp_invalid_match_length = EI_INIT; */
 
+static dissector_handle_t wcp_handle;
 static dissector_handle_t fr_uncompressed_handle;
 
 /*
@@ -426,11 +427,9 @@ wcp_window_t *get_wcp_window_ptr(packet_info *pinfo) {
 
 	wcp_circuit_data = (wcp_circuit_data_t *)conversation_get_proto_data(conv, proto_wcp);
 	if (!wcp_circuit_data) {
-		wcp_circuit_data = wmem_new(wmem_file_scope(), wcp_circuit_data_t);
+		wcp_circuit_data = wmem_new0(wmem_file_scope(), wcp_circuit_data_t);
 		wcp_circuit_data->recv.buf_cur = wcp_circuit_data->recv.buffer;
-		wcp_circuit_data->recv.initialized = 0;
 		wcp_circuit_data->send.buf_cur = wcp_circuit_data->send.buffer;
-		wcp_circuit_data->send.initialized = 0;
 		conversation_add_proto_data(conv, proto_wcp, wcp_circuit_data);
 	}
 	if (pinfo->pseudo_header->dte_dce.flags & FROM_DCE)
@@ -638,7 +637,7 @@ static tvbuff_t *wcp_uncompress(tvbuff_t *src_tvb, int offset, packet_info *pinf
 		}
 
 		/* save the new data as per packet data */
-		pdata_ptr = wmem_new(wmem_file_scope(), wcp_pdata_t);
+		pdata_ptr = wmem_new0(wmem_file_scope(), wcp_pdata_t);
 		memcpy( &pdata_ptr->buffer, buf_ptr->buf_cur, len);
 		pdata_ptr->len = len;
 
@@ -769,19 +768,17 @@ proto_register_wcp(void)
 	proto_register_subtree_array(ett, array_length(ett));
 	expert_wcp = expert_register_protocol(proto_wcp);
 	expert_register_field_array(expert_wcp, ei, array_length(ei));
+	wcp_handle = register_dissector("wcp", dissect_wcp, proto_wcp);
 }
 
 
 void
 proto_reg_handoff_wcp(void) {
-	dissector_handle_t wcp_handle;
-
 	/*
 	 * Get handle for the Frame Relay (uncompressed) dissector.
 	 */
 	fr_uncompressed_handle = find_dissector_add_dependency("fr_uncompressed", proto_wcp);
 
-	wcp_handle = create_dissector_handle(dissect_wcp, proto_wcp);
 	dissector_add_uint("fr.nlpid", NLPID_COMPRESSED, wcp_handle);
 	dissector_add_uint("ethertype",  ETHERTYPE_WCP, wcp_handle);
 }

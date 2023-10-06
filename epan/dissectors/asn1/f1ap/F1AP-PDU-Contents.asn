@@ -1,4 +1,4 @@
--- 3GPP TS 38.473 V17.3.0 (2022-12)
+-- 3GPP TS 38.473 V17.6.0 (2023-09)
 -- 9.4.4	PDU Definitions
 -- **************************************************************
 --
@@ -379,6 +379,7 @@ IMPORTS
 	UE-MulticastMRBs-RequiredToBeModified-Item,
 	UE-MulticastMRBs-RequiredToBeReleased-Item,
 	UE-MulticastMRBs-Setup-Item,
+	UE-MulticastMRBs-Setupnew-Item,
 	UE-MulticastMRBs-ToBeReleased-Item,
 	UE-MulticastMRBs-ToBeSetup-Item,
 	UE-MulticastMRBs-ToBeSetup-atModify-Item,
@@ -392,12 +393,18 @@ IMPORTS
 	SRSPosRRCInactiveConfig,
 	SDTBearerConfigurationQueryIndication,
 	SDTBearerConfigurationInfo,
+	ServingCellMO-List-Item,
+	ServingCellMO-encoded-in-CGC-List,
 	PosSItypeList,
 	DAPS-HO-Status,
 	UuRLCChannelID,
 	UplinkTxDirectCurrentTwoCarrierListInfo,
 	SRSPosRRCInactiveQueryIndication,
-	MC-PagingCell-Item
+	MC-PagingCell-Item,
+	UlTxDirectCurrentMoreCarrierInformation,
+	CPACMCGInformation,
+	ExtendedUEIdentityIndexValue,
+	HashedUEIdentityIndexValue
 
 
 
@@ -607,6 +614,8 @@ FROM F1AP-Containers
 	id-UE-MulticastMRBs-RequiredToBeReleased-Item,
 	id-UE-MulticastMRBs-Setup-List,
 	id-UE-MulticastMRBs-Setup-Item,
+	id-UE-MulticastMRBs-Setupnew-List,
+	id-UE-MulticastMRBs-Setupnew-Item,
 	id-UE-MulticastMRBs-ToBeReleased-List,
 	id-UE-MulticastMRBs-ToBeReleased-Item,
 	id-UE-MulticastMRBs-ToBeSetup-atModify-List,
@@ -909,11 +918,18 @@ FROM F1AP-Containers
 	id-SRSPosRRCInactiveConfig,
 	id-SDTBearerConfigurationQueryIndication,
 	id-SDTBearerConfigurationInfo,
+	id-ServingCellMO-List,
+	id-ServingCellMO-List-Item,
+	id-ServingCellMO-encoded-in-CGC-List,
 	id-PosSItypeList,
 	id-DAPS-HO-Status,
 	id-SRBMappingInfo,
 	id-UplinkTxDirectCurrentTwoCarrierListInfo,
 	id-SRSPosRRCInactiveQueryIndication,
+	id-UlTxDirectCurrentMoreCarrierInformation,
+	id-CPACMCGInformation,
+	id-ExtendedUEIdentityIndexValue,
+	id-HashedUEIdentityIndexValue,
 	maxCellingNBDU,
 	maxnoofCandidateSpCells,
 	maxnoofDRBs,
@@ -939,7 +955,8 @@ FROM F1AP-Containers
 	maxnoofMRBs,
 	maxnoofUEIDforPaging,
 	maxnoofNeighbourNodeCellsIAB,
-	maxnoofMRBsforUE
+	maxnoofMRBsforUE,
+	maxnoofServingCellMOs
 
 
 
@@ -1505,7 +1522,8 @@ UEContextSetupRequestIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-PathSwitchConfiguration					CRITICALITY ignore	TYPE PathSwitchConfiguration				 			PRESENCE optional	}|
 	{ ID id-GNBDUUESliceMaximumBitRateList			CRITICALITY ignore  TYPE GNBDUUESliceMaximumBitRateList 				PRESENCE optional }|
 	{ ID id-MulticastMBSSessionSetupList			CRITICALITY reject	TYPE MulticastMBSSessionList							PRESENCE optional }|
-	{ ID id-UE-MulticastMRBs-ToBeSetup-List			CRITICALITY reject	TYPE UE-MulticastMRBs-ToBeSetup-List				PRESENCE optional	},
+	{ ID id-UE-MulticastMRBs-ToBeSetup-List			CRITICALITY reject	TYPE UE-MulticastMRBs-ToBeSetup-List				PRESENCE optional	}|
+	{ ID id-ServingCellMO-List						CRITICALITY ignore	TYPE ServingCellMO-List									PRESENCE optional	},
 	...
 }
 
@@ -1516,7 +1534,7 @@ DRBs-ToBeSetup-List ::= SEQUENCE (SIZE(1..maxnoofDRBs)) OF ProtocolIE-SingleCont
 BHChannels-ToBeSetup-List ::= SEQUENCE (SIZE(1..maxnoofBHRLCChannels)) OF ProtocolIE-SingleContainer { { BHChannels-ToBeSetup-ItemIEs} }
 SLDRBs-ToBeSetup-List ::= SEQUENCE (SIZE(1..maxnoofSLDRBs)) OF ProtocolIE-SingleContainer { { SLDRBs-ToBeSetup-ItemIEs} }
 UE-MulticastMRBs-ToBeSetup-List ::= SEQUENCE (SIZE(1..maxnoofMRBsforUE)) OF ProtocolIE-SingleContainer { { UE-MulticastMRBs-ToBeSetup-ItemIEs} }
-
+ServingCellMO-List ::= SEQUENCE (SIZE(1..maxnoofServingCellMOs)) OF ProtocolIE-SingleContainer { { ServingCellMO-List-ItemIEs} }
 
 Candidate-SpCell-ItemIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-Candidate-SpCell-Item					CRITICALITY ignore	TYPE Candidate-SpCell-Item						PRESENCE mandatory	},
@@ -1554,7 +1572,10 @@ UE-MulticastMRBs-ToBeSetup-ItemIEs F1AP-PROTOCOL-IES ::= {
 	...
 }
 
-
+ServingCellMO-List-ItemIEs F1AP-PROTOCOL-IES ::= {
+	{ ID id-ServingCellMO-List-Item			CRITICALITY reject	TYPE ServingCellMO-List-Item	PRESENCE mandatory},
+	...
+}
 -- **************************************************************
 --
 -- UE CONTEXT SETUP RESPONSE
@@ -1590,7 +1611,9 @@ UEContextSetupResponseIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-UuRLCChannelSetupList					CRITICALITY ignore	TYPE UuRLCChannelSetupList						PRESENCE optional}|
 	{ ID id-UuRLCChannelFailedToBeSetupList			CRITICALITY ignore	TYPE UuRLCChannelFailedToBeSetupList			PRESENCE optional}|
 	{ ID id-PC5RLCChannelSetupList					CRITICALITY ignore	TYPE PC5RLCChannelSetupList						PRESENCE optional}|
-	{ ID id-PC5RLCChannelFailedToBeSetupList		CRITICALITY ignore	TYPE PC5RLCChannelFailedToBeSetupList			PRESENCE optional},
+	{ ID id-PC5RLCChannelFailedToBeSetupList		CRITICALITY ignore	TYPE PC5RLCChannelFailedToBeSetupList			PRESENCE optional}|
+	{ ID id-ServingCellMO-encoded-in-CGC-List		CRITICALITY ignore	TYPE ServingCellMO-encoded-in-CGC-List			PRESENCE optional}|
+	{ ID id-UE-MulticastMRBs-Setupnew-List			CRITICALITY reject	TYPE UE-MulticastMRBs-Setupnew-List				PRESENCE optional},
 	...
 }
 
@@ -1653,6 +1676,14 @@ SLDRBs-FailedToBeSetup-ItemIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-SLDRBs-FailedToBeSetup-Item		CRITICALITY ignore	TYPE SLDRBs-FailedToBeSetup-Item			PRESENCE mandatory},
 	...
 }
+
+UE-MulticastMRBs-Setupnew-List ::= SEQUENCE (SIZE(1..maxnoofMRBsforUE)) OF ProtocolIE-SingleContainer { { UE-MulticastMRBs-Setupnew-ItemIEs } }
+
+UE-MulticastMRBs-Setupnew-ItemIEs F1AP-PROTOCOL-IES ::= {
+	{ ID id-UE-MulticastMRBs-Setupnew-Item		CRITICALITY reject	TYPE UE-MulticastMRBs-Setupnew-Item		PRESENCE mandatory},
+	...
+}
+
 
 -- **************************************************************
 --
@@ -1849,7 +1880,10 @@ UEContextModificationRequestIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-SLDRXCycleList								CRITICALITY ignore  TYPE SLDRXCycleList 										PRESENCE optional }|
 	{ ID id-ManagementBasedMDTPLMNModificationList		CRITICALITY ignore	TYPE MDTPLMNModificationList						PRESENCE optional }|
 	{ ID id-SDTBearerConfigurationQueryIndication		CRITICALITY ignore	TYPE SDTBearerConfigurationQueryIndication		PRESENCE optional }|
-	{ ID id-DAPS-HO-Status								CRITICALITY ignore	TYPE DAPS-HO-Status										PRESENCE optional }		,
+	{ ID id-DAPS-HO-Status								CRITICALITY ignore	TYPE DAPS-HO-Status										PRESENCE optional }|
+	{ ID id-ServingCellMO-List							CRITICALITY ignore	TYPE ServingCellMO-List								PRESENCE optional	}|
+	{ ID id-UlTxDirectCurrentMoreCarrierInformation	    CRITICALITY ignore	TYPE UlTxDirectCurrentMoreCarrierInformation	PRESENCE optional	}|
+	{ ID id-CPACMCGInformation						CRITICALITY ignore	TYPE CPACMCGInformation									PRESENCE optional },
 	...
 }
 
@@ -2001,7 +2035,8 @@ UEContextModificationResponseIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-PC5RLCChannelModifiedList				CRITICALITY ignore	TYPE PC5RLCChannelModifiedList					PRESENCE optional}|
 	{ ID id-PC5RLCChannelFailedToBeModifiedList		CRITICALITY ignore	TYPE PC5RLCChannelFailedToBeModifiedList		PRESENCE optional}|
 	{ ID id-SDTBearerConfigurationInfo				CRITICALITY ignore	TYPE SDTBearerConfigurationInfo					PRESENCE optional}|
-	{ ID id-UE-MulticastMRBs-Setup-List				CRITICALITY reject	TYPE UE-MulticastMRBs-Setup-List				PRESENCE optional},
+	{ ID id-UE-MulticastMRBs-Setup-List				CRITICALITY reject	TYPE UE-MulticastMRBs-Setup-List				PRESENCE optional}|
+	{ ID id-ServingCellMO-encoded-in-CGC-List		CRITICALITY ignore	TYPE ServingCellMO-encoded-in-CGC-List		PRESENCE optional},
 	...
 }
 
@@ -2634,7 +2669,9 @@ PagingIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-NRPagingeDRXInformationforRRCINACTIVE	CRITICALITY ignore	TYPE NRPagingeDRXInformationforRRCINACTIVE	PRESENCE optional	}|
 	{ ID id-PagingCause			CRITICALITY ignore	TYPE PagingCause				PRESENCE optional	}|
 	{ ID id-PEIPSAssistanceInfo		CRITICALITY ignore	TYPE PEIPSAssistanceInfo		PRESENCE optional	}|
-	{ ID id-UEPagingCapability		CRITICALITY ignore	TYPE UEPagingCapability			PRESENCE optional	},
+	{ ID id-UEPagingCapability		CRITICALITY ignore	TYPE UEPagingCapability			PRESENCE optional	}|
+	{ ID id-ExtendedUEIdentityIndexValue	CRITICALITY ignore	TYPE ExtendedUEIdentityIndexValue		PRESENCE optional}|
+	{ ID id-HashedUEIdentityIndexValue		CRITICALITY ignore	TYPE HashedUEIdentityIndexValue			PRESENCE optional},
 	...
 }
 
@@ -3255,14 +3292,14 @@ IABUPConfigurationUpdateRequestIEs F1AP-PROTOCOL-IES ::= {
 UL-UP-TNL-Information-to-Update-List ::= SEQUENCE (SIZE(1.. maxnoofULUPTNLInformationforIAB))	OF ProtocolIE-SingleContainer { { UL-UP-TNL-Information-to-Update-List-ItemIEs } }
 
 UL-UP-TNL-Information-to-Update-List-ItemIEs F1AP-PROTOCOL-IES ::= {
-	{ ID id-UL-UP-TNL-Information-to-Update-List-Item	CRITICALITY ignore	TYPE UL-UP-TNL-Information-to-Update-List-Item PRESENCE optional},
+	{ ID id-UL-UP-TNL-Information-to-Update-List-Item	CRITICALITY ignore	TYPE UL-UP-TNL-Information-to-Update-List-Item PRESENCE mandatory },
 	...
 }
 
 UL-UP-TNL-Address-to-Update-List ::= SEQUENCE (SIZE(1.. maxnoofUPTNLAddresses))	OF ProtocolIE-SingleContainer { { UL-UP-TNL-Address-to-Update-List-ItemIEs } }
 
 UL-UP-TNL-Address-to-Update-List-ItemIEs F1AP-PROTOCOL-IES ::= {
-	{ ID id-UL-UP-TNL-Address-to-Update-List-Item	CRITICALITY ignore	TYPE UL-UP-TNL-Address-to-Update-List-Item PRESENCE optional},
+	{ ID id-UL-UP-TNL-Address-to-Update-List-Item	CRITICALITY ignore	TYPE UL-UP-TNL-Address-to-Update-List-Item PRESENCE mandatory },
 	...
 }
 
@@ -3288,7 +3325,7 @@ IABUPConfigurationUpdateResponseIEs F1AP-PROTOCOL-IES ::= {
 DL-UP-TNL-Address-to-Update-List ::= SEQUENCE (SIZE(1.. maxnoofUPTNLAddresses))	OF ProtocolIE-SingleContainer { { DL-UP-TNL-Address-to-Update-List-ItemIEs } }
 
 DL-UP-TNL-Address-to-Update-List-ItemIEs F1AP-PROTOCOL-IES ::= {
-	{ ID id-DL-UP-TNL-Address-to-Update-List-Item	CRITICALITY ignore	TYPE DL-UP-TNL-Address-to-Update-List-Item	PRESENCE optional},
+	{ ID id-DL-UP-TNL-Address-to-Update-List-Item	CRITICALITY ignore	TYPE DL-UP-TNL-Address-to-Update-List-Item	PRESENCE mandatory },
 	...
 }
 
@@ -4414,7 +4451,8 @@ BroadcastContextModificationResponseIEs F1AP-PROTOCOL-IES ::= {
 	{ ID id-BroadcastMRBs-FailedToBeSetupMod-List	CRITICALITY ignore TYPE BroadcastMRBs-FailedToBeSetupMod-List	PRESENCE optional}|
 	{ ID id-BroadcastMRBs-Modified-List				CRITICALITY reject TYPE BroadcastMRBs-Modified-List					PRESENCE optional}|
 	{ ID id-BroadcastMRBs-FailedToBeModified-List	CRITICALITY ignore TYPE BroadcastMRBs-FailedToBeModified-List	PRESENCE optional}|
-	{ ID id-CriticalityDiagnostics					CRITICALITY ignore	TYPE CriticalityDiagnostics						PRESENCE optional},
+	{ ID id-CriticalityDiagnostics					CRITICALITY ignore	TYPE CriticalityDiagnostics						PRESENCE optional}|
+	{ ID id-BroadcastAreaScope						CRITICALITY ignore TYPE BroadcastAreaScope								PRESENCE optional},
 	...
 }
 
@@ -5081,6 +5119,7 @@ PRSConfigurationRequest ::= SEQUENCE {
 }
 
 PRSConfigurationRequest-IEs F1AP-PROTOCOL-IES ::= {
+	{ ID id-TransactionID			CRITICALITY reject	TYPE TransactionID						PRESENCE mandatory }|
 	{ ID id-PRSConfigRequestType	CRITICALITY reject	TYPE PRSConfigRequestType				PRESENCE mandatory }|
 	{ ID id-PRSTRPList				CRITICALITY ignore	TYPE PRSTRPList							PRESENCE mandatory },
 	...
@@ -5098,6 +5137,7 @@ PRSConfigurationResponse ::= SEQUENCE {
 }
 
 PRSConfigurationResponse-IEs F1AP-PROTOCOL-IES ::= {
+	{ ID id-TransactionID			CRITICALITY reject	TYPE TransactionID					PRESENCE mandatory}|
 	{ ID id-PRSTransmissionTRPList	CRITICALITY ignore	TYPE PRSTransmissionTRPList			PRESENCE optional}|
 	{ ID id-CriticalityDiagnostics	CRITICALITY ignore	TYPE CriticalityDiagnostics			PRESENCE optional},
 	...
@@ -5115,6 +5155,7 @@ PRSConfigurationFailure ::= SEQUENCE {
 }
 
 PRSConfigurationFailure-IEs F1AP-PROTOCOL-IES ::= {
+	{ ID id-TransactionID			CRITICALITY reject	TYPE TransactionID				PRESENCE mandatory}|
 	{ ID id-Cause	CRITICALITY ignore	TYPE Cause	PRESENCE mandatory}|
 	{ ID id-CriticalityDiagnostics	CRITICALITY ignore	TYPE CriticalityDiagnostics		PRESENCE optional},
 	...

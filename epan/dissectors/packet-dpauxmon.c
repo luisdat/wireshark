@@ -10,12 +10,13 @@
  */
 
 #include <config.h>
-#include <conversation.h>
-
-#include "packet-dpaux.h"
 
 #include <epan/packet.h>
+#include <epan/conversation.h>
 #include <epan/proto_data.h>
+#include <wiretap/wtap.h>
+
+#include "packet-dpaux.h"
 
 enum {
     DPAUXMON_DATA = 0x00,
@@ -30,6 +31,7 @@ void proto_reg_handoff_dpauxmon(void);
 void proto_register_dpauxmon(void);
 
 static dissector_handle_t dpaux_handle;
+static dissector_handle_t dpauxmon_handle;
 
 /* Initialize the protocol and registered fields */
 static int proto_dpauxmon = -1;
@@ -164,18 +166,18 @@ proto_register_dpauxmon(void)
     proto_dpauxmon = proto_register_protocol("DPAUXMON DisplayPort AUX channel monitor", "DPAUXMON", "dpauxmon");
     proto_register_field_array(proto_dpauxmon, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
+
+    dpauxmon_handle = register_dissector("dpauxmon", dissect_dpauxmon, proto_dpauxmon);
 }
 
 void
 proto_reg_handoff_dpauxmon(void)
 {
     static gboolean initialized = FALSE;
-    static dissector_handle_t dpauxmon_handle;
 
     dpaux_handle = find_dissector_add_dependency("dpaux", proto_dpauxmon);
 
     if (!initialized) {
-        dpauxmon_handle = create_dissector_handle(dissect_dpauxmon, proto_dpauxmon);
         initialized = TRUE;
     } else {
         dissector_delete_uint("wtap_encap", WTAP_ENCAP_DPAUXMON, dpauxmon_handle);

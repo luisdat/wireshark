@@ -24,11 +24,11 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/reassemble.h>
-#include <epan/dissectors/packet-ber.h>
-#include <epan/dissectors/packet-zbee.h>
-#include <epan/dissectors/packet-zbee-nwk.h>
-#include <epan/dissectors/packet-zbee-zcl.h>
-#include <epan/dissectors/packet-zbee-aps.h>
+#include "packet-ber.h"
+#include "packet-zbee.h"
+#include "packet-zbee-nwk.h"
+#include "packet-zbee-zcl.h"
+#include "packet-zbee-aps.h"
 #include <wsutil/time_util.h>
 
 #define gbcs_message_code_names_VALUE_STRING_LIST(XXX) \
@@ -642,7 +642,7 @@ static void dissect_gbcs_gbz_component(tvbuff_t *tvb, packet_info *pinfo, proto_
 
         text = col_get_text(pinfo->cinfo, COL_INFO);
         if (text) {
-            strbuf = wmem_strbuf_new(wmem_packet_scope(), text);
+            strbuf = wmem_strbuf_new(pinfo->pool, text);
         }
         nwk.cluster_id = cluster;
         payload_tvb = tvb_new_subset_length(tvb, *offset - 3, component_len + 3);
@@ -1465,7 +1465,7 @@ dissect_gbcs_message_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 
         text = col_get_text(pinfo->cinfo, COL_INFO);
         if (text) {
-            strbuf = wmem_strbuf_new(wmem_packet_scope(), text);
+            strbuf = wmem_strbuf_new(pinfo->pool, text);
         }
         asn1_tree = proto_tree_add_subtree(tree, payload_tvb, 0, len, ett_gbcs_message_asn1, NULL, "GBCS ASN.1");
         call_dissector(gbcs_ber_handle, payload_tvb, pinfo, asn1_tree);

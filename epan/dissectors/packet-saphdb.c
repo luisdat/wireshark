@@ -28,8 +28,8 @@
 #include <wsutil/wmem/wmem.h>
 #include <epan/wmem_scopes.h>
 
-#include <epan/dissectors/packet-tcp.h>
-#include <epan/dissectors/packet-tls.h>
+#include "packet-tcp.h"
+#include "packet-tls.h"
 
 
 /*
@@ -38,6 +38,8 @@
  */
 #define SAPHDB_PORT_RANGE "30013,30015"
 
+/* Header Length */
+#define SAPHDB_HEADER_LEN 32
 
 /* SAP HDB Packet Options values */
 static const value_string saphdb_message_header_packetoptions_vals[] = {
@@ -942,7 +944,7 @@ dissect_saphdb_part(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
 
 	/* Add the Part fields */
 	partkind = tvb_get_gint8(tvb, offset);
-	proto_item_append_text(part_item, ", %s", val_to_str(partkind, saphdb_part_partkind_vals, "Unknown"));
+	proto_item_append_text(part_item, ", %s", val_to_str_const(partkind, saphdb_part_partkind_vals, "Unknown"));
 	partkind_item = proto_tree_add_item(part_tree, hf_saphdb_part_partkind, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 	offset += 1;
 	length += 1;
@@ -1030,8 +1032,8 @@ dissect_saphdb_segment(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 	offset += 1;
 	length += 1;
 
-	col_append_fstr(pinfo->cinfo, COL_INFO, "Segment %s (", val_to_str(segmentkind, saphdb_segment_segmentkind_vals, "Unknown"));
-	proto_item_append_text(segment_item, ", %s", val_to_str(segmentkind, saphdb_segment_segmentkind_vals, "Unknown"));
+	col_append_fstr(pinfo->cinfo, COL_INFO, "Segment %s (", val_to_str_const(segmentkind, saphdb_segment_segmentkind_vals, "Unknown"));
+	proto_item_append_text(segment_item, ", %s", val_to_str_const(segmentkind, saphdb_segment_segmentkind_vals, "Unknown"));
 
 	/* Check a couple of fields */
 	if (segmentlength < 13) {
@@ -1048,8 +1050,8 @@ dissect_saphdb_segment(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 	switch (segmentkind) {
 		case 1: /* Request */
 			message_type = tvb_get_gint8(tvb, offset);
-			col_append_fstr(pinfo->cinfo, COL_INFO, "%s)", val_to_str(message_type, saphdb_segment_messagetype_vals, "Unknown"));
-			proto_item_append_text(segment_item, ", %s", val_to_str(message_type, saphdb_segment_messagetype_vals, "Unknown"));
+			col_append_fstr(pinfo->cinfo, COL_INFO, "%s)", val_to_str_const(message_type, saphdb_segment_messagetype_vals, "Unknown"));
+			proto_item_append_text(segment_item, ", %s", val_to_str_const(message_type, saphdb_segment_messagetype_vals, "Unknown"));
 			proto_tree_add_item(segment_tree, hf_saphdb_segment_messagetype, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 			offset += 1;
 			length += 1;
@@ -1071,8 +1073,8 @@ dissect_saphdb_segment(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 			length += 1;
 
 			function_code = tvb_get_gint16(tvb, offset, ENC_LITTLE_ENDIAN);
-			col_append_fstr(pinfo->cinfo, COL_INFO, "%s)", val_to_str(function_code, saphdb_segment_functioncode_vals, "Unknown"));
-			proto_item_append_text(segment_item, ", %s", val_to_str(function_code, saphdb_segment_functioncode_vals, "Unknown"));
+			col_append_fstr(pinfo->cinfo, COL_INFO, "%s)", val_to_str_const(function_code, saphdb_segment_functioncode_vals, "Unknown"));
+			proto_item_append_text(segment_item, ", %s", val_to_str_const(function_code, saphdb_segment_functioncode_vals, "Unknown"));
 			proto_tree_add_item(segment_tree, hf_saphdb_segment_functioncode, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 			offset += 2;
 			length += 2;
@@ -1127,7 +1129,7 @@ dissect_saphdb_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 	col_clear(pinfo->cinfo,COL_INFO);
 
 	/* we are being asked for details */
-	if (tvb_reported_length(tvb) == 8 || tvb_reported_length(tvb) == 14 || tvb_reported_length(tvb) >= 32) {
+	if (tvb_reported_length(tvb) == 8 || tvb_reported_length(tvb) == 14 || tvb_reported_length(tvb) >= SAPHDB_HEADER_LEN) {
 
 		proto_item *ti = NULL;
 		proto_tree *saphdb_tree = NULL;
@@ -1164,7 +1166,7 @@ dissect_saphdb_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 			col_add_str(pinfo->cinfo, COL_INFO, "Initialization Reply");
 
 		/* All other message types */
-		} else if (tvb_reported_length(tvb) >= 32) {
+		} else if (tvb_reported_length(tvb) >= SAPHDB_HEADER_LEN) {
 
 			gboolean compressed = FALSE;
 			gint16 number_of_segments = 0;
@@ -1173,7 +1175,7 @@ dissect_saphdb_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 			proto_tree *message_header_tree = NULL, *message_buffer_tree = NULL;
 
 			/* Add the Message Header subtree */
-			message_header_item = proto_tree_add_item(saphdb_tree, hf_saphdb_message_header, tvb, offset, 32, ENC_NA);
+			message_header_item = proto_tree_add_item(saphdb_tree, hf_saphdb_message_header, tvb, offset, SAPHDB_HEADER_LEN, ENC_NA);
 			message_header_tree = proto_item_add_subtree(message_header_item, ett_saphdb);
 
 			/* Add the Message Header fields */
@@ -1241,7 +1243,7 @@ get_saphdb_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data
 {
 	/* Entire HDB packets are of 32-bytes header plus the value in varpartlength field */
 	guint32 varpartlength = tvb_get_guint32(tvb, offset + 12, ENC_LITTLE_ENDIAN);
-	return varpartlength + 32;
+	return varpartlength + SAPHDB_HEADER_LEN;
 }
 
 static int
@@ -1258,7 +1260,15 @@ dissect_saphdb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 	}
 	else
 	{
-		tcp_dissect_pdus(tvb, pinfo, tree, TRUE, 32, get_saphdb_pdu_len, dissect_saphdb_tcp, data);
+		/* Header must be present */
+		if (!tvb_bytes_exist(tvb, 0, SAPHDB_HEADER_LEN))
+			return 0;
+
+		/* Filter on reserved bytes */
+		if(tvb_get_guint8(tvb, 23) || tvb_get_guint32(tvb, 28, ENC_BIG_ENDIAN))
+			return 0;
+
+		tcp_dissect_pdus(tvb, pinfo, tree, TRUE, SAPHDB_HEADER_LEN, get_saphdb_pdu_len, dissect_saphdb_tcp, data);
 	}
 	return tvb_reported_length(tvb);
 }
@@ -1477,7 +1487,7 @@ proto_reg_handoff_saphdb(void)
 
 	if (!initialized) {
 		saphdb_handle = create_dissector_handle(dissect_saphdb, proto_saphdb);
-		saphdb_handle_tls = register_dissector("SAPHDB over TLS", dissect_saphdb, proto_saphdb);
+		saphdb_handle_tls = register_dissector_with_description("saphdb_tls", "SAPHDB over TLS", dissect_saphdb, proto_saphdb);
 		initialized = TRUE;
 	} else {
 		range_foreach(saphdb_port_range, range_delete_callback, NULL);

@@ -82,7 +82,7 @@ set(WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES ${MAN4_INSTALL_FILES} PARENT_SCOP
 set(LOGRAY_BUNDLE_RESOURCE_SHARE_MAN1_FILES ${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES} PARENT_SCOPE)
 set(LOGRAY_BUNDLE_RESOURCE_SHARE_MAN4_FILES ${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES} PARENT_SCOPE)
 
-set(MAN_INCLUDES diagnostic-options.adoc)
+set(MAN_INCLUDES diagnostic-options.adoc dissection-options.adoc)
 
 if(ASCIIDOCTOR_FOUND)
 	ASCIIDOCTOR2ROFFMAN(1 ${MAN1_SOURCE_FILES})
@@ -94,6 +94,39 @@ if(ASCIIDOCTOR_FOUND)
 		${MAN4_INSTALL_FILES}
 	)
 	set_target_properties(manpages PROPERTIES FOLDER "Documentation")
+endif()
+
+if(ASCIIDOCTOR_FOUND)
+	ASCIIDOCTOR2HTML(release-notes.adoc)
+	ASCIIDOCTOR2TXT(release-notes.adoc)
+
+	list(APPEND HTML_INSTALL_FILES "${CMAKE_CURRENT_BINARY_DIR}/release-notes.html")
+
+	add_custom_target(release_notes_html
+		DEPENDS
+			${CMAKE_CURRENT_BINARY_DIR}/release-notes.html
+	)
+	set_target_properties(release_notes_html PROPERTIES FOLDER "Documentation")
+	add_custom_target(release_notes_txt
+		DEPENDS
+			${CMAKE_CURRENT_BINARY_DIR}/release-notes.txt
+	)
+	set_target_properties(release_notes_txt PROPERTIES FOLDER "Documentation")
+	add_custom_target(release_notes
+		DEPENDS
+			release_notes_html
+			release_notes_txt
+	)
+	set_target_properties(release_notes PROPERTIES FOLDER "Documentation")
+
+	add_custom_target(news
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			${CMAKE_CURRENT_BINARY_DIR}/release-notes.txt
+			${CMAKE_SOURCE_DIR}/NEWS
+		DEPENDS
+			release_notes_txt
+	)
+	set_target_properties(news PROPERTIES FOLDER "Documentation")
 endif()
 
 add_custom_target(

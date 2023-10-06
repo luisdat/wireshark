@@ -47,10 +47,10 @@
 #include <epan/reassemble.h>
 #include <epan/expert.h>
 #include <epan/tvbuff-int.h>
-#include <epan/dissectors/packet-tls-utils.h>
-#include <epan/dissectors/packet-tcp.h>
-#include <epan/dissectors/packet-ber.h>
-#include <epan/dissectors/packet-bpv6.h>
+#include "packet-tls-utils.h"
+#include "packet-tcp.h"
+#include "packet-ber.h"
+#include "packet-bpv6.h"
 #include "packet-tcpcl.h"
 
 void proto_register_tcpclv3(void);
@@ -2187,7 +2187,7 @@ proto_register_tcpclv3(void)
     expert_tcpcl = expert_register_protocol(proto_tcpcl);
     expert_register_field_array(expert_tcpcl, ei_tcpcl, array_length(ei_tcpcl));
 
-    tcpcl_handle = create_dissector_handle(dissect_tcpcl, proto_tcpcl);
+    tcpcl_handle = register_dissector("tcpcl", dissect_tcpcl, proto_tcpcl);
     sess_ext_dissectors = register_dissector_table("tcpcl.v4.sess_ext", "TCPCLv4 Session Extension", proto_tcpcl, FT_UINT16, BASE_HEX);
     xfer_ext_dissectors = register_dissector_table("tcpcl.v4.xfer_ext", "TCPCLv4 Transfer Extension", proto_tcpcl, FT_UINT16, BASE_HEX);
 

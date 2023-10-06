@@ -10,6 +10,8 @@
 
 #include <config.h>
 
+#include <wireshark.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -19,11 +21,7 @@
 
 #ifdef HAVE_LIBPCAP
 
-#include <string.h>
-
 #include <errno.h>
-
-#include <glib.h>
 
 #include <ws_exit_codes.h>
 
@@ -44,8 +42,9 @@ static gboolean capture_opts_output_to_pipe(const char *save_file, gboolean *is_
 
 
 void
-capture_opts_init(capture_options *capture_opts)
+capture_opts_init(capture_options *capture_opts, GList *(*get_iface_list)(int *, gchar **))
 {
+    capture_opts->get_iface_list                  = get_iface_list;
     capture_opts->ifaces                          = g_array_new(FALSE, FALSE, sizeof(interface_options));
     capture_opts->all_ifaces                      = g_array_new(FALSE, FALSE, sizeof(interface_t));
     capture_opts->num_selected                    = 0;
@@ -374,7 +373,7 @@ static gboolean get_filter_arguments(capture_options* capture_opts, const char* 
     }
 
     if (filter_exp == NULL) {
-        /* No filter expression found yet; fallback to previous implemention
+        /* No filter expression found yet; fallback to previous implementation
            and assume the arg contains a filter expression */
         if (colonp) {
             *colonp = ':';      /* restore colon */
@@ -454,7 +453,9 @@ get_ring_arguments(capture_options *capture_opts, const char *arg)
         capture_opts->print_file_names = TRUE;
         capture_opts->print_name_to = g_strdup(p);
     }
-
+    else {
+        return FALSE;
+    }
     *colonp = ':';    /* put the colon back */
     return TRUE;
 }
@@ -603,19 +604,14 @@ fill_in_interface_opts_from_ifinfo(interface_options *interface_opts,
     interface_opts->extcap = g_strdup(if_info->extcap);
 }
 
-static gboolean
-fill_in_interface_opts_from_ifinfo_by_name(interface_options *interface_opts,
-                                           const char *name)
+static if_info_t*
+find_ifinfo_by_name(GList *if_list, const char *name)
 {
-    gboolean    matched;
-    GList       *if_list;
-    int         err;
     GList       *if_entry;
-    if_info_t   *if_info;
+    if_info_t   *matched_if_info;
     size_t      prefix_length;
 
-    matched = FALSE;
-    if_list = capture_interface_list(&err, NULL, NULL);
+    matched_if_info = NULL;
     if (if_list != NULL) {
         /*
          * Try and do an exact match (case insensitive) on  the
@@ -625,7 +621,7 @@ fill_in_interface_opts_from_ifinfo_by_name(interface_options *interface_opts,
         for (if_entry = g_list_first(if_list); if_entry != NULL;
              if_entry = g_list_next(if_entry))
         {
-            if_info = (if_info_t *)if_entry->data;
+            if_info_t *if_info = (if_info_t *)if_entry->data;
 
             /*
              * Does the specified name match the interface name
@@ -635,7 +631,7 @@ fill_in_interface_opts_from_ifinfo_by_name(interface_options *interface_opts,
                 /*
                  * Yes.
                  */
-                matched = TRUE;
+                matched_if_info = if_info;
                 break;
             }
 
@@ -649,12 +645,34 @@ fill_in_interface_opts_from_ifinfo_by_name(interface_options *interface_opts,
                 /*
                  * Yes.
                  */
-                matched = TRUE;
+                matched_if_info = if_info;
                 break;
             }
+
+#ifdef _WIN32
+            /*
+             * On Windows, we store interface names in preferences as:
+             *  friendlyname (name)
+             * Do we have a case-insensitive match for that?
+             */
+            if (if_info->friendly_name != NULL) {
+                GString* combined_name = g_string_new(if_info->friendly_name);
+                g_string_append_printf(combined_name, " (%s)", if_info->name);
+                if (g_ascii_strcasecmp(combined_name->str, name) == 0) {
+                    /*
+                     * Yes.
+                     */
+                    matched_if_info = if_info;
+                }
+                g_string_free(combined_name, TRUE);
+                if (matched_if_info != NULL) {
+                    break;
+                }
+            }
+#endif
         }
 
-        if (!matched) {
+        if (matched_if_info == NULL) {
             /*
              * We didn't find it; attempt a case-insensitive prefix match
              * of the friendly name.
@@ -663,7 +681,7 @@ fill_in_interface_opts_from_ifinfo_by_name(interface_options *interface_opts,
             for (if_entry = g_list_first(if_list); if_entry != NULL;
                  if_entry = g_list_next(if_entry))
             {
-                if_info = (if_info_t *)if_entry->data;
+                if_info_t *if_info = (if_info_t *)if_entry->data;
 
                 if (if_info->friendly_name != NULL &&
                     g_ascii_strncasecmp(if_info->friendly_name, name, prefix_length) == 0) {
@@ -671,21 +689,14 @@ fill_in_interface_opts_from_ifinfo_by_name(interface_options *interface_opts,
                      * We found an interface whose friendly name matches
                      * with a case-insensitive prefix match.
                      */
-                    matched = TRUE;
+                    matched_if_info = if_info;
                     break;
                 }
             }
         }
     }
 
-    if (matched) {
-        /*
-         * We found an interface that matches.
-         */
-        fill_in_interface_opts_from_ifinfo(interface_opts, if_info);
-    }
-    free_interface_list(if_list);
-    return matched;
+    return matched_if_info;
 }
 
 static int
@@ -733,7 +744,7 @@ capture_opts_add_iface_opt(capture_options *capture_opts, const char *optarg_str
             cmdarg_err("There is no interface with that adapter index");
             return 1;
         }
-        if_list = capture_interface_list(&err, &err_str, NULL);
+        if_list = capture_opts->get_iface_list(&err, &err_str);
         if (if_list == NULL) {
             if (err == 0)
                 cmdarg_err("There are no interfaces on which a capture can be done");
@@ -762,9 +773,26 @@ capture_opts_add_iface_opt(capture_options *capture_opts, const char *optarg_str
         /*
          * Search for that name in the interface list and, if we found
          * it, fill in fields in the interface_opts structure.
+         *
+         * XXX - if we can't get the interface list, we don't report
+         * an error, as, on Windows, that might be due to WinPcap or
+         * Npcap not being installed, but the specified "interface"
+         * might be the standard input ("=") or a pipe, and dumpcap
+         * should support capturing from the standard input or from
+         * a pipe even if there's no capture support from *pcap.
+         *
+         * Perhaps doing something similar to what was suggested
+         * for numerical interfaces should be done.
          */
-        if (!fill_in_interface_opts_from_ifinfo_by_name(&interface_opts,
-                                                        optarg_str_p)) {
+        if_list = capture_opts->get_iface_list(&err, &err_str);
+        if_info = find_ifinfo_by_name(if_list, optarg_str_p);
+        if (if_info != NULL) {
+            /*
+             * We found the interface in the list; fill in the
+             * interface_opts structure from its if_info.
+             */
+            fill_in_interface_opts_from_ifinfo(&interface_opts, if_info);
+        } else {
             /*
              * We didn't find the interface in the list; just use
              * the specified name, so that, for example, if an
@@ -780,6 +808,7 @@ capture_opts_add_iface_opt(capture_options *capture_opts, const char *optarg_str
             interface_opts.if_type = capture_opts->default_options.if_type;
             interface_opts.extcap = g_strdup(capture_opts->default_options.extcap);
         }
+        free_interface_list(if_list);
     }
 
     interface_opts.cfilter = g_strdup(capture_opts->default_options.cfilter);
@@ -1183,9 +1212,10 @@ capture_opts_trim_ring_num_files(capture_options *capture_opts)
         cmdarg_err("%u is a lot of ring buffer files.\n", capture_opts->ring_num_files);
     }
 #if RINGBUFFER_MIN_NUM_FILES > 0
-    else if (capture_opts->ring_num_files < RINGBUFFER_MIN_NUM_FILES)
+    else if (capture_opts->ring_num_files < RINGBUFFER_MIN_NUM_FILES) {
         cmdarg_err("Too few ring buffer files (%u). Increasing to %u.\n", capture_opts->ring_num_files, RINGBUFFER_MIN_NUM_FILES);
         capture_opts->ring_num_files = RINGBUFFER_MIN_NUM_FILES;
+    }
 #endif
 }
 

@@ -1925,13 +1925,11 @@ dissect_data_element(proto_tree *tree, proto_tree **next_tree,
         offset += len - length;
     }
 
-    pitem = proto_tree_add_item(ptree, hf_data_element_value, tvb, offset,  0, ENC_NA);
+    pitem = proto_tree_add_item(ptree, hf_data_element_value, tvb, offset, length, ENC_NA);
     if (length > tvb_reported_length_remaining(tvb, offset)) {
         expert_add_info(pinfo, pitem, &ei_data_element_value_large);
-        length = 0;
-    }
-    proto_item_set_len(pitem, length);
-    if (length == 0)
+        proto_item_append_text(pitem, ": MISSING");
+    } else if (length == 0)
         proto_item_append_text(pitem, ": MISSING");
 
     if (next_tree) *next_tree = proto_item_add_subtree(pitem, ett_btsdp_data_element_value);
@@ -1985,6 +1983,7 @@ dissect_protocol_descriptor_list(proto_tree *next_tree, tvbuff_t *tvb,
     proto_tree      *last_tree;
     gint             new_offset;
     gint             list_offset;
+    gint             entry_start;
     gint             entry_offset;
     gint             entry_length;
     guint32          value;
@@ -2000,7 +1999,8 @@ dissect_protocol_descriptor_list(proto_tree *next_tree, tvbuff_t *tvb,
 
         feature_item = proto_tree_add_none_format(next_tree, hf_sdp_protocol_item, tvb, list_offset, 0, "Protocol #%u", i_protocol);
         feature_tree = proto_item_add_subtree(feature_item, ett_btsdp_protocol);
-        entry_offset = get_type_length(tvb, list_offset, &entry_length);
+        entry_start = get_type_length(tvb, list_offset, &entry_length);
+        entry_offset = entry_start;
         proto_item_set_len(feature_item, entry_length + (entry_offset - list_offset));
 
         dissect_data_element(feature_tree, &sub_tree, pinfo, tvb, list_offset);
@@ -2020,7 +2020,7 @@ dissect_protocol_descriptor_list(proto_tree *next_tree, tvbuff_t *tvb,
 
         entry_offset += length;
 
-        if (entry_offset - list_offset <= entry_length) {
+        if (entry_offset - entry_start < entry_length) {
             dissect_data_element(entry_tree, &sub_tree, pinfo, tvb, entry_offset);
             new_offset = get_type_length(tvb, entry_offset, &length);
             entry_offset = new_offset;
@@ -2070,7 +2070,7 @@ dissect_protocol_descriptor_list(proto_tree *next_tree, tvbuff_t *tvb,
             entry_offset += length;
         }
 
-        while (entry_offset - list_offset <= entry_length) {
+        while (entry_offset - entry_start < entry_length) {
             gint value_offset;
             gint len;
 
@@ -3523,6 +3523,8 @@ dissect_sdp_type(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
         gint           bytes_to_go = size;
         gint           first       = 1;
         wmem_strbuf_t *substr;
+        tvbuff_t      *next_tvb = tvb_new_subset_length(tvb, offset, size);
+        gint           next_offset = 0;
 
         ti = proto_tree_add_item(next_tree, (type == 6) ? hf_data_element_value_sequence : hf_data_element_value_alternative,
                 tvb, offset, size, ENC_NA);
@@ -3537,14 +3539,15 @@ dissect_sdp_type(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
                 first = 0;
             }
 
-            size = dissect_sdp_type(st, pinfo, tvb, offset, attribute, service_uuid,
+            size = dissect_sdp_type(st, pinfo, next_tvb, next_offset,
+                    attribute, service_uuid,
                     service_did_vendor_id, service_did_vendor_id_source,
                     service_hdp_data_exchange_specification, service_info, &substr);
             if (size < 1) {
                 break;
             }
-            wmem_strbuf_append_printf(info_buf, "%s ", wmem_strbuf_get_str(substr));
-            offset += size ;
+            wmem_strbuf_append_printf(info_buf, "%s ", wmem_strbuf_finalize(substr));
+            next_offset += size;
             bytes_to_go -= size;
         }
 
@@ -3772,9 +3775,9 @@ dissect_sdp_service_attribute(proto_tree *tree, tvbuff_t *tvb, gint offset,
     }
 
     if (name_vals && try_val_to_str(id, name_vals)) {
-        attribute_name = val_to_str(id, name_vals, "Unknown");
+        attribute_name = val_to_str_const(id, name_vals, "Unknown");
     } else {
-        attribute_name = val_to_str(id, vs_general_attribute_id, "Unknown");
+        attribute_name = val_to_str_const(id, vs_general_attribute_id, "Unknown");
         profile_speficic = "";
         hfx_attribute_id = hf_service_attribute_id_generic;
     }
@@ -5152,7 +5155,7 @@ proto_register_btsdp(void)
         },
         { &hf_gnss_supported_features,
             { "Supported Features: Reserved",    "btsdp.service.gnss.supported_features.reserved",
-            FT_UINT16, BASE_HEX, NULL, 0xFFFF,
+            FT_UINT16, BASE_HEX, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_pbap_pse_supported_repositories,

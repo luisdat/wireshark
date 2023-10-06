@@ -240,7 +240,7 @@ wtap_open_return_val vms_open(wtap *wth, int *err, gchar **err_info)
     wth->snapshot_length = 0; /* not known */
     wth->subtype_read = vms_read;
     wth->subtype_seek_read = vms_seek_read;
-    wth->file_tsprec = WTAP_TSPREC_CSEC;
+    wth->file_tsprec = WTAP_TSPREC_10_MSEC;
 
     /*
      * Add an IDB; we don't know how many interfaces were
@@ -322,6 +322,7 @@ parse_vms_packet(FILE_T fh, wtap_rec *rec, Buffer *buf, int *err, gchar **err_in
 {
     char    line[VMS_LINE_LENGTH + 1];
     int     num_items_scanned;
+    gboolean have_pkt_len = FALSE;
     guint32 pkt_len = 0;
     int     pktnum;
     int     csec = 101;
@@ -378,7 +379,7 @@ parse_vms_packet(FILE_T fh, wtap_rec *rec, Buffer *buf, int *err, gchar **err_in
                 return FALSE;
             }
         }
-        if ( (! pkt_len) && (p = strstr(line, "Length"))) {
+        if ( (! have_pkt_len) && (p = strstr(line, "Length "))) {
             p += sizeof("Length ");
             while (*p && ! g_ascii_isdigit(*p))
                 p++;
@@ -394,9 +395,15 @@ parse_vms_packet(FILE_T fh, wtap_rec *rec, Buffer *buf, int *err, gchar **err_in
                 *err_info = ws_strdup_printf("vms: Length field '%s' not valid", p);
                 return FALSE;
             }
+            have_pkt_len = TRUE;
             break;
         }
     } while (! isdumpline(line));
+    if (! have_pkt_len) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = ws_strdup_printf("vms: Length field not found");
+        return FALSE;
+    }
     if (pkt_len > WTAP_MAX_PACKET_SIZE_STANDARD) {
         /*
          * Probably a corrupt capture file; return an error,

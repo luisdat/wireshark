@@ -19,11 +19,11 @@
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
 #include <epan/addr_resolv.h>
-#include <epan/wmem_scopes.h>
+#include <wiretap/pcapng_module.h>
 #include <wiretap/secrets-types.h>
 
-#include <epan/dissectors/file-pcapng.h>
-#include <epan/dissectors/packet-pcap_pktdata.h>
+#include "file-pcapng.h"
+#include "packet-pcap_pktdata.h"
 
 static int proto_pcapng = -1;
 
@@ -115,7 +115,7 @@ static int hf_pcapng_interface_description_snap_length = -1;
 static int hf_pcapng_packet_block_interface_id = -1;
 static int hf_pcapng_packet_block_drops_count = -1;
 static int hf_pcapng_captured_length = -1;
-static int hf_pcapng_packet_length = -1;
+static int hf_pcapng_original_length = -1;
 static int hf_pcapng_packet_data = -1;
 static int hf_pcapng_packet_padding = -1;
 static int hf_pcapng_interface_id = -1;
@@ -135,6 +135,11 @@ static int hf_pcapng_record_padding = -1;
 static int hf_pcapng_dsb_secrets_type = -1;
 static int hf_pcapng_dsb_secrets_length = -1;
 static int hf_pcapng_dsb_secrets_data = -1;
+
+static int hf_pcapng_cb_pen = -1;
+static int hf_pcapng_cb_data = -1;
+static int hf_pcapng_cb_option_string = -1;
+static int hf_pcapng_cb_option_data = -1;
 
 static int hf_pcapng_option_data_packet_darwin_dpeb_id = -1;
 static int hf_pcapng_option_data_packet_darwin_svc_class = -1;
@@ -208,36 +213,42 @@ static int * const hfx_pcapng_option_data_packet_darwin_flags[] = {
 
 static gboolean pref_dissect_next_layer = FALSE;
 
-#define BLOCK_INTERFACE_DESCRIPTION  0x00000001
-#define BLOCK_PACKET                 0x00000002
-#define BLOCK_SIMPLE_PACKET          0x00000003
-#define BLOCK_NAME_RESOLUTION        0x00000004
-#define BLOCK_INTERFACE_STATISTICS   0x00000005
-#define BLOCK_ENHANCED_PACKET        0x00000006
-#define BLOCK_IRIG_TIMESTAMP         0x00000007
-#define BLOCK_ARINC_429              0x00000008
-#define BLOCK_SYSTEMD_JOURNAL_EXPORT 0x00000009
-#define BLOCK_DSB                    0x0000000a
-#define BLOCK_SECTION_HEADER         0x0A0D0D0A
-
 static const value_string block_type_vals[] = {
-    { 0x00000001,  "Interface Description Block" },
-    { 0x00000002,  "Packet Block" },
-    { 0x00000003,  "Simple Packet Block" },
-    { 0x00000004,  "Name Resolution Block" },
-    { 0x00000005,  "Interface Statistics Block" },
-    { 0x00000006,  "Enhanced Packet Block" },
-    { 0x00000007,  "IRIG Timestamp Block" },
-    { 0x00000008,  "Arinc 429 in AFDX Encapsulation Information Block" },
-    { 0x00000009,  "systemd Journal Export Block" },
-    { 0x0000000A,  "Decryption Secrets Block" },
-    { 0x00000204,  "Sysdig Event Block" },
-    { 0x00000208,  "Sysdig Event Block with flags" },
-    { 0x00000216,  "Sysdig Event Block v2" },
-    { 0x00000217,  "Sysdig Event Block with flags v2" },
-    { 0x00000221,  "Sysdig Event Block v2 large payload" },
-    { 0x00000222,  "Sysdig Event Block with flags v2 large payload" },
-    { 0x0A0D0D0A,  "Section Header Block" },
+    { BLOCK_TYPE_IDB,                       "Interface Description Block" },
+    { BLOCK_TYPE_PB,                        "Packet Block" },
+    { BLOCK_TYPE_SPB,                       "Simple Packet Block" },
+    { BLOCK_TYPE_NRB,                       "Name Resolution Block" },
+    { BLOCK_TYPE_ISB,                       "Interface Statistics Block" },
+    { BLOCK_TYPE_EPB,                       "Enhanced Packet Block" },
+    { BLOCK_TYPE_IRIG_TS,                   "IRIG Timestamp Block" },
+    { BLOCK_TYPE_ARINC_429,                 "Arinc 429 in AFDX Encapsulation Information Block" },
+    { BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT,    "systemd Journal Export Block" },
+    { BLOCK_TYPE_DSB,                       "Decryption Secrets Block" },
+    { BLOCK_TYPE_SYSDIG_MI,                 "Sysdig Machine Info Block" },
+    { BLOCK_TYPE_SYSDIG_PL_V1,              "Sysdig Process List Block" },
+    { BLOCK_TYPE_SYSDIG_FDL_V1,             "Sysdig File Descriptor List Block" },
+    { BLOCK_TYPE_SYSDIG_EVENT,              "Sysdig Event Block" },
+    { BLOCK_TYPE_SYSDIG_IL_V1,              "Sysdig Interface List Block" },
+    { BLOCK_TYPE_SYSDIG_UL_V1,              "Sysdig User List Block" },
+    { BLOCK_TYPE_SYSDIG_PL_V2,              "Sysdig Process List Block version 2" },
+    { BLOCK_TYPE_SYSDIG_EVF,                "Sysdig Event Block with flags" },
+    { BLOCK_TYPE_SYSDIG_PL_V3,              "Sysdig Process List Block version 3" },
+    { BLOCK_TYPE_SYSDIG_PL_V4,              "Sysdig Process List Block version 4" },
+    { BLOCK_TYPE_SYSDIG_PL_V5,              "Sysdig Process List Block version 5" },
+    { BLOCK_TYPE_SYSDIG_PL_V6,              "Sysdig Process List Block version 6" },
+    { BLOCK_TYPE_SYSDIG_PL_V7,              "Sysdig Process List Block version 7" },
+    { BLOCK_TYPE_SYSDIG_PL_V8,              "Sysdig Process List Block version 8" },
+    { BLOCK_TYPE_SYSDIG_PL_V9,              "Sysdig Process List Block version 9" },
+    { BLOCK_TYPE_SYSDIG_EVENT_V2,           "Sysdig Event Block v2" },
+    { BLOCK_TYPE_SYSDIG_EVF_V2,             "Sysdig Event Block with flags v2" },
+    { BLOCK_TYPE_SYSDIG_FDL_V2,             "Sysdig File Descriptor List Block" },
+    { BLOCK_TYPE_SYSDIG_IL_V2,              "Sysdig Interface List Block version 2" },
+    { BLOCK_TYPE_SYSDIG_UL_V2,              "Sysdig User List Block version 2" },
+    { BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE,     "Sysdig Event Block v2 large payload" },
+    { BLOCK_TYPE_SYSDIG_EVF_V2_LARGE,       "Sysdig Event Block with flags v2 large payload" },
+    { BLOCK_TYPE_CB_COPY,                   "Custom Block which can be copied"},
+    { BLOCK_TYPE_CB_NO_COPY,                "Custom Block which should not be copied"},
+    { BLOCK_TYPE_SHB,                       "Section Header Block" },
     { 0, NULL }
 };
 
@@ -245,6 +256,11 @@ static const value_string block_type_vals[] = {
 /* blockId-> local_block_callback_info_t* */
 static GHashTable *s_local_block_callback_table = NULL;
 
+#define OPTION_CODE_CUSTOM_OPTIONS \
+    { 2988,  "Custom Option UTF-8 string which can be copied" }, \
+    { 2989,  "Custom Option which can be copied" }, \
+    { 19372, "Custom Option UTF-8 string which should not be copied" }, \
+    { 19373, "Custom Option which should not be copied" }
 
 static const value_string option_code_section_header_vals[] = {
     { 0,  "End of Options" },
@@ -253,6 +269,7 @@ static const value_string option_code_section_header_vals[] = {
     { 2,  "Hardware Description" },
     { 3,  "OS Description" },
     { 4,  "User Application" },
+    OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
@@ -274,6 +291,7 @@ static const value_string option_code_interface_description_vals[] = {
     { 13, "FCS Length" },
     { 14, "Timestamp Offset" },
     { 15, "Hardware" },
+    OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
@@ -393,6 +411,7 @@ static const value_string option_code_enhanced_packet_vals[] = {
     { 5,  "Packet ID" },
     { 6,  "Queue" },
     { 7,  "Verdict" },
+    OPTION_CODE_CUSTOM_OPTIONS,
     { 32769,   "Darwin DPEB ID" },
     { 32770,   "Darwin Service Class" },
     { 32771,   "Darwin Effective DPEB ID" },
@@ -407,6 +426,7 @@ static const value_string option_code_packet_vals[] = {
 
     { 2,  "Flags" },
     { 3,  "Hash" },
+    OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
@@ -417,6 +437,7 @@ static const value_string option_code_name_resolution_vals[] = {
     { 2,  "DNS Name" },
     { 3,  "DNS IPv4 Address" },
     { 4,  "DNS IPv6 Address" },
+    OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
@@ -431,6 +452,7 @@ static const value_string option_code_interface_statistics_vals[] = {
     { 6,  "Number of Accepted Packets" },
     { 7,  "Number of Packets Dropped by OS" },
     { 8,  "Number of Packets Delivered to the User" },
+    OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
@@ -462,7 +484,7 @@ static const value_string timestamp_resolution_base_vals[] = {
 };
 
 static const value_string interface_filter_type_vals[] = {
-    { 0, "libpcap string" },
+    { 0, "Libpcap string" },
     { 1, "BPF program" },
     { 0, NULL }
 };
@@ -500,8 +522,11 @@ static const value_string flags_reception_type_vals[] = {
 };
 
 static const value_string dsb_secrets_types_vals[] = {
-    { SECRETS_TYPE_TLS,         "TLS Key Log" },
-    { SECRETS_TYPE_WIREGUARD,   "WireGuard Key Log" },
+    { SECRETS_TYPE_TLS,             "TLS Key Log" },
+    { SECRETS_TYPE_SSH,             "SSH Key Log" },
+    { SECRETS_TYPE_WIREGUARD,       "WireGuard Key Log" },
+    { SECRETS_TYPE_ZIGBEE_NWK_KEY,  "Zigbee NWK Key" },
+    { SECRETS_TYPE_ZIGBEE_APS_KEY,  "Zigbee APS Key" },
     { 0, NULL }
 };
 
@@ -516,6 +541,26 @@ static const guint8 pcapng_big_endian_magic[BYTE_ORDER_MAGIC_SIZE] = {
 static const guint8 pcapng_little_endian_magic[BYTE_ORDER_MAGIC_SIZE] = {
     0x4D, 0x3C, 0x2B, 0x1A
 };
+
+static
+void dissect_custom_options(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t *tvb, int offset,
+                            guint32 option_code, guint32 option_length, guint encoding)
+{
+    proto_tree_add_item(tree, hf_pcapng_cb_pen, tvb, offset, 4, encoding);
+    offset += 4;
+
+    /* Todo: Add known PEN custom options dissection. */
+    switch (option_code) {
+    case 2988:
+    case 19372:
+        proto_tree_add_item(tree, hf_pcapng_cb_option_string, tvb, offset, option_length - 4, ENC_UTF_8);
+        break;
+    case 2989:
+    case 19373:
+        proto_tree_add_item(tree, hf_pcapng_cb_option_data, tvb, offset, option_length - 4, encoding);
+        break;
+    }
+}
 
 gint dissect_options(proto_tree *tree, packet_info *pinfo,
         guint32 block_type, tvbuff_t *tvb, int offset, guint encoding,
@@ -563,27 +608,27 @@ gint dissect_options(proto_tree *tree, packet_info *pinfo,
 
         /* TODO: could have done this once outside of loop? */
         switch (block_type) {
-        case BLOCK_SECTION_HEADER:
+        case BLOCK_TYPE_SHB:
             hfj_pcapng_option_code = hf_pcapng_option_code_section_header;
             vals = option_code_section_header_vals;
             break;
-        case BLOCK_INTERFACE_DESCRIPTION:
+        case BLOCK_TYPE_IDB:
             hfj_pcapng_option_code = hf_pcapng_option_code_interface_description;
             vals = option_code_interface_description_vals;
             break;
-        case BLOCK_ENHANCED_PACKET:
+        case BLOCK_TYPE_EPB:
             hfj_pcapng_option_code = hf_pcapng_option_code_enhanced_packet;
             vals = option_code_enhanced_packet_vals;
             break;
-        case BLOCK_PACKET:
+        case BLOCK_TYPE_PB:
             hfj_pcapng_option_code = hf_pcapng_option_code_packet;
             vals = option_code_packet_vals;
             break;
-        case BLOCK_NAME_RESOLUTION:
+        case BLOCK_TYPE_NRB:
             hfj_pcapng_option_code = hf_pcapng_option_code_name_resolution;
             vals = option_code_name_resolution_vals;
             break;
-        case BLOCK_INTERFACE_STATISTICS:
+        case BLOCK_TYPE_ISB:
             hfj_pcapng_option_code = hf_pcapng_option_code_interface_statistics;
             vals = option_code_interface_statistics_vals;
             break;
@@ -616,8 +661,11 @@ gint dissect_options(proto_tree *tree, packet_info *pinfo,
             proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_comment, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
             proto_item_append_text(option_item, " = %s", str);
             offset += option_length;
+        } else if (option_code == 2988 || option_code == 2989 || option_code == 19372 || option_code == 19373) {
+            dissect_custom_options(option_tree, pinfo, tvb, offset, option_code, option_length, encoding);
+            offset += option_length;
         } else switch (block_type) {
-        case BLOCK_SECTION_HEADER:
+        case BLOCK_TYPE_SHB:
             switch (option_code) {
             case 2:
                 proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_section_header_hardware, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
@@ -639,7 +687,7 @@ gint dissect_options(proto_tree *tree, packet_info *pinfo,
                 offset += option_length;
             }
             break;
-        case BLOCK_INTERFACE_DESCRIPTION: {
+        case BLOCK_TYPE_IDB: {
             struct interface_description  *interface_description = (struct interface_description *) user_data;
 
             switch (option_code) {
@@ -933,7 +981,7 @@ gint dissect_options(proto_tree *tree, packet_info *pinfo,
             }
             }
             break;
-        case BLOCK_PACKET:
+        case BLOCK_TYPE_PB:
             switch (option_code) {
             case 2:
                 if (option_length != 4) {
@@ -971,7 +1019,7 @@ gint dissect_options(proto_tree *tree, packet_info *pinfo,
             }
 
             break;
-        case BLOCK_NAME_RESOLUTION:
+        case BLOCK_TYPE_NRB:
             switch (option_code) {
             case 2:
                 proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_dns_name, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
@@ -1015,7 +1063,7 @@ gint dissect_options(proto_tree *tree, packet_info *pinfo,
             }
 
             break;
-        case BLOCK_INTERFACE_STATISTICS:
+        case BLOCK_TYPE_ISB:
             switch (option_code) {
             case 2:
                 if (option_length != 8) {
@@ -1105,7 +1153,7 @@ gint dissect_options(proto_tree *tree, packet_info *pinfo,
             }
 
             break;
-        case BLOCK_ENHANCED_PACKET:
+        case BLOCK_TYPE_EPB:
             switch (option_code) {
             case 2:
                 if (option_length != 4) {
@@ -1386,7 +1434,7 @@ dissect_shb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     proto_tree_add_item(tree, hf_pcapng_section_header_section_length, tvb, offset, 8, argp->info->encoding);
     offset += 8;
 
-    dissect_options(tree, pinfo, BLOCK_SECTION_HEADER, tvb, offset, argp->info->encoding, NULL);
+    dissect_options(tree, pinfo, BLOCK_TYPE_SHB, tvb, offset, argp->info->encoding, NULL);
 
     return TRUE;
 }
@@ -1415,7 +1463,7 @@ dissect_idb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     interface_description.snap_len = tvb_get_guint32(tvb, offset, argp->info->encoding);
     offset += 4;
 
-    dissect_options(tree, pinfo, BLOCK_INTERFACE_DESCRIPTION, tvb, offset, argp->info->encoding, &interface_description);
+    dissect_options(tree, pinfo, BLOCK_TYPE_IDB, tvb, offset, argp->info->encoding, &interface_description);
 
     wmem_array_append_one(argp->info->interfaces, interface_description);
 }
@@ -1428,7 +1476,7 @@ dissect_pb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     guint32 interface_id;
     struct interface_description *interface_description;
     guint32 captured_length;
-    guint32 reported_length;
+    guint32 original_length;
     proto_item *packet_data_item;
 
     proto_item_append_text(argp->block_item, " %u", argp->info->frame_number);
@@ -1448,7 +1496,7 @@ dissect_pb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     proto_tree_add_item_ret_uint(tree, hf_pcapng_captured_length, tvb, offset, 4, argp->info->encoding, &captured_length);
     offset += 4;
 
-    proto_tree_add_item_ret_uint(tree, hf_pcapng_packet_length, tvb, offset, 4, argp->info->encoding, &reported_length);
+    proto_tree_add_item_ret_uint(tree, hf_pcapng_original_length, tvb, offset, 4, argp->info->encoding, &original_length);
     offset += 4;
 
     packet_data_item = proto_tree_add_item(tree, hf_pcapng_packet_data, tvb, offset, captured_length, argp->info->encoding);
@@ -1459,7 +1507,7 @@ dissect_pb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
         pinfo->num = argp->info->frame_number;
 
         TRY {
-            call_dissector_with_data(pcap_pktdata_handle, tvb_new_subset_length_caplen(tvb, offset, captured_length, reported_length),
+            call_dissector_with_data(pcap_pktdata_handle, tvb_new_subset_length_caplen(tvb, offset, captured_length, original_length),
                                      pinfo, packet_data_tree, &interface_description->link_type);
         }
         CATCH_BOUNDS_ERRORS {
@@ -1475,7 +1523,7 @@ dissect_pb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
         offset += ((captured_length % 4) ?(4 - (captured_length % 4)):0);
     }
 
-    dissect_options(tree, pinfo, BLOCK_PACKET, tvb, offset, argp->info->encoding, NULL);
+    dissect_options(tree, pinfo, BLOCK_TYPE_PB, tvb, offset, argp->info->encoding, NULL);
 }
 
 static void
@@ -1486,7 +1534,7 @@ dissect_spb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     struct interface_description *interface_description;
     proto_item *ti;
     volatile guint32 captured_length;
-    guint32 reported_length;
+    guint32 original_length;
     proto_item *packet_data_item;
 
     interface_description = get_interface_description(argp->info, 0,
@@ -1494,12 +1542,12 @@ dissect_spb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
 
     proto_item_append_text(argp->block_item, " %u", argp->info->frame_number);
 
-    proto_tree_add_item_ret_uint(tree, hf_pcapng_packet_length, tvb, offset, 4, argp->info->encoding, &reported_length);
+    proto_tree_add_item_ret_uint(tree, hf_pcapng_original_length, tvb, offset, 4, argp->info->encoding, &original_length);
     offset += 4;
 
-    captured_length = reported_length;
+    captured_length = original_length;
     if (interface_description && interface_description->snap_len != 0) {
-        captured_length = MIN(reported_length, interface_description->snap_len);
+        captured_length = MIN(original_length, interface_description->snap_len);
     }
     ti = proto_tree_add_uint(tree, hf_pcapng_captured_length, tvb, 0, 0, captured_length);
     proto_item_set_generated(ti);
@@ -1647,7 +1695,7 @@ dissect_nrb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     }
     proto_item_set_end(records_item, tvb, offset);
 
-    dissect_options(tree, pinfo, BLOCK_NAME_RESOLUTION, tvb, offset, argp->info->encoding, NULL);
+    dissect_options(tree, pinfo, BLOCK_TYPE_NRB, tvb, offset, argp->info->encoding, NULL);
 }
 
 static void
@@ -1667,7 +1715,7 @@ dissect_isb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     pcapng_add_timestamp(tree, pinfo, tvb, offset, argp->info->encoding, interface_description);
     offset += 8;
 
-    dissect_options(tree, pinfo, BLOCK_INTERFACE_STATISTICS, tvb, offset, argp->info->encoding, NULL);
+    dissect_options(tree, pinfo, BLOCK_TYPE_ISB, tvb, offset, argp->info->encoding, NULL);
 }
 
 static void
@@ -1678,7 +1726,7 @@ dissect_epb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     guint32 interface_id;
     struct interface_description *interface_description;
     guint32 captured_length;
-    guint32 reported_length;
+    guint32 original_length;
     proto_item *packet_data_item;
 
     proto_item_append_text(argp->block_item, " %u", argp->info->frame_number);
@@ -1695,7 +1743,7 @@ dissect_epb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     proto_tree_add_item_ret_uint(tree, hf_pcapng_captured_length, tvb, offset, 4, argp->info->encoding, &captured_length);
     offset += 4;
 
-    proto_tree_add_item_ret_uint(tree, hf_pcapng_packet_length, tvb, offset, 4, argp->info->encoding, &reported_length);
+    proto_tree_add_item_ret_uint(tree, hf_pcapng_original_length, tvb, offset, 4, argp->info->encoding, &original_length);
     offset += 4;
 
     packet_data_item = proto_tree_add_item(tree, hf_pcapng_packet_data, tvb, offset, captured_length, argp->info->encoding);
@@ -1706,7 +1754,7 @@ dissect_epb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
         pinfo->num = argp->info->frame_number;
 
         TRY {
-            call_dissector_with_data(pcap_pktdata_handle, tvb_new_subset_length_caplen(tvb, offset, captured_length, reported_length),
+            call_dissector_with_data(pcap_pktdata_handle, tvb_new_subset_length_caplen(tvb, offset, captured_length, original_length),
                                      pinfo, packet_data_tree, &interface_description->link_type);
         }
         CATCH_BOUNDS_ERRORS {
@@ -1722,7 +1770,7 @@ dissect_epb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
         offset += ((captured_length % 4) ?(4 - (captured_length % 4)):0);
     }
 
-    dissect_options(tree, pinfo, BLOCK_ENHANCED_PACKET, tvb, offset, argp->info->encoding, NULL);
+    dissect_options(tree, pinfo, BLOCK_TYPE_EPB, tvb, offset, argp->info->encoding, NULL);
 }
 
 static void
@@ -1745,8 +1793,30 @@ dissect_dsb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
         offset += padlen;
     }
 
-    dissect_options(tree, pinfo, BLOCK_DSB, tvb, offset, argp->info->encoding, NULL);
+    dissect_options(tree, pinfo, BLOCK_TYPE_DSB, tvb, offset, argp->info->encoding, NULL);
 }
+
+static void
+dissect_cb_data(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t *tvb,
+                block_data_arg *argp)
+{
+    int offset = 0;
+
+    proto_tree_add_item(tree, hf_pcapng_cb_pen, tvb, offset, 4, argp->info->encoding);
+    offset += 4;
+
+    /* Todo: Add known PEN custom data dissection. */
+    proto_tree_add_item(tree, hf_pcapng_cb_data, tvb, offset, tvb_reported_length(tvb) - offset, argp->info->encoding);
+
+    /*
+     * The pcapng spec does not tell the size of the custom data without knowing the data content,
+     * so it's not possible to dissect options.
+     *
+     * dissect_options(tree, pinfo, BLOCK_CB_COPY, tvb, offset, argp->info->encoding, NULL);
+     */
+}
+
+#define BLOCK_BAD_SHB_SIZE 12
 
 gint dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct info *info)
 {
@@ -1762,6 +1832,7 @@ gint dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct i
     tvbuff_t        *volatile next_tvb = NULL;
     block_data_arg   arg;
     volatile gboolean stop_dissecting = FALSE;
+    volatile gboolean byte_order_magic_bad = FALSE;
 
     block_type = tvb_get_guint32(tvb, offset + 0, info->encoding);
     length     = tvb_get_guint32(tvb, offset + 4, info->encoding);
@@ -1786,87 +1857,39 @@ gint dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct i
 
     /* Name is either from local 'name', or from fixed block_type_vals */
     if (p_local_block_callback) {
-        proto_item_append_text(block_item, ": %s", p_local_block_callback->name);
+        proto_item_append_text(block_item, " %u: %s", info->block_number, p_local_block_callback->name);
         proto_item_append_text(block_type_item, ": (%s)", p_local_block_callback->name);
         proto_item_append_text(block_type_value_item, ": (%s)", p_local_block_callback->name);
     }
     else {
-        proto_item_append_text(block_item, ": %s", val_to_str_const(block_type, block_type_vals, "Unknown"));
+        proto_item_append_text(block_item, " %u: %s", info->block_number, val_to_str_const(block_type, block_type_vals, "Unknown"));
         proto_item_append_text(block_type_item, ": (%s)", val_to_str_const(block_type, block_type_vals, "Unknown"));
         proto_item_append_text(block_type_value_item, ": (%s)", val_to_str_const(block_type, block_type_vals, "Unknown"));
     }
+    info->block_number += 1;
 
     arg.block_item = block_item;
     arg.block_tree = block_tree;
     arg.info = info;
 
-    if (block_type == BLOCK_SECTION_HEADER) {
-        /* Section Header Block - this needs special byte-order handling */
-        volatile gboolean byte_order_magic_bad = FALSE;
-
-        proto_item_append_text(block_item, " %u", info->section_number);
-        info->section_number += 1;
-        info->interface_number = 0;
-        info->darwin_process_event_number = 0;
-        info->frame_number = 1;
-        if (info->interfaces != NULL) {
-            wmem_free(pinfo->pool, info->interfaces);
-        }
-        info->interfaces = wmem_array_new(pinfo->pool, sizeof(struct interface_description));
-
-        if (tvb_memeql(tvb, 8, pcapng_big_endian_magic, BYTE_ORDER_MAGIC_SIZE) == 0) {
-            info->encoding = ENC_BIG_ENDIAN;
-        } else if (tvb_memeql(tvb, 8, pcapng_little_endian_magic, BYTE_ORDER_MAGIC_SIZE) == 0) {
-            info->encoding = ENC_LITTLE_ENDIAN;
-        } else {
-            byte_order_magic_bad = TRUE;
-        }
-
-        next_tvb = process_block_length(block_tree, pinfo, tvb, offset, &block_data_tree, &block_length_item, &block_length, info->encoding);
-        if (next_tvb == NULL) {
-            /* The length was invalid, so we can't dissect any further */
-            return -1;
-        }
-        offset += 4;
-
-	/*
-	 * Dissect the block data as an SHB's content.
-	 * Catch exceptions; ReportedBoundsError means that the body
-	 * doesn't fit in the block.
-	 */
-	TRY {
-            if (!dissect_shb_data(block_data_tree, pinfo, next_tvb,
-                                  byte_order_magic_bad, &arg)) {
-                /*
-                 * We can't dissect any further.
-                 */
-                stop_dissecting = TRUE;
-            }
-	}
-	CATCH(ReportedBoundsError) {
-            /*
-             * The body didn't fit in the block.
-             * Mark the length as being too small.
-             */
-            expert_add_info(pinfo, block_length_item, &ei_block_length_below_block_content_length);
-        }
-        CATCH_ALL {
-            /*
-             * Just rethrow other exceptions to the ultimate handler.
-             */
-            RETHROW;
-	}
-	ENDTRY;
-    } else {
+    if (block_type == BLOCK_TYPE_SHB && tvb_captured_length(tvb) == BLOCK_BAD_SHB_SIZE) {
         /*
-         * Not an SHB, so we know the byte order.
+         * dissect_pcapng() gave us a short SHB because its byte-order magic is bad.
+         * process_block_length() would fail, so generate an abbreviated TVB
+         * to pass to dissect_shb_data() which will flag up the bad magic.
          */
+        byte_order_magic_bad = TRUE;
+        next_tvb = tvb_new_subset_length(tvb, 8, 4);
+        block_data_tree = block_tree;
+    }
+    else {
         next_tvb = process_block_length(block_tree, pinfo, tvb, offset, &block_data_tree, &block_length_item, &block_length, info->encoding);
         if (next_tvb == NULL) {
             /* The length was invalid, so we can't dissect any further */
             return -1;
         }
-        offset += 4;
+    }
+    offset += 4;
 
     /*
      * Dissect the block data.
@@ -1874,55 +1897,64 @@ gint dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct i
      * doesn't fit in the block.
      */
     TRY {
-            switch (block_type) {
-            case BLOCK_INTERFACE_DESCRIPTION:
-                dissect_idb_data(block_data_tree, pinfo, next_tvb, &arg);
-                break;
-            case BLOCK_PACKET:
-                dissect_pb_data(block_data_tree, pinfo, next_tvb, &arg);
-                break;
-            case BLOCK_SIMPLE_PACKET:
-                dissect_spb_data(block_data_tree, pinfo, next_tvb, &arg);
-                break;
-            case BLOCK_NAME_RESOLUTION:
-                dissect_nrb_data(block_data_tree, pinfo, next_tvb, &arg);
-                break;
-            case BLOCK_INTERFACE_STATISTICS:
-                dissect_isb_data(block_data_tree, pinfo, next_tvb, &arg);
-                break;
-            case BLOCK_ENHANCED_PACKET:
-                dissect_epb_data(block_data_tree, pinfo, next_tvb, &arg);
-                break;
-            case BLOCK_DSB:
-                dissect_dsb_data(block_data_tree, pinfo, next_tvb, &arg);
-                break;
-            case BLOCK_IRIG_TIMESTAMP:
-            case BLOCK_ARINC_429:
-                break;
-
-            default:
-                /* Use local block type handling if available */
-                if (p_local_block_callback) {
-                    p_local_block_callback->dissector(block_data_tree, pinfo, next_tvb, &arg);
-                }
-                break;
+        switch (block_type) {
+        case BLOCK_TYPE_SHB:
+            proto_item_append_text(block_item, " %u", info->section_number);
+            if (!dissect_shb_data(block_data_tree, pinfo, next_tvb, byte_order_magic_bad, &arg)) {
+                stop_dissecting = TRUE;
             }
+            break;
+        case BLOCK_TYPE_IDB:
+            dissect_idb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_PB:
+            dissect_pb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_SPB:
+            dissect_spb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_NRB:
+            dissect_nrb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_ISB:
+            dissect_isb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_EPB:
+            dissect_epb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_DSB:
+            dissect_dsb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_CB_COPY:
+        case BLOCK_TYPE_CB_NO_COPY:
+            dissect_cb_data(block_data_tree, pinfo, next_tvb, &arg);
+            break;
+        case BLOCK_TYPE_IRIG_TS:
+        case BLOCK_TYPE_ARINC_429:
+            break;
+
+        default:
+            /* Use local block type handling if available */
+            if (p_local_block_callback) {
+                p_local_block_callback->dissector(block_data_tree, pinfo, next_tvb, &arg);
+            }
+            break;
         }
-	CATCH(ReportedBoundsError) {
-            /*
-             * The body didn't fit in the block.
-             * Mark the length as being too small.
-             */
-            expert_add_info(pinfo, block_length_item, &ei_block_length_below_block_content_length);
-        }
-        CATCH_ALL {
-            /*
-             * Just rethrow other exceptions to the ultimate handler.
-             */
-            RETHROW;
-	}
-	ENDTRY;
     }
+    CATCH(ReportedBoundsError) {
+        /*
+            * The body didn't fit in the block.
+            * Mark the length as being too small.
+            */
+        expert_add_info(pinfo, block_length_item, &ei_block_length_below_block_content_length);
+    }
+    CATCH_ALL {
+        /*
+            * Just rethrow other exceptions to the ultimate handler.
+            */
+        RETHROW;
+    }
+    ENDTRY;
 
     if (stop_dissecting) {
         /* We found a fatal problem with the file. */
@@ -1952,38 +1984,64 @@ dissect_pcapng(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     };
     gint             offset = 0;
     guint32          length;
-    guint32          encoding;
+    guint32          block_type;
     proto_tree      *main_tree;
     proto_item      *main_item;
     struct info      info;
+    volatile gboolean byte_order_magic_bad = FALSE;
 
     if (tvb_memeql(tvb, 0, pcapng_premagic, BLOCK_TYPE_SIZE) != 0)
         return 0;
 
-    if (tvb_memeql(tvb, 8, pcapng_big_endian_magic, BYTE_ORDER_MAGIC_SIZE) == 0) {
-        encoding = ENC_BIG_ENDIAN;
-    } else if (tvb_memeql(tvb, 8, pcapng_little_endian_magic, BYTE_ORDER_MAGIC_SIZE) == 0) {
-        encoding = ENC_LITTLE_ENDIAN;
-    } else {
-        return 0;
-    }
-
-    info.section_number = 1;
+    info.encoding = ENC_BIG_ENDIAN;
+    info.block_number = 1;
+    info.section_number = 0;
     info.interface_number = 0;
     info.darwin_process_event_number = 0;
     info.frame_number = 1;
-    info.encoding = encoding;
-    info.interfaces = wmem_array_new(pinfo->pool, sizeof(struct interface_description));
+    info.interfaces = NULL;
     info.darwin_process_events = wmem_array_new(pinfo->pool, sizeof(struct darwin_process_event_description));
 
     main_item = proto_tree_add_item(tree, proto_pcapng, tvb, offset, -1, ENC_NA);
     main_tree = proto_item_add_subtree(main_item, ett_pcapng);
 
-    while (tvb_captured_length_remaining(tvb, offset)) {
+    while (tvb_captured_length_remaining(tvb, offset) > 8) {
         tvbuff_t  *next_tvb;
         int       block_length;
 
-        length = tvb_get_guint32(tvb, offset + 4, encoding);
+        block_type = tvb_get_guint32(tvb, offset, info.encoding);
+        if (block_type == BLOCK_TYPE_SHB) {
+            info.section_number += 1;
+            info.interface_number = 0;
+            info.darwin_process_event_number = 0;
+            info.frame_number = 1;
+            if (info.interfaces != NULL) {
+                wmem_free(pinfo->pool, info.interfaces);
+            }
+            info.interfaces = wmem_array_new(pinfo->pool, sizeof(struct interface_description));
+
+            /* Byte order may change from that of previous SHB [#19371] */
+            if (tvb_memeql(tvb, offset + 8, pcapng_big_endian_magic, BYTE_ORDER_MAGIC_SIZE) == 0) {
+                info.encoding = ENC_BIG_ENDIAN;
+            } else if (tvb_memeql(tvb, offset + 8, pcapng_little_endian_magic, BYTE_ORDER_MAGIC_SIZE) == 0) {
+                info.encoding = ENC_LITTLE_ENDIAN;
+            } else {
+                byte_order_magic_bad = TRUE;
+                if (offset == 0) {
+                    return 0;
+                }
+            }
+        }
+
+        if (G_UNLIKELY(byte_order_magic_bad)) {
+            /* Pass a shortened TVB that's just big enough to let
+             * dissect_block() mark the SHB's byte order magic as bad.
+             */
+            length = BLOCK_BAD_SHB_SIZE;
+        }
+        else {
+            length = tvb_get_guint32(tvb, offset + 4, info.encoding);
+        }
         next_tvb = tvb_new_subset_length(tvb, offset, length);
 
         block_length = dissect_block(main_tree, pinfo, next_tvb, &info);
@@ -2500,13 +2558,13 @@ proto_register_pcapng(void)
             NULL, HFILL }
         },
         { &hf_pcapng_captured_length,
-            { "Captured Length",                           "pcapng.packet.captured_length",
-            FT_UINT16, BASE_DEC, NULL, 0x00,
+            { "Captured Packet Length",                    "pcapng.packet.captured_length",
+            FT_UINT32, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
-        { &hf_pcapng_packet_length,
-            { "Packet Length",                             "pcapng.packet.packet_length",
-            FT_UINT16, BASE_DEC, NULL, 0x00,
+        { &hf_pcapng_original_length,
+            { "Original Packet Length",                    "pcapng.packet.original_length",
+            FT_UINT32, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
         { &hf_pcapng_packet_data,
@@ -2596,6 +2654,26 @@ proto_register_pcapng(void)
         },
         { &hf_pcapng_dsb_secrets_data,
             { "Secrets Data",                              "pcapng.dsb.secrets_data",
+            FT_BYTES, BASE_NONE, NULL, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_pcapng_cb_pen,
+            { "Private Enterprise Number (PEN)",           "pcapng.cb.pen",
+            FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_pcapng_cb_data,
+            { "Custom Data",                               "pcapng.cb.custom_data",
+            FT_BYTES, BASE_NONE, NULL, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_pcapng_cb_option_string,
+            { "Custom Option String",                        "pcapng.cb.custom_option.string",
+            FT_STRING, BASE_NONE, NULL, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_pcapng_cb_option_data,
+            { "Custom Option Binary",                        "pcapng.cb.custom_option.data",
             FT_BYTES, BASE_NONE, NULL, 0x00,
             NULL, HFILL }
         },

@@ -102,6 +102,10 @@
 #include <QStyleHints>
 #endif
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
+#include <QStyleFactory>
+#endif
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -277,6 +281,16 @@ void MainApplication::refreshPacketData()
     }
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
+void MainApplication::colorSchemeChanged() {
+    if (ColorUtils::themeIsDark()) {
+        setStyle(QStyleFactory::create("fusion"));
+    } else {
+        setStyle(QStyleFactory::create("windowsvista"));
+    }
+}
+#endif
+
 void MainApplication::updateTaps()
 {
     draw_tap_listeners(FALSE);
@@ -382,16 +396,15 @@ void MainApplication::setMonospaceFont(const char *font_string) {
     substitutes << x11_alt_fonts << win_default_font << win_alt_font << osx_default_font << osx_alt_fonts << fallback_fonts;
 #endif // Q_OS
 
-    mono_font_.setFamily(default_font);
+    mono_font_ = QFont(default_font, mainApp->font().pointSize() + font_size_adjust);
     mono_font_.insertSubstitutions(default_font, substitutes);
-    mono_font_.setPointSize(mainApp->font().pointSize() + font_size_adjust);
     mono_font_.setBold(false);
 
     // Retrieve the effective font and apply it.
     mono_font_.setFamily(QFontInfo(mono_font_).family());
 
-    g_free(prefs.gui_qt_font_name);
-    prefs.gui_qt_font_name = qstring_strdup(mono_font_.toString());
+    g_free(prefs.gui_font_name);
+    prefs.gui_font_name = qstring_strdup(mono_font_.toString());
 }
 
 int MainApplication::monospaceTextSize(const char *str)
@@ -486,7 +499,11 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
     update_local_interfaces();
 #endif
 
-    setMonospaceFont(prefs.gui_qt_font_name);
+    setMonospaceFont(prefs.gui_font_name);
+
+    // Freeze the packet list early to avoid updating column data before doing a
+    // full redissection. The packet list will be thawed when redissection is done.
+    emit freezePacketList(true);
 
     emit columnsChanged();
     emit preferencesChanged();
@@ -697,6 +714,11 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
 
+    // Throw various settings at the wall with the hope that one of them will
+    // enable context menu shortcuts QTBUG-69452, QTBUG-109590
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    setAttribute(Qt::AA_DontShowShortcutsInContextMenus, false);
+#endif
 #if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
     styleHints()->setShowShortcutsInContextMenus(true);
 #endif
@@ -805,11 +827,15 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     qApp->setStyleSheet(app_style_sheet);
 
     // If our window text is lighter than the window background, assume the theme is dark.
-    QPalette gui_pal = qApp->palette();
-    prefs_set_gui_theme_is_dark(gui_pal.windowText().color().value() > gui_pal.window().color().value());
+    prefs_set_gui_theme_is_dark(ColorUtils::themeIsDark());
 
 #if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
     connect(this, SIGNAL(softwareUpdateQuit()), this, SLOT(quit()), Qt::QueuedConnection);
+#endif
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
+    colorSchemeChanged();
+    connect(styleHints(), &QStyleHints::colorSchemeChanged, this, &MainApplication::colorSchemeChanged);
 #endif
 
     connect(qApp, SIGNAL(aboutToQuit()), this, SLOT(cleanup()));
@@ -865,6 +891,9 @@ void MainApplication::emitAppSignal(AppSignal signal)
         break;
     case FieldsChanged:
         emit fieldsChanged();
+        break;
+    case FreezePacketList:
+        emit freezePacketList(false);
         break;
     default:
         break;
@@ -1169,12 +1198,13 @@ void MainApplication::loadLanguage(const QString newLanguage)
     QString localeLanguage;
 
     if (newLanguage.isEmpty() || newLanguage == USE_SYSTEM_LANGUAGE) {
-        localeLanguage = QLocale::system().name();
+        locale = QLocale::system();
+        localeLanguage = locale.name();
     } else {
         localeLanguage = newLanguage;
+        locale = QLocale(localeLanguage);
     }
 
-    locale = QLocale(localeLanguage);
     QLocale::setDefault(locale);
     switchTranslator(mainApp->translator,
             QString("wireshark_%1.qm").arg(localeLanguage), QString(":/i18n/"));

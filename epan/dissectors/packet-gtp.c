@@ -590,7 +590,7 @@ static gint ett_nrup = -1;
 
 
 /* --- PDCP DECODE ADDITIONS --- */
-static gboolean
+static bool
 pdcp_uat_fld_ip_chk_cb(void* r _U_, const char* ipaddr, guint len _U_, const void* u1 _U_, const void* u2 _U_, char** err)
 {
     ws_in4_addr ip4_addr;
@@ -610,7 +610,7 @@ pdcp_uat_fld_ip_chk_cb(void* r _U_, const char* ipaddr, guint len _U_, const voi
 
 #define PDCP_TEID_WILDCARD "*"
 
-static gboolean
+static bool
 pdcp_uat_fld_teid_chk_cb(void* r _U_, const char* teid, guint len _U_, const void* u1 _U_, const void* u2 _U_, char** err)
 {
     if (teid) {
@@ -649,7 +649,7 @@ typedef struct {
 /* N.B. this is an array/table of the struct above, where IP address + TEID is the key */
 static uat_pdcp_lte_keys_record_t *uat_pdcp_lte_keys_records = NULL;
 
-static gboolean pdcp_lte_update_cb(void *r, char **err)
+static bool pdcp_lte_update_cb(void *r, char **err)
 {
     uat_pdcp_lte_keys_record_t* rec = (uat_pdcp_lte_keys_record_t *)r;
     ws_in4_addr ip4_addr;
@@ -741,7 +741,7 @@ typedef struct {
 /* N.B. this is an array/table of the struct above, where IP address + TEID is the key */
 static uat_pdcp_nr_keys_record_t *uat_pdcp_nr_keys_records = NULL;
 
-static gboolean pdcp_nr_update_cb(void *r, char **err) {
+static bool pdcp_nr_update_cb(void *r, char **err) {
     uat_pdcp_nr_keys_record_t* rec = (uat_pdcp_nr_keys_record_t *)r;
     ws_in4_addr ip4_addr;
     ws_in6_addr ip6_addr;
@@ -4950,6 +4950,7 @@ decode_gtp_rp(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree * 
     nsapi = (tvb_get_guint8(tvb, offset + 1) & 0xF0) >> 4;
     rp = tvb_get_guint8(tvb, offset + 1) & 0x07;
 
+    /* TODO: shouldn't really use int item as tree root.. */
     te = proto_tree_add_uint_format(tree, hf_gtp_rp, tvb, offset, 2, rp, "Radio Priority for NSAPI(%u) : %u", nsapi, rp);
     ext_tree_rp = proto_item_add_subtree(te, ett_gtp_rp);
 
@@ -7114,7 +7115,7 @@ decode_gtp_imeisv(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * 
      * set to '1111'. Both IMEI and IMEISV are BCD encoded.
      */
     next_tvb = tvb_new_subset_length(tvb, offset, length);
-    proto_tree_add_item_ret_display_string(ext_imeisv, hf_gtp_ext_imeisv, next_tvb, 0, -1, ENC_BCD_DIGITS_0_9, pinfo->pool, &digit_str);
+    proto_tree_add_item_ret_display_string(ext_imeisv, hf_gtp_ext_imeisv, next_tvb, 0, -1, ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN, pinfo->pool, &digit_str);
     proto_item_append_text(te, ": %s", digit_str);
 
     return 3 + length;
@@ -11477,7 +11478,7 @@ proto_register_gtp(void)
         },
         {&hf_gtp_ranap_cause,
          { "RANAP cause", "gtp.ranap_cause",
-           FT_UINT8, BASE_DEC|BASE_EXT_STRING, &ranap_cause_type_ext, 0,
+           FT_UINT16, BASE_DEC|BASE_EXT_STRING, &ranap_cause_type_ext, 0,
            NULL, HFILL}
         },
         {&hf_gtp_recovery,
@@ -11702,12 +11703,12 @@ proto_register_gtp(void)
         },
         {&hf_gtp_xid_par_len,
          { "PS Handover XID parameter length", "gtp.ps_handover_xid_par_len",
-           FT_UINT8, BASE_DEC, NULL, 0xFF,
+           FT_UINT8, BASE_DEC, NULL, 0x0,
            "XID parameter length", HFILL}
         },
         {&hf_gtp_rep_act_type,
          { "Action", "gtp.ms_inf_chg_rep_act",
-           FT_UINT8, BASE_DEC, VALS(chg_rep_act_type_vals), 0xFF,
+           FT_UINT8, BASE_DEC, VALS(chg_rep_act_type_vals), 0x0,
            NULL, HFILL}
         },
         {&hf_gtp_correlation_id,
@@ -12442,7 +12443,7 @@ proto_register_gtp(void)
       },
       {&hf_nrup_dl_disc_num_blks,
          { "DL discard Number of blocks", "nrup.dl_disc_num_blks",
-           FT_UINT8, BASE_DEC, NULL, 0xff,
+           FT_UINT8, BASE_DEC, NULL, 0x0,
            NULL, HFILL}
       },
       {&hf_nrup_dl_disc_nr_pdcp_pdu_sn_start,

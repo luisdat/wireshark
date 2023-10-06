@@ -6124,7 +6124,7 @@ netlogon_dissect_UNICODE_STRING_512(tvbuff_t *tvb, int offset,
                                    ett_UNICODE_STRING_512, &item, "UNICODE_STRING_512:");
     }
 
-    for(i=0;i<512;i++){
+    for(i=0;i<256;i++){
         offset = dissect_ndr_uint16(tvb, offset, pinfo, tree, di, drep,
                                     hf_netlogon_unknown_short, NULL);
     }
@@ -6696,11 +6696,21 @@ netlogon_dissect_netrserverauthenticate3_rqst(tvbuff_t *tvb, int offset,
     guint32 flags;
     offset = netlogon_dissect_LOGONSRV_HANDLE(tvb, offset,
                                               pinfo, tree, di, drep);
+    ALIGN_TO_5_BYTES
+
     offset = dissect_ndr_str_pointer_item(tvb, offset, pinfo, tree, di, drep,
                                           NDR_POINTER_REF, "Acct Name", hf_netlogon_acct_name, 0);
 
+    if (di->call_data->flags & DCERPC_IS_NDR64) {
+        ALIGN_TO_4_BYTES
+    } else {
+        ALIGN_TO_2_BYTES
+    }
+
     offset = netlogon_dissect_NETLOGON_SECURE_CHANNEL_TYPE(tvb, offset,
                                                            pinfo, tree, di, drep);
+
+    ALIGN_TO_5_BYTES
 
     offset = dissect_ndr_str_pointer_item(tvb, offset, pinfo, tree, di, drep,
                                           NDR_POINTER_REF, "Computer Name", hf_netlogon_computer_name, 0);
@@ -7082,15 +7092,15 @@ netlogon_dissect_netrserverpasswordset2_rqst(tvbuff_t *tvb, int offset,
                                               pinfo, tree, di, drep);
 
     offset = dissect_ndr_str_pointer_item(tvb, offset, pinfo, tree, di, drep,
-                                          NDR_POINTER_UNIQUE, "unknown string",
-                                          hf_netlogon_unknown_string, 0);
+                                          NDR_POINTER_REF, "Acct Name",
+                                          hf_netlogon_acct_name, 0);
 
-    offset = dissect_ndr_uint16(tvb, offset, pinfo, tree, di, drep,
-                                hf_netlogon_unknown_short, NULL);
+    offset = netlogon_dissect_NETLOGON_SECURE_CHANNEL_TYPE(tvb, offset,
+                                                           pinfo, tree, di, drep);
 
     offset = dissect_ndr_str_pointer_item(tvb, offset, pinfo, tree, di, drep,
-                                          NDR_POINTER_UNIQUE, "unknown string",
-                                          hf_netlogon_unknown_string, 0);
+                                          NDR_POINTER_REF, "Computer Name",
+                                          hf_netlogon_computer_name, 0);
 
     offset = dissect_ndr_pointer(tvb, offset, pinfo, tree, di, drep,
                                  netlogon_dissect_AUTHENTICATOR, NDR_POINTER_REF,
@@ -7108,7 +7118,7 @@ netlogon_dissect_netrserverpasswordset2_reply(tvbuff_t *tvb, int offset,
                                               packet_info *pinfo, proto_tree *tree, dcerpc_info *di, guint8 *drep)
 {
     offset = dissect_ndr_pointer(tvb, offset, pinfo, tree, di, drep,
-                                 netlogon_dissect_AUTHENTICATOR, NDR_POINTER_UNIQUE,
+                                 netlogon_dissect_AUTHENTICATOR, NDR_POINTER_REF,
                                  "AUTHENTICATOR: return_authenticator", -1);
 
     offset = dissect_ntstatus(tvb, offset, pinfo, tree, di, drep,
@@ -7669,7 +7679,7 @@ static int dissect_secchan_nl_auth_message(tvbuff_t *tvb, int offset,
         int old_offset=offset;
         char *str;
 
-        offset=dissect_mscldap_string(tvb, offset, 255, &str);
+        offset=dissect_mscldap_string(pinfo->pool, tvb, offset, 255, &str);
         proto_tree_add_string(subtree, hf_netlogon_secchan_nl_dns_domain, tvb, old_offset, offset-old_offset, str);
     }
 
@@ -7678,7 +7688,7 @@ static int dissect_secchan_nl_auth_message(tvbuff_t *tvb, int offset,
         int old_offset=offset;
         char *str;
 
-        offset=dissect_mscldap_string(tvb, offset, 255, &str);
+        offset=dissect_mscldap_string(pinfo->pool, tvb, offset, 255, &str);
         proto_tree_add_string(subtree, hf_netlogon_secchan_nl_dns_host, tvb, old_offset, offset-old_offset, str);
     }
 
@@ -7687,7 +7697,7 @@ static int dissect_secchan_nl_auth_message(tvbuff_t *tvb, int offset,
         int old_offset=offset;
         char *str;
 
-        offset=dissect_mscldap_string(tvb, offset, 255, &str);
+        offset=dissect_mscldap_string(pinfo->pool, tvb, offset, 255, &str);
         proto_tree_add_string(subtree, hf_netlogon_secchan_nl_nb_host_utf8, tvb, old_offset, offset-old_offset, str);
     }
 
@@ -7849,12 +7859,14 @@ static int hf_netlogon_secchan_verf_nonce = -1;
 
 static const value_string sign_algs[] = {
     { 0x0077, "HMAC-MD5"},
+    { 0x0013, "HMAC-SHA256"},
     { 0, NULL}
 };
 
 static const value_string seal_algs[] = {
     { 0xFFFF, "Not Encrypted"},
     { 0x007A, "RC4"},
+    { 0x001A, "AES-128"},
     { 0, NULL}
 };
 

@@ -322,6 +322,8 @@ static gint ett_pim_addr_flags = -1;
 
 static expert_field ei_pim_cksum = EI_INIT;
 
+static dissector_handle_t pim_handle;
+static dissector_handle_t pimv1_handle;
 
 static dissector_handle_t ip_handle;
 static dissector_handle_t ipv6_handle;
@@ -845,7 +847,7 @@ dissect_pim_addr(packet_info *pinfo, proto_tree* tree, tvbuff_t *tvb, int offset
                 ja_eos_type = tvb_get_guint8(tvb, ja_offset);
                 proto_tree_add_bitmask(ja_tree, tvb, ja_offset, hf_pim_source_ja_flags,
                                        ett_pim_addr_flags, pim_source_ja_flags, ENC_BIG_ENDIAN);
-                proto_item_append_text(ti, ": %s", val_to_str(ja_eos_type & 0x3F, pim_join_attribute_type_vals, "Unknown"));
+                proto_item_append_text(ti, ": %s", val_to_str_const(ja_eos_type & 0x3F, pim_join_attribute_type_vals, "Unknown"));
                 ja_offset += 1;
                 proto_tree_add_item(ja_tree, hf_pim_source_ja_length, tvb, ja_offset, 1, ENC_BIG_ENDIAN);
                 ja_offset += 1;
@@ -1001,7 +1003,7 @@ dissect_pim_addr(packet_info *pinfo, proto_tree* tree, tvbuff_t *tvb, int offset
                 ja_eos_type = tvb_get_guint8(tvb, ja_offset);
                 proto_tree_add_bitmask(ja_tree, tvb, ja_offset, hf_pim_source_ja_flags,
                             ett_pim_addr_flags, pim_source_ja_flags, ENC_BIG_ENDIAN);
-                proto_item_append_text(ti, ": %s", val_to_str(ja_eos_type & 0x3F, pim_join_attribute_type_vals, "Unknown"));
+                proto_item_append_text(ti, ": %s", val_to_str_const(ja_eos_type & 0x3F, pim_join_attribute_type_vals, "Unknown"));
                 ja_offset += 1;
                 proto_tree_add_item(ja_tree, hf_pim_source_ja_length, tvb, ja_offset, 1, ENC_BIG_ENDIAN);
                 ja_offset += 1;
@@ -2297,6 +2299,9 @@ proto_register_pim(void)
     expert_pim = expert_register_protocol(proto_pim);
     expert_register_field_array(expert_pim, ei, array_length(ei));
 
+    pim_handle = register_dissector("pim", dissect_pim, proto_pim);
+    pimv1_handle = register_dissector("pimv1", dissect_pimv1, proto_pim);
+
     pim_module = prefs_register_protocol(proto_pim, NULL);
     prefs_register_bool_preference(pim_module, "payload_tree",
                                   "PIM payload shown on main tree",
@@ -2308,12 +2313,7 @@ proto_register_pim(void)
 void
 proto_reg_handoff_pim(void)
 {
-    dissector_handle_t pim_handle, pimv1_handle;
-
-    pim_handle = create_dissector_handle(dissect_pim, proto_pim);
     dissector_add_uint("ip.proto", IP_PROTO_PIM, pim_handle);
-
-    pimv1_handle = create_dissector_handle(dissect_pimv1, proto_pim);
     dissector_add_uint("igmp.type", IGMP_V1_PIM_ROUTING_MESSAGE, pimv1_handle);
 
     /*

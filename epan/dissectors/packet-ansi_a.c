@@ -843,6 +843,7 @@ const value_string ansi_tsb58_language_ind_vals[] = {
     { 0x0013,   "Dutch" },
     { 0x0014,   "Swedish" },
     { 0x0015,   "Danish" },
+    /* N.B. no entry for 0x16 in spec! */
     { 0x0017,   "Finnish" },
     { 0x0018,   "Norwegian" },
     { 0x0019,   "Greek" },
@@ -1362,6 +1363,9 @@ static expert_field ei_ansi_a_unknown_bsmap_msg = EI_INIT;
 static expert_field ei_ansi_a_undecoded = EI_INIT;
 
 static dissector_handle_t dtap_handle;
+static dissector_handle_t bsmap_handle;
+static dissector_handle_t sip_dtap_bsmap_handle;
+
 static dissector_table_t is637_dissector_table; /* IS-637-A Transport Layer (SMS) */
 static dissector_table_t is683_dissector_table; /* IS-683-A (OTA) */
 static dissector_table_t is801_dissector_table; /* IS-801 (PLD) */
@@ -6828,7 +6832,7 @@ elem_a2p_bearer_format(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guin
         if (format_assigned &&
             (first_assigned_found == FALSE))
         {
-            rtp_dyn_payload_insert(rtp_dyn_payload, rtp_payload_type, mime_type, sample_rate);
+            rtp_dyn_payload_insert(rtp_dyn_payload, rtp_payload_type, mime_type, sample_rate, 1);
             rtp_dyn_payload_used = TRUE;
 
             first_assigned_found = TRUE;
@@ -6838,7 +6842,7 @@ elem_a2p_bearer_format(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guin
 
         if (in_band_format_assigned)
         {
-            rtp_dyn_payload_insert(rtp_dyn_payload, rtp_payload_type, "telephone-event", sample_rate);
+            rtp_dyn_payload_insert(rtp_dyn_payload, rtp_payload_type, "telephone-event", sample_rate, 1);
             rtp_dyn_payload_used = TRUE;
         }
 
@@ -11363,7 +11367,7 @@ proto_register_ansi_a(void)
         },
         { &hf_ansi_a_mid_broadcast_message_id,
             { "Message ID", "ansi_a_bsmap.mid.broadcast.message_id",
-            FT_UINT8, BASE_DEC, NULL, 0x2f,
+            FT_UINT8, BASE_DEC, NULL, 0x3f,
             NULL, HFILL }
         },
         { &hf_ansi_a_mid_broadcast_zone_id,
@@ -11558,7 +11562,7 @@ proto_register_ansi_a(void)
         },
         { &hf_ansi_a_is2000_chan_id_chan_walsh_code_chan_idx,
             { "Walsh Code Channel Index", "ansi_a_bsmap.is2000_chan_id.chan.walsh_code_chan_idx",
-            FT_UINT16, BASE_DEC, NULL, 0x7ff,
+            FT_UINT16, BASE_DEC, NULL, 0x07ff,
             NULL, HFILL }
         },
         { &hf_ansi_a_is2000_chan_id_chan_pilot_pn_code,
@@ -12872,8 +12876,13 @@ proto_register_ansi_a(void)
         expert_register_protocol(proto_a_bsmap);
     expert_register_field_array(expert_a_bsmap, ei, array_length(ei));
 
+    bsmap_handle = register_dissector("ansi_a_bsmap", dissect_bsmap, proto_a_bsmap);
+
     proto_a_dtap =
         proto_register_protocol("ANSI A-I/F DTAP", "ANSI DTAP", "ansi_a_dtap");
+
+    dtap_handle = register_dissector("ansi_a_dtap", dissect_dtap, proto_a_dtap);
+    sip_dtap_bsmap_handle = register_dissector("ansi_a_dtap_bsmap", dissect_sip_dtap_bsmap, proto_a_dtap);
 
     is637_dissector_table =
         register_dissector_table("ansi_a.sms", "IS-637-A (SMS)",
@@ -12922,12 +12931,6 @@ proto_reg_handoff_ansi_a(void)
 
     if (!ansi_a_prefs_initialized)
     {
-        dissector_handle_t      bsmap_handle, sip_dtap_bsmap_handle;
-
-        bsmap_handle = create_dissector_handle(dissect_bsmap, proto_a_bsmap);
-        dtap_handle = create_dissector_handle(dissect_dtap, proto_a_dtap);
-        sip_dtap_bsmap_handle = create_dissector_handle(dissect_sip_dtap_bsmap, proto_a_dtap);
-
         dissector_add_uint("bsap.pdu_type",  BSSAP_PDU_TYPE_BSMAP, bsmap_handle);
         dissector_add_uint("bsap.pdu_type",  BSSAP_PDU_TYPE_DTAP, dtap_handle);
         dissector_add_string("media_type", "application/femtointerfacemsg", sip_dtap_bsmap_handle);

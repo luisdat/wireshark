@@ -14,11 +14,13 @@
 
 #include <epan/packet.h>
 #include <epan/reassemble.h>
-#include <epan/dissectors/packet-socketcan.h>
+#include "packet-socketcan.h"
 #include <epan/wmem_scopes.h>
 
 void proto_register_isobus(void);
 void proto_reg_handoff_isobus(void);
+
+static dissector_handle_t isobus_handle;
 
 /* Initialize the protocol and registered fields */
 static int proto_isobus = -1;
@@ -403,11 +405,11 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     {
     case 0:
         col_append_fstr(pinfo->cinfo, COL_INFO, "[%s] ",
-            val_to_str(pdu_format, pdu_format_dp0_short, "Unknown"));
+            val_to_str_const(pdu_format, pdu_format_dp0_short, "Unknown"));
         break;
     case 1:
         col_append_fstr(pinfo->cinfo, COL_INFO, "[%s] ",
-            val_to_str(pdu_format, pdu_format_dp1_short, "Unknown"));
+            val_to_str_const(pdu_format, pdu_format_dp1_short, "Unknown"));
         break;
     }
 
@@ -535,7 +537,8 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
             proto_tree_add_item(tree, hf_isobus_transportprotocol_connabort_pgn, tvb, data_offset, 3, ENC_LITTLE_ENDIAN);
 
-            col_append_fstr(pinfo->cinfo, COL_INFO, "Connection Abort, %s", rval_to_str(connection_abort_reason, connection_abort_reasons, "unknown reason"));
+            col_append_fstr(pinfo->cinfo, COL_INFO, "Connection Abort, %s",
+                            rval_to_str_const(connection_abort_reason, connection_abort_reasons, "unknown reason"));
         }
         else if (control_byte == 32)
         {
@@ -843,14 +846,13 @@ proto_register_isobus(void)
 
     subdissector_table = register_dissector_table("isobus.pdu_format",
         "PDU format", proto_isobus, FT_UINT8, BASE_DEC);
+
+    isobus_handle = register_dissector("isobus",  dissect_isobus, proto_isobus );
 }
 
 void
 proto_reg_handoff_isobus(void)
 {
-   dissector_handle_t isobus_handle;
-
-   isobus_handle = create_dissector_handle( dissect_isobus, proto_isobus );
    dissector_add_for_decode_as("can.subdissector", isobus_handle );
 }
 

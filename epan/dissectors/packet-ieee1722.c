@@ -42,7 +42,7 @@
 #include <epan/etypes.h>
 #include <epan/decode_as.h>
 #include <epan/proto_data.h>
-#include <epan/dissectors/packet-socketcan.h>
+#include "packet-socketcan.h"
 
 #include "packet-mp2t.h"
 
@@ -66,6 +66,16 @@ void proto_register_1722_acf_can(void);
 void proto_reg_handoff_1722_acf_can(void);
 void proto_register_1722_acf_lin(void);
 void proto_reg_handoff_1722_acf_lin(void);
+
+static dissector_handle_t avtp_handle_eth;
+static dissector_handle_t avtp_handle_udp;
+static dissector_handle_t avb1722_61883_handle;
+static dissector_handle_t avb1722_aaf_handle;
+static dissector_handle_t avb1722_cvf_handle;
+static dissector_handle_t avb1722_crf_handle;
+static dissector_handle_t avb1722_ntscf_handle;
+static dissector_handle_t avb1722_tscf_handle;
+static dissector_handle_t avb1722_acf_lin_handle;
 
 static dissector_handle_t jpeg_handle;
 static dissector_handle_t h264_handle;
@@ -144,45 +154,37 @@ typedef struct _ieee1722_seq_data_t {
 /* Bit Field Masks */
 #define IEEE_1722_MR_MASK                               0x08
 #define IEEE_1722_TV_MASK                               0x01
-#define IEEE_1722_SEQ_NUM_MASK                          0x00
+#define IEEE_1722_SEQ_NUM_MASK                          0x0
 #define IEEE_1722_TU_MASK                               0x01
-#define IEEE_1722_STREAM_ID_MASK                        0x00
-#define IEEE_1722_TIMESTAMP_MASK                        0x00
-#define IEEE_1722_FORMAT_MASK                           0x00
+#define IEEE_1722_STREAM_ID_MASK                        0x0
+#define IEEE_1722_TIMESTAMP_MASK                        0x0
+#define IEEE_1722_FORMAT_MASK                           0x0
 #define IEEE_1722_NOM_SAMPLE_RATE_MASK                  0xf000
 #define IEEE_1722_CHANNEL_PER_FRAME_MASK                0x03ff
-#define IEEE_1722_BIT_DEPTH_MASK                        0x00
-#define IEEE_1722_AES3_DATA_TYPE_H_MASK                 0x00
-#define IEEE_1722_STREAM_DATA_LENGTH_MASK               0x00
+#define IEEE_1722_BIT_DEPTH_MASK                        0x0
+#define IEEE_1722_AES3_DATA_TYPE_H_MASK                 0x0
+#define IEEE_1722_STREAM_DATA_LENGTH_MASK               0x0
 #define IEEE_1722_AES3_DATA_TYPE_REFERENCE_MASK         0xe0
 #define IEEE_1722_SP_MASK                               0x10
 #define IEEE_1722_EVT_MASK                              0x0f
-#define IEEE_1722_AES3_DATA_TYPE_L_MASK                 0x00
-#define IEEE_1722_DATA_MASK                             0x00
-#define IEEE_1722_SAMPLE_MASK                           0x00
+#define IEEE_1722_AES3_DATA_TYPE_L_MASK                 0x0
+#define IEEE_1722_DATA_MASK                             0x0
+#define IEEE_1722_SAMPLE_MASK                           0x0
 
 /**************************************************************************************************/
 /* subtype CVF                                                                                    */
 /*                                                                                                */
 /**************************************************************************************************/
 #define IEEE_1722_CVF_FORMAT_RFC                        0x02
-#define IEEE_1722_CVF_FORMAT_SUBTYPE_MJPEG              0x00
+#define IEEE_1722_CVF_FORMAT_SUBTYPE_MJPEG              0x0
 #define IEEE_1722_CVF_FORMAT_SUBTYPE_H264               0x01
 #define IEEE_1722_CVF_FORMAT_SUBTYPE_JPEG2000           0x02
 
-/* Bit Field Masks */
-#define IEEE_1722_MR_MASK                               0x08
-#define IEEE_1722_TV_MASK                               0x01
-#define IEEE_1722_SEQ_NUM_MASK                          0x00
-#define IEEE_1722_TU_MASK                               0x01
-#define IEEE_1722_STREAM_ID_MASK                        0x00
-#define IEEE_1722_TIMESTAMP_MASK                        0x00
-#define IEEE_1722_FORMAT_MASK                           0x00
-#define IEEE_1722_FORMAT_SUBTYPE_MASK                   0x00
-#define IEEE_1722_CVF_H264_TIMESTAMP_MASK               0x00
+/* More bit Field Masks */
+#define IEEE_1722_FORMAT_SUBTYPE_MASK                   0x0
+#define IEEE_1722_CVF_H264_TIMESTAMP_MASK               0x0
 #define IEEE_1722_H264_PTV_MASK                         0x20
 #define IEEE_1722_MARKER_BIT_MASK                       0x10
-#define IEEE_1722_EVT_MASK                              0x0f
 
 /**************************************************************************************************/
 /* subtype CRF                                                                                    */
@@ -204,8 +206,8 @@ typedef struct _ieee1722_seq_data_t {
 #define IEEE_1722_NTSCF_HEADER_SIZE                     12      /* including common header */
 
 /* Bit Field Masks */
-#define IEEE_1722_NTSCF_R_MASK                          0x800
-#define IEEE_1722_NTSCF_DATA_LENGTH_MASK                0x7ff
+#define IEEE_1722_NTSCF_R_MASK                          0x0800
+#define IEEE_1722_NTSCF_DATA_LENGTH_MASK                0x07ff
 #define IEEE_1722_NTSCF_SEQ_NUM_MASK                    0xff
 #define IEEE_1722_NTSCF_STREAM_ID_MASK                  0x00
 
@@ -219,14 +221,14 @@ typedef struct _ieee1722_seq_data_t {
 #define IEEE_1722_TSCF_MR_MASK                          0x08
 #define IEEE_1722_TSCF_RSV1_MASK                        0x06
 #define IEEE_1722_TSCF_TV_MASK                          0x01
-#define IEEE_1722_TSCF_SEQNUM_MASK                      0x00
+#define IEEE_1722_TSCF_SEQNUM_MASK                      0x0
 #define IEEE_1722_TSCF_RSV2_MASK                        0xFE
 #define IEEE_1722_TSCF_TU_MASK                          0x01
-#define IEEE_1722_TSCF_STREAM_ID_MASK                   0x00
-#define IEEE_1722_TSCF_AVTP_TIMESTAMP_MASK              0x00
-#define IEEE_1722_TSCF_RSV3_MASK                        0x00
-#define IEEE_1722_TSCF_DATA_LENGTH_MASK                 0x00
-#define IEEE_1722_TSCF_RSV4_MASK                        0x00
+#define IEEE_1722_TSCF_STREAM_ID_MASK                   0x0
+#define IEEE_1722_TSCF_AVTP_TIMESTAMP_MASK              0x0
+#define IEEE_1722_TSCF_RSV3_MASK                        0x0
+#define IEEE_1722_TSCF_DATA_LENGTH_MASK                 0x0
+#define IEEE_1722_TSCF_RSV4_MASK                        0x0
 
 /**************************************************************************************************/
 /* AVTP Control Format (ACF) Message Header                                                       */
@@ -304,8 +306,8 @@ typedef struct _ieee1722_seq_data_t {
 #define IEEE_1722_ACF_LIN_PAD_MASK                      0xC0
 #define IEEE_1722_ACF_LIN_MTV_MASK                      0x20
 #define IEEE_1722_ACF_LIN_BUS_ID_MASK                   0x1F
-#define IEEE_1722_ACF_LIN_IDENTIFIER_MASK               0x00
-#define IEEE_1722_ACF_LIN_MSG_TIMESTAMP_MASK            0x00
+#define IEEE_1722_ACF_LIN_IDENTIFIER_MASK               0x0
+#define IEEE_1722_ACF_LIN_MSG_TIMESTAMP_MASK            0x0
 
 /**************************************************************************************************/
 /* 1722                                                                                           */
@@ -549,6 +551,7 @@ static int hf_1722_aaf_bit_depth = -1;
 static int hf_1722_aaf_stream_data_length = -1;
 static int hf_1722_aaf_sparse_timestamp = -1;
 static int hf_1722_aaf_evtfield = -1;
+static int hf_1722_aaf_reserved = -1;
 static int hf_1722_aaf_channels_per_frame = -1;
 static int hf_1722_aaf_data = -1;
 static int hf_1722_aaf_sample = -1;
@@ -924,7 +927,7 @@ void proto_register_1722(void)
     static hf_register_info hf[] = {
         { &hf_1722_encap_seqnum,
             { "Encapsulation Sequence Number", "ieee1722.encapsulation_sequence_num",
-              FT_UINT32, BASE_HEX, NULL, 0x00,
+              FT_UINT32, BASE_HEX, NULL, 0x0,
               "Sequence number incremented for each AVTPDU on a 5-tuple", HFILL }
         },
         { &hf_1722_subtype,
@@ -965,14 +968,13 @@ void proto_register_1722(void)
     /* Sub-dissector for 1722.1, 1722 AAF, 1722 CRF, 1722 61883, 1722 CVF */
     avb_dissector_table = register_dissector_table("ieee1722.subtype",
                           "IEEE1722 AVTP Subtype", proto_1722, FT_UINT8, BASE_HEX);
+
+    avtp_handle_eth = register_dissector("ieee1722.eth", dissect_1722_eth, proto_1722);
+    avtp_handle_udp = register_dissector("ieee1722.udp", dissect_1722_udp, proto_1722);
 }
 
 void proto_reg_handoff_1722(void)
 {
-    dissector_handle_t avtp_handle_eth, avtp_handle_udp;
-
-    avtp_handle_eth = create_dissector_handle(dissect_1722_eth, proto_1722);
-    avtp_handle_udp = create_dissector_handle(dissect_1722_udp, proto_1722);
     dissector_add_uint("ethertype", ETHERTYPE_AVTP, avtp_handle_eth);
     dissector_add_uint_with_preference("udp.port", UDP_PORT_IEEE_1722, avtp_handle_udp);
 }
@@ -1439,13 +1441,12 @@ void proto_register_1722_61883(void)
     proto_register_subtree_array(ett, array_length(ett));
     expert_1722_61883 = expert_register_protocol(proto_1722_61883);
     expert_register_field_array(expert_1722_61883, ei, array_length(ei));
+
+    avb1722_61883_handle = register_dissector("iec61883", dissect_1722_61883, proto_1722_61883);
 }
 
 void proto_reg_handoff_1722_61883(void)
 {
-    dissector_handle_t avb1722_61883_handle;
-
-    avb1722_61883_handle = create_dissector_handle(dissect_1722_61883, proto_1722_61883);
     dissector_add_uint("ieee1722.subtype", IEEE_1722_SUBTYPE_61883, avb1722_61883_handle);
 
     mp2t_handle = find_dissector_add_dependency("mp2t", proto_1722_61883);
@@ -1523,6 +1524,7 @@ static int dissect_1722_aaf (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 
     if (format < IEEE_1722_AAF_FORMAT_AES3_32_BIT)
     {
+        /* PCM Format */
         proto_tree_add_item(ti_aaf_tree, hf_1722_aaf_nominal_sample_rate, tvb, offset, 2, ENC_BIG_ENDIAN);
         ti_channels_per_frame = proto_tree_add_item_ret_uint(ti_aaf_tree, hf_1722_aaf_channels_per_frame, tvb, offset, 2, ENC_BIG_ENDIAN, &channels_per_frame);
         if (channels_per_frame == 0)
@@ -1542,7 +1544,10 @@ static int dissect_1722_aaf (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
             offset += 2;
 
             proto_tree_add_bitmask_list(ti_aaf_tree, tvb, offset, 1, fields_pcm, ENC_BIG_ENDIAN);
-            offset += 2;
+            offset += 1;
+
+            proto_tree_add_item(ti_aaf_tree, hf_1722_aaf_reserved, tvb, offset, 1, ENC_NA);
+            offset += 1;
 
             /* Make the Audio sample tree. */
             ti            = proto_tree_add_item(ti_aaf_tree, hf_1722_aaf_data, tvb, offset, datalen, ENC_NA);
@@ -1636,6 +1641,10 @@ void proto_register_1722_aaf (void)
             { "EVT", "aaf.evtfield",
               FT_UINT8, BASE_HEX, NULL, IEEE_1722_EVT_MASK, NULL, HFILL }
         },
+        { &hf_1722_aaf_reserved,
+            { "Reserved", "aaf.reserved",
+              FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }
+        },
         { &hf_1722_aaf_data,
             { "Audio Data", "aaf.data",
               FT_BYTES, BASE_NONE, NULL, IEEE_1722_DATA_MASK, NULL, HFILL }
@@ -1672,13 +1681,12 @@ void proto_register_1722_aaf (void)
 
     expert_1722_aaf = expert_register_protocol(proto_1722_aaf);
     expert_register_field_array(expert_1722_aaf, ei, array_length(ei));
+
+    avb1722_aaf_handle = register_dissector("aaf", dissect_1722_aaf, proto_1722_aaf);
 }
 
 void proto_reg_handoff_1722_aaf(void)
 {
-    dissector_handle_t avb1722_aaf_handle;
-
-    avb1722_aaf_handle = create_dissector_handle(dissect_1722_aaf, proto_1722_aaf);
     dissector_add_uint("ieee1722.subtype", IEEE_1722_SUBTYPE_AAF, avb1722_aaf_handle);
 }
 
@@ -1867,13 +1875,11 @@ void proto_register_1722_cvf (void)
     expert_1722_cvf = expert_register_protocol(proto_1722_cvf);
     expert_register_field_array(expert_1722_cvf, ei, array_length(ei));
 
+    avb1722_cvf_handle = register_dissector("cvf", dissect_1722_cvf, proto_1722_cvf);
 }
 
 void proto_reg_handoff_1722_cvf(void)
 {
-    dissector_handle_t avb1722_cvf_handle;
-
-    avb1722_cvf_handle = create_dissector_handle(dissect_1722_cvf, proto_1722_cvf);
     dissector_add_uint("ieee1722.subtype", IEEE_1722_SUBTYPE_CVF, avb1722_cvf_handle);
 
     jpeg_handle = find_dissector_add_dependency("jpeg", proto_1722_cvf);
@@ -2018,13 +2024,12 @@ void proto_register_1722_crf(void)
     proto_register_subtree_array(ett, array_length(ett));
     expert_1722_crf = expert_register_protocol(proto_1722_crf);
     expert_register_field_array(expert_1722_crf, ei, array_length(ei));
+
+    avb1722_crf_handle = register_dissector("crf", dissect_1722_crf, proto_1722_crf);
 }
 
 void proto_reg_handoff_1722_crf(void)
 {
-    dissector_handle_t avb1722_crf_handle;
-
-    avb1722_crf_handle = create_dissector_handle(dissect_1722_crf, proto_1722_crf);
     dissector_add_uint("ieee1722.subtype", IEEE_1722_SUBTYPE_CRF, avb1722_crf_handle);
 }
 
@@ -2145,13 +2150,12 @@ void proto_register_1722_ntscf(void)
 
     expert_1722_ntscf = expert_register_protocol(proto_1722_ntscf);
     expert_register_field_array(expert_1722_ntscf, ei, array_length(ei));
+
+    avb1722_ntscf_handle = register_dissector("ntscf", dissect_1722_ntscf, proto_1722_ntscf);
 }
 
 void proto_reg_handoff_1722_ntscf(void)
 {
-    dissector_handle_t avb1722_ntscf_handle;
-
-    avb1722_ntscf_handle = create_dissector_handle(dissect_1722_ntscf, proto_1722_ntscf);
     dissector_add_uint("ieee1722.subtype", IEEE_1722_SUBTYPE_NTSCF, avb1722_ntscf_handle);
 }
 
@@ -2332,13 +2336,12 @@ void proto_register_1722_tscf(void)
 
     expert_1722_tscf = expert_register_protocol(proto_1722_tscf);
     expert_register_field_array(expert_1722_tscf, ei, array_length(ei));
+
+    avb1722_tscf_handle = register_dissector("tscf", dissect_1722_tscf, proto_1722_tscf);
 }
 
 void proto_reg_handoff_1722_tscf(void)
 {
-    dissector_handle_t avb1722_tscf_handle;
-
-    avb1722_tscf_handle = create_dissector_handle(dissect_1722_tscf, proto_1722_tscf);
     dissector_add_uint("ieee1722.subtype", IEEE_1722_SUBTYPE_TSCF, avb1722_tscf_handle);
 }
 
@@ -2386,7 +2389,7 @@ static int dissect_1722_acf (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 
     set_actual_length(tvb, msg_length);
     proto_item_set_len(ti_acf, msg_length);
-    msg_type_str = rval_to_str(msg_type, acf_msg_type_range_rvals, "%s");
+    msg_type_str = rval_to_str_const(msg_type, acf_msg_type_range_rvals, "Unknown");
     proto_item_append_text(ti_header, ": %s (0x%02X), %d bytes with header",
                            msg_type_str, msg_type, msg_length);
     proto_item_append_text(ti_acf, ": %s (0x%02X)", msg_type_str, msg_type);
@@ -2937,13 +2940,12 @@ void proto_register_1722_acf_lin(void)
     expert_register_field_array(expert_1722_acf_lin, ei, array_length(ei));
 
     avb1722_acf_lin_dissector_table = register_decode_as_next_proto(proto_1722_acf_lin, "acf-lin.subdissector", "ACF-LIN next level dissector", NULL);
+
+    avb1722_acf_lin_handle = register_dissector("acf-lin", dissect_1722_acf_lin, proto_1722_acf_lin);
 }
 
 void proto_reg_handoff_1722_acf_lin(void)
 {
-    dissector_handle_t avb1722_acf_lin_handle;
-
-    avb1722_acf_lin_handle = create_dissector_handle(dissect_1722_acf_lin, proto_1722_acf_lin);
     dissector_add_uint("acf.msg_type", IEEE_1722_ACF_TYPE_LIN, avb1722_acf_lin_handle);
 }
 

@@ -40,6 +40,8 @@
 void proto_register_acn(void);
 void proto_reg_handoff_acn(void);
 
+static dissector_handle_t acn_handle;
+
 /* pdu flags */
 #define ACN_PDU_FLAG_L     0x80
 #define ACN_PDU_FLAG_V     0x40
@@ -453,7 +455,7 @@ typedef struct
 #define ACTUAL_ADDRESS  0
 /* forward reference */
 static guint32 acn_add_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, const char *label);
-static int     dissect_acn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+static int     dissect_acn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data);
 static int     dissect_rdmnet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 data_offset, gboolean is_udp);
 
 /* Global variables */
@@ -990,7 +992,7 @@ static const value_string acn_blob_dimmer_properties2_field_name[] = {
   { 47, "DMX B Patch DD" },
   { 48, "sACN Patch DD" },
   { 49, "DMX A 16-bit Enable" },
-  { 40, "DMX B 16-bit Enable" },
+  { 50, "DMX B 16-bit Enable" },
   { 51, "sACN 16-bit Enable" },
   { 52, "Dimmer Zone" },
   { 0, NULL }
@@ -1027,7 +1029,7 @@ static const value_string acn_blob_dimmer_rack_properties2_field_name[] = {
   { 27, "Data Loss Preset DMX A" },
   { 28, "Data Loss Preset DMX B" },
   { 29, "Data Loss Preset sACN" },
-  { 20, "Data Port Priority DMX A" },
+  { 30, "Data Port Priority DMX A" },
   { 31, "Data Port Priority DMX B" },
   { 32, "Data Port Enabled DMX A" },
   { 33, "Data Port Enabled DMX B" },
@@ -1037,7 +1039,7 @@ static const value_string acn_blob_dimmer_rack_properties2_field_name[] = {
   { 37, "16 Bit Enabled sACN" },
   { 38, "Patch From Home Screen" },
   { 39, "SCR Off Time" },
-  { 30, "Time Mode" },
+  { 40, "Time Mode" },
   { 41, "Offset from UTC" },
   { 42, "Universal Hold Last Look Time" },
   { 43, "Reactivate Presets On Boot" },
@@ -1047,7 +1049,7 @@ static const value_string acn_blob_dimmer_rack_properties2_field_name[] = {
   { 47, "Allow Backplane Communication Errors" },
   { 48, "Activate Presets on Boot" },
   { 49, "SmartLink2 Power Supply Enable" },
-  { 40, "Remote Record Enable" },
+  { 50, "Remote Record Enable" },
   { 51, "System Number" },
   { 52, "Architectural Priority" },
   { 53, "Data Loss Preset Space DMX A" },
@@ -2476,7 +2478,7 @@ static const value_string acn_blob_sequence_operation_field_name[] = {
   { 1, "Operation Type" },
   { 2, "Space" },
   { 3, "Sequence Number" },
-  { 3, "Step Number" },
+  { 4, "Step Number" },
   { 0, NULL }
 };
 
@@ -3322,7 +3324,7 @@ dissect_acn_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
    */
 
   if (is_acn(tvb)) {
-    dissect_acn(tvb, pinfo, tree);
+    dissect_acn(tvb, pinfo, tree, data);
     return TRUE;
   }
 
@@ -3903,15 +3905,15 @@ acn_add_dmp_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int of
             break;
           case 2:
             data_value = tvb_get_ntohs(tvb, offset);
-            proto_tree_add_uint_format(tree, hf_acn_data8, tvb, offset, 2, data_value, "%s %4.4X", buffer, data_value);
+            proto_tree_add_uint_format(tree, hf_acn_data16, tvb, offset, 2, data_value, "%s %4.4X", buffer, data_value);
             break;
           case 3:
             data_value = tvb_get_ntoh24(tvb, offset);
-            proto_tree_add_uint_format(tree, hf_acn_data8, tvb, offset, 3, data_value, "%s %6.6X", buffer, data_value);
+            proto_tree_add_uint_format(tree, hf_acn_data24, tvb, offset, 3, data_value, "%s %6.6X", buffer, data_value);
             break;
           case 4:
             data_value = tvb_get_ntohl(tvb, offset);
-            proto_tree_add_uint_format(tree, hf_acn_data8, tvb, offset, 4, data_value, "%s %8.8X", buffer, data_value);
+            proto_tree_add_uint_format(tree, hf_acn_data32, tvb, offset, 4, data_value, "%s %8.8X", buffer, data_value);
             break;
           default:
             /* build string of values */
@@ -3958,15 +3960,15 @@ acn_add_dmp_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int of
             break;
           case 2:
             data_value = tvb_get_ntohs(tvb, offset);
-            proto_tree_add_uint_format(tree, hf_acn_data8, tvb, offset, 2, data_value, "%s %4.4X", buffer, data_value);
+            proto_tree_add_uint_format(tree, hf_acn_data16, tvb, offset, 2, data_value, "%s %4.4X", buffer, data_value);
             break;
           case 3:
             data_value = tvb_get_ntoh24(tvb, offset);
-            proto_tree_add_uint_format(tree, hf_acn_data8, tvb, offset, 3, data_value, "%s %6.6X", buffer, data_value);
+            proto_tree_add_uint_format(tree, hf_acn_data24, tvb, offset, 3, data_value, "%s %6.6X", buffer, data_value);
             break;
           case 4:
             data_value = tvb_get_ntohl(tvb, offset);
-            proto_tree_add_uint_format(tree, hf_acn_data8, tvb, offset, 4, data_value, "%s %8.8X", buffer, data_value);
+            proto_tree_add_uint_format(tree, hf_acn_data32, tvb, offset, 4, data_value, "%s %8.8X", buffer, data_value);
             break;
           default:
             /* build string of values */
@@ -5698,7 +5700,7 @@ dissect_acn_dmx_discovery_pdu(guint32 protocol_id, tvbuff_t *tvb, packet_info *p
   switch (vector) {
     case ACN_DMX_DISCOVERY_UNIVERSE_LIST_VECTOR:
       buf_ptr = buffer;
-      
+
       /* add a snippet to info (this may be slow) */
       col_append_fstr(pinfo->cinfo,COL_INFO, ",[Universe Page %u/%u: ", page+1, lastpage+1);
       current_universe_idx = 0;
@@ -6519,7 +6521,7 @@ dissect_broker_redirect_v4(tvbuff_t *tvb, proto_tree *tree, int offset)
 static guint32
 dissect_broker_redirect_v6(tvbuff_t *tvb, proto_tree *tree, int offset)
 {
-  /* ipv4 address */
+  /* ipv6 address */
   proto_tree_add_item(tree, hf_rdmnet_broker_redirect_ipv6_address, tvb, offset, 16, ENC_NA);
   offset += 16;
 
@@ -7343,7 +7345,7 @@ dissect_acn_root_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int of
 /******************************************************************************/
 /* Dissect ACN                                                                */
 static int
-dissect_acn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+dissect_acn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   proto_item      *ti;
   proto_tree      *acn_tree;
@@ -7595,7 +7597,7 @@ proto_register_acn(void)
     },
     { &hf_acn_blob_time_zone,
       { "Time Zone", "acn.blob_time_zone",
-        FT_INT8, BASE_DEC, NULL, 0x0,
+        FT_INT32, BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_acn_blob_dst_type,
@@ -8055,7 +8057,7 @@ proto_register_acn(void)
         FT_STRING, BASE_NONE, NULL, 0x0,
         "DMX Extension Discovery Universe List", HFILL }
     },
-      
+
     /* DMX Discovery Pages */
     { &hf_acn_dmx_discovery_page,
       { "Page", "acn.dmx.discovery.page",
@@ -8741,7 +8743,7 @@ proto_register_acn(void)
         FT_UINT16, BASE_DEC, NULL, 0x0,
         "Redirect IPv4 TCP port", HFILL }
     },
-    /* Broker Redirect IPv6 Address */
+    /* Broker Redirect IPv6 Address. TODO: is filter correct here? */
     { &hf_rdmnet_broker_redirect_ipv6_address,
       { "IPv6 Address", "rdmnet.broker.redirect_ipv6.ipv4_address",
         FT_IPv6, BASE_NONE, NULL, 0x0,
@@ -8993,6 +8995,8 @@ proto_register_acn(void)
 
   proto_register_field_array(proto_rdmnet, rdmnet_hf, array_length(rdmnet_hf));
   proto_register_subtree_array(rdmnet_ett, array_length(rdmnet_ett));
+
+  acn_handle = register_dissector("acn", dissect_acn, proto_acn);
 }
 
 
@@ -9001,9 +9005,7 @@ proto_register_acn(void)
 void
 proto_reg_handoff_acn(void)
 {
-  /* dissector_handle_t acn_handle; */
-  /* acn_handle = create_dissector_handle(dissect_acn, proto_acn); */
-  /* dissector_add_for_decode_as_with_preference("udp.port", acn_handle);                         */
+  dissector_add_for_decode_as_with_preference("udp.port", acn_handle);
 
   rdm_handle      = find_dissector_add_dependency("rdm", proto_acn);
 

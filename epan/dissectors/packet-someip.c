@@ -4,7 +4,7 @@
  * Copyright 2012-2023 Dr. Lars Voelker
  * Copyright 2019      Ana Pantar
  * Copyright 2019      Guenter Ebermann
-  *
+ *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
@@ -19,15 +19,15 @@
 #include <epan/expert.h>
 #include <epan/to_str.h>
 #include <epan/uat.h>
-#include <epan/dissectors/packet-tcp.h>
+#include "packet-tcp.h"
 #include <epan/reassemble.h>
 #include <epan/addr_resolv.h>
 #include <epan/stats_tree.h>
 
-#include <packet-udp.h>
-#include <packet-dtls.h>
-#include <packet-someip.h>
-#include <packet-tls.h>
+#include "packet-udp.h"
+#include "packet-dtls.h"
+#include "packet-someip.h"
+#include "packet-tls.h"
 
 /*
  * Dissector for SOME/IP, SOME/IP-TP, and SOME/IP Payloads.
@@ -129,6 +129,7 @@ static int proto_someip = -1;
 
 static dissector_handle_t someip_handle_udp = NULL;
 static dissector_handle_t someip_handle_tcp = NULL;
+static dissector_handle_t dtls_handle = NULL;
 
 /* header field */
 static int hf_someip_messageid                                          = -1;
@@ -149,6 +150,7 @@ static int hf_someip_returncode                                         = -1;
 
 static int hf_someip_tp                                                 = -1;
 static int hf_someip_tp_offset                                          = -1;
+static int hf_someip_tp_offset_encoded                                  = -1;
 static int hf_someip_tp_flags                                           = -1;
 static int hf_someip_tp_reserved                                        = -1;
 static int hf_someip_tp_more_segments                                   = -1;
@@ -159,7 +161,6 @@ static int hf_someip_payload                                            = -1;
 static gint ett_someip                                                  = -1;
 static gint ett_someip_msgtype                                          = -1;
 static gint ett_someip_tp                                               = -1;
-static gint ett_someip_tp_flags                                         = -1;
 
 /* dissector handling */
 static dissector_table_t someip_dissector_table = NULL;
@@ -235,6 +236,7 @@ static const fragment_items someip_tp_frag_items = {
 static gboolean someip_tp_reassemble = TRUE;
 static gboolean someip_deserializer_activated = TRUE;
 static gboolean someip_deserializer_wtlv_default = FALSE;
+static gboolean someip_detect_dtls = FALSE;
 
 /* SOME/IP Message Types */
 static const value_string someip_msg_type[] = {
@@ -717,7 +719,7 @@ someip_segment_free_persistent_key(gpointer ptr)
     }
 }
 
-const reassembly_table_functions
+static const reassembly_table_functions
 someip_reassembly_table_functions = {
     someip_segment_hash,
     someip_segment_equal,
@@ -785,7 +787,7 @@ copy_generic_one_id_string_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_generic_one_identifier_16bit(void *r, char **err) {
     generic_one_id_string_t *rec = (generic_one_id_string_t *)r;
 
@@ -837,7 +839,7 @@ copy_generic_two_id_string_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_generic_two_identifier_16bit(void *r, char **err) {
     generic_two_id_string_t *rec = (generic_two_id_string_t *)r;
 
@@ -1155,7 +1157,7 @@ copy_someip_parameter_list_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_list(void *r, char **err) {
     someip_parameter_list_uat_t *rec = (someip_parameter_list_uat_t *)r;
     guchar c;
@@ -1342,7 +1344,7 @@ copy_someip_parameter_enum_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_enum(void *r, char **err) {
     someip_parameter_enum_uat_t *rec = (someip_parameter_enum_uat_t *)r;
 
@@ -1511,7 +1513,7 @@ copy_someip_parameter_array_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_array(void *r, char **err) {
     someip_parameter_array_uat_t *rec = (someip_parameter_array_uat_t *)r;
     char                         *tmp;
@@ -1690,7 +1692,7 @@ copy_someip_parameter_struct_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_struct(void *r, char **err) {
     someip_parameter_struct_uat_t *rec = (someip_parameter_struct_uat_t *)r;
     char                          *tmp = NULL;
@@ -1878,7 +1880,7 @@ copy_someip_parameter_union_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_union(void *r, char **err) {
     someip_parameter_union_uat_t *rec = (someip_parameter_union_uat_t *)r;
     gchar                        *tmp;
@@ -2046,7 +2048,7 @@ copy_someip_parameter_base_type_list_cb(void *n, const void *o, size_t size _U_)
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_base_type_list(void *r, char **err) {
     someip_parameter_base_type_list_uat_t *rec = (someip_parameter_base_type_list_uat_t *)r;
 
@@ -2159,7 +2161,7 @@ copy_someip_parameter_string_list_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_string_list(void *r, char **err) {
     someip_parameter_string_uat_t *rec = (someip_parameter_string_uat_t *)r;
 
@@ -2261,7 +2263,7 @@ copy_someip_parameter_typedef_list_cb(void *n, const void *o, size_t size _U_) {
     return new_rec;
 }
 
-static gboolean
+static bool
 update_someip_parameter_typedef_list(void *r, char **err) {
     someip_parameter_typedef_uat_t *rec = (someip_parameter_typedef_uat_t *)r;
 
@@ -3004,7 +3006,7 @@ dissect_someip_payload_struct(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         offset += length_of_length / 8;
         int endpos = offset_orig + (length_of_length / 8) + (guint32)length;
         proto_item_set_end(ti, tvb, endpos);
-        subtvb = tvb_new_subset_length_caplen(tvb, 0, endpos, endpos);
+        subtvb = tvb_new_subset_length(tvb, 0, endpos);
     }
 
     offset += dissect_someip_payload_parameters(subtvb, pinfo, subtree, offset, config->items, config->num_of_items, config->wtlv_encoding);
@@ -3083,7 +3085,7 @@ dissect_someip_payload_array_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
     if (length != -1) {
         if (length <= tvb_captured_length_remaining(tvb, offset)) {
-            subtvb = tvb_new_subset_length_caplen(tvb, offset, length, length);
+            subtvb = tvb_new_subset_length(tvb, offset, length);
             /* created subtvb. so we set offset=0 */
             offset = 0;
         } else {
@@ -3289,7 +3291,7 @@ dissect_someip_payload_union(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     }
 
     if (item != NULL) {
-        subtvb = tvb_new_subset_length_caplen(tvb, offset, length, length);
+        subtvb = tvb_new_subset_length(tvb, offset, length);
         dissect_someip_payload_parameter(subtvb, pinfo, subtree, 0, (guint8)item->data_type, item->id_ref, item->name, item->hf_id, -1);
     } else {
         expert_someip_payload_config_error(tree, pinfo, tvb, offset, 0, "Union type not configured");
@@ -3479,7 +3481,7 @@ dissect_someip_payload_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
                 break;
             }
 
-            tvbuff_t *subtvb = tvb_new_subset_length_caplen(tvb, offset - 2, param_length + 2, param_length + 2);
+            tvbuff_t *subtvb = tvb_new_subset_length(tvb, offset - 2, param_length + 2);
             if (item != NULL) {
                 dissect_someip_payload_parameter(subtvb, pinfo, tree, 2, (guint8)item->data_type, item->id_ref, item->name, item->hf_id, 0);
             } else {
@@ -3576,12 +3578,6 @@ dissect_someip_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     int             tmp = 0;
 
     gint            tvb_length = tvb_captured_length_remaining(tvb, offset);
-
-    static int * const someip_tp_flags[] = {
-        &hf_someip_tp_reserved,
-        &hf_someip_tp_more_segments,
-        NULL
-    };
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, SOMEIP_NAME);
     col_set_str(pinfo->cinfo, COL_INFO, SOMEIP_NAME_LONG);
@@ -3687,7 +3683,7 @@ dissect_someip_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     proto_tree_add_item_ret_boolean(msgtype_tree, hf_someip_messagetype_ack_flag, tvb, offset, 1, ENC_BIG_ENDIAN, &msgtype_ack);
     proto_tree_add_item_ret_boolean(msgtype_tree, hf_someip_messagetype_tp_flag, tvb, offset, 1, ENC_BIG_ENDIAN, &msgtype_tp);
 
-    proto_item_append_text(ti, " (%s)", val_to_str((~SOMEIP_MSGTYPE_TP_MASK)&msgtype, someip_msg_type, "Unknown Message Type"));
+    proto_item_append_text(ti, " (%s)", val_to_str_const((~SOMEIP_MSGTYPE_TP_MASK)&msgtype, someip_msg_type, "Unknown Message Type"));
     if (msgtype_tp) {
         proto_item_append_text(ti, " (%s)", SOMEIP_MSGTYPE_TP_STRING);
     }
@@ -3695,7 +3691,7 @@ dissect_someip_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
     /* Return Code */
     ti = proto_tree_add_item_ret_uint(someip_tree, hf_someip_returncode, tvb, offset, 1, ENC_BIG_ENDIAN, &retcode);
-    proto_item_append_text(ti, " (%s)", val_to_str(retcode, someip_return_code, "Unknown Return Code"));
+    proto_item_append_text(ti, " (%s)", val_to_str_const(retcode, someip_return_code, "Unknown Return Code"));
     offset += 1;
 
     /* lets figure out what we have for the rest */
@@ -3717,11 +3713,13 @@ dissect_someip_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
         ti = proto_tree_add_item(someip_tree, hf_someip_tp, tvb, offset, someip_payload_length, ENC_NA);
         tp_tree = proto_item_add_subtree(ti, ett_someip_tp);
 
-        tp_offset = (tvb_get_ntohl(tvb, offset) & SOMEIP_TP_OFFSET_MASK);
-        tp_more_segments = ((tvb_get_ntohl(tvb, offset) & SOMEIP_TP_OFFSET_MASK_MORE_SEGMENTS) != 0);
-        /* Why can I not mask an FT_UINT32 without it being shifted. :( . */
-        proto_tree_add_uint(tp_tree, hf_someip_tp_offset, tvb, offset, 4, tp_offset);
-        proto_tree_add_bitmask_with_flags(tp_tree, tvb, offset+3, hf_someip_tp_flags, ett_someip_tp_flags, someip_tp_flags, ENC_BIG_ENDIAN, BMT_NO_TFS | BMT_NO_INT);
+        /* Unfortunately, with a bitmask set the value is always shifted and cannot be set directly. */
+        proto_tree_add_item_ret_uint(tp_tree, hf_someip_tp_offset_encoded, tvb, offset, 4, ENC_BIG_ENDIAN, &tp_offset);
+        tp_offset <<= 4;
+        proto_tree_add_item(tp_tree, hf_someip_tp_reserved, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_boolean(tp_tree, hf_someip_tp_more_segments, tvb, offset, 4, ENC_BIG_ENDIAN, &tp_more_segments);
+        ti = proto_tree_add_uint(tp_tree, hf_someip_tp_offset, tvb, offset, 4, tp_offset);
+        PROTO_ITEM_SET_GENERATED(ti);
         offset += 4;
 
         proto_tree_add_item(tp_tree, hf_someip_payload, tvb, offset, someip_payload_length - SOMEIP_TP_HDR_LEN, ENC_NA);
@@ -3733,7 +3731,7 @@ dissect_someip_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                      someip_tp_head, &someip_tp_frag_items, &update_col_info, someip_tree);
         }
     } else {
-        subtvb = tvb_new_subset_length_caplen(tvb, SOMEIP_HDR_LEN, someip_payload_length, someip_payload_length);
+        subtvb = tvb_new_subset_length(tvb, SOMEIP_HDR_LEN, someip_payload_length);
     }
 
     if (subtvb!=NULL) {
@@ -3769,9 +3767,72 @@ dissect_someip_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     return tvb_reported_length(tvb);
 }
 
+static gboolean
+could_this_be_dtls(tvbuff_t *tvb) {
+    /* Headers compared
+     *
+     * Byte | SOME/IP     | DTLS
+     * --------------------------------
+     * 00   | Service ID  | Content Type
+     * 01   | Service ID  | Version
+     * 02   | Method ID   | Version
+     * 03   | Method ID   | Epoch
+     * 04   | Length      | Epoch
+     * 05   | Length      | Sequence Counter
+     * 06   | Length      | Sequence Counter
+     * 07   | Length      | Sequence Counter
+     * 08   | Client ID   | Sequence Counter
+     * 09   | Client ID   | Sequence Counter
+     * 10   | Session ID  | Sequence Counter
+     * 11   | Session ID  | Length
+     * 12   | SOME/IP Ver | Length
+     * 13   | Iface Ver   | ...
+     * 14   | Msg Type    | ...
+     * 15   | Return Code | ...
+     * 16   | ...         | ...
+     */
+    gint length = tvb_captured_length_remaining(tvb, 0);
+
+    /* DTLS header is 13 bytes. */
+    if (length < 13) {
+        /* not sure what we have here ... */
+        return false;
+    }
+
+    guint8 dtls_content_type = tvb_get_guint8(tvb, 0);
+    guint16 dtls_version = tvb_get_guint16(tvb, 1, ENC_BIG_ENDIAN);
+    guint16 dtls_length = tvb_get_guint16(tvb, 11, ENC_BIG_ENDIAN);
+
+    gboolean dtls_possible = (20 <= dtls_content_type) && (dtls_content_type <= 63) &&
+                             (0xfefc <= dtls_version) && (dtls_version <= 0xfeff) &&
+                             ((guint32)length == (guint32)dtls_length + 13);
+
+    if (dtls_possible && length < SOMEIP_HDR_LEN) {
+        return true;
+    }
+
+    guint32 someip_length = tvb_get_guint32(tvb, 4, ENC_BIG_ENDIAN);
+    guint8 someip_version = tvb_get_guint8(tvb, 12);
+
+    /* typically this is 1500 bytes or less on UDP but being conservative */
+    gboolean someip_possible = (someip_version == 1) && (8 <= someip_length) && (someip_length <= 65535) &&
+                               ((guint32)length == someip_length + 8);
+
+    return dtls_possible && !someip_possible;
+}
 
 static int
 dissect_someip_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) {
+    if (someip_detect_dtls && could_this_be_dtls(tvb)) {
+        if (!PINFO_FD_VISITED(pinfo)) {
+            dissector_add_uint("dtls.port", (guint16)pinfo->destport, someip_handle_udp);
+        }
+
+        if (dtls_handle != 0) {
+            return call_dissector_with_data(dtls_handle, tvb, pinfo, tree, data);
+        }
+    }
+
     return udp_dissect_pdus(tvb, pinfo, tree, SOMEIP_HDR_PART1_LEN, NULL, get_someip_message_len, dissect_someip_message, data);
 }
 
@@ -3887,15 +3948,18 @@ proto_register_someip(void) {
         { &hf_someip_tp_offset,
             { "Offset", "someip.tp.offset",
             FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+        { &hf_someip_tp_offset_encoded,
+            { "Encoded Offset", "someip.tp.offset_encoded",
+            FT_UINT32, BASE_HEX, NULL, SOMEIP_TP_OFFSET_MASK, NULL, HFILL }},
         { &hf_someip_tp_flags,
             { "Flags", "someip.tp.flags",
-            FT_UINT8, BASE_HEX, NULL, SOMEIP_TP_OFFSET_MASK_FLAGS, NULL, HFILL }},
+            FT_UINT32, BASE_HEX, NULL, SOMEIP_TP_OFFSET_MASK_FLAGS, NULL, HFILL }},
         { &hf_someip_tp_reserved,
             { "Reserved", "someip.tp.flags.reserved",
-            FT_UINT8, BASE_HEX, NULL, SOMEIP_TP_OFFSET_MASK_RESERVED, NULL, HFILL }},
+            FT_UINT32, BASE_HEX, NULL, SOMEIP_TP_OFFSET_MASK_RESERVED, NULL, HFILL }},
         { &hf_someip_tp_more_segments,
             { "More Segments", "someip.tp.flags.more_segments",
-            FT_BOOLEAN, 8, NULL, SOMEIP_TP_OFFSET_MASK_MORE_SEGMENTS, NULL, HFILL }},
+            FT_BOOLEAN, 32, NULL, SOMEIP_TP_OFFSET_MASK_MORE_SEGMENTS, NULL, HFILL }},
 
         {&hf_someip_tp_fragments,
             {"SOME/IP-TP segments", "someip.tp.fragments",
@@ -3988,7 +4052,6 @@ proto_register_someip(void) {
         &ett_someip,
         &ett_someip_msgtype,
         &ett_someip_tp,
-        &ett_someip_tp_flags,
         &ett_someip_tp_fragment,
         &ett_someip_tp_fragments,
 
@@ -4283,6 +4346,11 @@ proto_register_someip(void) {
         "Should the SOME/IP Dissector use the payload dissector?",
         &someip_deserializer_activated);
 
+    prefs_register_bool_preference(someip_module, "detect_dtls_and_hand_off",
+        "Try to automatically detect DTLS",
+        "Should the SOME/IP Dissector automatically detect DTLS and hand off to it?",
+        &someip_detect_dtls);
+
     prefs_register_bool_preference(someip_module, "payload_dissector_wtlv_default",
         "Try WTLV payload dissection for unconfigured messages (not pure SOME/IP)",
         "Should the SOME/IP Dissector use the payload dissector with the experimental WTLV encoding for unconfigured messages?",
@@ -4496,6 +4564,8 @@ proto_reg_handoff_someip(void) {
 
         dissector_add_uint_range_with_preference("udp.port", "", someip_handle_udp);
         dissector_add_uint_range_with_preference("tcp.port", "", someip_handle_tcp);
+
+        dtls_handle = find_dissector("dtls");
 
         initialized = TRUE;
     } else {

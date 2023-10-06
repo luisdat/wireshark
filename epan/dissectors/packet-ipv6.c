@@ -38,6 +38,7 @@
 #include <epan/proto_data.h>
 #include <epan/to_str.h>
 #include <epan/exported_pdu.h>
+#include <epan/exceptions.h>
 
 #include <wiretap/erf_record.h>
 #include <wsutil/str_util.h>
@@ -70,13 +71,14 @@ void proto_reg_handoff_ipv6(void);
 #define IP6OPT_PDM                      0x0F    /* 00 0 01111 =  15 */
 #define IP6OPT_APN6                     0x13    /* 00 0 10003 =  19 */
 #define IP6OPT_EXP_1E                   0x1E    /* 00 0 11110 =  30 */
+#define IP6OPT_RPL                      0x23    /* 00 1 00011 =  35 */
 #define IP6OPT_QUICKSTART               0x26    /* 00 1 00110 =  38 */
 #define IP6OPT_PMTU                     0x30    /* 00 1 10000 =  48 */
 #define IP6OPT_IOAM                     0x31    /* 00 1 10001 =  49 */
 #define IP6OPT_EXP_3E                   0x3E    /* 00 1 11110 =  62 */
 #define IP6OPT_TPF                      0x41    /* 01 0 00001 =  65 */
 #define IP6OPT_EXP_5E                   0x5E    /* 01 0 11110 =  94 */
-#define IP6OPT_RPL                      0x63    /* 01 1 00011 =  99 */
+#define IP6OPT_RPL_OLD                  0x63    /* 01 1 00011 =  99 */ /* DEPRECATED */
 #define IP6OPT_MPL                      0x6D    /* 01 1 01101 = 109 */
 #define IP6OPT_EXP_7E                   0x7E    /* 01 1 11110 = 126 */
 #define IP6OPT_ENDI                     0x8A    /* 10 0 01010 = 138 */ /* DEPRECATED */
@@ -651,13 +653,13 @@ ipv6_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, con
 }
 
 static gboolean
-ipv6_filter_valid(packet_info *pinfo)
+ipv6_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
     return proto_is_frame_protocol(pinfo->layers, "ipv6");
 }
 
 static gchar*
-ipv6_build_filter(packet_info *pinfo)
+ipv6_build_filter(packet_info *pinfo, void *user_data _U_)
 {
     return ws_strdup_printf("ipv6.addr eq %s and ipv6.addr eq %s",
                 address_to_str(pinfo->pool, &pinfo->net_src),
@@ -681,7 +683,7 @@ static guint number_of_nat64_prefix = 0;
 
 UAT_CSTRING_CB_DEF(nat64_prefix_uats, ipaddr, struct nat64_prefix_data)
 
-static gboolean
+static bool
 nat64_prefix_uat_fld_ip_chk_cb(void *r _U_, const char *ipaddr, guint len _U_, const void *u1 _U_, const void *u2 _U_, char **err)
 {
     /* Check for a valid IPv6 address */
@@ -787,9 +789,6 @@ static gboolean ipv6_summary_in_tree = TRUE;
 /* Show expanded information about IPv6 address */
 static gboolean ipv6_address_detail = FALSE;
 
-/* Look up addresses via mmdbresolve */
-static gboolean ipv6_use_geoip = TRUE;
-
 /* Perform strict RFC adherence checking */
 static gboolean g_ipv6_rpl_srh_strict_rfc_checking = FALSE;
 
@@ -821,13 +820,14 @@ static const value_string ipv6_opt_type_vals[] = {
     { IP6OPT_PDM,           "Performance and Diagnostic Metrics" },
     { IP6OPT_APN6,          "Application-Aware IPv6 Networking (APN6)" },
     { IP6OPT_EXP_1E,        "Experimental (0x1E)"           },
+    { IP6OPT_RPL,           "RPL Option"                    },
     { IP6OPT_QUICKSTART,    "Quick-Start"                   },
     { IP6OPT_PMTU,          "Path MTU Option"               },
     { IP6OPT_IOAM,          "IOAM Option"                   },
     { IP6OPT_EXP_3E,        "Experimental (0x3E)"           },
     { IP6OPT_TPF,           "Tunnel Payload Forwarding (TPF) Information" },
     { IP6OPT_EXP_5E,        "Experimental (0x5E)"           },
-    { IP6OPT_RPL,           "RPL Option"                    },
+    { IP6OPT_RPL_OLD,       "RPL Option (deprecated)"       },
     { IP6OPT_MPL,           "MPL Option"                    },
     { IP6OPT_EXP_7E,        "Experimental (0x7E)"           },
     { IP6OPT_ENDI,          "Endpoint Identification"       },
@@ -895,10 +895,11 @@ static const gint _ipv6_opt_type_hdr[][2] = {
     { IP6OPT_CALIPSO,       IPv6_OPT_HDR_HBH },
     { IP6OPT_SMF_DPD,       IPv6_OPT_HDR_HBH },
     { IP6OPT_PDM,           IPv6_OPT_HDR_DST },
+    { IP6OPT_RPL,           IPv6_OPT_HDR_HBH },
     { IP6OPT_QUICKSTART,    IPv6_OPT_HDR_HBH },
     { IP6OPT_IOAM,          IPv6_OPT_HDR_HBH },
     { IP6OPT_TPF,           IPv6_OPT_HDR_DST },
-    { IP6OPT_RPL,           IPv6_OPT_HDR_HBH },
+    { IP6OPT_RPL_OLD,       IPv6_OPT_HDR_HBH },
     { IP6OPT_MPL,           IPv6_OPT_HDR_HBH },
     { IP6OPT_ILNP_NONCE,    IPv6_OPT_HDR_DST },
     { IP6OPT_LIO,           IPv6_OPT_HDR_DST },
@@ -2849,6 +2850,7 @@ dissect_opts(tvbuff_t *tvb, int offset, proto_tree *tree, packet_info *pinfo, ws
             offset = dissect_opt_jumbo(tvb, offset, pinfo, opt_tree, &opt_ti, opt_len);
             break;
         case IP6OPT_RPL:
+        case IP6OPT_RPL_OLD:
             offset = dissect_opt_rpl(tvb, offset, pinfo, opt_tree, &opt_ti, opt_len);
             break;
         case IP6OPT_TEL:
@@ -3092,6 +3094,13 @@ static struct ipv6_special_range_s {
             { 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
         },
         "ORCHIDv2"
+    },
+    {
+        {
+            { 0x20, 0x01, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+            { 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+        },
+        "Drone Remote ID Protocol Entity Tags (DETs)"
     },
     {
         {
@@ -3648,7 +3657,7 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         add_ipv6_address_embed_ipv4(pinfo, ipv6_tree, tvb, offset + IP6H_SRC, hf_ipv6_src_embed_ipv4);
         add_ipv6_address_embed_ipv4(pinfo, ipv6_tree, tvb, offset + IP6H_DST, hf_ipv6_dst_embed_ipv4);
 
-        if (ipv6_use_geoip) {
+        if (gbl_resolv_flags.maxmind_geoip) {
             add_geoip_info(ipv6_tree, pinfo, tvb, offset, ip6_src, ip6_dst);
         }
     }
@@ -3707,7 +3716,24 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     p_add_ipv6_nxt(pinfo, ip6_nxt);
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
-    ipv6_dissect_next(ip6_nxt, next_tvb, pinfo, tree, iph);
+    TRY {
+        ipv6_dissect_next(ip6_nxt, next_tvb, pinfo, tree, iph);
+    }
+    FINALLY {
+        /* If we need to extend the length due to an ext header and haven't
+         * yet, do so now. This might be due to an exception or unreassembled
+         * fragments.
+         * XXX: What about the tap? We want to tap if we haven't yet, but
+         * if we always tapped here we would send to the tap in reverse order
+         * for IP-in-IP.
+         */
+        if (ipv6_pinfo != NULL && ipv6_pinfo->ipv6_tree != NULL) {
+            /* Set IPv6 Header length */
+            proto_item_set_len(proto_tree_get_parent(ipv6_pinfo->ipv6_tree), ipv6_pinfo->ipv6_item_len);
+            ipv6_pinfo->ipv6_tree = NULL;
+        }
+    }
+    ENDTRY;
 
     pinfo->fragmented = save_fragmented;
     return tvb_captured_length(tvb);
@@ -5338,10 +5364,8 @@ proto_register_ipv6(void)
                                    "Show details about IPv6 addresses",
                                    "Whether to show extended information about IPv6 addresses",
                                    &ipv6_address_detail);
-    prefs_register_bool_preference(ipv6_module, "use_geoip" ,
-                                   "Enable IPv6 geolocation",
-                                   "Whether to look up IPv6 addresses in each MaxMind database we have loaded",
-                                   &ipv6_use_geoip);
+
+    prefs_register_obsolete_preference(ipv6_module, "use_geoip");
 
     /* RPL Strict Header Checking */
     prefs_register_bool_preference(ipv6_module, "perform_strict_rpl_srh_rfc_checking",
@@ -5368,6 +5392,10 @@ proto_register_ipv6(void)
                                     "Support packet-capture from IPv6 TSO-enabled hardware",
                                     "Whether to correct for TSO-enabled (TCP segmentation offload) hardware "
                                     "captures, such as spoofing the IPv6 packet length", &ipv6_tso_supported);
+
+    prefs_register_static_text_preference(ipv6_module, "text_use_geoip" ,
+                                   "IP geolocation settings can be changed in the Name Resolution preferences",
+                                   "IP geolocation settings can be changed in the Name Resolution preferences");
 
     static uat_field_t nat64_uats_flds[] = {
         UAT_FLD_CSTRING_OTHER(nat64_prefix_uats, ipaddr, "NAT64 Prefix", nat64_prefix_uat_fld_ip_chk_cb, "IPv6 prefix address"),
@@ -5408,7 +5436,7 @@ proto_register_ipv6(void)
     register_decode_as(&ipv6_dstopts_da);
 
     register_conversation_table(proto_ipv6, TRUE, ipv6_conversation_packet, ipv6_endpoint_packet);
-    register_conversation_filter("ipv6", "IPv6", ipv6_filter_valid, ipv6_build_filter);
+    register_conversation_filter("ipv6", "IPv6", ipv6_filter_valid, ipv6_build_filter, NULL);
 
     register_capture_dissector("ipv6", capture_ipv6, proto_ipv6);
 }

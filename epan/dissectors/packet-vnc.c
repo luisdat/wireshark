@@ -139,12 +139,6 @@ static const true_false_string auth_result_tfs = {
 	"OK"
 };
 
-static const value_string yes_no_vs[] = {
-	{ 0, "No"  },
-	{ 1, "Yes" },
-	{ 0,  NULL }
-};
-
 typedef enum {
 	/* Required */
 	VNC_CLIENT_MESSAGE_TYPE_SET_PIXEL_FORMAT	  =   0,
@@ -3593,7 +3587,7 @@ proto_register_vnc(void)
 		{ &hf_vnc_security_type,
 		  { "Security type", "vnc.security_type",
 		    FT_UINT8, BASE_DEC, VALS(vnc_security_types_vs), 0x0,
-		    "Security types offered by the server (VNC versions => 3.007", HFILL }
+		    "Security types offered by the server (VNC versions => 3.007)", HFILL }
 		},
 		{ &hf_vnc_server_security_type,
 		  { "Security type", "vnc.server_security_type",
@@ -3763,12 +3757,12 @@ proto_register_vnc(void)
 		{ &hf_vnc_auth_error_length,
 		  { "Length of authentication error", "vnc.auth_error_len",
 		    FT_UINT32, BASE_DEC, NULL, 0x0,
-		    "Authentication error length (present only if the authentication result is fail", HFILL }
+		    "Authentication error length (present only if the authentication result is fail)", HFILL }
 		},
 		{ &hf_vnc_auth_error,
 		  { "Authentication error", "vnc.auth_error",
 		    FT_STRING, BASE_NONE, NULL, 0x0,
-		    "Authentication error (present only if the authentication result is fail", HFILL }
+		    "Authentication error (present only if the authentication result is fail)", HFILL }
 		},
 		{ &hf_vnc_ard_auth_generator,
 		  { "Generator", "vnc.ard_auth_generator",
@@ -4366,7 +4360,7 @@ proto_register_vnc(void)
 
 		{ &hf_vnc_zrle_rle,
 		  { "RLE", "vnc.zrle_rle",
-		    FT_UINT8, BASE_DEC, VALS(yes_no_vs), 0x80, /* Upper bit */
+		    FT_BOOLEAN, 8, TFS(&tfs_yes_no), 0x80, /* Upper bit */
 		    "Specifies that data is run-length encoded", HFILL }
 		},
 
@@ -4506,7 +4500,7 @@ proto_register_vnc(void)
 		},
 		{ &hf_vnc_mirrorlink_pixel_format,
 		  { "Pixel Format", "vnc.mirrorlink_pixel_format",
-		    FT_UINT16, BASE_HEX, NULL, 0x0,
+		    FT_UINT32, BASE_HEX, NULL, 0x0,
 		    "Pixel format support", HFILL }
 		},
 		{ &hf_vnc_mirrorlink_display_width,

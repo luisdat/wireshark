@@ -21,8 +21,8 @@
 #include <epan/uat.h>
 #include <epan/stats_tree.h>
 
-#include <packet-udp.h>
-#include <packet-someip.h>
+#include "packet-udp.h"
+#include "packet-someip.h"
 
  /*
   * Dissector for SOME/IP Service Discovery (SOME/IP-SD).
@@ -246,6 +246,8 @@ static expert_field ef_someipsd_config_string_malformed = EI_INIT;
 /*** prototypes ***/
 void proto_register_someip_sd(void);
 void proto_reg_handoff_someip_sd(void);
+
+static dissector_handle_t someip_sd_handle;
 
 /**************************************
  ******** SOME/IP-SD Dissector ********
@@ -693,7 +695,7 @@ dissect_someip_sd_pdu_entry(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_item_set_hidden(ti);
 
     /* register ports but we skip 0xfffe because of other-serv */
-    if (serviceid != SOMEIP_SD_SERVICE_ID_OTHER_SERVICE) {
+    if (serviceid != SOMEIP_SD_SERVICE_ID_OTHER_SERVICE && !PINFO_FD_VISITED(pinfo)) {
         someip_sd_register_ports(opt_index1, opt_num1, option_count, option_ports);
         someip_sd_register_ports(opt_index2, opt_num2, option_count, option_ports);
     }
@@ -1195,16 +1197,17 @@ proto_register_someip_sd(void) {
         { &ef_someipsd_config_string_malformed,{ "someipsd.config_string_malformed", PI_MALFORMED, PI_ERROR, "SOME/IP-SD Configuration String malformed!", EXPFILL } },
     };
 
-    /* Register Protocol, Fields, ETTs, Expert Info, Taps */
+    /* Register Protocol, Fields, ETTs, Expert Info, Taps, Dissector */
     proto_someip_sd = proto_register_protocol(SOMEIP_SD_NAME_LONG, SOMEIP_SD_NAME, SOMEIP_SD_NAME_FILTER);
     proto_register_field_array(proto_someip_sd, hf_sd, array_length(hf_sd));
     proto_register_subtree_array(ett_sd, array_length(ett_sd));
     expert_module_someip_sd = expert_register_protocol(proto_someip_sd);
     expert_register_field_array(expert_module_someip_sd, ei_sd, array_length(ei_sd));
     tap_someip_sd_entries = register_tap("someipsd_entries");
+    someip_sd_handle = register_dissector(SOMEIP_SD_NAME_FILTER, dissect_someip_sd_pdu, proto_someip_sd);
 
     /* Register preferences */
-    someipsd_module = prefs_register_protocol(proto_someip_sd, &proto_reg_handoff_someip_sd);
+    someipsd_module = prefs_register_protocol(proto_someip_sd, NULL);
 
     range_convert_str(wmem_epan_scope(), &someip_ignore_ports_udp, "", 65535);
     prefs_register_range_preference(someipsd_module, "ports.udp.ignore", "UDP Ports ignored",
@@ -1219,19 +1222,8 @@ proto_register_someip_sd(void) {
 
 void
 proto_reg_handoff_someip_sd(void) {
-    static gboolean             initialized = FALSE;
-    static dissector_handle_t   someip_sd_handle = NULL;
-
-    if (!initialized) {
-        someip_sd_handle = create_dissector_handle(dissect_someip_sd_pdu, proto_someip_sd);
-        dissector_add_uint("someip.messageid", SOMEIP_SD_MESSAGEID, someip_sd_handle);
-
-        stats_tree_register("someipsd_entries", "someipsd_entries", "SOME/IP-SD Entries", 0, someipsd_entries_stats_tree_packet, someipsd_entries_stats_tree_init, NULL);
-
-        initialized = TRUE;
-    }
-
-    /* nothing to do here right now */
+    dissector_add_uint("someip.messageid", SOMEIP_SD_MESSAGEID, someip_sd_handle);
+    stats_tree_register("someipsd_entries", "someipsd_entries", "SOME/IP-SD Entries", 0, someipsd_entries_stats_tree_packet, someipsd_entries_stats_tree_init, NULL);
 }
 
 /*

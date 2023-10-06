@@ -26,6 +26,7 @@
 #include <wsutil/clopts_common.h>
 #include <wsutil/cmdarg_err.h>
 #include <ui/urls.h>
+#include <wsutil/time_util.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/privileges.h>
 #include <wsutil/socket.h>
@@ -266,6 +267,20 @@ gather_wireshark_runtime_info(feature_list l)
         } else {
             without_feature(l, "HiDPI");
         }
+        QString session = qEnvironmentVariable("XDG_SESSION_TYPE");
+        if (!session.isEmpty()) {
+            if (session == "wayland") {
+                with_feature(l, "Wayland");
+            } else if (session == "x11") {
+                with_feature(l, "Xorg");
+            } else {
+                with_feature(l, "XDG_SESSION_TYPE=%s", qUtf8Printable(session));
+            }
+        }
+        QString platform = qApp->platformName();
+        if (!platform.isEmpty()) {
+            with_feature(l, "QPA plugin \"%s\"", qUtf8Printable(platform));
+        }
     }
 }
 
@@ -342,7 +357,7 @@ check_and_warn_user_startup()
 }
 #endif
 
-#if defined(_WIN32) && !defined(HAVE_MSYSTEM)
+#if defined(_WIN32) && !defined(__MINGW32__)
 // Try to avoid library search path collisions. QCoreApplication will
 // search QT_INSTALL_PREFIX/plugins for platform DLLs before searching
 // the application directory. If
@@ -363,6 +378,9 @@ check_and_warn_user_startup()
 //
 // NOTE: This does not apply to MinGW-w64 using MSYS2. In that case we use
 // the system's Qt plugins with the default search paths.
+//
+// NOTE 2: When using MinGW-w64 without MSYS2 we also search for the system DLLS,
+// because our installer might not have deployed them.
 
 static inline void
 win32_reset_library_path(void)
@@ -422,6 +440,23 @@ macos_enable_layer_backing(void)
         }
     }
 #endif
+}
+#endif
+
+#ifdef HAVE_LIBPCAP
+static GList *
+capture_opts_get_interface_list(int *err, char **err_str)
+{
+    /*
+     * XXX - should this pass an update callback?
+     * We already have a window up by the time we start parsing
+     * the majority of the command-line arguments, because
+     * we need to do a bunch of initialization work before
+     * parsing those arguments, and we want to let the user
+     * know that we're doing that initialization, given that
+     * it can take a while.
+     */
+    return capture_interface_list(err, err_str, NULL);
 }
 #endif
 
@@ -534,6 +569,8 @@ int main(int argc, char *qt_argv[])
     setlocale(LC_ALL, "");
 #endif
 
+    ws_tzset();
+
 #ifdef _WIN32
     //
     // On Windows, QCoreApplication has its own WinMain(), which gets the
@@ -628,6 +665,8 @@ int main(int argc, char *qt_argv[])
     ws_init_version_info("Wireshark", gather_wireshark_qt_compiled_info,
                          gather_wireshark_runtime_info);
 
+    init_report_message("Wireshark", &wireshark_report_routines);
+
     /* Create the user profiles directory */
     if (create_profiles_dir(&rf_path) == -1) {
         simple_dialog(ESD_TYPE_WARN, ESD_BTN_OK,
@@ -650,7 +689,7 @@ int main(int argc, char *qt_argv[])
 
     commandline_early_options(argc, argv);
 
-#if defined(_WIN32) && !defined(HAVE_MSYSTEM)
+#if defined(_WIN32) && !defined(__MINGW32__)
     win32_reset_library_path();
 #endif
 
@@ -744,10 +783,8 @@ int main(int argc, char *qt_argv[])
 #ifdef HAVE_LIBPCAP
     /* Set the initial values in the capture options. This might be overwritten
        by preference settings and then again by the command line parameters. */
-    capture_opts_init(&global_capture_opts);
+    capture_opts_init(&global_capture_opts, capture_opts_get_interface_list);
 #endif
-
-    init_report_message("Wireshark", &wireshark_report_routines);
 
     /*
      * Libwiretap must be initialized before libwireshark is, so that
@@ -916,6 +953,7 @@ int main(int argc, char *qt_argv[])
 #ifdef DEBUG_STARTUP_TIME
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling prefs_apply_all, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
+    splash_update(RA_PREFERENCES_APPLY, NULL, NULL);
     prefs_apply_all();
     prefs_to_capture_opts();
     wsApp->emitAppSignal(WiresharkApplication::PreferencesChanged);
@@ -949,7 +987,7 @@ int main(int argc, char *qt_argv[])
     wsApp->emitAppSignal(WiresharkApplication::ColumnsChanged); // We read "recent" widths above.
     wsApp->emitAppSignal(WiresharkApplication::RecentPreferencesRead); // Must be emitted after PreferencesChanged.
 
-    wsApp->setMonospaceFont(prefs.gui_qt_font_name);
+    wsApp->setMonospaceFont(prefs.gui_font_name);
 
     /* For update of WindowTitle (When use gui.window_title preference) */
     main_w->setWSWindowTitle();
@@ -959,6 +997,14 @@ int main(int argc, char *qt_argv[])
         g_free(err_msg);
     }
 
+    /* allSystemsGo() emits appInitialized(), which signals the WelcomePage to
+     * delete the splash overlay. However, it doesn't get redrawn until
+     * processEvents() is called. If we're opening a capture file that happens
+     * either when we finish reading the file or when the progress bar appears.
+     * It's probably better to leave the splash overlay up until that happens
+     * rather than showing the user the welcome page, so we don't call
+     * processEvents() here.
+     */
     wsApp->allSystemsGo();
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Wireshark is up and ready to go, elapsed time %.3fs", (float) (g_get_monotonic_time() - start_time) / 1000000);
     SimpleDialog::displayQueuedMessages(main_w);
@@ -991,7 +1037,7 @@ int main(int argc, char *qt_argv[])
                                          QObject::tr("The filter expression %1 isn't a valid display filter. (%2).")
                                                  .arg(global_commandline_info.jfilter, df_err->msg),
                                          QMessageBox::Ok);
-                    dfilter_error_free(df_err);
+                    df_error_free(&df_err);
                 } else {
                     /* Filter ok, jump to the first packet matching the filter
                        conditions. Default search direction is forward, but if

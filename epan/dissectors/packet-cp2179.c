@@ -721,10 +721,13 @@ dissect_response_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, int 
                     proto_tree_add_item(cp2179_proto_tree, hf_cp2179_timetag_numsets, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 
                     num_records = tvb_get_guint8(tvb, offset) & 0x7F;
+                    offset += 1;
+
+                    if (num_records == 0 || numberofcharacters <= 1)
+                        break;
+
                     recordsize = (numberofcharacters-1) / num_records;
                     num_values = (recordsize-6) / 2;      /* Determine how many 16-bit analog values are present in each event record */
-
-                    offset += 1;
 
                     for (x = 0; x < num_records; x++)
                     {
@@ -969,7 +972,7 @@ dissect_cp2179_pdu(tvbuff_t *cp2179_tvb, packet_info *pinfo, proto_tree *tree, v
 
     message_type = classify_message_type(cp2179_tvb);
     /* set information for Information column for CP2179 */
-    col_add_fstr(pinfo->cinfo, COL_INFO, "%s", val_to_str_ext_const(message_type, &cp2179_messagetype_vals_ext, "Unknown Message Type"));
+    col_add_str(pinfo->cinfo, COL_INFO, val_to_str_ext_const(message_type, &cp2179_messagetype_vals_ext, "Unknown Message Type"));
 
     if (!pinfo->fd->visited){
         conversation_t           *conversation = NULL;
@@ -1054,7 +1057,6 @@ dissect_cp2179(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         cp2179_tvb = clean_telnet_iac(pinfo, tvb, 0, length);
     }
     else{
-        /* cp2179_tvb = tvb_new_subset_length_caplen( tvb, 0, length, length); */
         cp2179_tvb = tvb_new_subset_length( tvb, 0, length);
     }
 
@@ -1078,7 +1080,7 @@ proto_register_cp2179(void)
         { &hf_cp2179_rtu_address,
             { "RTU Address", "cp2179.RTUAddress",
             FT_UINT16, BASE_DEC,
-            NULL, 0x7FF,
+            NULL, 0x07FF,
             NULL, HFILL }
         },
 

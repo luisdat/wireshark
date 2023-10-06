@@ -70,8 +70,6 @@ static prefs_set_pref_e set_pref(gchar*, const gchar*, void *, gboolean);
 static void free_col_info(GList *);
 static void pre_init_prefs(void);
 static gboolean prefs_is_column_visible(const gchar *cols_hidden, fmt_data *cfmt);
-static gboolean parse_column_format(fmt_data *cfmt, const char *fmt);
-static void try_convert_to_custom_column(gpointer *el_data);
 static guint prefs_module_list_foreach(wmem_tree_t *module_list, module_cb callback,
                           gpointer user_data, gboolean skip_obsolete);
 static gint find_val_for_string(const char *needle, const enum_val_t *haystack, gint default_value);
@@ -207,7 +205,6 @@ struct preference {
     int type;                        /**< type of that preference */
     unsigned int effect_flags;       /**< Flags of types effected by preference (PREF_TYPE_DISSECTION, PREF_EFFECT_CAPTURE, etc).
                                           Flags must be non-zero to ensure saving to disk */
-    gui_type_t gui;                  /**< type of the GUI (QT, GTK or both) the preference is registered for */
     union {                          /* The Qt preference code assumes that these will all be pointers (and unique) */
         guint *uint;
         gboolean *boolp;
@@ -263,11 +260,6 @@ const char* prefs_get_title(pref_t *pref)
 int prefs_get_type(pref_t *pref)
 {
     return pref->type;
-}
-
-gui_type_t prefs_get_gui_type(pref_t *pref)
-{
-    return pref->gui;
 }
 
 const char* prefs_get_name(pref_t *pref)
@@ -835,7 +827,7 @@ typedef struct {
     gboolean skip_obsolete;
 } call_foreach_t;
 
-static gboolean
+static bool
 call_foreach_cb(const void *key _U_, void *value, void *data)
 {
     module_t *module = (module_t*)value;
@@ -912,7 +904,7 @@ prefs_modules_foreach_submodules(module_t *module, module_cb callback,
     return prefs_module_list_foreach((module)?module->submodules:prefs_top_level_modules, callback, user_data, TRUE);
 }
 
-static gboolean
+static bool
 call_apply_cb(const void *key _U_, void *value, void *data _U_)
 {
     module_t *module = (module_t *)value;
@@ -988,7 +980,6 @@ register_preference(module_t *module, const char *name, const char *title,
     /* Default to module's preference effects */
     preference->effect_flags = module->effect_flags;
 
-    preference->gui = GUI_ALL;  /* default */
     if (title != NULL)
         preference->ordinal = module->numprefs;
     else
@@ -1082,7 +1073,7 @@ preference_match(gconstpointer a, gconstpointer b)
     return strcmp(name, pref->name);
 }
 
-static gboolean
+static bool
 module_find_pref_cb(const void *key _U_, void *value, void *data)
 {
     find_pref_arg_t* arg = (find_pref_arg_t*)data;
@@ -1770,8 +1761,6 @@ prefs_register_uat_preference_qt(module_t *module, const char *name,
     pref_t* preference = register_preference(module, name, title, description, PREF_UAT);
 
     preference->varp.uat = uat;
-
-    preference->gui = GUI_QT;
 }
 
 struct epan_uat* prefs_get_uat_value(pref_t *pref)
@@ -2622,6 +2611,8 @@ column_format_init_cb(pref_t* pref, GList** value)
         dest_cfmt->resolved = src_cfmt->resolved;
         pref->default_val.list = g_list_append(pref->default_val.list, dest_cfmt);
     }
+
+    column_register_fields();
 }
 
 static void
@@ -2687,17 +2678,17 @@ column_format_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_fla
       /* Go past the title.  */
       col_l_elt = col_l_elt->next;
 
+      /* Some predefined columns have been migrated to use custom columns.
+       * We'll convert these silently here */
+      try_convert_to_custom_column((char **)&col_l_elt->data);
+
       /* Parse the format to see if it's valid.  */
       if (!parse_column_format(&cfmt_check, (char *)col_l_elt->data)) {
         /* It's not a valid column format.  */
         prefs_clear_string_list(col_l);
         return PREFS_SET_SYNTAX_ERR;
       }
-      if (cfmt_check.fmt != COL_CUSTOM) {
-        /* Some predefined columns have been migrated to use custom columns.
-         * We'll convert these silently here */
-        try_convert_to_custom_column(&col_l_elt->data);
-      } else {
+      if (cfmt_check.fmt == COL_CUSTOM) {
         /* We don't need the custom column field on this pass. */
         g_free(cfmt_check.custom_fields);
       }
@@ -2728,6 +2719,7 @@ column_format_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_fla
 
     prefs_clear_string_list(col_l);
     free_string_like_preference(hidden_pref);
+    column_register_fields();
     return PREFS_SET_OK;
 }
 
@@ -3152,7 +3144,7 @@ prefs_register_modules(void)
 
     register_string_like_preference(gui_font_module, "qt.font_name", "Font name",
         "Font name for packet list, protocol tree, and hex dump panes. (Qt)",
-        &prefs.gui_qt_font_name, PREF_STRING, NULL, TRUE);
+        &prefs.gui_font_name, PREF_STRING, NULL, TRUE);
 
     /* User Interface : Colors */
     gui_color_module = prefs_register_subtree(gui_module, "Colors", "Colors", NULL);
@@ -3250,6 +3242,10 @@ prefs_register_modules(void)
     register_string_like_preference(gui_module, "fileopen.dir", "Start Directory",
         "Directory to start in when opening File Open dialog.",
         &prefs.gui_fileopen_dir, PREF_DIRNAME, NULL, TRUE);
+
+    register_string_like_preference(gui_module, "browser_sslkeylog.path", "Path to browser executable",
+        "Path to browser executable to launch with SSLKEYLOG",
+        &prefs.gui_browser_sslkeylog_path, PREF_OPEN_FILENAME, NULL, TRUE);
 
     prefs_register_obsolete_preference(gui_module, "fileopen.remembered_dir");
 
@@ -3415,27 +3411,27 @@ prefs_register_modules(void)
     prefs_register_bool_preference(gui_layout_module, "packet_list_separator.enabled",
                                    "Enable Packet List Separator",
                                    "Enable Packet List Separator",
-                                   &prefs.gui_qt_packet_list_separator);
+                                   &prefs.gui_packet_list_separator);
 
     prefs_register_bool_preference(gui_layout_module, "packet_header_column_definition.enabled",
                                     "Show column definition in packet list header",
                                     "Show column definition in packet list header",
-                                    &prefs.gui_qt_packet_header_column_definition);
+                                    &prefs.gui_packet_header_column_definition);
 
     prefs_register_bool_preference(gui_layout_module, "packet_list_hover_style.enabled",
                                    "Enable Packet List mouse-over colorization",
                                    "Enable Packet List mouse-over colorization",
-                                   &prefs.gui_qt_packet_list_hover_style);
+                                   &prefs.gui_packet_list_hover_style);
 
     prefs_register_bool_preference(gui_layout_module, "show_selected_packet.enabled",
                                    "Show selected packet in the Status Bar",
                                    "Show selected packet in the Status Bar",
-                                   &prefs.gui_qt_show_selected_packet);
+                                   &prefs.gui_show_selected_packet);
 
     prefs_register_bool_preference(gui_layout_module, "show_file_load_time.enabled",
                                    "Show file load time in the Status Bar",
                                    "Show file load time in the Status Bar",
-                                   &prefs.gui_qt_show_file_load_time);
+                                   &prefs.gui_show_file_load_time);
 
     prefs_register_enum_preference(gui_module, "packet_list_elide_mode",
                        "Elide mode",
@@ -3534,6 +3530,11 @@ prefs_register_modules(void)
         "Enables automatic updates for IO Graph",
         &prefs.gui_io_graph_automatic_update);
 
+    prefs_register_bool_preference(gui_module, "io_graph_enable_legend",
+        "Enables the legend of IO Graph",
+        "Enables the legend of IO Graph",
+        &prefs.gui_io_graph_enable_legend);
+
     prefs_register_bool_preference(gui_module, "show_byteview_in_dialog",
         "Show the byte view in the packet details dialog",
         "Show the byte view in the packet details dialog",
@@ -3631,9 +3632,7 @@ prefs_register_modules(void)
     prefs_register_bool_preference(capture_module, "no_extcap", "Disable external capture interfaces",
         "Disable external capture modules (extcap)", &prefs.capture_no_extcap);
 
-    /* We might want to make this a "recent" setting. */
-    prefs_register_bool_preference(capture_module, "auto_scroll", "Scroll packet list during capture",
-        "Scroll packet list during capture?", &prefs.capture_auto_scroll);
+    prefs_register_obsolete_preference(capture_module, "auto_scroll");
 
     prefs_register_bool_preference(capture_module, "show_info", "Show capture information dialog while capturing",
         "Show capture information dialog while capturing?", &prefs.capture_show_info);
@@ -3773,6 +3772,17 @@ prefs_register_modules(void)
                                    "Protocols may use things like VLAN ID or interface ID to narrow the potential for duplicate conversations. "
                                    "Currently ICMP and ICMPv6 use this preference to add VLAN ID to conversation tracking, and IPv4 uses this preference to take VLAN ID into account during reassembly",
                                    &prefs.strict_conversation_tracking_heuristics);
+
+    prefs_register_bool_preference(protocols_module, "ignore_dup_frames",
+                                   "Ignore duplicate frames",
+                                   "Ignore frames that are exact duplicates of any previous frame.",
+                                   &prefs.ignore_dup_frames);
+
+    prefs_register_uint_preference(protocols_module, "ignore_dup_frames_cache_entries",
+            "The max number of hashes to keep in memory for determining duplicates frames",
+            "If \"Ignore duplicate frames\" is set, this setting sets the maximum number "
+            "of cache entries to maintain. A 0 means no limit.",
+            10, &prefs.ignore_dup_frames_cache_entries);
 
     /* Obsolete preferences
      * These "modules" were reorganized/renamed to correspond to their GUI
@@ -3962,45 +3972,6 @@ find_val_for_string(const char *needle, const enum_val_t *haystack,
     return default_value;
 }
 
-
-/* Array of columns that have been migrated to custom columns */
-struct deprecated_columns {
-    const gchar *col_fmt;
-    const gchar *col_expr;
-};
-static struct deprecated_columns migrated_columns[] = {
-    { /* COL_COS_VALUE */ "%U", "vlan.priority" },
-    { /* COL_CIRCUIT_ID */ "%c", "iax2.call" },
-    { /* COL_BSSGP_TLLI */ "%l", "bssgp.tlli" },
-    { /* COL_HPUX_SUBSYS */ "%H", "nettl.subsys" },
-    { /* COL_HPUX_DEVID */ "%P", "nettl.devid" },
-    { /* COL_FR_DLCI */ "%C", "fr.dlci" },
-    { /* COL_REL_CONV_TIME */ "%rct", "tcp.time_relative" },
-    { /* COL_DELTA_CONV_TIME */ "%dct", "tcp.time_delta" },
-    { /* COL_OXID */ "%XO", "fc.ox_id" },
-    { /* COL_RXID */ "%XR", "fc.rx_id" },
-    { /* COL_SRCIDX */ "%Xd", "mdshdr.srcidx" },
-    { /* COL_DSTIDX */ "%Xs", "mdshdr.dstidx" },
-    { /* COL_DCE_CTX */ "%z", "dcerpc.cn_ctx_id" }
-};
-
-static gboolean
-is_deprecated_column_format(const gchar* fmt)
-{
-    guint haystack_idx;
-
-    for (haystack_idx = 0;
-         haystack_idx < G_N_ELEMENTS(migrated_columns);
-         ++haystack_idx) {
-
-        if (strcmp(migrated_columns[haystack_idx].col_fmt, fmt) == 0) {
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
 /* Preferences file format:
  * - Configuration directives start at the beginning of the line, and
  *   are terminated with a colon.
@@ -4015,58 +3986,6 @@ print.file: /a/very/long/path/
             to/wireshark-out.ps
  *
  */
-
-#define DEF_NUM_COLS    7
-
-/*
- * Parse a column format, filling in the relevant fields of a fmt_data.
- */
-static gboolean
-parse_column_format(fmt_data *cfmt, const char *fmt)
-{
-    const gchar *cust_format = col_format_to_string(COL_CUSTOM);
-    size_t cust_format_len = strlen(cust_format);
-    gchar **cust_format_info;
-    char *p;
-    int col_fmt;
-    gchar *col_custom_fields = NULL;
-    long col_custom_occurrence = 0;
-    gboolean col_resolved = TRUE;
-
-    /*
-     * Is this a custom column?
-     */
-    if ((strlen(fmt) > cust_format_len) && (fmt[cust_format_len] == ':') &&
-        strncmp(fmt, cust_format, cust_format_len) == 0) {
-        /* Yes. */
-        col_fmt = COL_CUSTOM;
-        cust_format_info = g_strsplit(&fmt[cust_format_len+1], ":", 3); /* add 1 for ':' */
-        col_custom_fields = g_strdup(cust_format_info[0]);
-        if (col_custom_fields && cust_format_info[1]) {
-            col_custom_occurrence = strtol(cust_format_info[1], &p, 10);
-            if (p == cust_format_info[1] || *p != '\0') {
-                /* Not a valid number. */
-                g_free(col_custom_fields);
-                g_strfreev(cust_format_info);
-                return FALSE;
-            }
-        }
-        if (col_custom_fields && cust_format_info[1] && cust_format_info[2]) {
-            col_resolved = (cust_format_info[2][0] == 'U') ? FALSE : TRUE;
-        }
-        g_strfreev(cust_format_info);
-    } else {
-        col_fmt = get_column_format_from_str(fmt);
-        if ((col_fmt == -1) && (!is_deprecated_column_format(fmt)))
-            return FALSE;
-    }
-
-    cfmt->fmt = col_fmt;
-    cfmt->custom_fields = col_custom_fields;
-    cfmt->custom_occurrence = (int)col_custom_occurrence;
-    cfmt->resolved = col_resolved;
-    return TRUE;
-}
 
 /* Initialize non-dissector preferences to wired-in default values Called
  * at program startup and any time the profile changes. (The dissector
@@ -4106,17 +4025,35 @@ pre_init_prefs(void)
     int         i;
     gchar       *col_name;
     fmt_data    *cfmt;
-    static const gchar *col_fmt[DEF_NUM_COLS*2] = {
+    static const char *col_fmt_packets[] = {
         "No.",      "%m", "Time",        "%t",
         "Source",   "%s", "Destination", "%d",
         "Protocol", "%p", "Length",      "%L",
-        "Info",     "%i"};
+        "Info",     "%i" };
+    static const char **col_fmt = col_fmt_packets;
+    int num_cols = 7;
+
+    if (!is_packet_configuration_namespace()) {
+        static const char *col_fmt_logs[] = {
+            "No.",             "%m", "Time",        "%t",
+            "Source",          "%s", "Destination", "%d",
+            "Length",          "%L",
+            "Service",         "%Cus:ct.shortsrc:0:R",
+            "Region",          "%Cus:ct.region:0:R",
+            "Bucket/Instance", "%Cus:s3.bucket || ec2.name:0:R",
+            "User Name",       "%Cus:ct.user:0:R",
+            "Event Name",      "%Cus:ct.name:0:R",
+            "User IP",         "%Cus:ct.srcip:0:R",
+            "Info",            "%i" };
+        col_fmt = col_fmt_logs;
+        num_cols = 12;
+    }
 
     prefs.restore_filter_after_following_stream = FALSE;
     prefs.gui_toolbar_main_style = TB_STYLE_ICONS;
     /* We try to find the best font in the Qt code */
-    g_free(prefs.gui_qt_font_name);
-    prefs.gui_qt_font_name           = g_strdup("");
+    g_free(prefs.gui_font_name);
+    prefs.gui_font_name              = g_strdup("");
     prefs.gui_active_fg.red          =         0;
     prefs.gui_active_fg.green        =         0;
     prefs.gui_active_fg.blue         =         0;
@@ -4192,6 +4129,8 @@ pre_init_prefs(void)
     prefs.gui_recent_files_count_max = 10;
     g_free(prefs.gui_fileopen_dir);
     prefs.gui_fileopen_dir           = g_strdup(get_persdatafile_dir());
+    g_free(prefs.gui_browser_sslkeylog_path);
+    prefs.gui_browser_sslkeylog_path = g_strdup("");
     prefs.gui_fileopen_preview       = 3;
     prefs.gui_ask_unsaved            = TRUE;
     prefs.gui_autocomplete_filter    = TRUE;
@@ -4220,11 +4159,11 @@ pre_init_prefs(void)
     prefs.gui_interfaces_hide_types = g_strdup("");
     prefs.gui_interfaces_show_hidden = FALSE;
     prefs.gui_interfaces_remote_display = TRUE;
-    prefs.gui_qt_packet_list_separator = FALSE;
-    prefs.gui_qt_packet_header_column_definition = TRUE;
-    prefs.gui_qt_packet_list_hover_style = TRUE;
-    prefs.gui_qt_show_selected_packet = FALSE;
-    prefs.gui_qt_show_file_load_time = FALSE;
+    prefs.gui_packet_list_separator = FALSE;
+    prefs.gui_packet_header_column_definition = TRUE;
+    prefs.gui_packet_list_hover_style = TRUE;
+    prefs.gui_show_selected_packet = FALSE;
+    prefs.gui_show_file_load_time = FALSE;
     prefs.gui_max_export_objects     = 1000;
     prefs.gui_max_tree_items = 1 * 1000 * 1000;
     prefs.gui_max_tree_depth = 5 * 100;
@@ -4236,17 +4175,15 @@ pre_init_prefs(void)
         free_col_info(prefs.col_list);
         prefs.col_list = NULL;
     }
-    for (i = 0; i < DEF_NUM_COLS; i++) {
-        cfmt = g_new(fmt_data,1);
+    for (i = 0; i < num_cols; i++) {
+        cfmt = g_new0(fmt_data,1);
         cfmt->title = g_strdup(col_fmt[i * 2]);
+        cfmt->visible = true;
+        cfmt->resolved = true;
         parse_column_format(cfmt, col_fmt[(i * 2) + 1]);
-        cfmt->visible = TRUE;
-        cfmt->resolved = TRUE;
-        cfmt->custom_fields = NULL;
-        cfmt->custom_occurrence = 0;
         prefs.col_list = g_list_append(prefs.col_list, cfmt);
     }
-    prefs.num_cols  = DEF_NUM_COLS;
+    prefs.num_cols  = num_cols;
 
 /* set the default values for the capture dialog box */
     prefs.capture_prom_mode             = TRUE;
@@ -4254,7 +4191,6 @@ pre_init_prefs(void)
     prefs.capture_real_time             = TRUE;
     prefs.capture_update_interval       = DEFAULT_UPDATE_INTERVAL;
     prefs.capture_no_extcap             = FALSE;
-    prefs.capture_auto_scroll           = TRUE;
     prefs.capture_show_info             = FALSE;
 
     if (!prefs.capture_columns) {
@@ -4277,11 +4213,16 @@ pre_init_prefs(void)
     prefs.st_sort_defcolflag = ST_SORT_COL_COUNT;
     prefs.st_sort_defdescending = TRUE;
     prefs.st_sort_showfullname = FALSE;
+
+    /* protocols */
     prefs.display_hidden_proto_items = FALSE;
     prefs.display_byte_fields_with_spaces = FALSE;
+    prefs.ignore_dup_frames = FALSE;
+    prefs.ignore_dup_frames_cache_entries = 10000;
 
     /* set the default values for the io graph dialog */
     prefs.gui_io_graph_automatic_update = TRUE;
+    prefs.gui_io_graph_enable_legend = TRUE;
 
     /* set the default values for the packet dialog */
     prefs.gui_packet_details_show_byteview = TRUE;
@@ -4387,7 +4328,7 @@ reset_pref_cb(gpointer data, gpointer user_data)
 /*
  * Reset all preferences for a module.
  */
-static gboolean
+static bool
 reset_module_prefs(const void *key _U_, void *value, void *data _U_)
 {
     module_t *module = (module_t *)value;
@@ -5116,6 +5057,9 @@ string_to_name_resolve(const char *string, e_addr_resolve *name_resolve)
     memset(name_resolve, 0, sizeof(e_addr_resolve));
     while ((c = *string++) != '\0') {
         switch (c) {
+        case 'g':
+            name_resolve->maxmind_geoip = TRUE;
+            break;
         case 'm':
             name_resolve->mac_name = TRUE;
             break;
@@ -5142,27 +5086,6 @@ string_to_name_resolve(const char *string, e_addr_resolve *name_resolve)
         }
     }
     return '\0';
-}
-
-static void
-try_convert_to_custom_column(gpointer *el_data)
-{
-    guint haystack_idx;
-
-    gchar **fmt = (gchar **) el_data;
-
-    for (haystack_idx = 0;
-         haystack_idx < G_N_ELEMENTS(migrated_columns);
-         ++haystack_idx) {
-
-        if (strcmp(migrated_columns[haystack_idx].col_fmt, *fmt) == 0) {
-            gchar *cust_col = ws_strdup_printf("%%Cus:%s:0",
-                                migrated_columns[haystack_idx].col_expr);
-
-            g_free(*fmt);
-            *fmt = cust_col;
-        }
-    }
 }
 
 static gboolean
@@ -5608,6 +5531,7 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
     module_t *module, *containing_module;
     pref_t   *pref;
     int type;
+    gboolean converted_pref = FALSE;
 
     //The PRS_GUI field names are here for backwards compatibility
     //display filters have been converted to a UAT.
@@ -5742,9 +5666,7 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
                         }
                     }
                     if (module) {
-                        ws_warning("Preference \"%s.%s\" has been converted to \"%s.%s\"\n"
-                                   "Save your preferences to make this change permanent.",
-                                   pref_name, dotp+1, module->name, dotp+1);
+                        converted_pref = TRUE;
                         prefs.unknown_prefs = TRUE;
                     }
                 }
@@ -6036,6 +5958,9 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
                         value = "none";
                 }
             }
+            if (pref) {
+                converted_pref = TRUE;
+            }
         }
         if (pref == NULL ) {
             if (strcmp(module->name, "extcap") == 0 && g_list_length(module->prefs) <= 1) {
@@ -6053,6 +5978,12 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
             return PREFS_SET_OBSOLETE;        /* no such preference any more */
         } else {
             RESET_PREF_OBSOLETE(type);
+        }
+
+        if (converted_pref) {
+            ws_warning("Preference \"%s\" has been converted to \"%s.%s\"\n"
+                       "Save your preferences to make this change permanent.",
+                       pref_name, module->name ? module->name : module->parent->name, prefs_get_name(pref));
         }
 
         switch (type) {

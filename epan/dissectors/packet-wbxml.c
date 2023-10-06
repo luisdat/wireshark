@@ -393,8 +393,8 @@ wv_datetime_from_opaque(wmem_allocator_t *pool, tvbuff_t *tvb, guint32 offset, g
 		time_zone = tvb_get_guint8(tvb, offset + 5);
 		/* Now construct the string */
 		str = wmem_strdup_printf(pool, "WV-CSP DateTime: "
-				      "%04d-%02d-%02dT%02d:%02d:%02d%c",
-				      year, month, day, hour, minute, second, time_zone);
+				      "%04d-%02d-%02dT%02d:%02d:%02d%s",
+				      year, month, day, hour, minute, second, format_char(pool, time_zone));
 	} else { /* Invalid length for a WV-CSP DateTime tag value */
 		str = wmem_strdup_printf(pool, "<Error: invalid binary WV-CSP DateTime value "
 				      "(%u bytes of opaque data)>", data_len);
@@ -3960,7 +3960,7 @@ static const value_string  wbxml_uaprof_tags_cp2[] = {
 	{0x18, "prf:JavaScriptVersion"},
 	{0x19, "prf:PreferenceForFrames"},
 	{0x1A, "prf:TablesCapable"},
-	{0x1B, "Prf:XhtmlVersion"},
+	{0x1B, "prf:XhtmlVersion"},
 	{0x1C, "prf:XhtmlModules"},
 
 	{ 0x00, NULL }
@@ -6526,7 +6526,6 @@ static const value_string vals_wv_csp_13_element_value_tokens[] = {
 	{ 0x35, "GRANTED" },
 	{ 0x82, "Gray" },
 	{ 0x88, "Green" },
-	{ 0x3D, "History" },
 	{ 0x0E, "http://" },
 	{ 0x0F, "https://" },
 	{ 0x7C, "Huge" },
@@ -7333,7 +7332,7 @@ parse_wbxml_tag_defined (proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gu
 
 	unsigned     recursion_level = p_get_proto_depth(pinfo, proto_wbxml);
 	unsigned     encoding = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wbxml, 0));
-	if (++recursion_level >= WBXML_MAX_RECURSION_LEVEL) {
+	if (recursion_level >= WBXML_MAX_RECURSION_LEVEL) {
 		proto_tree_add_expert(tree, pinfo, &ei_wbxml_too_much_recursion, tvb, offset, tvb_captured_length_remaining(tvb, offset));
 		return tvb_len;
 	}
@@ -7461,7 +7460,7 @@ parse_wbxml_tag_defined (proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gu
 				if (map != NULL)
 				{
 					char *tmp_str;
-					if (tag_save_known) { /* Knwon tag */
+					if (tag_save_known) { /* Known tag */
 						if (map->opaque_binary_tag) {
 							tmp_str = map->opaque_binary_tag(tvb, off + 1,
 										     tag_save_known, *codepage_stag, &len, pinfo);
@@ -7551,8 +7550,7 @@ parse_wbxml_tag_defined (proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gu
 					DebugLog(("STAG: Tag in Tag - RECURSE! (off = %u)\n", off));
 					/* Do not process the attribute list:
 					 * recursion will take care of it */
-					recursion_level++;
-					p_set_proto_depth(pinfo, proto_wbxml, recursion_level);
+					p_set_proto_depth(pinfo, proto_wbxml, recursion_level + 1);
 					len = parse_wbxml_tag_defined (tree, tvb, pinfo, off, str_tbl,
 								       codepage_stag, codepage_attr, map);
 					off += len;

@@ -242,7 +242,7 @@ addr_uat_copy_cb(void *dest, const void *source, size_t len _U_)
 }
 
 /* Sanity-checks a UAT record. */
-static gboolean
+static bool
 addr_uat_update_cb(void *r, char **err)
 {
     static_addr_t *map = (static_addr_t *)r;
@@ -327,7 +327,7 @@ static void ieee802154_key_post_update_cb(void)
     }
 }
 
-static gboolean ieee802154_key_update_cb(void *r, char **err)
+static bool ieee802154_key_update_cb(void *r, char **err)
 {
     ieee802154_key_t* rec = (ieee802154_key_t*)r;
     GByteArray *bytes;
@@ -5175,8 +5175,8 @@ dissect_ieee802154_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
     case IEEE802154_CMD_VENDOR_SPECIFIC:
     {
-        guint32 oui = tvb_get_ntoh24(tvb, 0);
-        proto_tree_add_item(tree, hf_ieee802154_cmd_vendor_oui, tvb, 0, 3, ENC_BIG_ENDIAN);
+        guint32 oui = tvb_get_letoh24(tvb, 0);
+        proto_tree_add_item(tree, hf_ieee802154_cmd_vendor_oui, tvb, 0, 3, ENC_LITTLE_ENDIAN);
         if (!dissector_try_uint_new(cmd_vendor_dissector_table, oui, tvb_new_subset_remaining(tvb, 3), pinfo, tree, FALSE, packet)) {
             call_data_dissector(tvb_new_subset_remaining(tvb, 3), pinfo, tree);
         }
@@ -5933,14 +5933,14 @@ static tap_packet_status ieee802154_endpoint_packet(void *pit, packet_info *pinf
     return TAP_PACKET_REDRAW;
 }
 
-static gboolean ieee802154_filter_valid(packet_info *pinfo)
+static gboolean ieee802154_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
     return proto_is_frame_protocol(pinfo->layers, "wpan")
             && ((pinfo->dl_src.type == ieee802_15_4_short_address_type) || (pinfo->dl_src.type == AT_EUI64))
             && ((pinfo->dl_dst.type == ieee802_15_4_short_address_type) || (pinfo->dl_dst.type == AT_EUI64));
 }
 
-static gchar* ieee802154_build_filter(packet_info *pinfo)
+static gchar* ieee802154_build_filter(packet_info *pinfo, void *user_data _U_)
 {
     return ws_strdup_printf("wpan.%s eq %s and wpan.%s eq %s",
             (pinfo->dl_src.type == ieee802_15_4_short_address_type) ? "addr16" : "addr64",
@@ -7409,7 +7409,7 @@ void proto_register_ieee802154(void)
     ieee802154_tap = register_tap(IEEE802154_PROTOABBREV_WPAN);
 
     register_conversation_table(proto_ieee802154, TRUE, ieee802154_conversation_packet, ieee802154_endpoint_packet);
-    register_conversation_filter(IEEE802154_PROTOABBREV_WPAN, "IEEE 802.15.4", ieee802154_filter_valid, ieee802154_build_filter);
+    register_conversation_filter(IEEE802154_PROTOABBREV_WPAN, "IEEE 802.15.4", ieee802154_filter_valid, ieee802154_build_filter, NULL);
 } /* proto_register_ieee802154 */
 
 
