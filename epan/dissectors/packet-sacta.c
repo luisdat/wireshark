@@ -9,6 +9,7 @@
 
 #include "packet-sacta.h"
 #include "address_types.h"
+#include "wsutil/inet_addr.h"
 #include "epan/expert.h"
 #include <epan/reassemble.h>
 

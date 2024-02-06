@@ -53,7 +53,7 @@ extern "C" char* strptime(const char* s,
 #endif
 
 #ifndef HAVE_STRPTIME
-# include "wsutil/strptime.h"
+# include "wsutil/ws_strptime.h"
 #endif
 
 #include "packet-4sight.h"

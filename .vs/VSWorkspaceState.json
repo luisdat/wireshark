@@ -1,0 +1,21 @@
+{
+  "OutputFoldersPerTargetSystem": {
+    "M\u00E1quina local": [
+      "..\\..\\..\\..\\..\\..\\build\\out\\build\\x64-debug",
+      "..\\..\\..\\..\\..\\..\\build\\out\\install\\x64-debug",
+      "..\\..\\..\\..\\..\\..\\build\\out\\build\\x64-release",
+      "..\\..\\..\\..\\..\\..\\build\\out\\install\\x64-release",
+      "..\\..\\..\\..\\..\\..\\build\\out\\build\\x86-debug",
+      "..\\..\\..\\..\\..\\..\\build\\out\\install\\x86-debug",
+      "..\\..\\..\\..\\..\\..\\build\\out\\build\\x86-release",
+      "..\\..\\..\\..\\..\\..\\build\\out\\install\\x86-release"
+    ]
+  },
+  "ExpandedNodes": [
+    "",
+    "\\epan",
+    "\\epan\\dissectors"
+  ],
+  "SelectedNode": "\\epan\\dissectors\\packet-amqp.c",
+  "PreviewInSolutionExplorer": false
+}
