@@ -25,23 +25,24 @@
 void proto_reg_handoff_teredo(void);
 void proto_register_teredo(void);
 
-static int teredo_tap = -1;
+static int teredo_tap;
 
-static int proto_teredo = -1;
+static int proto_teredo;
 
-static int hf_teredo_auth = -1;
-static int hf_teredo_auth_idlen = -1;
-static int hf_teredo_auth_aulen = -1;
-static int hf_teredo_auth_id = -1;
-static int hf_teredo_auth_value = -1;
-static int hf_teredo_auth_nonce = -1;
-static int hf_teredo_auth_conf = -1;
-static int hf_teredo_orig = -1;
-static int hf_teredo_orig_port = -1;
-static int hf_teredo_orig_addr = -1;
+static int hf_teredo_auth;
+static int hf_teredo_auth_idlen;
+static int hf_teredo_auth_aulen;
+static int hf_teredo_auth_id;
+static int hf_teredo_auth_value;
+static int hf_teredo_auth_nonce;
+static int hf_teredo_auth_conf;
+static int hf_teredo_orig;
+static int hf_teredo_orig_port;
+static int hf_teredo_orig_addr;
 
-static gint ett_teredo = -1;
-static gint ett_teredo_auth = -1, ett_teredo_orig = -1;
+static gint ett_teredo;
+static gint ett_teredo_auth;
+static gint ett_teredo_orig;
 
 typedef struct {
 	guint16 th_indtyp;
@@ -367,8 +368,7 @@ proto_register_teredo(void)
 
 	module_t *teredo_module;
 
-	proto_teredo = proto_register_protocol(
-		"Teredo IPv6 over UDP tunneling", "Teredo", "teredo");
+	proto_teredo = proto_register_protocol("Teredo IPv6 over UDP tunneling", "Teredo", "teredo");
 	proto_register_field_array(proto_teredo, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 	teredo_handle = register_dissector("teredo", dissect_teredo, proto_teredo);

@@ -254,6 +254,13 @@ xmpp_unknown(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, xmpp_element_t
 }
 
 static void
+cleanup_glist_cb(void *user_data) {
+    GList *li = (GList*)user_data;
+
+    g_list_free(li);
+}
+
+static void
 xmpp_unknown_attrs(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, xmpp_element_t *element, gboolean displ_short_list)
 {
     proto_item *item = proto_tree_get_parent(tree);
@@ -262,6 +269,9 @@ xmpp_unknown_attrs(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, xmpp
     GList *values = g_hash_table_get_values(element->attrs);
 
     GList *keys_head = keys, *values_head = values;
+
+    CLEANUP_PUSH_PFX(k, cleanup_glist_cb, keys_head);
+    CLEANUP_PUSH_PFX(v, cleanup_glist_cb, values_head);
 
     gboolean short_list_started = FALSE;
 
@@ -285,7 +295,7 @@ xmpp_unknown_attrs(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, xmpp
                 proto_tree_add_string(tree, hf_xmpp_xmlns, tvb, attr->offset, attr->length, attr->value);
             else {
                 /*xmlns may looks like xmlns:abbrev="sth"*/
-                const gchar *xmlns_needle = ws_strcasestr((const char *)keys->data, "xmlns:");
+                const gchar *xmlns_needle = ws_ascii_strcasestr((const char *)keys->data, "xmlns:");
                 if (xmlns_needle && xmlns_needle == keys->data) {
                     proto_tree_add_string_format(tree, hf_xmpp_xmlns, tvb, attr->offset, attr->length, attr->value,"%s: %s", (gchar*)keys->data, attr->value);
                 } else {
@@ -305,8 +315,8 @@ xmpp_unknown_attrs(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, xmpp
     if(short_list_started && displ_short_list)
         proto_item_append_text(item, "]");
 
-    g_list_free(keys_head);
-    g_list_free(values_head);
+    CLEANUP_CALL_AND_POP_PFX(v);
+    CLEANUP_CALL_AND_POP_PFX(k);
 }
 
 void
@@ -596,7 +606,7 @@ xmpp_xml_frame_to_element_t(wmem_allocator_t *pool, xml_frame_t *xml_frame, xmpp
                 g_hash_table_insert(node->attrs,(gpointer)attr->name,(gpointer)attr);
 
                 /*checking that attr->name looks like xmlns:ns*/
-                xmlns_needle = ws_strcasestr(attr->name, "xmlns");
+                xmlns_needle = ws_ascii_strcasestr(attr->name, "xmlns");
 
                 if(xmlns_needle == attr->name)
                 {
@@ -672,7 +682,7 @@ attr_find_pred(gpointer key, gpointer value _U_, gpointer user_data)
 
     if( strcmp(attr_name, "xmlns") == 0 )
     {
-        const gchar *first_occur = ws_strcasestr((const char *)key, "xmlns:");
+        const gchar *first_occur = ws_ascii_strcasestr((const char *)key, "xmlns:");
         if(first_occur && first_occur == key)
             return TRUE;
         else

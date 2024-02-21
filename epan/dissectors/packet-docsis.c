@@ -58,7 +58,7 @@ static gboolean docsis_dissect_encrypted_frames = FALSE;
 #define DOCSIS_MIN_HEADER_LEN   6
 
 #define FCTYPE_PACKET   0x00
-#define FCTYPE_RESERVED 0x01
+#define FCTYPE_SPECIAL  0x01
 #define FCTYPE_ISOLAT   0x02
 #define FCTYPE_MACSPC   0x03
 
@@ -95,69 +95,71 @@ static gboolean docsis_dissect_encrypted_frames = FALSE;
 #define EH_EXTENDED         15
 
 /* Initialize the protocol and registered fields */
-static int proto_docsis = -1;
-static int hf_docsis_fctype = -1;
-static int hf_docsis_machdr_fcparm = -1;
-static int hf_docsis_fcparm = -1;
-static int hf_docsis_exthdr = -1;
-static int hf_docsis_concat_cnt = -1;
-static int hf_docsis_macparm = -1;
-static int hf_docsis_ehdrlen = -1;
-static int hf_docsis_len = -1;
-static int hf_docsis_eh_type = -1;
-static int hf_docsis_eh_len = -1;
-static int hf_docsis_eh_val = -1;
-static int hf_docsis_frag_rsvd = -1;
-static int hf_docsis_frag_first = -1;
-static int hf_docsis_frag_last = -1;
-static int hf_docsis_frag_seq = -1;
-static int hf_docsis_sid = -1;
-static int hf_docsis_mini_slots = -1;
-static int hf_docsis_requested_size = -1;
-static int hf_docsis_hcs = -1;
-static int hf_docsis_hcs_status = -1;
-static int hf_docsis_bpi_en = -1;
-static int hf_docsis_toggle_bit = -1;
-static int hf_docsis_key_seq = -1;
-static int hf_docsis_ehdr_ver = -1;
-static int hf_docsis_said = -1;
-static int hf_docsis_ehdr_phsi = -1;
-static int hf_docsis_ehdr_qind = -1;
-static int hf_docsis_ehdr_grants = -1;
-static int hf_docsis_reserved = -1;
-static int hf_docsis_ehdr_ds_traffic_pri = -1;
-static int hf_docsis_ehdr_ds_seq_chg_cnt = -1;
-static int hf_docsis_ehdr_ds_dsid = -1;
-static int hf_docsis_ehdr_ds_pkt_seq_num = -1;
-static int hf_docsis_ehdr_bpup2_bpi_en = -1;
-static int hf_docsis_ehdr_bpup2_toggle_bit = -1;
-static int hf_docsis_ehdr_bpup2_key_seq = -1;
-static int hf_docsis_ehdr_bpup2_ver = -1;
-static int hf_docsis_ehdr_bpup2_sid = -1;
-static int hf_docsis_ehdr_pv_st_refpt = -1;
-static int hf_docsis_ehdr_pv_timestamp = -1;
+static int proto_docsis;
+static int hf_docsis_fctype;
+static int hf_docsis_machdr_fcparm;
+static int hf_docsis_fcparm;
+static int hf_docsis_exthdr;
+static int hf_docsis_concat_cnt;
+static int hf_docsis_macparm;
+static int hf_docsis_ehdrlen;
+static int hf_docsis_len;
+static int hf_docsis_eh_type;
+static int hf_docsis_eh_len;
+static int hf_docsis_eh_val;
+static int hf_docsis_ehx_type;
+static int hf_docsis_ehx_len;
+static int hf_docsis_frag_rsvd;
+static int hf_docsis_frag_first;
+static int hf_docsis_frag_last;
+static int hf_docsis_frag_seq;
+static int hf_docsis_sid;
+static int hf_docsis_mini_slots;
+static int hf_docsis_requested_size;
+static int hf_docsis_hcs;
+static int hf_docsis_hcs_status;
+static int hf_docsis_bpi_en;
+static int hf_docsis_toggle_bit;
+static int hf_docsis_key_seq;
+static int hf_docsis_ehdr_ver;
+static int hf_docsis_said;
+static int hf_docsis_ehdr_phsi;
+static int hf_docsis_ehdr_qind;
+static int hf_docsis_ehdr_grants;
+static int hf_docsis_reserved;
+static int hf_docsis_ehdr_ds_traffic_pri;
+static int hf_docsis_ehdr_ds_seq_chg_cnt;
+static int hf_docsis_ehdr_ds_dsid;
+static int hf_docsis_ehdr_ds_pkt_seq_num;
+static int hf_docsis_ehdr_bpup2_bpi_en;
+static int hf_docsis_ehdr_bpup2_toggle_bit;
+static int hf_docsis_ehdr_bpup2_key_seq;
+static int hf_docsis_ehdr_bpup2_ver;
+static int hf_docsis_ehdr_bpup2_sid;
+static int hf_docsis_ehdr_pv_st_refpt;
+static int hf_docsis_ehdr_pv_timestamp;
 
-static int hf_docsis_fragments = -1;
-static int hf_docsis_fragment = -1;
-static int hf_docsis_fragment_overlap = -1;
-static int hf_docsis_fragment_overlap_conflict = -1;
-static int hf_docsis_fragment_multiple_tails = -1;
-static int hf_docsis_fragment_too_long_fragment = -1;
-static int hf_docsis_fragment_error = -1;
-static int hf_docsis_fragment_count = -1;
-static int hf_docsis_reassembled_in = -1;
-static int hf_docsis_reassembled_length = -1;
-static int hf_docsis_reassembled_data = -1;
-static int hf_docsis_frag_fcs = -1;
-static int hf_docsis_frag_fcs_status = -1;
+static int hf_docsis_fragments;
+static int hf_docsis_fragment;
+static int hf_docsis_fragment_overlap;
+static int hf_docsis_fragment_overlap_conflict;
+static int hf_docsis_fragment_multiple_tails;
+static int hf_docsis_fragment_too_long_fragment;
+static int hf_docsis_fragment_error;
+static int hf_docsis_fragment_count;
+static int hf_docsis_reassembled_in;
+static int hf_docsis_reassembled_length;
+static int hf_docsis_reassembled_data;
+static int hf_docsis_frag_fcs;
+static int hf_docsis_frag_fcs_status;
 
-static int hf_docsis_dst = -1;
-static int hf_docsis_dst_resolved = -1;
-static int hf_docsis_src = -1;
-static int hf_docsis_src_resolved = -1;
-static int hf_docsis_lg = -1;
-static int hf_docsis_ig = -1;
-static int hf_docsis_encrypted_payload = -1;
+static int hf_docsis_dst;
+static int hf_docsis_dst_resolved;
+static int hf_docsis_src;
+static int hf_docsis_src_resolved;
+static int hf_docsis_lg;
+static int hf_docsis_ig;
+static int hf_docsis_encrypted_payload;
 
 static dissector_handle_t docsis_handle;
 static dissector_handle_t eth_withoutfcs_handle;
@@ -166,21 +168,21 @@ static dissector_handle_t docsis_mgmt_handle;
 static dissector_table_t docsis_dissector_table;
 #endif
 
-static expert_field ei_docsis_hcs_bad = EI_INIT;
-static expert_field ei_docsis_len = EI_INIT;
-static expert_field ei_docsis_frag_fcs_bad = EI_INIT;
-static expert_field ei_docsis_eh_len = EI_INIT;
+static expert_field ei_docsis_hcs_bad;
+static expert_field ei_docsis_len;
+static expert_field ei_docsis_frag_fcs_bad;
+static expert_field ei_docsis_eh_len;
 
 /* Initialize the subtree pointers */
-static gint ett_docsis = -1;
-static gint ett_ehdr = -1;
-static gint ett_docsis_fragments = -1;
-static gint ett_docsis_fragment = -1;
-static gint ett_addr = -1;
+static gint ett_docsis;
+static gint ett_ehdr;
+static gint ett_docsis_fragments;
+static gint ett_docsis_fragment;
+static gint ett_addr;
 
 static const value_string fctype_vals[] = {
   {FCTYPE_PACKET,   "Packet PDU"},
-  {FCTYPE_RESERVED, "Reserved"},
+  {FCTYPE_SPECIAL,  "Special Use"},
   {FCTYPE_ISOLAT,   "Isolation PDU"},
   {FCTYPE_MACSPC,   "MAC Specific"},
   {0, NULL}
@@ -311,7 +313,7 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
     }
 
     eh_length_item = proto_tree_add_item (ehdr_tree, hf_docsis_eh_len, tvb, pos, 1, ENC_BIG_ENDIAN);
-
+    pos++;
 
     switch ((type >> 4) & 0x0F)
     {
@@ -319,8 +321,8 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
         /* Request: Minislots Requested */
         if (len == 3)
         {
-          proto_tree_add_item(ehdr_tree, hf_docsis_mini_slots, tvb, pos + 1, 1, ENC_NA);
-          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos + 2, 2, ENC_BIG_ENDIAN);
+          proto_tree_add_item(ehdr_tree, hf_docsis_mini_slots, tvb, pos, 1, ENC_NA);
+          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos + 1, 2, ENC_BIG_ENDIAN);
         }
         else
         {
@@ -332,7 +334,7 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
         /* Deprecated in DOCSIS 3.1 */
         if (len == 2)
         {
-          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos + 1, 2, ENC_BIG_ENDIAN);
+          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos, 2, ENC_BIG_ENDIAN);
         }
         else
         {
@@ -342,110 +344,111 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
         break;
       case EH_BP_UP:
         /* Upstream Privacy EH Element or Upstream Privacy with fragmentation */
-        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 2, 1,
+        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 1, 1,
                              ENC_BIG_ENDIAN, is_encrypted);
-        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 1,
                              1, ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_sid, tvb, pos + 2, 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_sid, tvb, pos + 1, 2,
                              ENC_BIG_ENDIAN);
-        frag_sid = tvb_get_guint8 (tvb, pos+2) & 0xCFFF;
-        proto_tree_add_item (ehdr_tree, hf_docsis_mini_slots, tvb, pos + 4,
+        frag_sid = tvb_get_guint8 (tvb, pos+1) & 0xCFFF;
+        proto_tree_add_item (ehdr_tree, hf_docsis_mini_slots, tvb, pos + 3,
                              1, ENC_BIG_ENDIAN);
         if (pinfo->fragmented)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_rsvd, tvb, pos+5,
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_rsvd, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
-          frag_flags = tvb_get_guint8 (tvb, pos+5) & 0x30;
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_first, tvb, pos+5,
+          frag_flags = tvb_get_guint8 (tvb, pos+4) & 0x30;
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_first, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_last, tvb, pos+5,
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_last, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
-          frag_seq = tvb_get_guint8 (tvb, pos+5) & 0x0F;
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_seq, tvb, pos+5,
+          frag_seq = tvb_get_guint8 (tvb, pos+4) & 0x0F;
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_seq, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
         }
         break;
       case EH_BP_DOWN:
         /* Downstream Privacy EH Element */
-        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 2, 1,
+        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 1, 1,
                              ENC_BIG_ENDIAN, is_encrypted);
-        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 1,
                              1, ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_said, tvb, pos + 2, 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_said, tvb, pos + 1, 2,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_reserved, tvb, pos + 4, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_reserved, tvb, pos + 3, 1,
                              ENC_BIG_ENDIAN);
         break;
       case EH_SFLOW_HDR_DOWN:
         /* Deprecated in DOCSIS 3.1, was Downstream Service Flow EH Element in earlier revisions */
       case EH_SFLOW_HDR_UP:
         /* Deprecated in DOCSIS 3.1, was Upstream Service Flow EH Element in earlier revisions */
-        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_phsi, tvb, pos+1, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_phsi, tvb, pos, 1, ENC_BIG_ENDIAN);
 
         if (len == 2)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_qind, tvb, pos+2, 1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_grants, tvb, pos+2, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_qind, tvb, pos+1, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_grants, tvb, pos+1, 1, ENC_BIG_ENDIAN);
         }
         break;
       case EH_BP_UP2:
         /* Upstream Privacy EH Element, version 2, with no piggyback request */
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_key_seq, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_key_seq, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_ver, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_ver, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_ehdr_bpup2_bpi_en, tvb, pos + 2, 1,
+        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_ehdr_bpup2_bpi_en, tvb, pos + 1, 1,
                              ENC_BIG_ENDIAN, is_encrypted);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_toggle_bit, tvb, pos + 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_toggle_bit, tvb, pos + 1,
                              1, ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_sid, tvb, pos + 2, 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_sid, tvb, pos + 1, 2,
                              ENC_BIG_ENDIAN);
         break;
       case EH_DS_SERVICE:
         /* Downstream Service EH Element */
-        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_ds_traffic_pri, tvb, pos+1, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_ds_traffic_pri, tvb, pos, 1, ENC_BIG_ENDIAN);
 
         if (len == 3)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos+1, 3, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos, 3, ENC_BIG_ENDIAN);
         }
 
         if (len == 5)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_seq_chg_cnt, tvb, pos+1, 1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos+1, 3, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_pkt_seq_num, tvb, pos+4, 2, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_seq_chg_cnt, tvb, pos, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos, 3, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_pkt_seq_num, tvb, pos+3, 2, ENC_BIG_ENDIAN);
         }
         break;
       case EH_PATH_VERIFY:
         /* Path Verify EH Element */
         if (len == 5)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_st_refpt, tvb, pos+1, 1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_timestamp, tvb, pos+2, 4, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_st_refpt, tvb, pos, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_timestamp, tvb, pos+1, 4, ENC_BIG_ENDIAN);
         }
         break;
       case EH_EXTENDED:
-        /* Extended EH Element, one or more Sub EH fields may follow; simply recurse */
-        {
-            tvbuff_t *subset = tvb_new_subset_remaining(tvb, pos);
-            dissect_ehdr (subset, ehdr_tree, pinfo, is_encrypted);
-        }
-        break;
+        /* Extended EH Element, ignore eh_len */
+        proto_tree_add_item(ehdr_tree, hf_docsis_ehx_type, tvb, pos, 1, ENC_NA);
+        pos++;
+        proto_tree_add_item(ehdr_tree, hf_docsis_ehx_len, tvb, pos, 1, ENC_NA);
+        len = tvb_get_guint8(tvb, pos);
+        pos++;
+        /* FALLTHROUGH */
       default:
         if (len > 0)
-          proto_tree_add_item (ehdr_tree, hf_docsis_eh_val, tvb, pos + 1,
+          proto_tree_add_item (ehdr_tree, hf_docsis_eh_val, tvb, pos,
                                len, ENC_NA);
     }
-    pos += len + 1;
+    pos += len;
   }
 
   return;
@@ -648,8 +651,8 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
     case FCTYPE_PACKET:
       col_set_str (pinfo->cinfo, COL_INFO, "Packet PDU");
       break;
-    case FCTYPE_RESERVED:
-      col_set_str (pinfo->cinfo, COL_INFO, "Reserved PDU");
+    case FCTYPE_SPECIAL:
+      col_set_str (pinfo->cinfo, COL_INFO, "Special Use");
       break;
     case FCTYPE_ISOLAT:
       col_set_str (pinfo->cinfo, COL_INFO, "Isolation PDU");
@@ -699,20 +702,28 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
       }
       break;
     }
-    case FCTYPE_RESERVED:
+    case FCTYPE_SPECIAL:
     {
-      proto_item_append_text (ti, " Reserved PDU");
-      proto_tree_add_item (docsis_tree, hf_docsis_fcparm, tvb, 0, 1, ENC_BIG_ENDIAN);
+      proto_item_append_text (ti, " Special Use PDU");
+      proto_tree_add_item (docsis_tree, hf_docsis_machdr_fcparm, tvb, 0, 1, ENC_BIG_ENDIAN);
       proto_tree_add_item (docsis_tree, hf_docsis_exthdr, tvb, 0, 1, ENC_BIG_ENDIAN);
       /* Dissect Length field for a PDU */
       dissect_exthdr_length_field (tvb, pinfo, docsis_tree, exthdr, mac_parm, len_sid, &payload_length, &is_encrypted);
       /* Dissect Header Check Sequence field for a PDU */
       fcs_correct = dissect_hcs_field (tvb, pinfo, docsis_tree, hdrlen);
-      if (fcs_correct)
-      {
-        /* Don't do anything for a Reserved Frame */
-        next_tvb =  tvb_new_subset_remaining(tvb, hdrlen);
-        call_data_dissector(next_tvb, pinfo, tree);
+      if (fcs_correct) {
+        if (fcparm == FCPARM_MAC_MGMT_HDR && exthdr == EXT_HDR_OFF) {
+          /* Pass off to the DOCSIS Management dissector/s */
+          mgt_tvb = tvb_new_subset_remaining(tvb, hdrlen);
+          if (is_encrypted && !docsis_dissect_encrypted_frames)
+            dissect_encrypted_frame (mgt_tvb, pinfo, docsis_tree, fctype, fcparm);
+          else
+            call_dissector (docsis_mgmt_handle, mgt_tvb, pinfo, docsis_tree);
+        } else {
+          /* Don't do anything for a Reserved Frame */
+          next_tvb =  tvb_new_subset_remaining(tvb, hdrlen);
+          call_data_dissector(next_tvb, pinfo, tree);
+        }
       }
       break;
     }
@@ -951,6 +962,16 @@ proto_register_docsis (void)
      {"Value", "docsis.ehdr.value",
       FT_BYTES, BASE_NONE, NULL, 0x0,
       "TLV Value", HFILL}
+    },
+    {&hf_docsis_ehx_type,
+     {"Extended Type", "docsis.ehdr.ehx_type",
+      FT_UINT8, BASE_DEC, NULL, 0x0,
+      "TLV Type", HFILL}
+    },
+    {&hf_docsis_ehx_len,
+     {"Extended Length", "docsis.ehdr.ehx_len",
+      FT_UINT8, BASE_DEC, NULL, 0x0,
+      "TLV Len", HFILL}
     },
     {&hf_docsis_frag_rsvd,
      {"Reserved", "docsis.frag_rsvd",

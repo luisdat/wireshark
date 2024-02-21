@@ -61,24 +61,24 @@ static gboolean dissect_fec = FALSE;
 
 static int fec_rtp_payload_type = 96;
 
-static int proto_2dparityfec = -1;
+static int proto_2dparityfec;
 
-static int hf_2dparityfec_index = -1;
-static int hf_2dparityfec_length_recovery = -1;
-static int hf_2dparityfec_mask = -1;
-static int hf_2dparityfec_na = -1;
-static int hf_2dparityfec_offset = -1;
-static int hf_2dparityfec_payload = -1;
-static int hf_2dparityfec_pt_recovery = -1;
-static int hf_2dparityfec_rfc2733_ext = -1;
-static int hf_2dparityfec_row_flag = -1;
-static int hf_2dparityfec_snbase_ext = -1;
-static int hf_2dparityfec_snbase_low = -1;
-static int hf_2dparityfec_ts_pro_mpeg_ext = -1;
-static int hf_2dparityfec_ts_recovery = -1;
-static int hf_2dparityfec_type = -1;
+static int hf_2dparityfec_index;
+static int hf_2dparityfec_length_recovery;
+static int hf_2dparityfec_mask;
+static int hf_2dparityfec_na;
+static int hf_2dparityfec_offset;
+static int hf_2dparityfec_payload;
+static int hf_2dparityfec_pt_recovery;
+static int hf_2dparityfec_rfc2733_ext;
+static int hf_2dparityfec_row_flag;
+static int hf_2dparityfec_snbase_ext;
+static int hf_2dparityfec_snbase_low;
+static int hf_2dparityfec_ts_pro_mpeg_ext;
+static int hf_2dparityfec_ts_recovery;
+static int hf_2dparityfec_type;
 
-static gint ett_2dparityfec = -1;
+static gint ett_2dparityfec;
 
 static const value_string fec_type_names[] = {
    {0, "XOR"},
@@ -231,10 +231,7 @@ void proto_register_2dparityfec(void)
 
    module_t *module_2dparityfec;
 
-   proto_2dparityfec = proto_register_protocol(
-      "Pro-MPEG Code of Practice #3 release 2 FEC Protocol",   /* name */
-      "2dparityfec",            /* short name */
-      "2dparityfec");           /* abbrev */
+   proto_2dparityfec = proto_register_protocol("Pro-MPEG Code of Practice #3 release 2 FEC Protocol", "2dparityfec", "2dparityfec");
 
    proto_register_field_array(proto_2dparityfec, hf, array_length(hf));
    proto_register_subtree_array(ett, array_length(ett));

@@ -171,6 +171,7 @@ static const struct {
     { "tls",    SECRETS_TYPE_TLS },
     { "ssh",    SECRETS_TYPE_SSH },
     { "wg",     SECRETS_TYPE_WIREGUARD },
+    { "opcua",  SECRETS_TYPE_OPCUA },
 };
 
 static int find_dct2000_real_data(guint8 *buf);
@@ -1060,7 +1061,7 @@ editcap_dump_open(const char *filename, const wtap_dump_params *params,
         return NULL;
 
     /*
-     * If the output file supporst identifying the interfaces on which
+     * If the output file supports identifying the interfaces on which
      * packets arrive, add all the IDBs we've seen so far.
      *
      * That mean that the abstract interface provided by libwiretap
@@ -1476,7 +1477,7 @@ main(int argc, char *argv[])
             int choplen = 0, chopoff = 0;
 
             switch (sscanf(ws_optarg, "%d:%d", &chopoff, &choplen)) {
-            case 1: /* only the chop length was specififed */
+            case 1: /* only the chop length was specified */
                 choplen = chopoff;
                 chopoff = 0;
                 break;

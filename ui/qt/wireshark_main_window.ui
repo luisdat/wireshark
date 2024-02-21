@@ -246,7 +246,6 @@
     <addaction name="actionHelpFAQ"/>
     <addaction name="actionHelpAsk"/>
     <addaction name="actionHelpDownloads"/>
-    <addaction name="separator"/>
     <addaction name="actionHelpWiki"/>
     <addaction name="actionHelpSampleCaptures"/>
     <addaction name="actionHelpReleaseNotes"/>
@@ -593,6 +592,7 @@
      </property>
      <addaction name="actionSCTPAnalyseThisAssociation"/>
      <addaction name="actionSCTPShowAllAssociations"/>
+     <addaction name="actionSCTPFilterThisAssociation"/>
     </widget>
     <widget class="QMenu" name="menuANSI">
      <property name="title">
@@ -608,7 +608,7 @@
     </widget>
     <widget class="QMenu" name="menuLTE">
      <property name="title">
-      <string>&amp;LTE</string>
+      <string>&amp;3GPP Uu</string>
      </property>
      <addaction name="actionTelephonyLTEPlaceholder"/>
     </widget>
@@ -639,6 +639,7 @@
     <addaction name="actionTelephonyUCPMessages"/>
     <addaction name="actionTelephonyF1APMessages"/>
     <addaction name="actionTelephonyNGAPMessages"/>
+    <addaction name="actionTelephonyE2APMessages"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
     <property name="title">
@@ -670,13 +671,13 @@
     <addaction name="actionEditFindNext"/>
     <addaction name="actionEditFindPrevious"/>
     <addaction name="separator"/>
-    <addaction name="actionEditMarkPacket"/>
+    <addaction name="actionEditMarkSelected"/>
     <addaction name="actionEditMarkAllDisplayed"/>
     <addaction name="actionEditUnmarkAllDisplayed"/>
     <addaction name="actionEditNextMark"/>
     <addaction name="actionEditPreviousMark"/>
     <addaction name="separator"/>
-    <addaction name="actionEditIgnorePacket"/>
+    <addaction name="actionEditIgnoreSelected"/>
     <addaction name="actionEditIgnoreAllDisplayed"/>
     <addaction name="actionEditUnignoreAllDisplayed"/>
     <addaction name="separator"/>
@@ -713,7 +714,7 @@
     <addaction name="actionToolsFirewallAclRules"/>
     <addaction name="actionToolsCredentials"/>
     <addaction name="actionToolsMacLookup"/>
-    <addaction name="actionToolsSSLKeylog"/>
+    <addaction name="actionToolsTLSKeylog"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -912,7 +913,7 @@
   </action>
   <action name="actionHelpMPWireshark_Filter">
    <property name="text">
-    <string>Wireshark Filter</string>
+    <string>Display Filters</string>
    </property>
   </action>
   <action name="actionHelpMPTShark">
@@ -1463,9 +1464,9 @@
     <string notr="true">Ctrl+B</string>
    </property>
   </action>
-  <action name="actionEditMarkPacket">
+  <action name="actionEditMarkSelected">
    <property name="text">
-    <string>&amp;Mark/Unmark Packet(s)</string>
+    <string>&amp;Mark/Unmark Selected</string>
    </property>
    <property name="toolTip">
     <string>Mark or unmark each selected packet</string>
@@ -1518,9 +1519,9 @@
     <string notr="true">Ctrl+Shift+B</string>
    </property>
   </action>
-  <action name="actionEditIgnorePacket">
+  <action name="actionEditIgnoreSelected">
    <property name="text">
-    <string>&amp;Ignore/Unignore Packet(s)</string>
+    <string>&amp;Ignore/Unignore Selected</string>
    </property>
    <property name="toolTip">
     <string>Ignore or unignore each selected packet</string>
@@ -1749,6 +1750,11 @@
     <string>Show All Associations</string>
    </property>
   </action>
+  <action name="actionSCTPFilterThisAssociation">
+   <property name="text">
+    <string>Filter this Association</string>
+   </property>
+  </action>
   <action name="actionStatisticsFlowGraph">
    <property name="text">
     <string>Flow Graph</string>
@@ -1965,6 +1971,14 @@
     <string>NGAP Messages</string>
    </property>
   </action>
+  <action name="actionTelephonyE2APMessages">
+   <property name="text">
+    <string>E2AP</string>
+   </property>
+   <property name="toolTip">
+    <string>E2AP Messages</string>
+   </property>
+  </action>
   <action name="actionAnalyzeDecodeAs">
    <property name="text">
     <string>Decode &amp;As…</string>
@@ -2060,14 +2074,6 @@
   <action name="actionStatistics29WestLBTRU">
    <property name="text">
     <string>LBT-RU</string>
-   </property>
-  </action>
-  <action name="actionSCTPFilterThisAssociation">
-   <property name="text">
-    <string>Filter this Association</string>
-   </property>
-   <property name="toolTip">
-    <string>Filter this Association</string>
    </property>
   </action>
   <action name="actionFileExportPDU">
@@ -3021,9 +3027,9 @@
     <string>MAC Address Blocks</string>
    </property>
   </action>
-  <action name="actionToolsSSLKeylog">
+  <action name="actionToolsTLSKeylog">
    <property name="text">
-    <string>Browser (SSL Keylog)</string>
+    <string>TLS Keylog Launcher</string>
    </property>
   </action>
   <action name="actionHelpReleaseNotes">

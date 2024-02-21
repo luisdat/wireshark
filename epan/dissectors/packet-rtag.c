@@ -14,7 +14,7 @@
 # include  <epan/packet.h>
 # include  <epan/etypes.h>
 
-static int proto_rtag = -1;
+static int proto_rtag;
 
 static dissector_handle_t ethertype_handle;
 static dissector_handle_t rtag_handle;
@@ -22,9 +22,9 @@ static dissector_handle_t rtag_handle;
 /*
  * These values and tables are a breakdown of the R-TAG parts.
  */
-static int hf_rtag_reserved = -1;
-static int hf_rtag_sequence = -1;
-static int hf_rtag_protocol = -1;
+static int hf_rtag_reserved;
+static int hf_rtag_sequence;
+static int hf_rtag_protocol;
 static hf_register_info rtag_breakdown[] = {
       { &hf_rtag_reserved,
 	{ "<reserved>", "rtag.reserved",
@@ -48,7 +48,7 @@ static hf_register_info rtag_breakdown[] = {
 
 /*
  */
-static gint ett_rtag = -1;
+static gint ett_rtag;
 static gint *ett[] = { &ett_rtag };
 
 /*
@@ -86,7 +86,7 @@ static int dissect_rtag(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	 * as part of the R-TAG protocol
 	 */
       ethertype_data_t ethertype_data;
-      ethertype_data.etype = rtag_protocol;;
+      ethertype_data.etype = rtag_protocol;
       ethertype_data.payload_offset = 6;
       ethertype_data.fh_tree = tree;
       ethertype_data.trailer_id = -1;

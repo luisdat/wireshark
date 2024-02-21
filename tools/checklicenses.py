@@ -37,7 +37,6 @@ ALLOWED_LICENSES = [
     'BSD (2 clause) GPL (v2 or later)',
     'BSD (3 clause)',
     'GPL (v2 or later)',
-    'GPL (v3 or later) (with Bison parser exception)',
     'ISC',
     'ISC GPL (v2 or later)',
     'LGPL (v2 or later)',
@@ -172,7 +171,7 @@ def check_licenses(options, args):
                                                     'licensecheck.pl'))
 
   licensecheck = subprocess.Popen([licensecheck_path,
-                                   '-l', '150',
+                                   '-l', '160',
                                    '-r', start_dir],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)

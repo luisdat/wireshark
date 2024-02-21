@@ -26,15 +26,15 @@ void proto_reg_handoff_mate(void);
 
 static mate_config* mc = NULL;
 
-static int proto_mate = -1;
+static int proto_mate;
 
-static int hf_mate_released_time = -1;
-static int hf_mate_duration = -1;
-static int hf_mate_number_of_pdus = -1;
-static int hf_mate_started_at = -1;
-static int hf_mate_gop_key = -1;
+static int hf_mate_released_time;
+static int hf_mate_duration;
+static int hf_mate_number_of_pdus;
+static int hf_mate_started_at;
+static int hf_mate_gop_key;
 
-static expert_field ei_mate_undefined_attribute = EI_INIT;
+static expert_field ei_mate_undefined_attribute;
 
 static const gchar* pref_mate_config_filename = "";
 static const gchar* current_mate_config_filename = NULL;
@@ -368,6 +368,15 @@ proto_reg_handoff_mate(void)
 				 */
 				set_postdissector_wanted_hfids(mate_handle,
 				    mc->wanted_hfids);
+				/* XXX: Due to #17877, any protocol added to the tree with length -1
+				 * that changes its length later (and there are many, such as TCP)
+				 * doesn't actually change its length unless the tree is visible,
+				 * which means that entire range checking work in MATE to split up
+				 * multiple PDUs of the target protocol in the same frame doesn't
+				 * work. Set the tree as visible as with Lua postdissectors that
+				 * need all fields. It's overkill and bad for performance, though.
+				 */
+				epan_set_always_visible(TRUE);
 
 				initialize_mate_runtime(mc);
 			}

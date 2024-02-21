@@ -69,7 +69,8 @@ static module_t *prefs_find_module_alias(const char *name);
 static prefs_set_pref_e set_pref(gchar*, const gchar*, void *, gboolean);
 static void free_col_info(GList *);
 static void pre_init_prefs(void);
-static gboolean prefs_is_column_visible(const gchar *cols_hidden, fmt_data *cfmt);
+static gboolean prefs_is_column_visible(const gchar *cols_hidden, int col);
+static gboolean prefs_is_column_fmt_visible(const gchar *cols_hidden, fmt_data *cfmt);
 static guint prefs_module_list_foreach(wmem_tree_t *module_list, module_cb callback,
                           gpointer user_data, gboolean skip_obsolete);
 static gint find_val_for_string(const char *needle, const enum_val_t *haystack, gint default_value);
@@ -84,6 +85,7 @@ static gint find_val_for_string(const char *needle, const enum_val_t *haystack, 
 static gboolean prefs_initialized = FALSE;
 static gchar *gpf_path = NULL;
 static gchar *cols_hidden_list = NULL;
+static gchar *cols_hidden_fmt_list = NULL;
 static gboolean gui_theme_is_dark = FALSE;
 
 /*
@@ -131,6 +133,12 @@ static const enum_val_t gui_layout_content[] = {
     {"PDETAILS", "PDETAILS", 2},
     {"PBYTES", "PBYTES", 3},
     {"PDIAGRAM", "PDIAGRAM", 4},
+    {NULL, NULL, -1}
+};
+
+static const enum_val_t gui_packet_dialog_layout[] = {
+    {"vertical", "Vertical (Stacked)", layout_vertical},
+    {"horizontal", "Horizontal (Side-by-side)", layout_horizontal},
     {NULL, NULL, -1}
 };
 
@@ -333,6 +341,7 @@ free_pref(gpointer data, gpointer user_data _U_)
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
     case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         free_string_like_preference(pref);
         break;
     case PREF_RANGE:
@@ -1648,6 +1657,45 @@ prefs_set_stashed_range_value(pref_t *pref, const gchar *value)
 
 }
 
+gboolean prefs_add_list_value(pref_t *pref, void* value, pref_source_t source)
+{
+    switch (source)
+    {
+    case pref_default:
+        pref->default_val.list = g_list_prepend(pref->default_val.list, value);
+        break;
+    case pref_stashed:
+        pref->stashed_val.list = g_list_prepend(pref->stashed_val.list, value);
+        break;
+    case pref_current:
+        *pref->varp.list = g_list_prepend(*pref->varp.list, value);
+        break;
+    default:
+        ws_assert_not_reached();
+        break;
+    }
+
+    return TRUE;
+}
+
+GList* prefs_get_list_value(pref_t *pref, pref_source_t source)
+{
+    switch (source)
+    {
+    case pref_default:
+        return pref->default_val.list;
+    case pref_stashed:
+        return pref->stashed_val.list;
+    case pref_current:
+        return *pref->varp.list;
+    default:
+        ws_assert_not_reached();
+        break;
+    }
+
+    return NULL;
+}
+
 gboolean prefs_set_range_value(pref_t *pref, range_t *value, pref_source_t source)
 {
     gboolean changed = FALSE;
@@ -1879,9 +1927,14 @@ prefs_register_custom_preference(module_t *module, const char *name,
 
 /*
  * Register a dedicated TCP preference for SEQ analysis overriding.
- * We are reusing the data structure from enum preference, as they are
- * similar in practice.
-
+ * This is similar to the data structure from enum preference, except
+ * that when a preference dialog is used, the stashed value is the list
+ * of frame data pointers whose sequence analysis override will be set
+ * to the current value if the dialog is accepted.
+ *
+ * We don't need to read or write the value from the preferences file
+ * (or command line), because the override is reset to the default (0)
+ * for each frame when a new capture file is loaded.
  */
 void
 prefs_register_custom_preference_TCP_Analysis(module_t *module, const char *name,
@@ -1895,6 +1948,7 @@ prefs_register_custom_preference_TCP_Analysis(module_t *module, const char *name
                                      PREF_PROTO_TCP_SNDAMB_ENUM);
     preference->varp.enump = var;
     preference->default_val.enumval = *var;
+    preference->stashed_val.list = NULL;
     preference->info.enum_info.enumvals = enumvals;
     preference->info.enum_info.radio_buttons = radio_buttons;
 }
@@ -1924,6 +1978,19 @@ DIAG_OFF(cast-qual)
 DIAG_ON(cast-qual)
 }
 
+/*
+ * Register a preference with a dissector name.
+ */
+void
+prefs_register_dissector_preference(module_t *module, const char *name,
+                                    const char *title, const char *description,
+                                    const char **var)
+{
+DIAG_OFF(cast-qual)
+    register_string_like_preference(module, name, title, description,
+                                    (char **)var, PREF_DISSECTOR, NULL, FALSE);
+DIAG_ON(cast-qual)
+}
 
 gboolean prefs_add_decode_as_value(pref_t *pref, guint value, gboolean replace)
 {
@@ -2038,7 +2105,6 @@ pref_stash(pref_t *pref, gpointer unused _U_)
         break;
 
     case PREF_ENUM:
-    case PREF_PROTO_TCP_SNDAMB_ENUM:
         pref->stashed_val.enumval = *pref->varp.enump;
         break;
 
@@ -2047,6 +2113,7 @@ pref_stash(pref_t *pref, gpointer unused _U_)
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
     case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         g_free(pref->stashed_val.string);
         pref->stashed_val.string = g_strdup(*pref->varp.string);
         break;
@@ -2064,6 +2131,7 @@ pref_stash(pref_t *pref, gpointer unused _U_)
     case PREF_STATIC_TEXT:
     case PREF_UAT:
     case PREF_CUSTOM:
+    case PREF_PROTO_TCP_SNDAMB_ENUM:
         break;
 
     case PREF_OBSOLETE:
@@ -2129,19 +2197,27 @@ pref_unstash(pref_t *pref, gpointer unstash_data_p)
         break;
 
     case PREF_PROTO_TCP_SNDAMB_ENUM:
-        /*if (*pref->varp.enump != pref->stashed_val.enumval) {
-            unstash_data->module->prefs_changed_flags |= prefs_get_effect_flags(pref);
-            //unstash_data->module->prefs_changed_flags = 1;
-            *pref->varp.enump = pref->stashed_val.enumval;
-        }*/
-        unstash_data->module->prefs_changed_flags = 1;
+    {
+        /* The preference dialogs are modal so the frame_data pointers should
+         * still be valid; otherwise we could store the frame numbers to
+         * change.
+         */
+        frame_data *fdata;
+        for (GList* elem = pref->stashed_val.list; elem != NULL; elem = elem->next) {
+            fdata = (frame_data*)elem->data;
+            if (fdata->tcp_snd_manual_analysis != *pref->varp.enump) {
+                unstash_data->module->prefs_changed_flags |= prefs_get_effect_flags(pref);
+                fdata->tcp_snd_manual_analysis = *pref->varp.enump;
+            }
+        }
         break;
-
+    }
     case PREF_STRING:
     case PREF_SAVE_FILENAME:
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
     case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         if (strcmp(*pref->varp.string, pref->stashed_val.string) != 0) {
             unstash_data->module->prefs_changed_flags |= prefs_get_effect_flags(pref);
             g_free(*pref->varp.string);
@@ -2241,7 +2317,6 @@ reset_stashed_pref(pref_t *pref) {
         break;
 
     case PREF_ENUM:
-    case PREF_PROTO_TCP_SNDAMB_ENUM:
         pref->stashed_val.enumval = pref->default_val.enumval;
         break;
 
@@ -2250,6 +2325,7 @@ reset_stashed_pref(pref_t *pref) {
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
     case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         g_free(pref->stashed_val.string);
         pref->stashed_val.string = g_strdup(pref->default_val.string);
         break;
@@ -2258,6 +2334,13 @@ reset_stashed_pref(pref_t *pref) {
     case PREF_RANGE:
         wmem_free(wmem_epan_scope(), pref->stashed_val.range);
         pref->stashed_val.range = range_copy(wmem_epan_scope(), pref->default_val.range);
+        break;
+
+    case PREF_PROTO_TCP_SNDAMB_ENUM:
+        if (pref->stashed_val.list != NULL) {
+            g_list_free(pref->stashed_val.list);
+            pref->stashed_val.list = NULL;
+        }
         break;
 
     case PREF_COLOR:
@@ -2288,7 +2371,6 @@ pref_clean_stash(pref_t *pref, gpointer unused _U_)
         break;
 
     case PREF_ENUM:
-    case PREF_PROTO_TCP_SNDAMB_ENUM:
         break;
 
     case PREF_STRING:
@@ -2296,6 +2378,7 @@ pref_clean_stash(pref_t *pref, gpointer unused _U_)
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
     case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         if (pref->stashed_val.string != NULL) {
             g_free(pref->stashed_val.string);
             pref->stashed_val.string = NULL;
@@ -2314,6 +2397,13 @@ pref_clean_stash(pref_t *pref, gpointer unused _U_)
     case PREF_UAT:
     case PREF_COLOR:
     case PREF_CUSTOM:
+        break;
+
+    case PREF_PROTO_TCP_SNDAMB_ENUM:
+        if (pref->stashed_val.list != NULL) {
+            g_list_free(pref->stashed_val.list);
+            pref->stashed_val.list = NULL;
+        }
         break;
 
     case PREF_OBSOLETE:
@@ -2453,7 +2543,8 @@ static void custom_pref_no_cb(pref_t* pref _U_) {}
 /*
  * Column preference functions
  */
-#define PRS_COL_HIDDEN                   "column.hidden"
+#define PRS_COL_HIDDEN_FMT               "column.hidden"
+#define PRS_COL_HIDDEN                   "column.hide"
 #define PRS_COL_FMT                      "column.format"
 #define PRS_COL_NUM                      "column.number"
 static module_t *gui_column_module = NULL;
@@ -2465,6 +2556,12 @@ column_hidden_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_fla
     fmt_data    *cfmt;
     pref_t  *format_pref;
 
+    /*
+     * Prefer the new preference to the old format-based preference if we've
+     * read it. (We probably could just compare the string to NULL and "".)
+     */
+    prefs.cols_hide_new = TRUE;
+
     (*changed_flags) |= prefs_set_string_value(pref, value, pref_current);
 
     /*
@@ -2474,9 +2571,11 @@ column_hidden_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_fla
      * set PRS_COL_HIDDEN on the command line).
      */
     format_pref = prefs_find_preference(gui_column_module, PRS_COL_FMT);
+    int cidx = 1;
     for (clp = *format_pref->varp.list; clp != NULL; clp = clp->next) {
       cfmt = (fmt_data *)clp->data;
-      cfmt->visible = prefs_is_column_visible(*pref->varp.string, cfmt);
+      cfmt->visible = prefs_is_column_visible(*pref->varp.string, cidx);
+      cidx++;
     }
 
     return PREFS_SET_OK;
@@ -2491,7 +2590,7 @@ column_hidden_type_name_cb(void)
 static char *
 column_hidden_type_description_cb(void)
 {
-    return g_strdup("List all columns to hide in the packet list.");
+    return g_strdup("List all column indices (1-indexed) to hide in the packet list.");
 }
 
 static char *
@@ -2501,6 +2600,7 @@ column_hidden_to_str_cb(pref_t* pref, gboolean default_val)
     GList       *clp;
     fmt_data    *cfmt;
     pref_t  *format_pref;
+    int          cidx = 1;
 
     if (default_val)
         return g_strdup(pref->default_val.string);
@@ -2509,24 +2609,14 @@ column_hidden_to_str_cb(pref_t* pref, gboolean default_val)
     format_pref = prefs_find_preference(gui_column_module, PRS_COL_FMT);
     clp = (format_pref) ? *format_pref->varp.list : NULL;
     while (clp) {
-        gchar *prefs_fmt;
         cfmt = (fmt_data *) clp->data;
-        if ((cfmt->fmt == COL_CUSTOM) && (cfmt->custom_fields)) {
-            prefs_fmt = ws_strdup_printf("%s:%s:%d:%c",
-                    col_format_to_string(cfmt->fmt),
-                    cfmt->custom_fields,
-                    cfmt->custom_occurrence,
-                    cfmt->resolved ? 'R' : 'U');
-        } else {
-            prefs_fmt = g_strdup(col_format_to_string(cfmt->fmt));
-        }
         if (!cfmt->visible) {
             if (cols_hidden->len)
                 g_string_append (cols_hidden, ",");
-            g_string_append (cols_hidden, prefs_fmt);
+            g_string_append_printf (cols_hidden, "%i", cidx);
         }
-        g_free(prefs_fmt);
         clp = clp->next;
+        cidx++;
     }
 
     return g_string_free (cols_hidden, FALSE);
@@ -2542,6 +2632,91 @@ column_hidden_is_default_cb(pref_t* pref)
     return is_default;
 }
 
+static prefs_set_pref_e
+column_hidden_fmt_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_flags)
+{
+    GList       *clp;
+    fmt_data    *cfmt;
+    pref_t  *format_pref;
+
+    (*changed_flags) |= prefs_set_string_value(pref, value, pref_current);
+
+    /*
+     * Set the "visible" flag for the existing columns; we need to
+     * do this if we set PRS_COL_HIDDEN_FMT but don't set PRS_COL_FMT
+     * after setting it (which might be the case if, for example, we
+     * set PRS_COL_HIDDEN_FMT on the command line; it shouldn't happen
+     * when reading the configuration file because we write (both of)
+     * the hidden column prefs before the column format prefs.)
+     */
+    format_pref = prefs_find_preference(gui_column_module, PRS_COL_FMT);
+    for (clp = *format_pref->varp.list; clp != NULL; clp = clp->next) {
+      cfmt = (fmt_data *)clp->data;
+      cfmt->visible = prefs_is_column_fmt_visible(*pref->varp.string, cfmt);
+    }
+
+    return PREFS_SET_OK;
+}
+
+static const char *
+column_hidden_fmt_type_name_cb(void)
+{
+    return "Packet list hidden column formats (deprecated)";
+}
+
+static char *
+column_hidden_fmt_type_description_cb(void)
+{
+    return g_strdup("List all column formats to hide in the packet list. Deprecated in favor of the index-based preference.");
+}
+
+static char *
+column_hidden_fmt_to_str_cb(pref_t* pref, gboolean default_val)
+{
+    GString     *cols_hidden;
+    GList       *clp;
+    fmt_data    *cfmt;
+    pref_t  *format_pref;
+
+    if (default_val)
+        return g_strdup(pref->default_val.string);
+
+    cols_hidden = g_string_new("");
+    format_pref = prefs_find_preference(gui_column_module, PRS_COL_FMT);
+    clp = (format_pref) ? *format_pref->varp.list : NULL;
+    while (clp) {
+        char *prefs_fmt;
+        cfmt = (fmt_data *) clp->data;
+        if ((cfmt->fmt == COL_CUSTOM) && (cfmt->custom_fields)) {
+            prefs_fmt = ws_strdup_printf("%s:%s:%d:%c",
+                    col_format_to_string(cfmt->fmt),
+                    cfmt->custom_fields,
+                    cfmt->custom_occurrence,
+                    cfmt->resolved ? 'R' : 'U');
+        } else {
+            prefs_fmt = g_strdup(col_format_to_string(cfmt->fmt));
+        }
+        if (!cfmt->visible) {
+            if (cols_hidden->len)
+                g_string_append (cols_hidden, ",");
+            g_string_append(cols_hidden, prefs_fmt);
+        }
+        g_free(prefs_fmt);
+        clp = clp->next;
+    }
+
+    return g_string_free (cols_hidden, FALSE);
+}
+
+static gboolean
+column_hidden_fmt_is_default_cb(pref_t* pref)
+{
+    char *cur_hidden_str = column_hidden_fmt_to_str_cb(pref, FALSE);
+    gboolean is_default = g_strcmp0(cur_hidden_str, pref->default_val.string) == 0;
+
+    g_free(cur_hidden_str);
+    return is_default;
+}
 
 /* Number of columns "preference".  This is only used internally and is not written to the
  * preference file
@@ -2700,21 +2875,31 @@ column_format_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_fla
     /* They're all valid; process them. */
     free_col_info(*pref->varp.list);
     *pref->varp.list = NULL;
-    hidden_pref = prefs_find_preference(gui_column_module, PRS_COL_HIDDEN);
+    if (prefs.cols_hide_new) {
+      hidden_pref = prefs_find_preference(gui_column_module, PRS_COL_HIDDEN);
+    } else {
+      hidden_pref = prefs_find_preference(gui_column_module, PRS_COL_HIDDEN_FMT);
+    }
     ws_assert(hidden_pref != NULL); /* Should never happen */
     col_num_pref = prefs_find_preference(gui_column_module, PRS_COL_NUM);
     ws_assert(col_num_pref != NULL); /* Should never happen */
     llen             = g_list_length(col_l);
     *col_num_pref->varp.uint = llen / 2;
     col_l_elt = g_list_first(col_l);
+    int cidx = 1;
     while (col_l_elt) {
       cfmt           = g_new(fmt_data,1);
       cfmt->title    = g_strdup((gchar *)col_l_elt->data);
       col_l_elt      = col_l_elt->next;
       parse_column_format(cfmt, (char *)col_l_elt->data);
-      cfmt->visible   = prefs_is_column_visible(*hidden_pref->varp.string, cfmt);
+      if (prefs.cols_hide_new) {
+        cfmt->visible   = prefs_is_column_visible(*hidden_pref->varp.string, cidx);
+      } else {
+        cfmt->visible   = prefs_is_column_fmt_visible(*hidden_pref->varp.string, cfmt);
+      }
       col_l_elt      = col_l_elt->next;
       *pref->varp.list = g_list_append(*pref->varp.list, cfmt);
+      cidx++;
     }
 
     prefs_clear_string_list(col_l);
@@ -3064,6 +3249,18 @@ prefs_register_modules(void)
      */
     gui_module = prefs_register_module(NULL, "gui", "User Interface",
         "User Interface", &gui_callback, FALSE);
+    /*
+     * The GUI preferences don't affect dissection in general.
+     * Any changes are signaled in other ways, so PREF_EFFECT_GUI doesn't
+     * explicitly do anything, but wslua_set_preference expects *some*
+     * effect flag to be set if the preference was changed.
+     * We have to do this again for all the submodules (except for the
+     * layout submodule, which has its own effect flag).
+     */
+    unsigned gui_effect_flags = prefs_get_module_effect_flags(gui_module);
+    gui_effect_flags |= PREF_EFFECT_GUI;
+    gui_effect_flags &= (~PREF_EFFECT_DISSECTION);
+    prefs_set_module_effect_flags(gui_module, gui_effect_flags);
 
     /*
      * gui.console_open is stored in the registry in addition to the
@@ -3096,8 +3293,10 @@ prefs_register_modules(void)
     prefs_register_obsolete_preference(gui_module, "packet_editor.enabled");
 
     gui_column_module = prefs_register_subtree(gui_module, "Columns", "Columns", NULL);
+    prefs_set_module_effect_flags(gui_column_module, gui_effect_flags);
     /* For reading older preference files with "column." preferences */
     prefs_register_module_alias("column", gui_column_module);
+
 
     custom_cbs.free_cb = free_string_like_preference;
     custom_cbs.reset_cb = reset_string_like_preference;
@@ -3107,8 +3306,18 @@ prefs_register_modules(void)
     custom_cbs.is_default_cb = column_hidden_is_default_cb;
     custom_cbs.to_str_cb = column_hidden_to_str_cb;
     register_string_like_preference(gui_column_module, PRS_COL_HIDDEN, "Packet list hidden columns",
-        "List all columns to hide in the packet list",
+        "List all column indices (1-indexed) to hide in the packet list",
         &cols_hidden_list, PREF_CUSTOM, &custom_cbs, FALSE);
+
+    custom_cbs.set_cb = column_hidden_fmt_set_cb;
+    custom_cbs.type_name_cb = column_hidden_fmt_type_name_cb;
+    custom_cbs.type_description_cb = column_hidden_fmt_type_description_cb;
+    custom_cbs.is_default_cb = column_hidden_fmt_is_default_cb;
+    custom_cbs.to_str_cb = column_hidden_fmt_to_str_cb;
+
+    register_string_like_preference(gui_column_module, PRS_COL_HIDDEN_FMT, "Packet list hidden column formats (deprecated)",
+        "List all column formats to hide in the packet list; deprecated in favor of the index-based preference",
+        &cols_hidden_fmt_list, PREF_CUSTOM, &custom_cbs, FALSE);
 
     custom_cbs.free_cb = column_format_free_cb;
     custom_cbs.reset_cb = column_format_reset_cb;
@@ -3137,6 +3346,7 @@ prefs_register_modules(void)
 
     /* User Interface : Font */
     gui_font_module = prefs_register_subtree(gui_module, "Font", "Font", NULL);
+    prefs_set_module_effect_flags(gui_font_module, gui_effect_flags);
 
     prefs_register_obsolete_preference(gui_font_module, "font_name");
 
@@ -3148,6 +3358,7 @@ prefs_register_modules(void)
 
     /* User Interface : Colors */
     gui_color_module = prefs_register_subtree(gui_module, "Colors", "Colors", NULL);
+    prefs_set_module_effect_flags(gui_color_module, gui_effect_flags);
 
     prefs_register_color_preference(gui_color_module, "active_frame.fg", "Foreground color for an active selected item",
         "Foreground color for an active selected item", &prefs.gui_active_fg);
@@ -3243,10 +3454,6 @@ prefs_register_modules(void)
         "Directory to start in when opening File Open dialog.",
         &prefs.gui_fileopen_dir, PREF_DIRNAME, NULL, TRUE);
 
-    register_string_like_preference(gui_module, "browser_sslkeylog.path", "Path to browser executable",
-        "Path to browser executable to launch with SSLKEYLOG",
-        &prefs.gui_browser_sslkeylog_path, PREF_OPEN_FILENAME, NULL, TRUE);
-
     prefs_register_obsolete_preference(gui_module, "fileopen.remembered_dir");
 
     prefs_register_uint_preference(gui_module, "fileopen.preview",
@@ -3254,6 +3461,10 @@ prefs_register_modules(void)
                                    "The preview timeout in the File Open dialog",
                                    10,
                                    &prefs.gui_fileopen_preview);
+
+    register_string_like_preference(gui_module, "tlskeylog_command", "Program to launch with TLS Keylog",
+        "Program path or command line to launch with SSLKEYLOGFILE",
+        &prefs.gui_tlskeylog_command, PREF_STRING, NULL, TRUE);
 
     prefs_register_bool_preference(gui_module, "ask_unsaved",
                                    "Ask to save unsaved capture files",
@@ -3333,6 +3544,7 @@ prefs_register_modules(void)
 
     register_string_like_preference(gui_module, "window_title", "Custom window title",
         "Custom window title to be appended to the existing title\n"
+        "%C = capture comment from command line\n"
         "%F = file path of the capture file\n"
         "%P = profile name\n"
         "%S = a conditional separator (\" - \") that only shows when surrounded by variables with values or static text\n"
@@ -3341,6 +3553,7 @@ prefs_register_modules(void)
 
     register_string_like_preference(gui_module, "prepend_window_title", "Custom window title prefix",
         "Custom window title to be prepended to the existing title\n"
+        "%C = capture comment from command line\n"
         "%F = file path of the capture file\n"
         "%P = profile name\n"
         "%S = a conditional separator (\" - \") that only shows when surrounded by variables with values or static text\n"
@@ -3375,6 +3588,10 @@ prefs_register_modules(void)
                                    10,
                                    &prefs.gui_max_tree_depth);
 
+    prefs_register_bool_preference(gui_module, "welcome_page.show_recent",
+                                   "Show recent files on the welcome page",
+                                   "This will enable or disable the 'Open' list on the welcome page.",
+                                   &prefs.gui_welcome_page_show_recent);
 
     /* User Interface : Layout */
     gui_layout_module = prefs_register_subtree(gui_module, "Layout", "Layout", gui_layout_callback);
@@ -3432,6 +3649,11 @@ prefs_register_modules(void)
                                    "Show file load time in the Status Bar",
                                    "Show file load time in the Status Bar",
                                    &prefs.gui_show_file_load_time);
+
+    prefs_register_enum_preference(gui_layout_module, "packet_dialog_layout",
+                                   "Packet Dialog layout",
+                                   "Packet Dialog layout",
+                                   (guint*)(void*)(&prefs.gui_packet_dialog_layout), gui_packet_dialog_layout, FALSE);
 
     prefs_register_enum_preference(gui_module, "packet_list_elide_mode",
                        "Elide mode",
@@ -3609,6 +3831,9 @@ prefs_register_modules(void)
 
     prefs_register_bool_preference(capture_module, "prom_mode", "Capture in promiscuous mode",
         "Capture in promiscuous mode?", &prefs.capture_prom_mode);
+
+    prefs_register_bool_preference(capture_module, "monitor_mode", "Capture in monitor mode on 802.11 devices",
+        "Capture in monitor mode on all 802.11 devices that support it?", &prefs.capture_monitor_mode);
 
     register_string_like_preference(capture_module, "devices_filter", "Interface capture filter",
         "Interface capture filter (Ex: en0(tcp),en1(udp),...)",
@@ -4035,16 +4260,19 @@ pre_init_prefs(void)
 
     if (!is_packet_configuration_namespace()) {
         static const char *col_fmt_logs[] = {
-            "No.",             "%m", "Time",        "%t",
-            "Source",          "%s", "Destination", "%d",
-            "Length",          "%L",
-            "Service",         "%Cus:ct.shortsrc:0:R",
-            "Region",          "%Cus:ct.region:0:R",
-            "Bucket/Instance", "%Cus:s3.bucket || ec2.name:0:R",
-            "User Name",       "%Cus:ct.user:0:R",
-            "Event Name",      "%Cus:ct.name:0:R",
-            "User IP",         "%Cus:ct.srcip:0:R",
-            "Info",            "%i" };
+            "No.",              "%m",
+            "Time",             "%t",
+            "Event name",       "%Cus:sysdig.event_name:0:R",
+            "Dir",              "%Cus:evt.dir:0:R",
+            "Proc Name",        "%Cus:proc.name:0:R",
+            "PID",              "%Cus:proc.pid:0:R",
+            "TID",              "%Cus:thread.tid:0:R",
+            "FD",               "%Cus:fd.num:0:R",
+            "FD Name",          "%Cus:fd.name:0:R",
+            "Container Name",   "%Cus:container.name:0:R",
+            "Arguments",        "%Cus:evt.args:0:R",
+            "Info",             "%i"
+            };
         col_fmt = col_fmt_logs;
         num_cols = 12;
     }
@@ -4129,9 +4357,9 @@ pre_init_prefs(void)
     prefs.gui_recent_files_count_max = 10;
     g_free(prefs.gui_fileopen_dir);
     prefs.gui_fileopen_dir           = g_strdup(get_persdatafile_dir());
-    g_free(prefs.gui_browser_sslkeylog_path);
-    prefs.gui_browser_sslkeylog_path = g_strdup("");
     prefs.gui_fileopen_preview       = 3;
+    g_free(prefs.gui_tlskeylog_command);
+    prefs.gui_tlskeylog_command      = g_strdup("");
     prefs.gui_ask_unsaved            = TRUE;
     prefs.gui_autocomplete_filter    = TRUE;
     prefs.gui_find_wrap              = TRUE;
@@ -4146,6 +4374,7 @@ pre_init_prefs(void)
     g_free(prefs.gui_start_title);
     prefs.gui_start_title            = g_strdup("The World's Most Popular Network Protocol Analyzer");
     prefs.gui_version_placement      = version_both;
+    prefs.gui_welcome_page_show_recent = TRUE;
     prefs.gui_layout_type            = layout_type_2;
     prefs.gui_layout_content_1       = layout_pane_content_plist;
     prefs.gui_layout_content_2       = layout_pane_content_pdetails;
@@ -4187,6 +4416,7 @@ pre_init_prefs(void)
 
 /* set the default values for the capture dialog box */
     prefs.capture_prom_mode             = TRUE;
+    prefs.capture_monitor_mode          = FALSE;
     prefs.capture_pcap_ng               = TRUE;
     prefs.capture_real_time             = TRUE;
     prefs.capture_update_interval       = DEFAULT_UPDATE_INTERVAL;
@@ -4225,6 +4455,7 @@ pre_init_prefs(void)
     prefs.gui_io_graph_enable_legend = TRUE;
 
     /* set the default values for the packet dialog */
+    prefs.gui_packet_dialog_layout   = layout_vertical;
     prefs.gui_packet_details_show_byteview = TRUE;
 }
 
@@ -4278,6 +4509,7 @@ reset_pref(pref_t *pref)
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
     case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         reset_string_like_preference(pref);
         break;
 
@@ -4393,6 +4625,52 @@ read_registry(void)
 }
 #endif
 
+void
+prefs_read_module(const char *module)
+{
+    int         err;
+    char        *pf_path;
+    FILE        *pf;
+
+    module_t *target_module = prefs_find_module(module);
+    if (!target_module) {
+        return;
+    }
+
+    /* Construct the pathname of the user's preferences file for the module. */
+    pf_path = get_persconffile_path(module, TRUE);
+
+    /* Read the user's module preferences file, if it exists and is not a dir. */
+    if (!test_for_regular_file(pf_path) || ((pf = ws_fopen(pf_path, "r")) == NULL)) {
+        g_free(pf_path);
+        /* Fall back to the user's generic preferences file. */
+        pf_path = get_persconffile_path(PF_NAME, TRUE);
+        pf = ws_fopen(pf_path, "r");
+    }
+
+    if (pf != NULL) {
+        /* We succeeded in opening it; read it. */
+        err = read_prefs_file(pf_path, pf, set_pref, target_module);
+        if (err != 0) {
+            /* We had an error reading the file; report it. */
+            report_warning("Error reading your preferences file \"%s\": %s.",
+                           pf_path, g_strerror(err));
+        } else
+            g_free(pf_path);
+        fclose(pf);
+    } else {
+        /* We failed to open it.  If we failed for some reason other than
+           "it doesn't exist", return the errno and the pathname, so our
+           caller can report the error. */
+        if (errno != ENOENT) {
+            report_warning("Can't open your preferences file \"%s\": %s.",
+                           pf_path, g_strerror(errno));
+        } else
+            g_free(pf_path);
+    }
+
+    return;
+}
 
 /* Read the preferences file, fill in "prefs", and return a pointer to it.
 
@@ -4910,9 +5188,54 @@ prefs_is_capture_device_hidden(const char *name)
  * Returns TRUE if the given column is visible (not hidden)
  */
 static gboolean
-prefs_is_column_visible(const gchar *cols_hidden, fmt_data *cfmt)
+prefs_is_column_visible(const gchar *cols_hidden, int col)
 {
-    gchar *tok, *cols;
+    char *tok, *cols, *p;
+    int cidx;
+
+    /*
+     * Do we have a list of hidden columns?
+     */
+    if (cols_hidden) {
+        /*
+         * Yes - check the column against each of the ones in the
+         * list.
+         */
+        cols = g_strdup(cols_hidden);
+        for (tok = strtok(cols, ","); tok; tok = strtok(NULL, ",")) {
+            tok = g_strstrip(tok);
+
+            cidx = (int)strtol(tok, &p, 10);
+            if (p == tok || *p != '\0') {
+                continue;
+            }
+            if (cidx != col) {
+                continue;
+            }
+            /*
+             * OK, they match, so it's one of the hidden fields,
+             * hence not visible.
+             */
+            g_free(cols);
+            return FALSE;
+        }
+        g_free(cols);
+    }
+
+    /*
+     * No - either there are no hidden columns or this isn't one
+     * of them - so it is visible.
+     */
+    return TRUE;
+}
+
+/*
+ * Returns TRUE if the given column is visible (not hidden)
+ */
+static gboolean
+prefs_is_column_fmt_visible(const gchar *cols_hidden, fmt_data *cfmt)
+{
+    char *tok, *cols;
     fmt_data cfmt_hidden;
 
     /*
@@ -5518,7 +5841,7 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
 }
 
 static prefs_set_pref_e
-set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
+set_pref(gchar *pref_name, const gchar *value, void *private_data,
          gboolean return_range_errors)
 {
     guint    cval;
@@ -5528,10 +5851,12 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
     gchar    *dotp, *last_dotp;
     static gchar *filter_label = NULL;
     static gboolean filter_enabled = FALSE;
-    module_t *module, *containing_module;
+    module_t *module, *containing_module, *target_module;
     pref_t   *pref;
     int type;
     gboolean converted_pref = FALSE;
+
+    target_module = (module_t*)private_data;
 
     //The PRS_GUI field names are here for backwards compatibility
     //display filters have been converted to a UAT.
@@ -5973,6 +6298,11 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
             return PREFS_SET_NO_SUCH_PREF;    /* no such preference */
         }
 
+        if (target_module && target_module != containing_module) {
+            /* Ignore */
+            return PREFS_SET_OK;
+        }
+
         type = pref->type;
         if (IS_PREF_OBSOLETE(type)) {
             return PREFS_SET_OBSOLETE;        /* no such preference any more */
@@ -6044,7 +6374,6 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
             break;
 
         case PREF_ENUM:
-        case PREF_PROTO_TCP_SNDAMB_ENUM:
             /* XXX - give an error if it doesn't match? */
             enum_val = find_val_for_string(value, pref->info.enum_info.enumvals,
                                            *pref->varp.enump);
@@ -6058,6 +6387,7 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
         case PREF_SAVE_FILENAME:
         case PREF_OPEN_FILENAME:
         case PREF_DIRNAME:
+        case PREF_DISSECTOR:
             containing_module->prefs_changed_flags |= prefs_set_string_value(pref, value, pref_current);
             break;
 
@@ -6149,7 +6479,13 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
 
         case PREF_STATIC_TEXT:
         case PREF_UAT:
+        case PREF_PROTO_TCP_SNDAMB_ENUM:
         {
+            /* There's no point in setting the TCP sequence override
+             * value from the command line, because the pref is different
+             * for each frame and reset to the default (0) for each new
+             * file.
+             */
             break;
         }
         }
@@ -6254,6 +6590,10 @@ prefs_pref_type_name(pref_t *pref)
 
     case PREF_PASSWORD:
         type_name = "Password";
+        break;
+
+    case PREF_DISSECTOR:
+        type_name = "Dissector";
         break;
     }
     return type_name;
@@ -6406,6 +6746,10 @@ prefs_pref_type_description(pref_t *pref)
         type_desc = "Password (never stored on disk)";
         break;
 
+    case PREF_DISSECTOR:
+        type_desc = "A dissector name";
+        break;
+
     default:
         break;
     }
@@ -6453,6 +6797,7 @@ prefs_pref_is_default(pref_t *pref)
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
     case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         if (!(g_strcmp0(pref->default_val.string, *pref->varp.string)))
             return TRUE;
         break;
@@ -6572,6 +6917,8 @@ prefs_pref_to_str(pref_t *pref, pref_source_t source) {
     case PREF_SAVE_FILENAME:
     case PREF_OPEN_FILENAME:
     case PREF_DIRNAME:
+    case PREF_PASSWORD:
+    case PREF_DISSECTOR:
         return g_strdup(*(const char **) valp);
 
     case PREF_DECODE_AS_RANGE:
@@ -6607,9 +6954,6 @@ prefs_pref_to_str(pref_t *pref, pref_source_t source) {
             pref_text = "[Managed in an unknown file]";
         break;
     }
-
-    case PREF_PASSWORD:
-        return g_strdup(*(const char **) valp);
 
     default:
         break;
@@ -6652,6 +6996,12 @@ write_pref(gpointer data, gpointer user_data)
     case PREF_DECODE_AS_UINT:
     case PREF_DECODE_AS_RANGE:
         /* Data is saved through Decode As mechanism and not part of preferences file */
+        return;
+    case PREF_PROTO_TCP_SNDAMB_ENUM:
+        /* Not written to the preference file because the override is only
+         * for the lifetime of the capture file and there is no single
+         * value to write.
+         */
         return;
     default:
         break;
@@ -6724,6 +7074,7 @@ count_non_uat_pref(gpointer data, gpointer user_data)
     case PREF_OBSOLETE:
     case PREF_DECODE_AS_UINT:
     case PREF_DECODE_AS_RANGE:
+    case PREF_PROTO_TCP_SNDAMB_ENUM:
         //These types are not written in preference file
         break;
     default:
@@ -6856,6 +7207,35 @@ write_prefs(char **pf_path_return)
             if (!uat_save(uat_get_table_by_name("Display expressions"), &err)) {
                 ws_warning("Unable to save Display expressions: %s", err);
                 g_free(err);
+            }
+        }
+
+        module_t *extcap_module = prefs_find_module("extcap");
+        if (extcap_module && !prefs.capture_no_extcap) {
+            char *ext_path = get_persconffile_path("extcap", TRUE);
+            FILE *extf;
+            if ((extf = ws_fopen(ext_path, "w")) == NULL) {
+                if (errno != EISDIR) {
+                    ws_warning("Unable to save extcap preferences \"%s\": %s",
+                        ext_path, g_strerror(errno));
+                }
+                g_free(ext_path);
+            } else {
+                g_free(ext_path);
+
+                fputs("# Extcap configuration file for Wireshark " VERSION ".\n"
+                      "#\n"
+                      "# This file is regenerated each time preferences are saved within\n"
+                      "# Wireshark. Making manual changes should be safe, however.\n"
+                      "# Preferences that have been commented out have not been\n"
+                      "# changed from their default value.\n", extf);
+
+                write_gui_pref_info.pf = extf;
+                write_gui_pref_info.is_gui_module = FALSE;
+
+                write_module_prefs(extcap_module, &write_gui_pref_info);
+
+                fclose(extf);
             }
         }
     }

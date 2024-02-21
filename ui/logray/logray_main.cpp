@@ -53,7 +53,7 @@
 #include <epan/dissectors/packet-kerberos.h>
 #endif
 
-#include <wsutil/codecs.h>
+#include <wsutil/codecs_priv.h>
 
 #include <extcap.h>
 
@@ -133,7 +133,7 @@ void exit_application(int status) {
 /*
  * Report an error in command-line arguments.
  *
- * On Windows, Wireshark is built for the Windows subsystem, and runs
+ * On Windows, Logray is built for the Windows subsystem, and runs
  * without a console, so we create a console on Windows to receive the
  * output.
  *
@@ -142,25 +142,25 @@ void exit_application(int status) {
  *
  * On UN*Xes:
  *
- *  If Wireshark is run from the command line, its output either goes
+ *  If Logray is run from the command line, its output either goes
  *  to the terminal or to wherever the standard error was redirected.
  *
- *  If Wireshark is run by executing it as a remote command, e.g. with
+ *  If Logray is run by executing it as a remote command, e.g. with
  *  ssh, its output either goes to whatever socket was set up for the
  *  remote command's standard error or to wherever the standard error
  *  was redirected.
  *
- *  If Wireshark was run from the GUI, e.g. by double-clicking on its
+ *  If Logray was run from the GUI, e.g. by double-clicking on its
  *  icon or on a file that it opens, there are no guarantees as to
  *  where the standard error went.  It could be going to /dev/null
  *  (current macOS), or to a socket to systemd for the journal, or
  *  to a log file in the user's home directory, or to the "console
  *  device" ("workstation console"), or....
  *
- *  Part of determining that, at least for locally-run Wireshark,
+ *  Part of determining that, at least for locally-run Logray,
  *  is to try to open /dev/tty to determine whether the process
  *  has a controlling terminal.  (It fails, at a minimum, for
- *  Wireshark launched from the GUI under macOS, Ubuntu with GNOME,
+ *  Logray launched from the GUI under macOS, Ubuntu with GNOME,
  *  and Ubuntu with KDE; in all cases, an attempt to open /dev/tty
  *  fails with ENXIO.)  If it does have a controlling terminal,
  *  write to the standard error, otherwise assume that the standard
@@ -311,7 +311,7 @@ check_and_warn_user_startup()
         simple_message_box(ESD_TYPE_WARN, &recent.privs_warn_if_elevated,
         "Running as user \"%s\" and group \"%s\".\n"
         "This could be dangerous.\n\n"
-        "If you're running Wireshark this way in order to perform live capture, "
+        "If you're running Logray this way in order to perform live capture, "
         "you may want to be aware that there is a better way documented at\n"
         WS_WIKI_URL("CaptureSetup/CapturePrivileges"), cur_user, cur_group);
         g_free(cur_user);
@@ -330,7 +330,7 @@ check_and_warn_user_startup()
 //
 // and
 //
-// - You install Wireshark that was built on a machine with Qt version
+// - You install Logray that was built on a machine with Qt version
 //   5.x.z installed in the default location.
 //
 // Qt5Core.dll will load qwindows.dll from your local C:\Qt\5.x\...\plugins
@@ -402,18 +402,22 @@ macos_enable_layer_backing(void)
 
 #ifdef HAVE_LIBPCAP
 static GList *
-capture_opts_get_interface_list(int *err, char **err_str)
+capture_opts_get_interface_list(int *err _U_, char **err_str _U_)
 {
-    /*
-     * XXX - should this pass an update callback?
-     * We already have a window up by the time we start parsing
-     * the majority of the command-line arguments, because
-     * we need to do a bunch of initialization work before
-     * parsing those arguments, and we want to let the user
-     * know that we're doing that initialization, given that
-     * it can take a while.
-     */
-    return capture_interface_list(err, err_str, NULL);
+    // logray only wants the IF_EXTCAP interfaces, so there's no point
+    // in spawning dumpcap to retrieve the other types of interfaces.
+#if 0
+    if (mainApp) {
+        GList *if_list = mainApp->getInterfaceList();
+        if (if_list == NULL) {
+            if_list = capture_interface_list(err, err_str, main_window_update);
+            mainApp->setInterfaceList(if_list);
+        }
+        return if_list;
+    }
+    return capture_interface_list(err, err_str, main_window_update);
+#endif
+    return append_extcap_interface_list(NULL);
 }
 #endif
 
@@ -432,7 +436,7 @@ int main(int argc, char *qt_argv[])
     char                *rf_path;
     int                  rf_open_errno;
 #ifdef HAVE_LIBPCAP
-    gchar               *err_str, *err_str_secondary;;
+    gchar               *err_str, *err_str_secondary;
 #else
 #ifdef _WIN32
 #ifdef HAVE_AIRPCAP
@@ -664,7 +668,7 @@ int main(int argc, char *qt_argv[])
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 #endif
 
-    /* Create The Wireshark app */
+    /* Create The Logray app */
     LograyApplication ls_app(argc, qt_argv);
 
     /* initialize the funnel mini-api */
@@ -716,13 +720,15 @@ int main(int argc, char *qt_argv[])
     main_w->connect(&ls_app, &LograyApplication::openCaptureOptions,
             main_w, &LograyMainWindow::showCaptureOptionsDialog);
 
-    /* Init the "Open file" dialog directory */
-    /* (do this after the path settings are processed) */
+    /*
+     * If we have a saved "last directory in which a file was opened"
+     * in the recent file, set it as the one for the app.
+     *
+     * (do this after the path settings are processed)
+     */
     if (recent.gui_fileopen_remembered_dir &&
         test_for_directory(recent.gui_fileopen_remembered_dir) == EISDIR) {
-      lwApp->setLastOpenDir(recent.gui_fileopen_remembered_dir);
-    } else {
-      lwApp->setLastOpenDir(get_persdatafile_dir());
+      set_last_open_dir(recent.gui_fileopen_remembered_dir);
     }
 
 #ifdef DEBUG_STARTUP_TIME
@@ -794,19 +800,39 @@ int main(int argc, char *qt_argv[])
         in_file_type = open_info_name_to_type(ex_opt_get_next("read_format"));
     }
 
-#ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
-#endif
-    splash_update(RA_EXTCAP, NULL, NULL);
-    extcap_register_preferences();
     splash_update(RA_PREFERENCES, NULL, NULL);
 #ifdef DEBUG_STARTUP_TIME
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling module preferences, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
 #endif
 
+    /* Read the preferences, but don't apply them yet. */
     global_commandline_info.prefs_p = ls_app.readConfigurationFiles(false);
 
-    /* Now get our args */
+    /* Now let's see if any of preferences were overridden at the command
+     * line, and store them. We have to do this before applying the
+     * preferences to the capture options.
+     */
+    commandline_override_prefs(argc, argv, TRUE);
+
+    /* Register the extcap preferences. We do this after seeing if the
+     * capture_no_extcap preference is set in the configuration file
+     * or command line. This will re-read the extcap specific preferences.
+     */
+#ifdef DEBUG_STARTUP_TIME
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+#endif
+    splash_update(RA_EXTCAP, NULL, NULL);
+    extcap_register_preferences();
+
+    /* Some of the preferences affect the capture options. Apply those
+     * before getting the other command line arguments, which can also
+     * affect the capture options. The command line arguments should be
+     * applied last to take precedence (at least until the user saves
+     * preferences, or switches profiles.)
+     */
+    prefs_to_capture_opts();
+
+    /* Now get our remaining args */
     commandline_other_options(argc, argv, TRUE);
 
     /* Convert some command-line parameters to QStrings */
@@ -822,19 +848,6 @@ int main(int argc, char *qt_argv[])
     timestamp_set_seconds_type (recent.gui_seconds_format);
 
 #ifdef HAVE_LIBPCAP
-#ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
-#endif
-    splash_update(RA_INTERFACES, NULL, NULL);
-
-    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load) {
-        /* Allow only extcap interfaces to be found */
-        GList * filter_list = NULL;
-        filter_list = g_list_append(filter_list, GUINT_TO_POINTER((guint) IF_EXTCAP));
-        fill_in_local_interfaces_filtered(filter_list, main_window_update);
-        g_list_free(filter_list);
-    }
-
     if  (global_commandline_info.list_link_layer_types)
         caps_queries |= CAPS_QUERY_LINK_TYPES;
      if (global_commandline_info.list_timestamp_types)
@@ -863,20 +876,34 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
         /* Get the list of link-layer types for the capture devices. */
         ret_val = EXIT_SUCCESS;
+        GList *if_cap_queries = NULL;
+        if_cap_query_t *if_cap_query;
+        GHashTable *capability_hash;
+        for (i = 0; i < global_capture_opts.ifaces->len; i++) {
+            interface_options *interface_opts;
+
+            interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
+            if_cap_query = g_new(if_cap_query_t, 1);
+            if_cap_query->name = interface_opts->name;
+            if_cap_query->monitor_mode = interface_opts->monitor_mode;
+            if_cap_query->auth_username = NULL;
+            if_cap_query->auth_password = NULL;
+#ifdef HAVE_PCAP_REMOTE
+            if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
+                if_cap_query->auth_username = interface_opts->auth_username;
+                if_cap_query->auth_password = interface_opts->auth_password;
+            }
+#endif
+            if_cap_queries = g_list_prepend(if_cap_queries, if_cap_query);
+        }
+        if_cap_queries = g_list_reverse(if_cap_queries);
+        capability_hash = capture_get_if_list_capabilities(if_cap_queries, &err_str, &err_str_secondary, NULL);
+        g_list_free_full(if_cap_queries, g_free);
         for (i = 0; i < global_capture_opts.ifaces->len; i++) {
             interface_options *interface_opts;
             if_capabilities_t *caps;
-            char *auth_str = NULL;
-
             interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
-#ifdef HAVE_PCAP_REMOTE
-            if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
-                auth_str = g_strdup_printf("%s:%s", interface_opts->auth_username, interface_opts->auth_password);
-            }
-#endif
-            caps = capture_get_if_capabilities(interface_opts->name, interface_opts->monitor_mode,
-                                               auth_str, &err_str, &err_str_secondary, NULL);
-            g_free(auth_str);
+            caps = static_cast<if_capabilities_t*>(g_hash_table_lookup(capability_hash, interface_opts->name));
             if (caps == NULL) {
                 cmdarg_err("%s%s%s", err_str, err_str_secondary ? "\n" : "", err_str_secondary ? err_str_secondary : "");
                 g_free(err_str);
@@ -886,7 +913,6 @@ int main(int argc, char *qt_argv[])
             }
             ret_val = capture_opts_print_if_capabilities(caps, interface_opts,
                                                          caps_queries);
-            free_if_capabilities(caps);
             if (ret_val != EXIT_SUCCESS) {
                 break;
             }
@@ -894,7 +920,24 @@ int main(int argc, char *qt_argv[])
 #ifdef _WIN32
         destroy_console();
 #endif /* _WIN32 */
+        g_hash_table_destroy(capability_hash);
         goto clean_exit;
+    }
+
+#ifdef DEBUG_STARTUP_TIME
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+#endif
+    splash_update(RA_INTERFACES, NULL, NULL);
+
+    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load) {
+        /* Allow only extcap interfaces to be found */
+        GList * filter_list = NULL;
+        filter_list = g_list_append(filter_list, GUINT_TO_POINTER((guint) IF_EXTCAP));
+        // The below starts the stats; we don't need that since Logyray only
+        // supports extcaps.
+        //lwApp->scanLocalInterfaces(filter_list);
+        fill_in_local_interfaces_filtered(filter_list, main_window_update);
+        g_list_free(filter_list);
     }
 
     capture_opts_trim_snaplen(&global_capture_opts, MIN_PACKET_SIZE);
@@ -908,7 +951,6 @@ int main(int argc, char *qt_argv[])
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling prefs_apply_all, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
 #endif
     prefs_apply_all();
-    prefs_to_capture_opts();
     lwApp->emitAppSignal(LograyApplication::PreferencesChanged);
 
 #ifdef HAVE_LIBPCAP
@@ -1035,6 +1077,7 @@ int main(int argc, char *qt_argv[])
     // loaded when the dialog is shown.  Register them here.
     profile_register_persconffile("io_graphs");
     profile_register_persconffile("import_hexdump.json");
+    profile_register_persconffile("remote_hosts.json");
 
     profile_store_persconffiles(FALSE);
 

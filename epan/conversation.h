@@ -42,6 +42,7 @@ extern "C" {
 #define NO_PORT2 0x02
 #define NO_PORT2_FORCE 0x04
 #define CONVERSATION_TEMPLATE 0x08
+#define NO_PORTS 0x010
 
 /**
  * Flags to pass to "find_conversation()" to indicate that the address B
@@ -50,6 +51,7 @@ extern "C" {
 #define NO_MASK_B 0xFFFF0000
 #define NO_ADDR_B 0x00010000
 #define NO_PORT_B 0x00020000
+#define NO_PORT_X 0x00040000
 
 /** Flags to handle endpoints */
 #define USE_LAST_ENDPOINT 0x08		/**< Use last endpoint created, regardless of type */
@@ -99,6 +101,9 @@ typedef enum {
     CONVERSATION_SNMP,		/* SNMP */
     CONVERSATION_QUIC,		/* QUIC */
     CONVERSATION_IDN,
+    CONVERSATION_IP,		/* IP */
+    CONVERSATION_IPV6,		/* IPv6 */
+    CONVERSATION_ETH     	/* ETHERNET */
 } conversation_type;
 
 /*
@@ -153,13 +158,14 @@ typedef conversation_type endpoint_type;
  * Conversation element type.
  */
 typedef enum {
-    CE_CONVERSATION_TYPE,	/* CONVERSATION_ value */
-    CE_ADDRESS,			/* address */
-    CE_PORT,			/* unsigned integer representing a port */
-    CE_STRING,			/* string */
-    CE_UINT,			/* unsigned integer not representing a port */
-    CE_UINT64,			/* 64-bit unsigned integer */
-    CE_INT,             /* signed integer */
+    CE_CONVERSATION_TYPE,   /* CONVERSATION_ value */
+    CE_ADDRESS,             /* address */
+    CE_PORT,                /* unsigned integer representing a port */
+    CE_STRING,              /* string */
+    CE_UINT,                /* unsigned integer not representing a port */
+    CE_UINT64,              /* 64-bit unsigned integer */
+    CE_INT,                 /* signed integer */
+    CE_INT64,               /* signed integer */
 } conversation_element_type;
 
 /**
@@ -193,6 +199,7 @@ typedef struct conversation_element {
         unsigned int uint_val;
         uint64_t uint64_val;
         int int_val;
+        int64_t int64_val;
     };
 } conversation_element_t;
 
@@ -240,7 +247,7 @@ typedef struct conversation {
  * type specifying the protocol for the conversation.  Now we use an
  * array of elements, with a CE_UINT value for the integer followed
  * by a CE_CONVERSATION_TYPE value specifying the protocol for the
- * converation.
+ * conversation.
  *
  * XXX - is there any reason why we shouldn't use an array of conversation
  * elements, with the appropriate addresses and ports, instead of this

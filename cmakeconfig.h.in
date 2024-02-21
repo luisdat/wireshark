@@ -19,8 +19,9 @@
 /* Version number of Logray and associated utilities */
 #define LOG_VERSION "${LOG_PROJECT_VERSION}${VERSION_EXTRA}"
 
-#define PLUGIN_PATH_ID "${PLUGIN_PATH_ID}"
 #define VERSION_FLAVOR "${VERSION_FLAVOR}"
+
+#define SHARED_MODULE_SUFFIX "${CMAKE_SHARED_MODULE_SUFFIX}"
 
 /* Build wsutil with SIMD optimization */
 #cmakedefine HAVE_SSE4_2 1
@@ -280,8 +281,8 @@
 /* Define if you have the 'memmem' function. */
 #cmakedefine HAVE_MEMMEM 1
 
-/* Define if you have the 'strcasestr' function. */
-#cmakedefine HAVE_STRCASESTR 1
+/* Define if you have the 'memrchr' function. */
+#cmakedefine HAVE_MEMRCHR 1
 
 /* Define if you have the 'strerrorname_np' function. */
 #cmakedefine HAVE_STRERRORNAME_NP 1
@@ -360,15 +361,15 @@
  * for our needs.
  * This should match the following:
  * - The <compatibility><application> section in resources\wireshark.exe.manifest.in
- * - The GetWindowsVersion parts of packaging\nsis\wireshark.nsi
+ * - The WinVer parts of packaging\nsis\wireshark.nsi
  * - The VersionNT parts of packaging\wix\Prerequisites.wxi
  */
 #  ifndef NTDDI_VERSION
-#  define NTDDI_VERSION   NTDDI_WIN7
+#  define NTDDI_VERSION   NTDDI_WIN10
 #  endif
 
 #  ifndef _WIN32_WINNT
-#  define _WIN32_WINNT    _WIN32_WINNT_WIN7
+#  define _WIN32_WINNT    _WIN32_WINNT_WIN10
 #  endif
 #endif
 

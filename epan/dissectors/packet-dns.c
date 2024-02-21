@@ -87,6 +87,7 @@ struct DnsTap {
     guint payload_size;
     guint qname_len;
     guint qname_labels;
+    gchar* qname;
     guint nquestions;
     guint nanswers;
     guint nauthorities;
@@ -96,11 +97,12 @@ struct DnsTap {
     nstime_t rrt;
 };
 
-static int dns_tap = -1;
+static int dns_tap;
 
 static const gchar* st_str_packets = "Total Packets";
 static const gchar* st_str_packet_qr = "Query/Response";
 static const gchar* st_str_packet_qtypes = "Query Type";
+static const gchar* st_str_packet_qnames = "Query Name";
 static const gchar* st_str_packet_qclasses = "Class";
 static const gchar* st_str_packet_rcodes = "rcode";
 static const gchar* st_str_packet_opcodes = "opcodes";
@@ -122,9 +124,9 @@ static const gchar* st_str_service_unsolicited = "no. of unsolicited responses";
 static const gchar* st_str_service_retransmission = "no. of retransmissions";
 static const gchar* st_str_service_rrt = "request-response time (msec)";
 
-static int st_node_packets = -1;
 static int st_node_packet_qr = -1;
 static int st_node_packet_qtypes = -1;
+static int st_node_packet_qnames = -1;
 static int st_node_packet_qclasses = -1;
 static int st_node_packet_rcodes = -1;
 static int st_node_packet_opcodes = -1;
@@ -146,373 +148,373 @@ static int st_node_service_unsolicited = -1;
 static int st_node_service_retransmission = -1;
 static int st_node_service_rrt = -1;
 
-static int proto_dns = -1;
-static int proto_mdns = -1;
-static int proto_llmnr = -1;
-static int hf_dns_length = -1;
-static int hf_dns_flags = -1;
-static int hf_dns_flags_response = -1;
-static int hf_dns_flags_opcode = -1;
-static int hf_dns_flags_authoritative = -1;
-static int hf_dns_flags_conflict_query = -1;
-static int hf_dns_flags_conflict_response = -1;
-static int hf_dns_flags_truncated = -1;
-static int hf_dns_flags_recdesired = -1;
-static int hf_dns_flags_tentative = -1;
-static int hf_dns_flags_recavail = -1;
-static int hf_dns_flags_z = -1;
-static int hf_dns_flags_authenticated = -1;
-static int hf_dns_flags_ad = -1;
-static int hf_dns_flags_checkdisable = -1;
-static int hf_dns_flags_rcode = -1;
-static int hf_dns_transaction_id = -1;
-static int hf_dns_count_questions = -1;
-static int hf_dns_count_zones = -1;
-static int hf_dns_count_answers = -1;
-static int hf_dns_count_prerequisites = -1;
-static int hf_dns_count_updates = -1;
-static int hf_dns_count_auth_rr = -1;
-static int hf_dns_count_add_rr = -1;
-static int hf_dns_qry_name = -1;
-static int hf_dns_qry_name_len = -1;
-static int hf_dns_count_labels = -1;
-static int hf_dns_qry_type = -1;
-static int hf_dns_qry_class = -1;
-static int hf_dns_qry_class_mdns = -1;
-static int hf_dns_qry_qu = -1;
-static int hf_dns_srv_instance = -1;
-static int hf_dns_srv_service = -1;
-static int hf_dns_srv_proto = -1;
-static int hf_dns_srv_name = -1;
-static int hf_dns_srv_priority = -1;
-static int hf_dns_srv_weight = -1;
-static int hf_dns_srv_port = -1;
-static int hf_dns_srv_target = -1;
-static int hf_dns_naptr_order = -1;
-static int hf_dns_naptr_preference = -1;
-static int hf_dns_naptr_flags_length = -1;
-static int hf_dns_naptr_flags = -1;
-static int hf_dns_naptr_service_length = -1;
-static int hf_dns_naptr_service = -1;
-static int hf_dns_naptr_regex_length = -1;
-static int hf_dns_naptr_regex = -1;
-static int hf_dns_naptr_replacement_length = -1;
-static int hf_dns_naptr_replacement = -1;
-static int hf_dns_rr_name = -1;
-static int hf_dns_rr_type = -1;
-static int hf_dns_rr_class = -1;
-static int hf_dns_rr_class_mdns = -1;
-static int hf_dns_rr_cache_flush = -1;
-static int hf_dns_rr_ext_rcode = -1;
-static int hf_dns_rr_edns0_version = -1;
-static int hf_dns_rr_z = -1;
-static int hf_dns_rr_z_do = -1;
-static int hf_dns_rr_z_reserved = -1;
-static int hf_dns_rr_ttl = -1;
-static int hf_dns_rr_len = -1;
-static int hf_dns_a = -1;
-static int hf_dns_a_ch_domain = -1;
-static int hf_dns_a_ch_addr = -1;
-static int hf_dns_md = -1;
-static int hf_dns_mf = -1;
-static int hf_dns_mb = -1;
-static int hf_dns_mg = -1;
-static int hf_dns_mr = -1;
-static int hf_dns_null = -1;
-static int hf_dns_aaaa = -1;
-static int hf_dns_cname = -1;
-static int hf_dns_rr_udp_payload_size = -1;
-static int hf_dns_rr_udp_payload_size_mdns = -1;
-static int hf_dns_soa_mname = -1;
-static int hf_dns_soa_rname = -1;
-static int hf_dns_soa_serial_number = -1;
-static int hf_dns_soa_refresh_interval = -1;
-static int hf_dns_soa_retry_interval = -1;
-static int hf_dns_soa_expire_limit = -1;
-static int hf_dns_soa_minimum_ttl = -1;
-static int hf_dns_ptr_domain_name = -1;
-static int hf_dns_wks_address = -1;
-static int hf_dns_wks_protocol = -1;
-static int hf_dns_wks_bits = -1;
-static int hf_dns_hinfo_cpu_length = -1;
-static int hf_dns_hinfo_cpu = -1;
-static int hf_dns_hinfo_os_length = -1;
-static int hf_dns_hinfo_os = -1;
-static int hf_dns_minfo_r_mailbox = -1;
-static int hf_dns_minfo_e_mailbox = -1;
-static int hf_dns_mx_preference = -1;
-static int hf_dns_mx_mail_exchange = -1;
-static int hf_dns_txt_length = -1;
-static int hf_dns_txt = -1;
-static int hf_dns_csync_soa = -1;
-static int hf_dns_csync_flags = -1;
-static int hf_dns_csync_flags_immediate = -1;
-static int hf_dns_csync_flags_soaminimum = -1;
-static int hf_dns_csync_type_bitmap = -1;
-static int hf_dns_zonemd_serial = -1;
-static int hf_dns_zonemd_scheme = -1;
-static int hf_dns_zonemd_hash_algo = -1;
-static int hf_dns_zonemd_digest = -1;
-static int hf_dns_svcb_priority = -1;
-static int hf_dns_svcb_target = -1;
-static int hf_dns_svcb_param_key = -1;
-static int hf_dns_svcb_param_length = -1;
-static int hf_dns_svcb_param_value = -1;
-static int hf_dns_svcb_param = -1;
-static int hf_dns_svcb_param_mandatory_key = -1;
-static int hf_dns_svcb_param_alpn_length = -1;
-static int hf_dns_svcb_param_alpn = -1;
-static int hf_dns_svcb_param_port = -1;
-static int hf_dns_svcb_param_ipv4hint_ip = -1;
-static int hf_dns_svcb_param_echconfig = -1;
-static int hf_dns_svcb_param_ipv6hint_ip = -1;
-static int hf_dns_svcb_param_dohpath = -1;
-static int hf_dns_svcb_param_odohconfig = -1;
-static int hf_dns_openpgpkey = -1;
-static int hf_dns_spf_length = -1;
-static int hf_dns_spf = -1;
-static int hf_dns_ilnp_nodeid_preference = -1;
-static int hf_dns_ilnp_nodeid = -1;
-static int hf_dns_ilnp_locator32_preference = -1;
-static int hf_dns_ilnp_locator32 = -1;
-static int hf_dns_ilnp_locator64_preference = -1;
-static int hf_dns_ilnp_locator64 = -1;
-static int hf_dns_ilnp_locatorfqdn_preference = -1;
-static int hf_dns_ilnp_locatorfqdn = -1;
-static int hf_dns_eui48 = -1;
-static int hf_dns_eui64 = -1;
-static int hf_dns_rrsig_type_covered = -1;
-static int hf_dns_rrsig_algorithm = -1;
-static int hf_dns_rrsig_labels = -1;
-static int hf_dns_rrsig_original_ttl = -1;
-static int hf_dns_rrsig_signature_expiration = -1;
-static int hf_dns_rrsig_signature_inception = -1;
-static int hf_dns_rrsig_key_tag = -1;
-static int hf_dns_rrsig_signers_name = -1;
-static int hf_dns_rrsig_signature = -1;
-static int hf_dns_dnskey_flags = -1;
-static int hf_dns_dnskey_flags_zone_key = -1;
-static int hf_dns_dnskey_flags_key_revoked = -1;
-static int hf_dns_dnskey_flags_secure_entry_point = -1;
-static int hf_dns_dnskey_flags_reserved = -1;
-static int hf_dns_dnskey_protocol = -1;
-static int hf_dns_dnskey_algorithm = -1;
-static int hf_dns_dnskey_key_id = -1;
-static int hf_dns_dnskey_public_key = -1;
-static int hf_dns_key_flags = -1;
-static int hf_dns_key_flags_authentication = -1;
-static int hf_dns_key_flags_confidentiality = -1;
-static int hf_dns_key_flags_key_required = -1;
-static int hf_dns_key_flags_associated_user = -1;
-static int hf_dns_key_flags_associated_named_entity = -1;
-static int hf_dns_key_flags_ipsec = -1;
-static int hf_dns_key_flags_mime = -1;
-static int hf_dns_key_flags_signatory = -1;
-static int hf_dns_key_protocol = -1;
-static int hf_dns_key_algorithm = -1;
-static int hf_dns_key_key_id = -1;
-static int hf_dns_key_public_key = -1;
-static int hf_dns_px_preference = -1;
-static int hf_dns_px_map822 = -1;
-static int hf_dns_px_mapx400 = -1;
-static int hf_dns_tkey_algo_name = -1;
-static int hf_dns_tkey_signature_expiration = -1;
-static int hf_dns_tkey_signature_inception = -1;
-static int hf_dns_tkey_mode = -1;
-static int hf_dns_tkey_error = -1;
-static int hf_dns_tkey_key_size = -1;
-static int hf_dns_tkey_key_data = -1;
-static int hf_dns_tkey_other_size = -1;
-static int hf_dns_tkey_other_data = -1;
-static int hf_dns_ipseckey_gateway_precedence = -1;
-static int hf_dns_ipseckey_gateway_type = -1;
-static int hf_dns_ipseckey_gateway_algorithm = -1;
-static int hf_dns_ipseckey_gateway_ipv4 = -1;
-static int hf_dns_ipseckey_gateway_ipv6 = -1;
-static int hf_dns_ipseckey_gateway_dns = -1;
-static int hf_dns_ipseckey_public_key = -1;
-static int hf_dns_xpf_ip_version = -1;
-static int hf_dns_xpf_protocol = -1;
-static int hf_dns_xpf_source_ipv4 = -1;
-static int hf_dns_xpf_destination_ipv4 = -1;
-static int hf_dns_xpf_source_ipv6 = -1;
-static int hf_dns_xpf_destination_ipv6 = -1;
-static int hf_dns_xpf_sport = -1;
-static int hf_dns_xpf_dport = -1;
-static int hf_dns_a6_prefix_len = -1;
-static int hf_dns_a6_address_suffix = -1;
-static int hf_dns_a6_prefix_name = -1;
-static int hf_dns_dname = -1;
-static int hf_dns_loc_version = -1;
-static int hf_dns_loc_size = -1;
-static int hf_dns_loc_horizontal_precision = -1;
-static int hf_dns_loc_vertical_precision = -1;
-static int hf_dns_loc_latitude = -1;
-static int hf_dns_loc_longitude = -1;
-static int hf_dns_loc_altitude = -1;
-static int hf_dns_loc_unknown_data = -1;
-static int hf_dns_nxt_next_domain_name = -1;
-static int hf_dns_kx_preference = -1;
-static int hf_dns_kx_key_exchange = -1;
-static int hf_dns_cert_type = -1;
-static int hf_dns_cert_key_tag = -1;
-static int hf_dns_cert_algorithm = -1;
-static int hf_dns_cert_certificate = -1;
-static int hf_dns_nsec_next_domain_name = -1;
-static int hf_dns_ns = -1;
-static int hf_dns_opt = -1;
-static int hf_dns_opt_code = -1;
-static int hf_dns_opt_len = -1;
-static int hf_dns_opt_data = -1;
-static int hf_dns_opt_dau = -1;
-static int hf_dns_opt_dhu = -1;
-static int hf_dns_opt_n3u = -1;
-static int hf_dns_opt_client_family = -1;
-static int hf_dns_opt_client_netmask = -1;
-static int hf_dns_opt_client_scope = -1;
-static int hf_dns_opt_client_addr = -1;
-static int hf_dns_opt_client_addr4 = -1;
-static int hf_dns_opt_client_addr6 = -1;
-static int hf_dns_opt_cookie_client = -1;
-static int hf_dns_opt_cookie_server = -1;
-static int hf_dns_opt_edns_tcp_keepalive_timeout = -1;
-static int hf_dns_opt_padding = -1;
-static int hf_dns_opt_chain_fqdn = -1;
-static int hf_dns_opt_ext_error_info_code = -1;
-static int hf_dns_opt_ext_error_extra_text = -1;
-static int hf_dns_nsec3_algo = -1;
-static int hf_dns_nsec3_flags = -1;
-static int hf_dns_nsec3_flag_optout = -1;
-static int hf_dns_nsec3_iterations = -1;
-static int hf_dns_nsec3_salt_length = -1;
-static int hf_dns_nsec3_salt_value = -1;
-static int hf_dns_nsec3_hash_length = -1;
-static int hf_dns_nsec3_hash_value = -1;
-static int hf_dns_tlsa_certificate_usage = -1;
-static int hf_dns_tlsa_selector = -1;
-static int hf_dns_tlsa_matching_type = -1;
-static int hf_dns_tlsa_certificate_association_data = -1;
-static int hf_dns_tsig_algorithm_name = -1;
-static int hf_dns_tsig_time_signed = -1;
-static int hf_dns_tsig_error = -1;
-static int hf_dns_tsig_fudge = -1;
-static int hf_dns_tsig_mac_size = -1;
-static int hf_dns_tsig_mac = -1;
-static int hf_dns_tsig_original_id = -1;
-static int hf_dns_tsig_other_len = -1;
-static int hf_dns_tsig_other_data = -1;
-static int hf_dns_response_in = -1;
-static int hf_dns_response_to = -1;
-static int hf_dns_retransmission = -1;
-static int hf_dns_retransmit_request_in = -1;
-static int hf_dns_retransmit_response_in = -1;
-static int hf_dns_time = -1;
-static int hf_dns_unsolicited = -1;
-static int hf_dns_sshfp_algorithm = -1;
-static int hf_dns_sshfp_fingerprint_type = -1;
-static int hf_dns_sshfp_fingerprint = -1;
-static int hf_dns_hip_hit_length = -1;
-static int hf_dns_hip_pk_algo = -1;
-static int hf_dns_hip_pk_length = -1;
-static int hf_dns_hip_hit = -1;
-static int hf_dns_hip_pk = -1;
-static int hf_dns_hip_rendezvous_server = -1;
-static int hf_dns_dhcid_rdata = -1;
-static int hf_dns_ds_key_id = -1;
-static int hf_dns_ds_algorithm = -1;
-static int hf_dns_apl_coded_prefix = -1;
-static int hf_dns_ds_digest_type = -1;
-static int hf_dns_ds_digest = -1;
-static int hf_dns_apl_address_family = -1;
-static int hf_dns_apl_negation = -1;
-static int hf_dns_apl_afdlength = -1;
-static int hf_dns_apl_afdpart_ipv4 = -1;
-static int hf_dns_apl_afdpart_ipv6 = -1;
-static int hf_dns_apl_afdpart_data = -1;
-static int hf_dns_gpos_longitude_length = -1;
-static int hf_dns_gpos_longitude = -1;
-static int hf_dns_gpos_latitude_length = -1;
-static int hf_dns_gpos_latitude = -1;
-static int hf_dns_gpos_altitude_length = -1;
-static int hf_dns_gpos_altitude = -1;
-static int hf_dns_rp_mailbox = -1;
-static int hf_dns_rp_txt_rr = -1;
-static int hf_dns_afsdb_subtype = -1;
-static int hf_dns_afsdb_hostname = -1;
-static int hf_dns_x25_length = -1;
-static int hf_dns_x25_psdn_address = -1;
-static int hf_dns_isdn_length = -1;
-static int hf_dns_isdn_address = -1;
-static int hf_dns_isdn_sa_length = -1;
-static int hf_dns_isdn_sa = -1;
-static int hf_dns_rt_preference = -1;
-static int hf_dns_rt_intermediate_host = -1;
-static int hf_dns_nsap_rdata = -1;
-static int hf_dns_nsap_ptr_owner = -1;
-static int hf_dns_caa_flags = -1;
-static int hf_dns_caa_flag_issuer_critical = -1;
-static int hf_dns_caa_issue = -1;
-static int hf_dns_caa_issuewild = -1;
-static int hf_dns_caa_iodef = -1;
-static int hf_dns_caa_unknown = -1;
-static int hf_dns_caa_tag_length = -1;
-static int hf_dns_caa_tag = -1;
-static int hf_dns_caa_value = -1;
-static int hf_dns_extraneous_data = -1;
-static int hf_dns_extraneous_length = -1;
+static int proto_dns;
+static int proto_mdns;
+static int proto_llmnr;
+static int hf_dns_length;
+static int hf_dns_flags;
+static int hf_dns_flags_response;
+static int hf_dns_flags_opcode;
+static int hf_dns_flags_authoritative;
+static int hf_dns_flags_conflict_query;
+static int hf_dns_flags_conflict_response;
+static int hf_dns_flags_truncated;
+static int hf_dns_flags_recdesired;
+static int hf_dns_flags_tentative;
+static int hf_dns_flags_recavail;
+static int hf_dns_flags_z;
+static int hf_dns_flags_authenticated;
+static int hf_dns_flags_ad;
+static int hf_dns_flags_checkdisable;
+static int hf_dns_flags_rcode;
+static int hf_dns_transaction_id;
+static int hf_dns_count_questions;
+static int hf_dns_count_zones;
+static int hf_dns_count_answers;
+static int hf_dns_count_prerequisites;
+static int hf_dns_count_updates;
+static int hf_dns_count_auth_rr;
+static int hf_dns_count_add_rr;
+static int hf_dns_qry_name;
+static int hf_dns_qry_name_len;
+static int hf_dns_count_labels;
+static int hf_dns_qry_type;
+static int hf_dns_qry_class;
+static int hf_dns_qry_class_mdns;
+static int hf_dns_qry_qu;
+static int hf_dns_srv_instance;
+static int hf_dns_srv_service;
+static int hf_dns_srv_proto;
+static int hf_dns_srv_name;
+static int hf_dns_srv_priority;
+static int hf_dns_srv_weight;
+static int hf_dns_srv_port;
+static int hf_dns_srv_target;
+static int hf_dns_naptr_order;
+static int hf_dns_naptr_preference;
+static int hf_dns_naptr_flags_length;
+static int hf_dns_naptr_flags;
+static int hf_dns_naptr_service_length;
+static int hf_dns_naptr_service;
+static int hf_dns_naptr_regex_length;
+static int hf_dns_naptr_regex;
+static int hf_dns_naptr_replacement_length;
+static int hf_dns_naptr_replacement;
+static int hf_dns_rr_name;
+static int hf_dns_rr_type;
+static int hf_dns_rr_class;
+static int hf_dns_rr_class_mdns;
+static int hf_dns_rr_cache_flush;
+static int hf_dns_rr_ext_rcode;
+static int hf_dns_rr_edns0_version;
+static int hf_dns_rr_z;
+static int hf_dns_rr_z_do;
+static int hf_dns_rr_z_reserved;
+static int hf_dns_rr_ttl;
+static int hf_dns_rr_len;
+static int hf_dns_a;
+static int hf_dns_a_ch_domain;
+static int hf_dns_a_ch_addr;
+static int hf_dns_md;
+static int hf_dns_mf;
+static int hf_dns_mb;
+static int hf_dns_mg;
+static int hf_dns_mr;
+static int hf_dns_null;
+static int hf_dns_aaaa;
+static int hf_dns_cname;
+static int hf_dns_rr_udp_payload_size;
+static int hf_dns_rr_udp_payload_size_mdns;
+static int hf_dns_soa_mname;
+static int hf_dns_soa_rname;
+static int hf_dns_soa_serial_number;
+static int hf_dns_soa_refresh_interval;
+static int hf_dns_soa_retry_interval;
+static int hf_dns_soa_expire_limit;
+static int hf_dns_soa_minimum_ttl;
+static int hf_dns_ptr_domain_name;
+static int hf_dns_wks_address;
+static int hf_dns_wks_protocol;
+static int hf_dns_wks_bits;
+static int hf_dns_hinfo_cpu_length;
+static int hf_dns_hinfo_cpu;
+static int hf_dns_hinfo_os_length;
+static int hf_dns_hinfo_os;
+static int hf_dns_minfo_r_mailbox;
+static int hf_dns_minfo_e_mailbox;
+static int hf_dns_mx_preference;
+static int hf_dns_mx_mail_exchange;
+static int hf_dns_txt_length;
+static int hf_dns_txt;
+static int hf_dns_csync_soa;
+static int hf_dns_csync_flags;
+static int hf_dns_csync_flags_immediate;
+static int hf_dns_csync_flags_soaminimum;
+static int hf_dns_csync_type_bitmap;
+static int hf_dns_zonemd_serial;
+static int hf_dns_zonemd_scheme;
+static int hf_dns_zonemd_hash_algo;
+static int hf_dns_zonemd_digest;
+static int hf_dns_svcb_priority;
+static int hf_dns_svcb_target;
+static int hf_dns_svcb_param_key;
+static int hf_dns_svcb_param_length;
+static int hf_dns_svcb_param_value;
+static int hf_dns_svcb_param;
+static int hf_dns_svcb_param_mandatory_key;
+static int hf_dns_svcb_param_alpn_length;
+static int hf_dns_svcb_param_alpn;
+static int hf_dns_svcb_param_port;
+static int hf_dns_svcb_param_ipv4hint_ip;
+static int hf_dns_svcb_param_ipv6hint_ip;
+static int hf_dns_svcb_param_dohpath;
+static int hf_dns_svcb_param_odohconfig;
+static int hf_dns_openpgpkey;
+static int hf_dns_spf_length;
+static int hf_dns_spf;
+static int hf_dns_ilnp_nodeid_preference;
+static int hf_dns_ilnp_nodeid;
+static int hf_dns_ilnp_locator32_preference;
+static int hf_dns_ilnp_locator32;
+static int hf_dns_ilnp_locator64_preference;
+static int hf_dns_ilnp_locator64;
+static int hf_dns_ilnp_locatorfqdn_preference;
+static int hf_dns_ilnp_locatorfqdn;
+static int hf_dns_eui48;
+static int hf_dns_eui64;
+static int hf_dns_rrsig_type_covered;
+static int hf_dns_rrsig_algorithm;
+static int hf_dns_rrsig_labels;
+static int hf_dns_rrsig_original_ttl;
+static int hf_dns_rrsig_signature_expiration;
+static int hf_dns_rrsig_signature_inception;
+static int hf_dns_rrsig_key_tag;
+static int hf_dns_rrsig_signers_name;
+static int hf_dns_rrsig_signature;
+static int hf_dns_dnskey_flags;
+static int hf_dns_dnskey_flags_zone_key;
+static int hf_dns_dnskey_flags_key_revoked;
+static int hf_dns_dnskey_flags_secure_entry_point;
+static int hf_dns_dnskey_flags_reserved;
+static int hf_dns_dnskey_protocol;
+static int hf_dns_dnskey_algorithm;
+static int hf_dns_dnskey_key_id;
+static int hf_dns_dnskey_public_key;
+static int hf_dns_key_flags;
+static int hf_dns_key_flags_authentication;
+static int hf_dns_key_flags_confidentiality;
+static int hf_dns_key_flags_key_required;
+static int hf_dns_key_flags_associated_user;
+static int hf_dns_key_flags_associated_named_entity;
+static int hf_dns_key_flags_ipsec;
+static int hf_dns_key_flags_mime;
+static int hf_dns_key_flags_signatory;
+static int hf_dns_key_protocol;
+static int hf_dns_key_algorithm;
+static int hf_dns_key_key_id;
+static int hf_dns_key_public_key;
+static int hf_dns_px_preference;
+static int hf_dns_px_map822;
+static int hf_dns_px_mapx400;
+static int hf_dns_tkey_algo_name;
+static int hf_dns_tkey_signature_expiration;
+static int hf_dns_tkey_signature_inception;
+static int hf_dns_tkey_mode;
+static int hf_dns_tkey_error;
+static int hf_dns_tkey_key_size;
+static int hf_dns_tkey_key_data;
+static int hf_dns_tkey_other_size;
+static int hf_dns_tkey_other_data;
+static int hf_dns_ipseckey_gateway_precedence;
+static int hf_dns_ipseckey_gateway_type;
+static int hf_dns_ipseckey_gateway_algorithm;
+static int hf_dns_ipseckey_gateway_ipv4;
+static int hf_dns_ipseckey_gateway_ipv6;
+static int hf_dns_ipseckey_gateway_dns;
+static int hf_dns_ipseckey_public_key;
+static int hf_dns_xpf_ip_version;
+static int hf_dns_xpf_protocol;
+static int hf_dns_xpf_source_ipv4;
+static int hf_dns_xpf_destination_ipv4;
+static int hf_dns_xpf_source_ipv6;
+static int hf_dns_xpf_destination_ipv6;
+static int hf_dns_xpf_sport;
+static int hf_dns_xpf_dport;
+static int hf_dns_a6_prefix_len;
+static int hf_dns_a6_address_suffix;
+static int hf_dns_a6_prefix_name;
+static int hf_dns_dname;
+static int hf_dns_loc_version;
+static int hf_dns_loc_size;
+static int hf_dns_loc_horizontal_precision;
+static int hf_dns_loc_vertical_precision;
+static int hf_dns_loc_latitude;
+static int hf_dns_loc_longitude;
+static int hf_dns_loc_altitude;
+static int hf_dns_loc_unknown_data;
+static int hf_dns_nxt_next_domain_name;
+static int hf_dns_kx_preference;
+static int hf_dns_kx_key_exchange;
+static int hf_dns_cert_type;
+static int hf_dns_cert_key_tag;
+static int hf_dns_cert_algorithm;
+static int hf_dns_cert_certificate;
+static int hf_dns_nsec_next_domain_name;
+static int hf_dns_ns;
+static int hf_dns_opt;
+static int hf_dns_opt_code;
+static int hf_dns_opt_len;
+static int hf_dns_opt_data;
+static int hf_dns_opt_dau;
+static int hf_dns_opt_dhu;
+static int hf_dns_opt_n3u;
+static int hf_dns_opt_client_family;
+static int hf_dns_opt_client_netmask;
+static int hf_dns_opt_client_scope;
+static int hf_dns_opt_client_addr;
+static int hf_dns_opt_client_addr4;
+static int hf_dns_opt_client_addr6;
+static int hf_dns_opt_cookie_client;
+static int hf_dns_opt_cookie_server;
+static int hf_dns_opt_edns_tcp_keepalive_timeout;
+static int hf_dns_opt_padding;
+static int hf_dns_opt_chain_fqdn;
+static int hf_dns_opt_ext_error_info_code;
+static int hf_dns_opt_ext_error_extra_text;
+static int hf_dns_nsec3_algo;
+static int hf_dns_nsec3_flags;
+static int hf_dns_nsec3_flag_optout;
+static int hf_dns_nsec3_iterations;
+static int hf_dns_nsec3_salt_length;
+static int hf_dns_nsec3_salt_value;
+static int hf_dns_nsec3_hash_length;
+static int hf_dns_nsec3_hash_value;
+static int hf_dns_tlsa_certificate_usage;
+static int hf_dns_tlsa_selector;
+static int hf_dns_tlsa_matching_type;
+static int hf_dns_tlsa_certificate_association_data;
+static int hf_dns_tsig_algorithm_name;
+static int hf_dns_tsig_time_signed;
+static int hf_dns_tsig_error;
+static int hf_dns_tsig_fudge;
+static int hf_dns_tsig_mac_size;
+static int hf_dns_tsig_mac;
+static int hf_dns_tsig_original_id;
+static int hf_dns_tsig_other_len;
+static int hf_dns_tsig_other_data;
+static int hf_dns_response_in;
+static int hf_dns_response_to;
+static int hf_dns_retransmission;
+static int hf_dns_retransmit_request_in;
+static int hf_dns_retransmit_response_in;
+static int hf_dns_time;
+static int hf_dns_unsolicited;
+static int hf_dns_sshfp_algorithm;
+static int hf_dns_sshfp_fingerprint_type;
+static int hf_dns_sshfp_fingerprint;
+static int hf_dns_hip_hit_length;
+static int hf_dns_hip_pk_algo;
+static int hf_dns_hip_pk_length;
+static int hf_dns_hip_hit;
+static int hf_dns_hip_pk;
+static int hf_dns_hip_rendezvous_server;
+static int hf_dns_dhcid_rdata;
+static int hf_dns_ds_key_id;
+static int hf_dns_ds_algorithm;
+static int hf_dns_apl_coded_prefix;
+static int hf_dns_ds_digest_type;
+static int hf_dns_ds_digest;
+static int hf_dns_apl_address_family;
+static int hf_dns_apl_negation;
+static int hf_dns_apl_afdlength;
+static int hf_dns_apl_afdpart_ipv4;
+static int hf_dns_apl_afdpart_ipv6;
+static int hf_dns_apl_afdpart_data;
+static int hf_dns_gpos_longitude_length;
+static int hf_dns_gpos_longitude;
+static int hf_dns_gpos_latitude_length;
+static int hf_dns_gpos_latitude;
+static int hf_dns_gpos_altitude_length;
+static int hf_dns_gpos_altitude;
+static int hf_dns_rp_mailbox;
+static int hf_dns_rp_txt_rr;
+static int hf_dns_afsdb_subtype;
+static int hf_dns_afsdb_hostname;
+static int hf_dns_x25_length;
+static int hf_dns_x25_psdn_address;
+static int hf_dns_isdn_length;
+static int hf_dns_isdn_address;
+static int hf_dns_isdn_sa_length;
+static int hf_dns_isdn_sa;
+static int hf_dns_rt_preference;
+static int hf_dns_rt_intermediate_host;
+static int hf_dns_nsap_rdata;
+static int hf_dns_nsap_ptr_owner;
+static int hf_dns_caa_flags;
+static int hf_dns_caa_flag_issuer_critical;
+static int hf_dns_caa_issue;
+static int hf_dns_caa_issuewild;
+static int hf_dns_caa_iodef;
+static int hf_dns_caa_unknown;
+static int hf_dns_caa_tag_length;
+static int hf_dns_caa_tag;
+static int hf_dns_caa_value;
+static int hf_dns_extraneous_data;
+static int hf_dns_extraneous_length;
 
-static int hf_dns_wins_local_flag = -1;
-static int hf_dns_wins_lookup_timeout = -1;
-static int hf_dns_wins_cache_timeout = -1;
-static int hf_dns_wins_nb_wins_servers = -1;
-static int hf_dns_wins_server = -1;
+static int hf_dns_wins_local_flag;
+static int hf_dns_wins_lookup_timeout;
+static int hf_dns_wins_cache_timeout;
+static int hf_dns_wins_nb_wins_servers;
+static int hf_dns_wins_server;
 
-static int hf_dns_winsr_local_flag = -1;
-static int hf_dns_winsr_lookup_timeout = -1;
-static int hf_dns_winsr_cache_timeout = -1;
-static int hf_dns_winsr_name_result_domain = -1;
+static int hf_dns_winsr_local_flag;
+static int hf_dns_winsr_lookup_timeout;
+static int hf_dns_winsr_cache_timeout;
+static int hf_dns_winsr_name_result_domain;
 
-static int hf_dns_data = -1;
+static int hf_dns_data;
 
-static int hf_dns_dso = -1;
-static int hf_dns_dso_tlv = -1;
-static int hf_dns_dso_tlv_type = -1;
-static int hf_dns_dso_tlv_length = -1;
-static int hf_dns_dso_tlv_data = -1;
-static int hf_dns_dso_tlv_keepalive_inactivity = -1;
-static int hf_dns_dso_tlv_keepalive_interval = -1;
-static int hf_dns_dso_tlv_retrydelay_retrydelay = -1;
-static int hf_dns_dso_tlv_encpad_padding = -1;
+static int hf_dns_dso;
+static int hf_dns_dso_tlv;
+static int hf_dns_dso_tlv_type;
+static int hf_dns_dso_tlv_length;
+static int hf_dns_dso_tlv_data;
+static int hf_dns_dso_tlv_keepalive_inactivity;
+static int hf_dns_dso_tlv_keepalive_interval;
+static int hf_dns_dso_tlv_retrydelay_retrydelay;
+static int hf_dns_dso_tlv_encpad_padding;
 
-static gint ett_dns = -1;
-static gint ett_dns_qd = -1;
-static gint ett_dns_rr = -1;
-static gint ett_dns_qry = -1;
-static gint ett_dns_ans = -1;
-static gint ett_dns_flags = -1;
-static gint ett_dns_opts = -1;
-static gint ett_nsec3_flags = -1;
-static gint ett_key_flags = -1;
-static gint ett_t_key = -1;
-static gint ett_dns_mac = -1;
-static gint ett_caa_flags = -1;
-static gint ett_caa_data = -1;
-static gint ett_dns_csdync_flags = -1;
-static gint ett_dns_dso = -1;
-static gint ett_dns_dso_tlv = -1;
-static gint ett_dns_svcb = -1;
-static gint ett_dns_extraneous = -1;
+static gint ett_dns;
+static gint ett_dns_qd;
+static gint ett_dns_rr;
+static gint ett_dns_qry;
+static gint ett_dns_ans;
+static gint ett_dns_flags;
+static gint ett_dns_opts;
+static gint ett_nsec3_flags;
+static gint ett_key_flags;
+static gint ett_t_key;
+static gint ett_dns_mac;
+static gint ett_caa_flags;
+static gint ett_caa_data;
+static gint ett_dns_csdync_flags;
+static gint ett_dns_dso;
+static gint ett_dns_dso_tlv;
+static gint ett_dns_svcb;
+static gint ett_dns_extraneous;
 
-static expert_field ei_dns_a_class_undecoded = EI_INIT;
-static expert_field ei_dns_opt_bad_length = EI_INIT;
-static expert_field ei_dns_depr_opc = EI_INIT;
-static expert_field ei_ttl_high_bit_set = EI_INIT;
-static expert_field ei_dns_tsig_alg = EI_INIT;
-static expert_field ei_dns_undecoded_option = EI_INIT;
-static expert_field ei_dns_key_id_buffer_too_short = EI_INIT;
-static expert_field ei_dns_retransmit_request = EI_INIT;
-static expert_field ei_dns_retransmit_response = EI_INIT;
-static expert_field ei_dns_extraneous_data = EI_INIT;
+static expert_field ei_dns_a_class_undecoded;
+static expert_field ei_dns_opt_bad_length;
+static expert_field ei_dns_depr_opc;
+static expert_field ei_ttl_high_bit_set;
+static expert_field ei_dns_tsig_alg;
+static expert_field ei_dns_undecoded_option;
+static expert_field ei_dns_key_id_buffer_too_short;
+static expert_field ei_dns_retransmit_request;
+static expert_field ei_dns_retransmit_response;
+static expert_field ei_dns_extraneous_data;
+static expert_field ei_dns_response_missing;
 
 static dissector_table_t dns_tsig_dissector_table=NULL;
 
@@ -525,6 +527,8 @@ static dissector_handle_t doq_handle;
 /* desegmentation of DNS over TCP */
 static gboolean dns_desegment = TRUE;
 
+static gboolean dns_qname_stats = FALSE;
+
 /* Maximum number of elapsed seconds between messages with the same
  * transaction ID to be considered as a retransmission
  */
@@ -533,6 +537,9 @@ static guint32 retransmission_timer = 5;
 /* Dissector handle for GSSAPI */
 static dissector_handle_t gssapi_handle;
 static dissector_handle_t ntlmssp_handle;
+
+/* Dissector handle for TLS ECHConfig message */
+static dissector_handle_t tls_echconfig_handle;
 
 /* Transport protocol for DNS. */
 enum DnsTransport {
@@ -1264,7 +1271,7 @@ static const range_string dns_dso_type_rvals[] = {
 #define DNS_SVCB_KEY_NOALPN           2
 #define DNS_SVCB_KEY_PORT             3
 #define DNS_SVCB_KEY_IPV4HINT         4
-#define DNS_SVCB_KEY_ECHCONFIG        5
+#define DNS_SVCB_KEY_ECH              5 /* draft-ietf-tls-svcb-ech-00 */
 #define DNS_SVCB_KEY_IPV6HINT         6
 #define DNS_SVCB_KEY_DOHPATH          7 /* draft-ietf-add-svcb-dns-08 */
 #define DNS_SVCB_KEY_ODOHCONFIG   32769 /* draft-pauly-dprive-oblivious-doh-02 */
@@ -1272,7 +1279,7 @@ static const range_string dns_dso_type_rvals[] = {
 
 /**
  * Service Binding (SVCB) Parameter Registry.
- * https://tools.ietf.org/html/draft-ietf-dnsop-svcb-https-01#section-12.3.2
+ * https://tools.ietf.org/html/draft-ietf-dnsop-svcb-https-12#section-14.3.2
  */
 static const value_string dns_svcb_param_key_vals[] = {
   { DNS_SVCB_KEY_MANDATORY,     "mandatory" },
@@ -1280,7 +1287,7 @@ static const value_string dns_svcb_param_key_vals[] = {
   { DNS_SVCB_KEY_NOALPN,        "no-default-alpn" },
   { DNS_SVCB_KEY_PORT,          "port" },
   { DNS_SVCB_KEY_IPV4HINT,      "ipv4hint" },
-  { DNS_SVCB_KEY_ECHCONFIG,     "echconfig" },
+  { DNS_SVCB_KEY_ECH,           "ech" },
   { DNS_SVCB_KEY_IPV6HINT,      "ipv6hint" },
   { DNS_SVCB_KEY_DOHPATH,       "dohpath" },
   { DNS_SVCB_KEY_ODOHCONFIG,    "odohconfig" },
@@ -1925,7 +1932,7 @@ dissect_type_bitmap_nxt(proto_tree *rr_tree, tvbuff_t *tvb, int cur_offset, int 
 #define DNS_ALGO_RSASHA512           10 /* RSA/SHA-512 */
 #define DNS_ALGO_ECCGOST             12 /* GOST R 34.10-2001 */
 #define DNS_ALGO_ECDSAP256SHA256     13 /* ECDSA Curve P-256 with SHA-256 */
-#define DNS_ALGO_ECDSAP386SHA386     14 /* ECDSA Curve P-386 with SHA-386 */
+#define DNS_ALGO_ECDSAP384SHA384     14 /* ECDSA Curve P-384 with SHA-384 */
 #define DNS_ALGO_ED25519             15 /* Ed25519 */
 #define DNS_ALGO_ED448               16 /* Ed448 */
 #define DNS_ALGO_HMACMD5            157 /* HMAC/MD5 */
@@ -1945,7 +1952,7 @@ static const value_string dnssec_algo_vals[] = {
   { DNS_ALGO_RSASHA512,         "RSA/SHA-512" },
   { DNS_ALGO_ECCGOST,           "GOST R 34.10-2001" },
   { DNS_ALGO_ECDSAP256SHA256,   "ECDSA Curve P-256 with SHA-256" },
-  { DNS_ALGO_ECDSAP386SHA386,   "ECDSA Curve P-386 with SHA-386" },
+  { DNS_ALGO_ECDSAP384SHA384,   "ECDSA Curve P-384 with SHA-384" },
   { DNS_ALGO_ED25519,           "Ed25519" },
   { DNS_ALGO_ED448,             "Ed448" },
   { DNS_ALGO_HMACMD5,           "HMAC/MD5" },
@@ -2054,7 +2061,6 @@ dissect_dns_svcparam_base64(proto_tree *param_tree, proto_item *param_item, int 
   proto_item_append_text(param_item, "=%s", str);
   g_free(str);
 }
-
 
 static int
 dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
@@ -2224,7 +2230,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
     }
     break;
 
-    case T_MF: /* Mail Forwader  (4) */
+    case T_MF: /* Mail Forwarder  (4) */
     {
       int           hostname_len;
       const gchar  *hostname_str;
@@ -3719,10 +3725,12 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
                 cur_offset += 4;
               }
               break;
-            case DNS_SVCB_KEY_ECHCONFIG:
-              dissect_dns_svcparam_base64(svcb_param_tree, svcb_param_ti, hf_dns_svcb_param_echconfig, tvb, cur_offset, svc_param_length);
-              cur_offset += svc_param_length;
+            case DNS_SVCB_KEY_ECH:
+            {
+              tvbuff_t *next_tvb = tvb_new_subset_length(tvb, cur_offset, svc_param_length);
+              cur_offset += call_dissector(tls_echconfig_handle, next_tvb, pinfo, svcb_param_tree);
               break;
+            }
             case DNS_SVCB_KEY_IPV6HINT:
               for (svc_param_offset = 0; svc_param_offset < svc_param_length; svc_param_offset += 16) {
                 proto_tree_add_item(svcb_param_tree, hf_dns_svcb_param_ipv6hint_ip, tvb, cur_offset, 16, ENC_NA);
@@ -4579,6 +4587,8 @@ dissect_dns_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
       it=proto_tree_add_uint(dns_tree, hf_dns_response_in, tvb, 0, 0, dns_trans->rep_frame);
       proto_item_set_generated(it);
+    } else if PINFO_FD_VISITED(pinfo) {
+      expert_add_info(pinfo, transaction_item, &ei_dns_response_missing);
     }
   } else {
     /* This is a reply */
@@ -4652,6 +4662,7 @@ dissect_dns_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if (quest > 0) {
       dns_stats->qname_len = name_len;
       dns_stats->qname_labels = qname_labels_count(name, name_len);
+      dns_stats->qname = format_text(pinfo->pool, (const guchar *)name, name_len);
     }
     if (flags & F_RESPONSE) {
       if (dns_trans->req_frame == 0) {
@@ -4774,11 +4785,12 @@ dissect_dns_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
    * - Answer RRs: 0 (for queries) or a low number (for responses)
    * - Authority RRs: 0 (for queries) or a low number (for responses)
    * - Additional RRs: assume a low number.
-   *
-   * Not implemented, but perhaps we could check for:
    * - Require that the question and answer count cannot both be zero. Perhaps
    *   some protocols have large sequences of zero bytes, this check reduces the
    *   probability of matching such payloads.
+   * - Check that the packet is long enough to carry the Questions and RRs.
+   *
+   * Not implemented, but perhaps we could check for:
    * - Assume a valid QNAME in the question section. (Is there sufficient data
    *   for a valid name?)
    * - Assume a common QTYPE and QCLASS (IN/CH).
@@ -4817,18 +4829,27 @@ dissect_dns_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
   if (add > max_add)
     return FALSE;
 
+  if (quest + ans == 0)
+    return FALSE;
+
+  /* Do we even have enough space left? */
+  if ( (quest * 6 + (ans + auth + add) * 11) > tvb_reported_length_remaining(tvb, offset + DNS_HDRLEN))
+    return FALSE;
+
   dissect_dns(tvb, pinfo, tree, NULL);
   return TRUE;
 }
 
 static void dns_stats_tree_init(stats_tree* st)
 {
-  st_node_packets = stats_tree_create_node(st, st_str_packets, 0, STAT_DT_INT, TRUE);
-  st_node_packet_qr = stats_tree_create_pivot(st, st_str_packet_qr, st_node_packets);
-  st_node_packet_qtypes = stats_tree_create_pivot(st, st_str_packet_qtypes, st_node_packets);
-  st_node_packet_qclasses = stats_tree_create_pivot(st, st_str_packet_qclasses, st_node_packets);
-  st_node_packet_rcodes = stats_tree_create_pivot(st, st_str_packet_rcodes, st_node_packets);
-  st_node_packet_opcodes = stats_tree_create_pivot(st, st_str_packet_opcodes, st_node_packets);
+  stats_tree_create_node(st, st_str_packets, 0, STAT_DT_INT, TRUE);
+  stat_node_set_flags(st, st_str_packets, 0, FALSE, ST_FLG_SORT_TOP);
+  st_node_packet_qr = stats_tree_create_pivot(st, st_str_packet_qr, 0);
+  st_node_packet_qtypes = stats_tree_create_pivot(st, st_str_packet_qtypes, 0);
+  st_node_packet_qnames = stats_tree_create_pivot(st, st_str_packet_qnames, 0);
+  st_node_packet_qclasses = stats_tree_create_pivot(st, st_str_packet_qclasses, 0);
+  st_node_packet_rcodes = stats_tree_create_pivot(st, st_str_packet_rcodes, 0);
+  st_node_packet_opcodes = stats_tree_create_pivot(st, st_str_packet_opcodes, 0);
   st_node_packets_avg_size = stats_tree_create_node(st, st_str_packets_avg_size, 0, STAT_DT_INT, FALSE);
   st_node_query_stats = stats_tree_create_node(st, st_str_query_stats, 0, STAT_DT_INT, TRUE);
   st_node_query_qname_len = stats_tree_create_node(st, st_str_query_qname_len, st_node_query_stats, STAT_DT_INT, FALSE);
@@ -4860,6 +4881,9 @@ static tap_packet_status dns_stats_tree_packet(stats_tree* st, packet_info* pinf
           val_to_str(pi->packet_qr, dns_qr_vals, "Unknown qr (%d)"));
   stats_tree_tick_pivot(st, st_node_packet_qtypes,
           val_to_str(pi->packet_qtype, dns_types_vals, "Unknown packet type (%d)"));
+  if (dns_qname_stats) {
+        stats_tree_tick_pivot(st, st_node_packet_qnames, pi->qname);
+  }
   stats_tree_tick_pivot(st, st_node_packet_qclasses,
           val_to_str(pi->packet_qclass, dns_classes, "Unknown class (%d)"));
   stats_tree_tick_pivot(st, st_node_packet_rcodes,
@@ -4920,9 +4944,11 @@ proto_reg_handoff_dns(void)
 #if 0
   dissector_add_uint("sctp.ppi",  DNS_PAYLOAD_PROTOCOL_ID, dns_handle);
 #endif
-  stats_tree_register("dns", "dns", "DNS", 0, dns_stats_tree_packet, dns_stats_tree_init, NULL);
+  stats_tree_cfg *st_config = stats_tree_register("dns", "dns", "DNS", 0, dns_stats_tree_packet, dns_stats_tree_init, NULL);
+  stats_tree_set_first_column_name(st_config, "Packet Type");
   gssapi_handle  = find_dissector_add_dependency("gssapi", proto_dns);
   ntlmssp_handle = find_dissector_add_dependency("ntlmssp", proto_dns);
+  tls_echconfig_handle = find_dissector("tls-echconfig");
   ssl_dissector_add(TCP_PORT_DNS_TLS, dns_handle);
   // RFC 7858 - registration via https://mailarchive.ietf.org/arch/msg/dns-privacy/iZ2rDIhFB2ZWsGC3PcdBVLGa8Do
   dissector_add_string("tls.alpn", "dot", dns_handle);
@@ -5004,7 +5030,7 @@ proto_register_dns(void)
         "Was the reply data authenticated by the server?", HFILL }},
 
     { &hf_dns_flags_ad,
-      { "AD bit", "dns.flags.authenticated",
+      { "AD bit", "dns.flags.ad",
         FT_BOOLEAN, 16, TFS(&tfs_set_notset), F_AUTHENTIC,
         NULL, HFILL }},
 
@@ -5482,11 +5508,6 @@ proto_register_dns(void)
       { "IP", "dns.svcb.svcparam.ipv4hint.ip",
         FT_IPv4, BASE_NONE, NULL, 0x0,
         "IPv4 address hints", HFILL }},
-
-    { &hf_dns_svcb_param_echconfig,
-      { "ECHConfig", "dns.svcb.svcparam.echconfig",
-        FT_BYTES, BASE_NONE, NULL, 0x0,
-        "Encrypted ClientHello (ECH) infos", HFILL }},
 
     { &hf_dns_svcb_param_ipv6hint_ip,
       { "IP", "dns.svcb.svcparam.ipv6hint.ip",
@@ -6598,6 +6619,7 @@ proto_register_dns(void)
     { &ei_dns_retransmit_request, { "dns.retransmit_request", PI_PROTOCOL, PI_WARN, "DNS query retransmission", EXPFILL }},
     { &ei_dns_retransmit_response, { "dns.retransmit_response", PI_PROTOCOL, PI_WARN, "DNS response retransmission", EXPFILL }},
     { &ei_dns_extraneous_data, { "dns.extraneous", PI_UNDECODED, PI_NOTE, "Extraneous data", EXPFILL }},
+    { &ei_dns_response_missing, { "dns.response_missing", PI_PROTOCOL, PI_WARN, "DNS response missing", EXPFILL }},
   };
 
   static gint *ett[] = {
@@ -6651,6 +6673,12 @@ proto_register_dns(void)
   prefs_register_static_text_preference(dns_module, "text_use_for_addr_resolution",
                                         "DNS address resolution settings can be changed in the Name Resolution preferences",
                                         "DNS address resolution settings can be changed in the Name Resolution preferences");
+
+  prefs_register_bool_preference(dns_module, "enable_qname_stats",
+    "Add queried names to DNS statistics",
+    "Whether the DNS dissector should add queried names to DNS statistics.",
+    &dns_qname_stats);
+
 
   dns_tsig_dissector_table = register_dissector_table("dns.tsig.mac", "DNS TSIG MAC", proto_dns, FT_STRING, STRING_CASE_SENSITIVE);
 

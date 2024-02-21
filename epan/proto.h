@@ -29,7 +29,7 @@
 
 #include <epan/wmem_scopes.h>
 
-#include "ipv4.h"
+#include "wsutil/inet_cidr.h"
 #include "wsutil/nstime.h"
 #include "tvbuff.h"
 #include "value_string.h"
@@ -551,7 +551,15 @@ void proto_report_dissector_bug(const char *format, ...)
  *  epoch (1900-01-01 00:00:00 GMT) and the next 4 bytes are 1/2^32's of
  *  a second since that second.  (I.e., a 64-bit count of 1/2^32's of a
  *  second since the NTP epoch, with the upper 32 bits first and the
- *  lower 32 bits second, even when little-endian.)
+ *  lower 32 bits second, even when little-endian.)  A value of 0 is a
+ *  special case representing unknown or unsynchronized time.  Per the
+ *  suggestion in RFC 4330, if bit 0 is not set then the time is assumed
+ *  to be in NTP Era 1, beginning on 2036-02-07 06:28:16 UTC.  (I.e., the
+ *  time displayed will be between 1968-01-20 03:14:08 UTC and
+ *  2104-02-26 09:42:24 UTC.)  The 16 byte NTP date format and the 4 byte
+ *  NTP short relative time format are not supported.
+ *  Encodings that store only the seconds since the NTP epoch without
+ *  fractional seconds should use ENC_TIME_SECS_NTP, described below.
  *
  *  ENC_TIME_TOD - 8 bytes, as a count of microseconds since the System/3x0
  *  and z/Architecture epoch (1900-01-01 00:00:00 GMT).
@@ -580,14 +588,17 @@ void proto_report_dissector_bug(const char *format, ...)
  *  If the time is absolute, it's nanoseconds since the UN*X epoch.
  *
  *  ENC_TIME_SECS_NTP - 4 bytes, representing a count of seconds since
- *  the NTP epoch.
+ *  the NTP epoch.  As with ENC_TIME_NTP, times are assumed to be in
+ *  the upper half of NTP Era 0 or the lower half of NTP Era 1.
  *
  *  ENC_TIME_RFC_3971 - 8 bytes, representing a count of 1/64ths of a
  *  second since the UN*X epoch; see section 5.3.1 "Timestamp Option"
  *  in RFC 3971.
  *
- *  ENC_TIME_MSEC_NTP - 4-8 bytes, representing a count of milliseconds since
- *  the NTP epoch.
+ *  ENC_TIME_MSEC_NTP - 6-8 bytes, representing a count of milliseconds since
+ *  the NTP epoch.  Similar to ENC_TIME_NTP, times before the midpoint of
+ *  NTP Era 0 (1968-01-20) are assumed to represent the corresponding
+ *  time in NTP Era 1 instead.
  *
  *  ENC_TIME_MIP6 - 8 bytes; the first 48 bits are seconds since the UN*X epoch
  *  and the remaining 16 bits indicate the number of 1/65536's of a second
@@ -741,7 +752,8 @@ typedef enum {
 typedef enum {
     HF_REF_TYPE_NONE,       /**< Field is not referenced */
     HF_REF_TYPE_INDIRECT,   /**< Field is indirectly referenced (only applicable for FT_PROTOCOL) via. its child */
-    HF_REF_TYPE_DIRECT      /**< Field is directly referenced */
+    HF_REF_TYPE_DIRECT,     /**< Field is directly referenced */
+    HF_REF_TYPE_PRINT       /**< Field is directly referenced for printing (so don't fake its representation either) */
 } hf_ref_type;
 
 /** information describing a header field */
@@ -947,6 +959,10 @@ typedef proto_node proto_item;
 #define PI_ASSUMPTION           0x0d000000
 /** The protocol field has been deprecated, usually PI_NOTE severity */
 #define PI_DEPRECATED           0x0e000000
+/** Something happened as part of the receive process (CRC error, short/long frame, etc.) */
+#define PI_RECEIVE              0x0f000000
+/** Something happened at the interface layer (out of buffers, hardware error, etc.) */
+#define PI_INTERFACE            0x10000000
 
 /*
  * add more, see
@@ -1070,7 +1086,7 @@ extern void proto_cleanup(void);
 
 /** This function takes a tree and a protocol id as parameter and
     will return TRUE/FALSE for whether the protocol or any of the filterable
-    fields in the protocol is referenced by any fitlers.
+    fields in the protocol is referenced by any filters.
     If this function returns FALSE then it is safe to skip any
     proto_tree_add_...() calls and just treat the call as if the
     dissector was called with tree==NULL.
@@ -1199,11 +1215,21 @@ extern void
 proto_tree_set_fake_protocols(proto_tree *tree, gboolean fake_protocols);
 
 /** Mark a field/protocol ID as "interesting".
+ * That means that we don't fake the item (because we are filtering on it),
+ * and we mark its parent protocol (if any) as being indirectly referenced
+ * (so proto_field_is_referenced() will return TRUE for the protocol as well.)
  @param tree the tree to be set (currently ignored)
- @param hfid the interesting field id
- @todo what *does* interesting mean? */
+ @param hfid the interesting field id */
 extern void
 proto_tree_prime_with_hfid(proto_tree *tree, const int hfid);
+
+/** Mark a field/protocol ID as something we want to print.
+ * That means that we don't fake it, and we also don't hide it by
+ * default even if the tree isn't visible.
+ @param tree the tree to be set (currently ignored)
+ @param hfid the field id */
+extern void
+proto_tree_prime_with_hfid_print(proto_tree *tree, const int hfid);
 
 /** Get a parent item of a subtree.
  @param tree the tree to get the parent from
@@ -2131,7 +2157,7 @@ proto_tree_add_string_format(proto_tree *tree, int hfindex, tvbuff_t *tvb, gint 
  @return the newly created item */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_boolean(proto_tree *tree, int hfindex, tvbuff_t *tvb, gint start,
-    gint length, guint32 value);
+    gint length, guint64 value);
 
 /** Add a formatted FT_BOOLEAN to a proto_tree, with the format generating
     the string for the value and with the field name being included
@@ -2147,7 +2173,7 @@ proto_tree_add_boolean(proto_tree *tree, int hfindex, tvbuff_t *tvb, gint start,
  @return the newly created item */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_boolean_format_value(proto_tree *tree, int hfindex,
-    tvbuff_t *tvb, gint start, gint length, guint32 value,
+    tvbuff_t *tvb, gint start, gint length, guint64 value,
     const char *format, ...) G_GNUC_PRINTF(7,8);
 
 /** Add a formatted FT_BOOLEAN to a proto_tree, with the format generating
@@ -2163,7 +2189,7 @@ proto_tree_add_boolean_format_value(proto_tree *tree, int hfindex,
  @return the newly created item */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_boolean_format(proto_tree *tree, int hfindex, tvbuff_t *tvb, gint start,
-    gint length, guint32 value, const char *format, ...) G_GNUC_PRINTF(7,8);
+    gint length, guint64 value, const char *format, ...) G_GNUC_PRINTF(7,8);
 
 /** Add a FT_FLOAT to a proto_tree.
  @param tree the tree to append this item to
@@ -3307,25 +3333,6 @@ proto_tree_add_uint64_bits_format_value(proto_tree *tree, const int hf_index, tv
  @return the newly created item */
 proto_item *
 proto_tree_add_boolean_bits_format_value(proto_tree *tree, const int hf_index, tvbuff_t *tvb,
-    const guint bit_offset, const gint no_of_bits, guint32 value, const guint encoding,
-    const char *format, ...)
-    G_GNUC_PRINTF(8,9);
-
-/** Add bits for a FT_BOOLEAN header field to a proto_tree, with
-    the format generating the string for the value and with the field
-    name being included automatically.
- @param tree the tree to append this item to
- @param hf_index field index
- @param tvb the tv buffer of the current data
- @param bit_offset start of data in tvb expressed in bits
- @param no_of_bits length of data in tvb expressed in bit
- @param value data to display
- @param encoding data encoding
- @param format printf like format string
- @param ... printf like parameters
- @return the newly created item */
-proto_item *
-proto_tree_add_boolean_bits_format_value64(proto_tree *tree, const int hf_index, tvbuff_t *tvb,
     const guint bit_offset, const gint no_of_bits, guint64 value, const guint encoding,
     const char *format, ...)
     G_GNUC_PRINTF(8,9);
@@ -3411,7 +3418,7 @@ WS_DLL_PUBLIC proto_item *
 proto_tree_add_ascii_7bits_item(proto_tree *tree, const int hfindex, tvbuff_t *tvb,
     const guint bit_offset, const gint no_of_chars);
 
-/** Add a checksum filed to a proto_tree.
+/** Add a checksum field to a proto_tree.
  This standardizes the display of a checksum field as well as any
  status and expert info supporting it.
  @param tree the tree to append this item to
@@ -3433,7 +3440,7 @@ proto_tree_add_checksum(proto_tree *tree, tvbuff_t *tvb, const guint offset,
         const int hf_checksum, const int hf_checksum_status, struct expert_field* bad_checksum_expert,
         packet_info *pinfo, guint32 computed_checksum, const guint encoding, const guint flags);
 
-/** Add a checksum bytes arry filed to a proto_tree.
+/** Add a checksum bytes array field to a proto_tree.
  This standardizes the display of a checksum field as well as any
  status and expert info supporting it.
  @param tree the tree to append this item to

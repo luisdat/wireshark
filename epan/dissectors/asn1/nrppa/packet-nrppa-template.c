@@ -8,8 +8,8 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Ref 3GPP TS 38.455 V17.4.0 (2023-03)
- * http://www.3gpp.org
+ * Ref 3GPP TS 38.455 V17.6.0 (2023-12)
+ * https://www.3gpp.org
  */
 
 #include "config.h"
@@ -28,12 +28,12 @@ void proto_register_nrppa(void);
 void proto_reg_handoff_nrppa(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_nrppa = -1;
+static int proto_nrppa;
 
 #include "packet-nrppa-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_nrppa = -1;
+static gint ett_nrppa;
 #include "packet-nrppa-ett.c"
 
 /* Global variables */
@@ -88,13 +88,12 @@ void proto_register_nrppa(void) {
 
   /* List of fields */
   static hf_register_info hf[] = {
-
 #include "packet-nrppa-hfarr.c"
   };
 
   /* List of subtrees */
   static gint *ett[] = {
-	  &ett_nrppa,
+    &ett_nrppa,
 #include "packet-nrppa-ettarr.c"
   };
 

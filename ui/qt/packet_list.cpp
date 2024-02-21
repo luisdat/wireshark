@@ -36,6 +36,7 @@
 #include "ui/util.h"
 
 #include "wiretap/wtap_opttypes.h"
+#include "wsutil/filesystem.h"
 #include "wsutil/str_util.h"
 #include <wsutil/wslog.h>
 
@@ -248,9 +249,7 @@ PacketList::PacketList(QWidget *parent) :
     connect(packet_list_header_, &PacketListHeader::columnsChanged, this, &PacketList::columnsChanged);
     setHeader(packet_list_header_);
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
     header()->setFirstSectionMovable(true);
-#endif
 
     setSelectionMode(QAbstractItemView::ExtendedSelection);
 
@@ -299,6 +298,19 @@ PacketList::~PacketList()
     {
         g_ptr_array_free(finfo_array, TRUE);
     }
+}
+
+void PacketList::scrollTo(const QModelIndex &index, QAbstractItemView::ScrollHint hint)
+{
+    /* QAbstractItemView doesn't have a way to indicate "auto scroll, but
+     * only vertically." So just restore the horizontal scroll value whenever
+     * it scrolls.
+     */
+    setUpdatesEnabled(false);
+    int horizVal = horizontalScrollBar()->value();
+    QTreeView::scrollTo(index, hint);
+    horizontalScrollBar()->setValue(horizVal);
+    setUpdatesEnabled(true);
 }
 
 void PacketList::colorsChanged()
@@ -667,8 +679,8 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
     ctx_menu->setAttribute(Qt::WA_DeleteOnClose);
     // XXX We might want to reimplement setParent() and fill in the context
     // menu there.
-    ctx_menu->addAction(window()->findChild<QAction *>("actionEditMarkPacket"));
-    ctx_menu->addAction(window()->findChild<QAction *>("actionEditIgnorePacket"));
+    ctx_menu->addAction(window()->findChild<QAction *>("actionEditMarkSelected"));
+    ctx_menu->addAction(window()->findChild<QAction *>("actionEditIgnoreSelected"));
     ctx_menu->addAction(window()->findChild<QAction *>("actionEditSetTimeReference"));
     ctx_menu->addAction(window()->findChild<QAction *>("actionEditTimeShift"));
     ctx_menu->addMenu(window()->findChild<QMenu *>("menuPacketComment"));
@@ -677,7 +689,9 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
 
     // Code for custom context menus from Lua's register_packet_menu()
     MainWindow * mainWindow = qobject_cast<MainWindow *>(mainApp->mainWindow());
-    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree && mainWindow) {
+    // N.B., Only want to call for a single frame selection.
+    // Testing finfo_array as a proxy, because mainWindow->hasUniqueSelection() doesn't detect multiple selections...
+    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree && mainWindow && finfo_array) {
         bool insertedPacketMenu = mainWindow->addPacketMenus(ctx_menu, finfo_array);
         if (insertedPacketMenu) {
             ctx_menu->addSeparator();
@@ -760,15 +774,16 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
     copyEntries->setParent(submenu);
     frameData->setParent(submenu);
 
-    ctx_menu->addSeparator();
-    ctx_menu->addMenu(&proto_prefs_menus_);
-    action = ctx_menu->addAction(tr("Decode As…"));
-    action->setProperty("create_new", QVariant(true));
-    connect(action, &QAction::triggered, this, &PacketList::ctxDecodeAsDialog);
-    // "Print" not ported intentionally
-    action = window()->findChild<QAction *>("actionViewShowPacketInNewWindow");
-    ctx_menu->addAction(action);
-
+    if (is_packet_configuration_namespace()) {
+        ctx_menu->addSeparator();
+        ctx_menu->addMenu(&proto_prefs_menus_);
+        action = ctx_menu->addAction(tr("Decode As…"));
+        action->setProperty("create_new", QVariant(true));
+        connect(action, &QAction::triggered, this, &PacketList::ctxDecodeAsDialog);
+        // "Print" not ported intentionally
+        action = window()->findChild<QAction *>("actionViewShowPacketInNewWindow");
+        ctx_menu->addAction(action);
+    }
 
     // Set menu sensitivity for the current column and set action data.
     if (frameData)
@@ -816,9 +831,7 @@ void PacketList::paintEvent(QPaintEvent *event)
 
 void PacketList::mousePressEvent (QMouseEvent *event)
 {
-    setAutoScroll(false);
     QTreeView::mousePressEvent(event);
-    setAutoScroll(true);
 
     QModelIndex curIndex = indexAt(event->pos());
     mouse_pressed_at_ = curIndex;
@@ -929,23 +942,7 @@ void PacketList::mouseMoveEvent (QMouseEvent *event)
 
 void PacketList::keyPressEvent(QKeyEvent *event)
 {
-    bool handled = false;
-    // If scrolling up/down, want to preserve horizontal scroll extent.
-    if (event->key() == Qt::Key_Down     || event->key() == Qt::Key_Up ||
-        event->key() == Qt::Key_PageDown || event->key() == Qt::Key_PageUp ||
-        event->key() == Qt::Key_End      || event->key() == Qt::Key_Home )
-    {
-        // XXX: Why allow jumping to the left if the first column is current?
-        if (currentIndex().isValid() && currentIndex().column() > 0) {
-            int pos = horizontalScrollBar()->value();
-            QTreeView::keyPressEvent(event);
-            horizontalScrollBar()->setValue(pos);
-            handled = true;
-        }
-    }
-
-    if (!handled)
-        QTreeView::keyPressEvent(event);
+    QTreeView::keyPressEvent(event);
 
     if (event->matches(QKeySequence::Copy))
     {
@@ -1019,19 +1016,11 @@ void PacketList::setRecentColumnWidth(int col)
         const char *long_str = get_column_width_string(fmt, col);
 
         QFontMetrics fm = QFontMetrics(mainApp->monospaceFont());
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
         if (long_str) {
             col_width = fm.horizontalAdvance(long_str);
         } else {
             col_width = fm.horizontalAdvance(MIN_COL_WIDTH_STR);
         }
-#else
-        if (long_str) {
-            col_width = fm.width(long_str);
-        } else {
-            col_width = fm.width(MIN_COL_WIDTH_STR);
-        }
-#endif
         // Custom delegate padding
         if (itemDelegateForColumn(col)) {
             QStyleOptionViewItem option;
@@ -1834,6 +1823,7 @@ void PacketList::sectionResized(int col, int, int new_width)
 void PacketList::sectionMoved(int logicalIndex, int oldVisualIndex, int newVisualIndex)
 {
     GList *new_col_list = NULL;
+    GList *new_recent_col_list = NULL;
     QList<int> saved_sizes;
     int sort_idx;
 
@@ -1858,9 +1848,14 @@ void PacketList::sectionMoved(int logicalIndex, int oldVisualIndex, int newVisua
         saved_sizes << header()->sectionSize(log_idx);
 
         void *pref_data = g_list_nth_data(prefs.col_list, log_idx);
-        if (!pref_data) continue;
+        if (pref_data) {
+            new_col_list = g_list_append(new_col_list, pref_data);
+        }
 
-        new_col_list = g_list_append(new_col_list, pref_data);
+        pref_data = g_list_nth_data(recent.col_width_list, log_idx);
+        if (pref_data) {
+            new_recent_col_list = g_list_append(new_recent_col_list, pref_data);
+        }
     }
 
     // Undo move to ensure that the logical indices map to the visual indices,
@@ -1878,6 +1873,8 @@ void PacketList::sectionMoved(int logicalIndex, int oldVisualIndex, int newVisua
 
     g_list_free(prefs.col_list);
     prefs.col_list = new_col_list;
+    g_list_free(recent.col_width_list);
+    recent.col_width_list = new_recent_col_list;
 
     thaw(true);
 

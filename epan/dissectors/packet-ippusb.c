@@ -51,28 +51,28 @@ static gint is_http_header(guint first_linelen, const guchar *first_line);
 
 static dissector_handle_t ippusb_handle;
 
-static gint proto_ippusb = -1;
-static gint ett_ippusb = -1;
-static gint ett_ippusb_as = -1;
-static gint ett_ippusb_attr = -1;
-static gint ett_ippusb_member = -1;
-static gint ett_ippusb_fragment= -1;
-static gint ett_ippusb_fragments = -1;
+static gint proto_ippusb;
+static gint ett_ippusb;
+static gint ett_ippusb_as;
+static gint ett_ippusb_attr;
+static gint ett_ippusb_member;
+static gint ett_ippusb_fragment;
+static gint ett_ippusb_fragments;
 
 /* For reassembly */
 static gint32 ippusb_last_pdu = -1;
 
-static gint hf_ippusb_fragments = -1;
-static gint hf_ippusb_fragment = -1;
-static gint hf_ippusb_fragment_overlap = -1;
-static gint hf_ippusb_fragment_overlap_conflict = -1;
-static gint hf_ippusb_fragment_multiple_tails = -1;
-static gint hf_ippusb_fragment_too_long_fragment = -1;
-static gint hf_ippusb_fragment_error = -1;
-static gint hf_ippusb_fragment_count = -1;
-static gint hf_ippusb_reassembled_in = -1;
-static gint hf_ippusb_reassembled_length = -1;
-static gint hf_ippusb_reassembled_data = -1;
+static int hf_ippusb_fragments;
+static int hf_ippusb_fragment;
+static int hf_ippusb_fragment_overlap;
+static int hf_ippusb_fragment_overlap_conflict;
+static int hf_ippusb_fragment_multiple_tails;
+static int hf_ippusb_fragment_too_long_fragment;
+static int hf_ippusb_fragment_error;
+static int hf_ippusb_fragment_count;
+static int hf_ippusb_reassembled_in;
+static int hf_ippusb_reassembled_length;
+static int hf_ippusb_reassembled_data;
 
 /* Reassemble by default */
 static gboolean global_ippusb_reassemble = TRUE;
@@ -240,7 +240,7 @@ dissect_ippusb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     }
 
     if (is_http_header(first_linelen, first_line) && last == TAG_END_OF_ATTRIBUTES && status_code != PRINT_JOB && status_code != SEND_DOCUMENT) {
-        /* An indiviual ippusb packet with http header */
+        /* An individual ippusb packet with http header */
 
         proto_tree_add_item(tree, proto_ippusb, tvb, offset, -1, ENC_NA);
 
@@ -296,7 +296,7 @@ dissect_ippusb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
                         /* If this segment is not the last chunk in a chunked transfer */
 
                         if (captured_length < reported_length && (new_msp->document & MSP_HAS_DOCUMENT)) {
-                            /* The attached document segment is smaller than it says it should be and cannot be reaseembled properly */
+                            /* The attached document segment is smaller than it says it should be and cannot be reassembled properly */
 
                             tvbuff_t *new_tvb = tvb_new_subset_length(tvb, 0, captured_length);
 
@@ -367,7 +367,7 @@ dissect_ippusb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
                     pinfo->fd->visited = FALSE;
 
                     if (captured_length < reported_length && (current_msp->document & MSP_HAS_DOCUMENT)) {
-                        /* The attached document segment is smaller than it says it should be and cannot be reaseembled properly */
+                        /* The attached document segment is smaller than it says it should be and cannot be reassembled properly */
 
                         tvbuff_t *new_tvb = tvb_new_subset_length(tvb, 0, captured_length);
 

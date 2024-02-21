@@ -55,286 +55,328 @@ static dissector_table_t ie_handle_table;
 #define NAN_SECURITY_CONTEXT_INFO_MIN_LENGTH 4
 #define NAN_PUBLIC_AVAIL_MIN_LENGTH 4
 #define NAN_VENDOR_SPECIFIC_MIN_LENGTH 3
+#define NAN_DEVICE_CAPABILITY_EXTENSION_MIN_LENGTH 2
+#define NAN_IDENTITY_RESOLUTION_MIN_LEN 1
+#define NAN_PAIRING_BOOTSTRAPPING_LEN 5
 
 #define NAN_UNALIGNED_SCH_BAND_ID_EXIST 0
 #define NAN_UNALIGNED_SCH_CHANNEL_ENTRY_EXIST 1
 #define NAN_UNALIGNED_SCH_CHANNEL_ENTRY_W_AUX_EXIST 2
 
-static int proto_nan = -1;
+static int proto_nan;
 
-static expert_field ei_nan_elem_len_invalid = EI_INIT;
-static expert_field ei_nan_unknown_attr_id = EI_INIT;
-static expert_field ei_nan_unknown_op_class = EI_INIT;
-static expert_field ei_nan_unknown_beacon_type = EI_INIT;
+static expert_field ei_nan_elem_len_invalid;
+static expert_field ei_nan_unknown_attr_id;
+static expert_field ei_nan_unknown_op_class;
+static expert_field ei_nan_unknown_beacon_type;
 
-static gint ett_nan = -1;
-static gint ett_attributes = -1;
-static gint ett_map_control = -1;
-static gint ett_type_status = -1;
-static gint ett_time_bitmap_ctrl = -1;
-static gint ett_non_nan_op_channel = -1;
-static gint ett_non_nan_beacon = -1;
-static gint ett_cluster_anchor_master_info = -1;
-static gint ett_sda_service_ctr = -1;
-static gint ett_sda_srf_ctr = -1;
-static gint ett_sdea_ctr = -1;
-static gint ett_sdea_range_limit = -1;
-static gint ett_sdea_service_info = -1;
-static gint ett_connection_cap_field = -1;
-static gint ett_further_av_map_entry_ctrl = -1;
-static gint ett_device_cap_map_id = -1;
-static gint ett_device_cap_committed_dw = -1;
-static gint ett_device_cap_supported_bands = -1;
-static gint ett_device_cap_op_mode = -1;
-static gint ett_device_cap_antennas = -1;
-static gint ett_device_cap_capabilities = -1;
-static gint ett_ndp_control = -1;
-static gint ett_ndpe_tlv = -1;
-static gint ett_availability_ctr = -1;
-static gint ett_availability_entry = -1;
-static gint ett_availability_entry_ctr = -1;
-static gint ett_availability_entry_entries = -1;
-static gint ett_availability_entry_entries_channel = -1;
-static gint ett_ndc_ctr = -1;
-static gint ett_ndc_entries = -1;
-static gint ett_device_ndc_map_id = -1;
-static gint ett_ndl_control = -1;
-static gint ett_ndl_schedule_entries = -1;
-static gint ett_unaligned_sch_ctrl = -1;
-static gint ett_unaligned_sch_ulw_overwrite = -1;
-static gint ett_unaligned_sch_ulw_ctrl = -1;
-static gint ett_ranging_setup_ftm_params = -1;
-static gint ett_ranging_setup_ctrl = -1;
-static gint ett_ranging_setup_schedule_entries = -1;
-static gint ett_ranging_info_location_info_availability = -1;
-static gint ett_p2p_device_role = -1;
-static gint ett_cipher_suite_info_list = -1;
-static gint ett_security_context_identifiers = -1;
-static gint ett_public_availability_sch_entries = -1;
-static gint ett_ie_tree = -1;
-static gint ett_availability_op_class = -1;
+static gint ett_nan;
+static gint ett_attributes;
+static gint ett_map_control;
+static gint ett_type_status;
+static gint ett_time_bitmap_ctrl;
+static gint ett_non_nan_op_channel;
+static gint ett_non_nan_beacon;
+static gint ett_cluster_anchor_master_info;
+static gint ett_sda_service_ctr;
+static gint ett_sda_srf_ctr;
+static gint ett_sdea_ctr;
+static gint ett_sdea_range_limit;
+static gint ett_sdea_service_info;
+static gint ett_connection_cap_field;
+static gint ett_further_av_map_entry_ctrl;
+static gint ett_device_cap_map_id;
+static gint ett_device_cap_committed_dw;
+static gint ett_device_cap_supported_bands;
+static gint ett_device_cap_op_mode;
+static gint ett_device_cap_antennas;
+static gint ett_device_cap_capabilities;
+static gint ett_ndp_control;
+static gint ett_ndpe_tlv;
+static gint ett_availability_ctr;
+static gint ett_availability_entry;
+static gint ett_availability_entry_ctr;
+static gint ett_availability_entry_entries;
+static gint ett_availability_entry_entries_channel;
+static gint ett_ndc_ctr;
+static gint ett_ndc_entries;
+static gint ett_device_ndc_map_id;
+static gint ett_ndl_control;
+static gint ett_ndl_schedule_entries;
+static gint ett_unaligned_sch_ctrl;
+static gint ett_unaligned_sch_ulw_overwrite;
+static gint ett_unaligned_sch_ulw_ctrl;
+static gint ett_ranging_setup_ftm_params;
+static gint ett_ranging_setup_ctrl;
+static gint ett_ranging_setup_schedule_entries;
+static gint ett_ranging_info_location_info_availability;
+static gint ett_p2p_device_role;
+static gint ett_cipher_suite_info_list;
+static gint ett_security_context_identifiers;
+static gint ett_public_availability_sch_entries;
+static gint ett_ie_tree;
+static gint ett_availability_op_class;
+static gint ett_device_capability_extension;
+static gint ett_nan_pairing_bootstrapping_type_status;
+static gint ett_nan_pairing_bootstrapping_method;
 
-static int hf_nan_attribute_type = -1;
-static int hf_nan_attribute_len = -1;
-static int hf_nan_action_subtype = -1;
-static int hf_nan_instance_id = -1;
-static int hf_nan_service_id = -1;
-static int hf_nan_map_id = -1;
-static int hf_nan_oui = -1;
-static int hf_nan_type_status = -1;
-static int hf_nan_reason_code = -1;
-static int hf_nan_status_1 = -1;
-static int hf_nan_status_2 = -1;
-static int hf_nan_bss_id = -1;
-static int hf_nan_availability_intervals_bitmap = -1;
-static int hf_nan_mac_address = -1;
-static int hf_nan_publish_id = -1;
-static int hf_nan_dialog_tokens = -1;
-static int hf_nan_time_bitmap = -1;
-static int hf_nan_time_bitmap_len = -1;
-static int hf_nan_time_bitmap_ctrl = -1;
-static int hf_nan_time_bitmap_ctrl_bit_duration = -1;
-static int hf_nan_time_bitmap_ctrl_period = -1;
-static int hf_nan_time_bitmap_ctrl_start_offset = -1;
-static int hf_nan_map_ctrl_map_id = -1;
-static int hf_nan_map_ctrl_availability_interval_duration = -1;
-static int hf_nan_map_ctrl_repeat = -1;
-static int hf_nan_map_ctrl_field = -1;
-static int hf_nan_non_op_channel_global_op_class = -1;
-static int hf_nan_non_op_channel_channel = -1;
-static int hf_nan_non_op_channel_center_freq = -1;
-static int hf_nan_non_beacon_tbtt_offset = -1;
-static int hf_nan_non_beacon_interval = -1;
-static int hf_nan_attr_master_preference = -1;
-static int hf_nan_attr_master_random_factor = -1;
-static int hf_nan_attr_cluster_anchor_master_rank = -1;
-static int hf_nan_attr_cluster_hop_count = -1;
-static int hf_nan_attr_cluster_beacon_transmission_time = -1;
-static int hf_nan_attr_sda_requestor_instance_id = -1;
-static int hf_nan_attr_sda_sc = -1;
-static int hf_nan_attr_sda_sc_type = -1;
-static int hf_nan_attr_sda_sc_matching_filter = -1;
-static int hf_nan_attr_sda_sc_service_response = -1;
-static int hf_nan_attr_sda_sc_service_info = -1;
-static int hf_nan_attr_sda_sc_discovery_range = -1;
-static int hf_nan_attr_sda_sc_binding_bitmap = -1;
-static int hf_nan_attr_sda_binding_bitmap = -1;
-static int hf_nan_attr_sda_matching_filter_len = -1;
-static int hf_nan_attr_sda_matching_filter_val = -1;
-static int hf_nan_attr_sda_service_response_filter_len = -1;
-static int hf_nan_attr_sda_srf_ctr = -1;
-static int hf_nan_attr_sda_srf_ctr_type = -1;
-static int hf_nan_attr_sda_srf_ctr_include = -1;
-static int hf_nan_attr_sda_srf_ctr_bloom_filter_index = -1;
-static int hf_nan_attr_sda_srf_address_set = -1;
-static int hf_nan_attr_sda_service_info_len = -1;
-static int hf_nan_attr_sda_service_info = -1;
-static int hf_nan_attr_sdea_ctr = -1;
-static int hf_nan_attr_sdea_ctr_fsd = -1;
-static int hf_nan_attr_sdea_ctr_fsd_w_gas = -1;
-static int hf_nan_attr_sdea_ctr_data_path = -1;
-static int hf_nan_attr_sdea_ctr_data_path_type = -1;
-static int hf_nan_attr_sdea_ctr_reserved_multicast_type = -1;
-static int hf_nan_attr_sdea_ctr_qos = -1;
-static int hf_nan_attr_sdea_ctr_security = -1;
-static int hf_nan_attr_sdea_ctr_ranging = -1;
-static int hf_nan_attr_sdea_ctr_range_limit = -1;
-static int hf_nan_attr_sdea_ctr_service_update_indicator = -1;
-static int hf_nan_attr_sdea_ingress_range_limit = -1;
-static int hf_nan_attr_sdea_egress_range_limit = -1;
-static int hf_nan_attr_sdea_service_update_indicator = -1;
-static int hf_nan_attr_sdea_service_info_length = -1;
-static int hf_nan_attr_sdea_service_info_protocol_type = -1;
-static int hf_nan_attr_sdea_service_info_specific = -1;
-static int hf_nan_attr_connection_cap_bitmap = -1;
-static int hf_nan_attr_connection_cap_wifi_direct = -1;
-static int hf_nan_attr_connection_cap_p2ps = -1;
-static int hf_nan_attr_connection_cap_tdls = -1;
-static int hf_nan_attr_connection_cap_wlan_infra = -1;
-static int hf_nan_attr_connection_cap_ibss = -1;
-static int hf_nan_attr_connection_cap_mesh = -1;
-static int hf_nan_attr_wlan_infra_device_role = -1;
-static int hf_nan_attr_p2p_device_role_device = -1;
-static int hf_nan_attr_p2p_device_role_group_owner = -1;
-static int hf_nan_attr_p2p_device_role_client = -1;
-static int hf_nan_attr_p2p_device_role = -1;
-static int hf_nan_attr_mesh_id = -1;
-static int hf_nan_attr_further_av_map_entry_av_interval_duration = -1;
-static int hf_nan_attr_further_av_map_op_class = -1;
-static int hf_nan_attr_further_av_map_channel_num = -1;
-static int hf_nan_attr_further_av_map_entry_ctrl = -1;
-static int hf_nan_attr_further_av_map_id = -1;
-static int hf_nan_attr_country_code = -1;
-static int hf_nan_attr_ranging_protocol = -1;
-static int hf_nan_attr_cluster_disc_id = -1;
-static int hf_nan_attr_cluster_disc_time_offset = -1;
-static int hf_nan_attr_cluster_disc_anchor_master_rank = -1;
-static int hf_nan_attr_device_cap_map_id_apply_to = -1;
-static int hf_nan_attr_device_cap_map_id_associated_maps = -1;
-static int hf_nan_attr_device_cap_committed_dw = -1;
-static int hf_nan_attr_device_cap_committed_dw_24ghz = -1;
-static int hf_nan_attr_device_cap_committed_dw_5ghz = -1;
-static int hf_nan_attr_device_cap_committed_dw_24ghz_overwrite = -1;
-static int hf_nan_attr_device_cap_committed_dw_5ghz_overwrite = -1;
-static int hf_nan_attr_device_cap_supported_bands = -1;
-static int hf_nan_attr_device_cap_supported_bands_reserved_tv_whitespaces = -1;
-static int hf_nan_attr_device_cap_supported_bands_sub_1ghz = -1;
-static int hf_nan_attr_device_cap_supported_bands_24ghz = -1;
-static int hf_nan_attr_device_cap_supported_bands_reserved_36ghz = -1;
-static int hf_nan_attr_device_cap_supported_bands_5ghz = -1;
-static int hf_nan_attr_device_cap_supported_bands_reserved_60ghz = -1;
-static int hf_nan_attr_device_cap_op_mode = -1;
-static int hf_nan_attr_device_cap_op_mode_phy = -1;
-static int hf_nan_attr_device_cap_op_mode_vht8080 = -1;
-static int hf_nan_attr_device_cap_op_mode_vht160 = -1;
-static int hf_nan_attr_device_cap_op_mode_reserved_paging_ndl = -1;
-static int hf_nan_attr_device_cap_antennas = -1;
-static int hf_nan_attr_device_cap_antennas_tx = -1;
-static int hf_nan_attr_device_cap_antennas_rx = -1;
-static int hf_nan_attr_device_cap_max_channel_switch_time = -1;
-static int hf_nan_attr_device_cap_capabilities = -1;
-static int hf_nan_attr_device_cap_capabilities_dfs_master = -1;
-static int hf_nan_attr_device_cap_capabilities_extended_key_id = -1;
-static int hf_nan_attr_device_cap_capabilities_simul_ndp_reception = -1;
-static int hf_nan_attr_device_cap_capabilities_ndpe_attr_support = -1;
-static int hf_nan_attr_ndp_type = -1;
-static int hf_nan_attr_ndp_initiator = -1;
-static int hf_nan_attr_ndp_id = -1;
-static int hf_nan_attr_ndp_ctrl_confirm = -1;
-static int hf_nan_attr_ndp_ctrl_security_pres = -1;
-static int hf_nan_attr_ndp_ctrl_publish_id_pres = -1;
-static int hf_nan_attr_ndp_ctrl_responder_ndi_pres = -1;
-static int hf_nan_attr_ndp_ctrl_sepcific_info_pres = -1;
-static int hf_nan_attr_ndp_control = -1;
-static int hf_nan_attr_ndp_responder_ndi = -1;
-static int hf_nan_attr_ndp_specific_info = -1;
-static int hf_nan_attr_ndpe_tlv_type = -1;
-static int hf_nan_attr_ndpe_tlv_len = -1;
-static int hf_nan_attr_ndpe_tlv_ipv6_interface_identifier = -1;
-static int hf_nan_attr_availability_sequence_id = -1;
-static int hf_nan_attr_availability_ctr = -1;
-static int hf_nan_attr_availability_map_id = -1;
-static int hf_nan_attr_availability_committed_changed = -1;
-static int hf_nan_attr_availability_potential_changed = -1;
-static int hf_nan_attr_availability_public_availability_changed = -1;
-static int hf_nan_attr_availability_ndc_changed = -1;
-static int hf_nan_attr_availability_reserved_multicast_schedule_changed = -1;
-static int hf_nan_attr_availability_reserved_multicast_schedule_change_changed = -1;
-static int hf_nan_attr_availability_entry_len = -1;
-static int hf_nan_attr_availability_entry_ctr = -1;
-static int hf_nan_attr_availability_entry_ctr_type = -1;
-static int hf_nan_attr_availability_entry_ctr_pref = -1;
-static int hf_nan_attr_availability_entry_ctr_utilization = -1;
-static int hf_nan_attr_availability_entry_ctr_rx_nss = -1;
-static int hf_nan_attr_availability_entry_ctr_time_bitmap = -1;
-static int hf_nan_attr_availability_entry_entries_type = -1;
-static int hf_nan_attr_availability_entry_entries_non_contiguous_bw = -1;
-static int hf_nan_attr_availability_entry_entries_num_entries = -1;
-static int hf_nan_attr_availability_entry_entries_band = -1;
-static int hf_nan_attr_availability_entry_entries_channel_op_class = -1;
-static int hf_nan_attr_availability_entry_entries_channel_bitmap = -1;
-static int hf_nan_attr_availability_entry_entries_primary_channel_bitmap = -1;
-static int hf_nan_attr_availability_entry_entries_aux_channel_bitmap = -1;
-static int hf_nan_attr_availability_entry_entries_channel_set = -1;
-static int hf_nan_attr_availability_entry_entries_start_freq = -1;
-static int hf_nan_attr_availability_entry_entries_bandwidth = -1;
-static int hf_nan_attr_ndc_id = -1;
-static int hf_nan_attr_ndc_ctrl = -1;
-static int hf_nan_attr_ndc_ctrl_selected = -1;
-static int hf_nan_attr_ndc_map_id_related_sch = -1;
-static int hf_nan_attr_ndl_type = -1;
-static int hf_nan_attr_ndl_control = -1;
-static int hf_nan_attr_ndl_ctrl_peer_id = -1;
-static int hf_nan_attr_ndl_ctrl_immutable_schedule_pres = -1;
-static int hf_nan_attr_ndl_ctrl_ndc_pres = -1;
-static int hf_nan_attr_ndl_ctrl_qos = -1;
-static int hf_nan_attr_ndl_ctrl_type = -1;
-static int hf_nan_attr_ndl_ctrl_setup_reason = -1;
-static int hf_nan_attr_ndl_ctrl_max_idle_pres = -1;
-static int hf_nan_attr_ndl_reserved_peer_id = -1;
-static int hf_nan_attr_ndl_max_idle = -1;
-static int hf_nan_attr_ndlqos_min_time_slots = -1;
-static int hf_nan_attr_ndlqos_max_latency = -1;
-static int hf_nan_attr_unaligned_sch_ctrl = -1;
-static int hf_nan_attr_unaligned_sch_ctrl_schedule_id = -1;
-static int hf_nan_attr_unaligned_sch_ctrl_seq_id = -1;
-static int hf_nan_attr_unaligned_sch_starting_time = -1;
-static int hf_nan_attr_unaligned_sch_duration = -1;
-static int hf_nan_attr_unaligned_sch_period = -1;
-static int hf_nan_attr_unaligned_sch_count_down = -1;
-static int hf_nan_attr_unaligned_sch_ulw_overwrite = -1;
-static int hf_nan_attr_unaligned_sch_ulw_overwrite_all = -1;
-static int hf_nan_attr_unaligned_sch_ulw_overwrite_map_id = -1;
-static int hf_nan_attr_unaligned_sch_ulw_ctrl = -1;
-static int hf_nan_attr_unaligned_sch_ulw_ctrl_type = -1;
-static int hf_nan_attr_unaligned_sch_ulw_ctrl_channel_av = -1;
-static int hf_nan_attr_unaligned_sch_ulw_ctrl_rxnss = -1;
-static int hf_nan_attr_ranging_info_location_info_avail = -1;
-static int hf_nan_attr_ranging_info_location_info_avail_lci = -1;
-static int hf_nan_attr_ranging_info_location_info_avail_geospatial = -1;
-static int hf_nan_attr_ranging_info_location_info_avail_civic_location = -1;
-static int hf_nan_attr_ranging_info_location_info_avail_last_movement_pres = -1;
-static int hf_nan_attr_ranging_info_last_movement_indication = -1;
-static int hf_nan_attr_ranging_setup_type = -1;
-static int hf_nan_attr_ranging_setup_ctrl = -1;
-static int hf_nan_attr_ranging_setup_ctrl_report_req = -1;
-static int hf_nan_attr_ranging_setup_ctrl_ftm_params = -1;
-static int hf_nan_attr_ranging_setup_ctrl_entry_list = -1;
-static int hf_nan_attr_ranging_setup_ftm_params = -1;
-static int hf_nan_attr_ranging_setup_ftm_max_per_burst = -1;
-static int hf_nan_attr_ranging_setup_ftm_min_delta = -1;
-static int hf_nan_attr_ranging_setup_ftm_max_burst_duration = -1;
-static int hf_nan_attr_ranging_setup_ftm_format_bw = -1;
-static int hf_nan_attr_ftm_range_report = -1;
-static int hf_nan_attr_cipher_suite_capabilities = -1;
-static int hf_nan_attr_cipher_suite_id = -1;
-static int hf_nan_attr_security_context_identifier = -1;
-static int hf_nan_attr_security_context_identifier_len = -1;
-static int hf_nan_attr_security_context_identifier_type = -1;
-static int hf_nan_attr_shared_key_rsna_descriptor = -1;
-static int hf_nan_attr_vendor_specific_body = -1;
-static int hf_nan_attr_container_element_id = -1;
-static int hf_nan_attr_container_element_len = -1;
+static int hf_nan_attribute_type;
+static int hf_nan_attribute_len;
+static int hf_nan_action_subtype;
+static int hf_nan_instance_id;
+static int hf_nan_service_id;
+static int hf_nan_map_id;
+static int hf_nan_oui;
+static int hf_nan_type_status;
+static int hf_nan_reason_code;
+static int hf_nan_status_1;
+static int hf_nan_status_2;
+static int hf_nan_bss_id;
+static int hf_nan_availability_intervals_bitmap;
+static int hf_nan_mac_address;
+static int hf_nan_publish_id;
+static int hf_nan_dialog_tokens;
+static int hf_nan_time_bitmap;
+static int hf_nan_time_bitmap_len;
+static int hf_nan_time_bitmap_ctrl;
+static int hf_nan_time_bitmap_ctrl_bit_duration;
+static int hf_nan_time_bitmap_ctrl_period;
+static int hf_nan_time_bitmap_ctrl_start_offset;
+static int hf_nan_map_ctrl_map_id;
+static int hf_nan_map_ctrl_availability_interval_duration;
+static int hf_nan_map_ctrl_repeat;
+static int hf_nan_map_ctrl_field;
+static int hf_nan_non_op_channel_global_op_class;
+static int hf_nan_non_op_channel_channel;
+static int hf_nan_non_op_channel_center_freq;
+static int hf_nan_non_beacon_tbtt_offset;
+static int hf_nan_non_beacon_interval;
+static int hf_nan_attr_master_preference;
+static int hf_nan_attr_master_random_factor;
+static int hf_nan_attr_cluster_anchor_master_rank;
+static int hf_nan_attr_cluster_hop_count;
+static int hf_nan_attr_cluster_beacon_transmission_time;
+static int hf_nan_attr_sda_requestor_instance_id;
+static int hf_nan_attr_sda_sc;
+static int hf_nan_attr_sda_sc_type;
+static int hf_nan_attr_sda_sc_matching_filter;
+static int hf_nan_attr_sda_sc_service_response;
+static int hf_nan_attr_sda_sc_service_info;
+static int hf_nan_attr_sda_sc_discovery_range;
+static int hf_nan_attr_sda_sc_binding_bitmap;
+static int hf_nan_attr_sda_binding_bitmap;
+static int hf_nan_attr_sda_matching_filter_len;
+static int hf_nan_attr_sda_matching_filter_val;
+static int hf_nan_attr_sda_service_response_filter_len;
+static int hf_nan_attr_sda_srf_ctr;
+static int hf_nan_attr_sda_srf_ctr_type;
+static int hf_nan_attr_sda_srf_ctr_include;
+static int hf_nan_attr_sda_srf_ctr_bloom_filter_index;
+static int hf_nan_attr_sda_srf_address_set;
+static int hf_nan_attr_sda_service_info_len;
+static int hf_nan_attr_sda_service_info;
+static int hf_nan_attr_sdea_ctr;
+static int hf_nan_attr_sdea_ctr_fsd;
+static int hf_nan_attr_sdea_ctr_fsd_w_gas;
+static int hf_nan_attr_sdea_ctr_data_path;
+static int hf_nan_attr_sdea_ctr_data_path_type;
+static int hf_nan_attr_sdea_ctr_reserved_multicast_type;
+static int hf_nan_attr_sdea_ctr_qos;
+static int hf_nan_attr_sdea_ctr_security;
+static int hf_nan_attr_sdea_ctr_ranging;
+static int hf_nan_attr_sdea_ctr_range_limit;
+static int hf_nan_attr_sdea_ctr_service_update_indicator;
+static int hf_nan_attr_sdea_ingress_range_limit;
+static int hf_nan_attr_sdea_egress_range_limit;
+static int hf_nan_attr_sdea_service_update_indicator;
+static int hf_nan_attr_sdea_service_info_length;
+static int hf_nan_attr_sdea_service_info_protocol_type;
+static int hf_nan_attr_sdea_service_info_specific;
+static int hf_nan_attr_connection_cap_bitmap;
+static int hf_nan_attr_connection_cap_wifi_direct;
+static int hf_nan_attr_connection_cap_p2ps;
+static int hf_nan_attr_connection_cap_tdls;
+static int hf_nan_attr_connection_cap_wlan_infra;
+static int hf_nan_attr_connection_cap_ibss;
+static int hf_nan_attr_connection_cap_mesh;
+static int hf_nan_attr_wlan_infra_device_role;
+static int hf_nan_attr_p2p_device_role_device;
+static int hf_nan_attr_p2p_device_role_group_owner;
+static int hf_nan_attr_p2p_device_role_client;
+static int hf_nan_attr_p2p_device_role;
+static int hf_nan_attr_mesh_id;
+static int hf_nan_attr_further_av_map_entry_av_interval_duration;
+static int hf_nan_attr_further_av_map_op_class;
+static int hf_nan_attr_further_av_map_channel_num;
+static int hf_nan_attr_further_av_map_entry_ctrl;
+static int hf_nan_attr_further_av_map_id;
+static int hf_nan_attr_country_code;
+static int hf_nan_attr_ranging_protocol;
+static int hf_nan_attr_cluster_disc_id;
+static int hf_nan_attr_cluster_disc_time_offset;
+static int hf_nan_attr_cluster_disc_anchor_master_rank;
+static int hf_nan_attr_device_cap_map_id_apply_to;
+static int hf_nan_attr_device_cap_map_id_associated_maps;
+static int hf_nan_attr_device_cap_committed_dw;
+static int hf_nan_attr_device_cap_committed_dw_24ghz;
+static int hf_nan_attr_device_cap_committed_dw_5ghz;
+static int hf_nan_attr_device_cap_committed_dw_24ghz_overwrite;
+static int hf_nan_attr_device_cap_committed_dw_5ghz_overwrite;
+static int hf_nan_attr_device_cap_supported_bands;
+static int hf_nan_attr_device_cap_supported_bands_reserved_tv_whitespaces;
+static int hf_nan_attr_device_cap_supported_bands_sub_1ghz;
+static int hf_nan_attr_device_cap_supported_bands_24ghz;
+static int hf_nan_attr_device_cap_supported_bands_reserved_36ghz;
+static int hf_nan_attr_device_cap_supported_bands_5ghz;
+static int hf_nan_attr_device_cap_supported_bands_reserved_60ghz;
+static int hf_nan_attr_device_cap_op_mode;
+static int hf_nan_attr_device_cap_op_mode_phy;
+static int hf_nan_attr_device_cap_op_mode_vht8080;
+static int hf_nan_attr_device_cap_op_mode_vht160;
+static int hf_nan_attr_device_cap_op_mode_reserved_paging_ndl;
+static int hf_nan_attr_device_cap_antennas;
+static int hf_nan_attr_device_cap_antennas_tx;
+static int hf_nan_attr_device_cap_antennas_rx;
+static int hf_nan_attr_device_cap_max_channel_switch_time;
+static int hf_nan_attr_device_cap_capabilities;
+static int hf_nan_attr_device_cap_capabilities_dfs_master;
+static int hf_nan_attr_device_cap_capabilities_extended_key_id;
+static int hf_nan_attr_device_cap_capabilities_simul_ndp_reception;
+static int hf_nan_attr_device_cap_capabilities_ndpe_attr_support;
+static int hf_nan_attr_ndp_type;
+static int hf_nan_attr_ndp_initiator;
+static int hf_nan_attr_ndp_id;
+static int hf_nan_attr_ndp_ctrl_confirm;
+static int hf_nan_attr_ndp_ctrl_security_pres;
+static int hf_nan_attr_ndp_ctrl_publish_id_pres;
+static int hf_nan_attr_ndp_ctrl_responder_ndi_pres;
+static int hf_nan_attr_ndp_ctrl_sepcific_info_pres;
+static int hf_nan_attr_ndp_control;
+static int hf_nan_attr_ndp_responder_ndi;
+static int hf_nan_attr_ndp_specific_info;
+static int hf_nan_attr_ndpe_tlv_type;
+static int hf_nan_attr_ndpe_tlv_len;
+static int hf_nan_attr_ndpe_tlv_ipv6_interface_identifier;
+static int hf_nan_attr_availability_sequence_id;
+static int hf_nan_attr_availability_ctr;
+static int hf_nan_attr_availability_map_id;
+static int hf_nan_attr_availability_committed_changed;
+static int hf_nan_attr_availability_potential_changed;
+static int hf_nan_attr_availability_public_availability_changed;
+static int hf_nan_attr_availability_ndc_changed;
+static int hf_nan_attr_availability_reserved_multicast_schedule_changed;
+static int hf_nan_attr_availability_reserved_multicast_schedule_change_changed;
+static int hf_nan_attr_availability_entry_len;
+static int hf_nan_attr_availability_entry_ctr;
+static int hf_nan_attr_availability_entry_ctr_type;
+static int hf_nan_attr_availability_entry_ctr_pref;
+static int hf_nan_attr_availability_entry_ctr_utilization;
+static int hf_nan_attr_availability_entry_ctr_rx_nss;
+static int hf_nan_attr_availability_entry_ctr_time_bitmap;
+static int hf_nan_attr_availability_entry_entries_type;
+static int hf_nan_attr_availability_entry_entries_non_contiguous_bw;
+static int hf_nan_attr_availability_entry_entries_num_entries;
+static int hf_nan_attr_availability_entry_entries_band;
+static int hf_nan_attr_availability_entry_entries_channel_op_class;
+static int hf_nan_attr_availability_entry_entries_channel_bitmap;
+static int hf_nan_attr_availability_entry_entries_primary_channel_bitmap;
+static int hf_nan_attr_availability_entry_entries_aux_channel_bitmap;
+static int hf_nan_attr_availability_entry_entries_channel_set;
+static int hf_nan_attr_availability_entry_entries_start_freq;
+static int hf_nan_attr_availability_entry_entries_bandwidth;
+static int hf_nan_attr_ndc_id;
+static int hf_nan_attr_ndc_ctrl;
+static int hf_nan_attr_ndc_ctrl_selected;
+static int hf_nan_attr_ndc_map_id_related_sch;
+static int hf_nan_attr_ndl_type;
+static int hf_nan_attr_ndl_control;
+static int hf_nan_attr_ndl_ctrl_peer_id;
+static int hf_nan_attr_ndl_ctrl_immutable_schedule_pres;
+static int hf_nan_attr_ndl_ctrl_ndc_pres;
+static int hf_nan_attr_ndl_ctrl_qos;
+static int hf_nan_attr_ndl_ctrl_type;
+static int hf_nan_attr_ndl_ctrl_setup_reason;
+static int hf_nan_attr_ndl_ctrl_max_idle_pres;
+static int hf_nan_attr_ndl_reserved_peer_id;
+static int hf_nan_attr_ndl_max_idle;
+static int hf_nan_attr_ndlqos_min_time_slots;
+static int hf_nan_attr_ndlqos_max_latency;
+static int hf_nan_attr_unaligned_sch_ctrl;
+static int hf_nan_attr_unaligned_sch_ctrl_schedule_id;
+static int hf_nan_attr_unaligned_sch_ctrl_seq_id;
+static int hf_nan_attr_unaligned_sch_starting_time;
+static int hf_nan_attr_unaligned_sch_duration;
+static int hf_nan_attr_unaligned_sch_period;
+static int hf_nan_attr_unaligned_sch_count_down;
+static int hf_nan_attr_unaligned_sch_ulw_overwrite;
+static int hf_nan_attr_unaligned_sch_ulw_overwrite_all;
+static int hf_nan_attr_unaligned_sch_ulw_overwrite_map_id;
+static int hf_nan_attr_unaligned_sch_ulw_ctrl;
+static int hf_nan_attr_unaligned_sch_ulw_ctrl_type;
+static int hf_nan_attr_unaligned_sch_ulw_ctrl_channel_av;
+static int hf_nan_attr_unaligned_sch_ulw_ctrl_rxnss;
+static int hf_nan_attr_ranging_info_location_info_avail;
+static int hf_nan_attr_ranging_info_location_info_avail_lci;
+static int hf_nan_attr_ranging_info_location_info_avail_geospatial;
+static int hf_nan_attr_ranging_info_location_info_avail_civic_location;
+static int hf_nan_attr_ranging_info_location_info_avail_last_movement_pres;
+static int hf_nan_attr_ranging_info_last_movement_indication;
+static int hf_nan_attr_ranging_setup_type;
+static int hf_nan_attr_ranging_setup_ctrl;
+static int hf_nan_attr_ranging_setup_ctrl_report_req;
+static int hf_nan_attr_ranging_setup_ctrl_ftm_params;
+static int hf_nan_attr_ranging_setup_ctrl_entry_list;
+static int hf_nan_attr_ranging_setup_ftm_params;
+static int hf_nan_attr_ranging_setup_ftm_max_per_burst;
+static int hf_nan_attr_ranging_setup_ftm_min_delta;
+static int hf_nan_attr_ranging_setup_ftm_max_burst_duration;
+static int hf_nan_attr_ranging_setup_ftm_format_bw;
+static int hf_nan_attr_ftm_range_report;
+static int hf_nan_attr_cipher_suite_capabilities;
+static int hf_nan_attr_cipher_suite_id;
+static int hf_nan_attr_security_context_identifier;
+static int hf_nan_attr_security_context_identifier_len;
+static int hf_nan_attr_security_context_identifier_type;
+static int hf_nan_attr_shared_key_rsna_descriptor;
+static int hf_nan_attr_vendor_specific_body;
+static int hf_nan_attr_container_element_id;
+static int hf_nan_attr_container_element_len;
+/* Device Capability Extension attribute, Capability Info field */
+static int hf_nan_attr_device_capability_extension;
+static int hf_nan_attr_device_capability_extension_6g_regulatory_info_presented;
+static int hf_nan_attr_device_capability_extension_6g_regulatory_info;
+static int hf_nan_attr_device_capability_extension_6g_regulatory_info_reserved;
+static int hf_nan_attr_device_capability_extension_paring_setup_enabled;
+static int hf_nan_attr_device_capability_extension_npk_nik_cache_enabled;
+/* NAN Identity Resolution attribute */
+static int hf_nan_attr_identity_cipher_version;
+static int hf_nan_attr_identity_resolution_nonce;
+static int hf_nan_attr_identity_resolution_tag;
+
+/* NAN Pairing Bootstrapping attribute */
+static int hf_nan_attr_pairing_bootstrapping_dialog_token;
+static int hf_nan_attr_pairing_bootstrapping_type_status;
+static int hf_nan_attr_pairing_bootstrapping_type;
+static int hf_nan_attr_pairing_bootstrapping_status;
+static int hf_nan_attr_pairing_bootstrapping_resaon_code;
+static int hf_nan_attr_pairing_bootstrapping_comeback_after;
+static int hf_nan_attr_pairing_bootstrapping_comeback_cookie_len;
+static int hf_nan_attr_pairing_bootstrapping_comeback_cookie;
+static int hf_nan_attr_pairing_bootstrapping_methods;
+static int hf_nan_attr_pairing_bootstrapping_method_opportunistic_bootstrapping;
+static int hf_nan_attr_pairing_bootstrapping_method_pin_code_display;
+static int hf_nan_attr_pairing_bootstrapping_method_passphrase_display;
+static int hf_nan_attr_pairing_bootstrapping_method_qr_code_display;
+static int hf_nan_attr_pairing_bootstrapping_method_nfc_tag;
+static int hf_nan_attr_pairing_bootstrapping_method_keypad_pin_code_only;
+static int hf_nan_attr_pairing_bootstrapping_method_keypad_passphrase;
+static int hf_nan_attr_pairing_bootstrapping_method_qr_code_scan;
+static int hf_nan_attr_pairing_bootstrapping_method_nfc_reader;
+static int hf_nan_attr_pairing_bootstrapping_method_reserved;
+static int hf_nan_attr_pairing_bootstrapping_method_service_managed_bootstrapping;
+static int hf_nan_attr_pairing_bootstrapping_method_bootstrapping_handshakes_skipped;
+
+static int hf_nan_attr_reserved;
 
 enum {
     NAN_ATTR_MASTER_INDICATION = 0x00,
@@ -379,6 +421,9 @@ enum {
     NAN_ATTR_PUBLIC_AVAILABILITY = 0x27,
     NAN_ATTR_SUBSCRIBE_SERVICE_ID_LIST = 0x28,
     NAN_ATTR_NDP_EXTENSION = 0x29,
+    NAN_ATTR_DEVICE_CAPABILITY_EXTENSION = 0x2a,
+    NAN_ATTR_IDENTITY_RESOLUTION = 0x2b,
+    NAN_ATTR_PAIRING_BOOTSTRAPPING = 0x2c,
     NAN_ATTR_VENDOR_SPECIFIC = 0xDD
 };
 
@@ -425,6 +470,9 @@ static const value_string attribute_types[] = {
     { NAN_ATTR_PUBLIC_AVAILABILITY, "Public Availability Attribute" },
     { NAN_ATTR_SUBSCRIBE_SERVICE_ID_LIST, "Subscribe Service ID List Attribute" },
     { NAN_ATTR_NDP_EXTENSION, "NDP Extension Attribute" },
+    { NAN_ATTR_DEVICE_CAPABILITY_EXTENSION, "Device Capability Extension"},
+    { NAN_ATTR_IDENTITY_RESOLUTION, "NAN Identity Resolution"},
+    { NAN_ATTR_PAIRING_BOOTSTRAPPING, "NAN Pairing Bootstrapping"},
     { NAN_ATTR_VENDOR_SPECIFIC, "Vendor Specific Attribute" },
     { 0, NULL }
 };
@@ -618,21 +666,21 @@ static const range_string reason_code_values[] = {
 };
 
 static const range_string action_frame_type_values[] = {
-    { 0, 0, "Reserved " },
-    { 1, 1, "Ranging Request " },
-    { 2, 2, "Ranging Response " },
-    { 3, 3, "Ranging Termination " },
-    { 4, 4, "Ranging Report " },
-    { 5, 5, "Data Path Request " },
-    { 6, 6, "Data Path Response " },
-    { 7, 7, "Data Path Confirm " },
-    { 8, 8, "Data Path Key Installment " },
-    { 9, 9, "Data Path Termination " },
-    { 10, 10, "Schedule Request " },
-    { 11, 11, "Schedule Response " },
-    { 12, 12, "Schedule Confirm " },
-    { 13, 13, "Schedule Update Notification " },
-    { 14, 255, "Reserved " },
+    { 0, 0, "Reserved" },
+    { 1, 1, "Ranging Request" },
+    { 2, 2, "Ranging Response" },
+    { 3, 3, "Ranging Termination" },
+    { 4, 4, "Ranging Report" },
+    { 5, 5, "Data Path Request" },
+    { 6, 6, "Data Path Response" },
+    { 7, 7, "Data Path Confirm" },
+    { 8, 8, "Data Path Key Installment" },
+    { 9, 9, "Data Path Termination" },
+    { 10, 10, "Schedule Request" },
+    { 11, 11, "Schedule Response" },
+    { 12, 12, "Schedule Confirm" },
+    { 13, 13, "Schedule Update Notification" },
+    { 14, 255, "Reserved" },
     { 0, 0, NULL }
 };
 
@@ -676,6 +724,35 @@ static const range_string furth_av_map_id[] = {
     {0, 15, "Identify Further Availability attribute"},
     {16, 255, "Reserved"},
     {0, 0, NULL}
+};
+
+static const value_string device_capability_extension_6g_regulatoty_info[] = {
+    { 0, "Indoor AP" },
+    { 1, "Standard Power AP" },
+    { 2, "Very Low Power AP" },
+    { 3, "Indoor Enabled AP" },
+    { 4, "Indoor Standard Power AP" },
+    { 0, NULL }
+};
+
+static const range_string nan_identity_resolution_cipher_version[] = {
+    {0, 0, "128-bit NIK, 64-bit Nonce, 64-bit Tag, HMAC-SHA-256"},
+    {1, 255, "Reserved"},
+    {0, 0, NULL }
+};
+
+static const value_string nan_pairing_bootstrapping_pairing_bootstrapping_type[] = {
+    { 0, "Advertise" },
+    { 1, "Request" },
+    { 2, "Response" },
+    { 0, NULL } /* Reserved for other value */
+};
+
+static const value_string nan_pairing_bootstrapping_pairing_bootstrapping_status[] = {
+    { 0, "Accepted" },
+    { 1, "Rejected" },
+    { 2, "Comeback" },
+    { 0, NULL } /* Reserved for other value */
 };
 
 typedef struct _range_channel_set {
@@ -2278,6 +2355,159 @@ dissect_attr_vendor_specific(proto_tree* attr_tree, tvbuff_t* tvb, gint offset, 
 }
 
 static void
+dissect_attr_device_capability_extension(proto_tree* attr_tree, tvbuff_t* tvb, gint offset, guint16 attr_len, packet_info* pinfo)
+{
+    if (attr_len < NAN_DEVICE_CAPABILITY_EXTENSION_MIN_LENGTH)
+    {
+        /* At least has 9 bits defined in NAN-R4 spec  */
+        expert_add_info(pinfo, attr_tree, &ei_nan_elem_len_invalid);
+        return;
+    }
+
+    static int* const capability_info_fields[] = {
+        &hf_nan_attr_device_capability_extension_6g_regulatory_info_presented,
+        &hf_nan_attr_device_capability_extension_6g_regulatory_info,
+        &hf_nan_attr_device_capability_extension_6g_regulatory_info_reserved,
+        &hf_nan_attr_device_capability_extension_paring_setup_enabled,
+        &hf_nan_attr_device_capability_extension_npk_nik_cache_enabled,
+        NULL
+    };
+
+    proto_tree_add_bitmask(attr_tree, tvb, offset + 3, hf_nan_attr_device_capability_extension,
+        ett_device_capability_extension, capability_info_fields, ENC_LITTLE_ENDIAN);
+}
+
+static void
+dissect_attr_nan_identity_resolution(proto_tree* attr_tree, tvbuff_t* tvb, gint offset, guint16 attr_len, packet_info* pinfo)
+{
+    if (attr_len < NAN_IDENTITY_RESOLUTION_MIN_LEN)
+    {
+        /* At least 1 byte: Cipher version  */
+        expert_add_info(pinfo, attr_tree, &ei_nan_elem_len_invalid);
+        return;
+    }
+
+    proto_tree_add_item(attr_tree, hf_nan_attr_identity_cipher_version, tvb,
+            offset + 3, 1, ENC_LITTLE_ENDIAN);
+
+    guint8 cipher_version = tvb_get_guint8(tvb, offset + 3);
+    switch (cipher_version)
+    {
+    case 0:
+        proto_tree_add_item(attr_tree, hf_nan_attr_identity_resolution_nonce, tvb,
+            offset + 4, 8, ENC_NA);
+        proto_tree_add_item(attr_tree, hf_nan_attr_identity_resolution_tag, tvb,
+            offset + 12, 8, ENC_NA);
+        break;
+    default:
+        proto_tree_add_item(attr_tree, hf_nan_attr_reserved, tvb,
+            offset + 3, attr_len - 1, ENC_NA);
+    }
+}
+
+static void
+dissect_attr_nan_pairing_bootstrapping(proto_tree* attr_tree, tvbuff_t* tvb, gint offset, guint16 attr_len, packet_info* pinfo)
+{
+    if (attr_len < NAN_PAIRING_BOOTSTRAPPING_LEN)
+    {
+        /* At least 5 bytes: Dialog Token(1) + Type and Status(1) + Reason Code(1) + Pairing Bootstrapping Method(2) */
+        expert_add_info(pinfo, attr_tree, &ei_nan_elem_len_invalid);
+        return;
+    }
+    gint npba_local_offset = offset + 3;
+
+    /* Dialog Token */
+    proto_tree_add_item(attr_tree, hf_nan_attr_pairing_bootstrapping_dialog_token, tvb,
+            npba_local_offset, 1, ENC_LITTLE_ENDIAN);
+    npba_local_offset += 1;
+
+    /* Type and Status */
+    guint8 type_status = tvb_get_guint8(tvb, npba_local_offset);
+    guint8 type = type_status & 0x0f;
+    guint8 status = (type_status & 0xf0) >> 4;
+
+    static int* const type_and_status_fields[] = {
+        &hf_nan_attr_pairing_bootstrapping_type,
+        &hf_nan_attr_pairing_bootstrapping_status,
+        NULL
+    };
+    proto_tree_add_bitmask(attr_tree, tvb, npba_local_offset, hf_nan_attr_pairing_bootstrapping_type_status,
+        ett_nan_pairing_bootstrapping_type_status, type_and_status_fields, ENC_LITTLE_ENDIAN);
+    npba_local_offset += 1;
+
+    /* Resaon code
+     * Indicate the reject reason when Type = 2 (Response) and Status = 1 (Rejected); otherwise, reserved */
+    if ((type == 2) && (status == 1))
+    {
+        proto_tree_add_item(attr_tree, hf_nan_attr_pairing_bootstrapping_resaon_code, tvb,
+            npba_local_offset, 1, ENC_LITTLE_ENDIAN);
+    }
+    else
+    {
+        proto_tree_add_item(attr_tree, hf_nan_attr_reserved, tvb,
+            npba_local_offset, 1, ENC_NA);
+    }
+    npba_local_offset += 1;
+
+    /* Comeback, if any. Presetned if,
+     * a) type is 2 and status is 2, or
+     * b) type is 1 and status is 2, and cookie is requried (based on attribute length)
+     */
+    bool comeback_presented = (attr_len > NAN_PAIRING_BOOTSTRAPPING_LEN);
+
+    bool comeback_after_presented = comeback_presented && ((type == 2) && (status == 2));
+
+    if (comeback_after_presented)
+    {
+        proto_tree_add_item(attr_tree, hf_nan_attr_pairing_bootstrapping_comeback_after, tvb,
+            npba_local_offset, 2, ENC_LITTLE_ENDIAN);
+        npba_local_offset += 2;
+    }
+
+    if (comeback_presented)
+    {
+        guint8 cookie_len = tvb_get_guint8(tvb, npba_local_offset);
+        proto_tree_add_item(attr_tree, hf_nan_attr_pairing_bootstrapping_comeback_cookie_len, tvb,
+            npba_local_offset, 1, ENC_LITTLE_ENDIAN);
+        npba_local_offset += 1;
+
+        if (cookie_len)
+        {
+            proto_tree_add_item(attr_tree, hf_nan_attr_pairing_bootstrapping_comeback_cookie, tvb,
+                npba_local_offset, cookie_len, ENC_NA);
+            npba_local_offset += cookie_len;
+        }
+    }
+
+    /* Pairing Bootstrapping Method */
+    static int* const pairing_bootstrapping_method[] = {
+        &hf_nan_attr_pairing_bootstrapping_method_opportunistic_bootstrapping,
+        &hf_nan_attr_pairing_bootstrapping_method_pin_code_display,
+        &hf_nan_attr_pairing_bootstrapping_method_passphrase_display,
+        &hf_nan_attr_pairing_bootstrapping_method_qr_code_display,
+        &hf_nan_attr_pairing_bootstrapping_method_nfc_tag,
+        &hf_nan_attr_pairing_bootstrapping_method_keypad_pin_code_only,
+        &hf_nan_attr_pairing_bootstrapping_method_keypad_passphrase,
+        &hf_nan_attr_pairing_bootstrapping_method_qr_code_scan,
+        &hf_nan_attr_pairing_bootstrapping_method_nfc_reader,
+        &hf_nan_attr_pairing_bootstrapping_method_reserved,
+        &hf_nan_attr_pairing_bootstrapping_method_service_managed_bootstrapping,
+        &hf_nan_attr_pairing_bootstrapping_method_bootstrapping_handshakes_skipped,
+        NULL
+    };
+    if (type == 2 && status)
+    {
+        proto_tree_add_item(attr_tree, hf_nan_attr_reserved, tvb,
+            npba_local_offset, 2, ENC_NA);
+    }
+    else
+    {
+        proto_tree_add_bitmask(attr_tree, tvb, npba_local_offset, hf_nan_attr_pairing_bootstrapping_methods,
+            ett_nan_pairing_bootstrapping_method, pairing_bootstrapping_method, ENC_LITTLE_ENDIAN);
+    }
+}
+
+static void
 find_attribute_field(proto_tree* nan_tree, tvbuff_t* tvb, guint tvb_len, guint* offset, packet_info* pinfo)
 {
     if ((tvb_len - *offset) < 3)
@@ -2415,6 +2645,15 @@ find_attribute_field(proto_tree* nan_tree, tvbuff_t* tvb, guint tvb_len, guint* 
     case NAN_ATTR_NDL:
         dissect_attr_ndl(attr_tree, tvb, *offset, attr_len, pinfo);
         break;
+    case NAN_ATTR_DEVICE_CAPABILITY_EXTENSION:
+        dissect_attr_device_capability_extension(attr_tree, tvb, *offset, attr_len, pinfo);
+        break;
+    case NAN_ATTR_IDENTITY_RESOLUTION:
+        dissect_attr_nan_identity_resolution(attr_tree, tvb, *offset, attr_len, pinfo);
+        break;
+    case NAN_ATTR_PAIRING_BOOTSTRAPPING:
+        dissect_attr_nan_pairing_bootstrapping(attr_tree, tvb, *offset, attr_len, pinfo);
+        break;
     default:
         expert_add_info(pinfo, attr_tree, &ei_nan_unknown_attr_id);
     }
@@ -2437,7 +2676,7 @@ dissect_nan_beacon(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* da
     // field value be provided to it by the calling dissector, so we can't
     // just ask for "wlan.fixed.beacon".
     //
-    // Fortunaely, we are currently putting the Discovery vs. Sync information
+    // Fortunately, we are currently putting the Discovery vs. Sync information
     // only in the Info column, and the beacon interval is put at the end
     // of the Info column, as "BI={interval}", by the 802.11 dissector, so
     // we can just fetch the Info column string and, if it's present, extract
@@ -3597,14 +3836,14 @@ proto_register_nan(void)
             {
             "Type",
             "wifi_nan.availability.entry.entries.type",
-            FT_BOOLEAN, 8, TFS(&availability_entry_entries_type_flags), 0x0, NULL, HFILL
+            FT_BOOLEAN, BASE_NONE, TFS(&availability_entry_entries_type_flags), 0x0, NULL, HFILL
             }
         },
         { &hf_nan_attr_availability_entry_entries_non_contiguous_bw,
             {
             "Non-contiguous Bandwidth",
             "wifi_nan.availability.entry.entries.non_contiguous_bw",
-            FT_BOOLEAN, 8, NULL, 0x0, NULL, HFILL
+            FT_BOOLEAN, BASE_NONE, NULL, 0x0, NULL, HFILL
             }
         },
         { &hf_nan_attr_availability_entry_entries_num_entries,
@@ -4069,6 +4308,216 @@ proto_register_nan(void)
             FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL
             }
         },
+        { &hf_nan_attr_device_capability_extension,
+            {
+                "Capability Extension",
+                "wifi_nan.device_capability_extension.capability_info",
+                FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_device_capability_extension_6g_regulatory_info_presented,
+            {
+                "6GHz Regulatory Info Presented",
+                "wifi_nan.device_capability_extension.6g_regulatory_presented",
+                FT_BOOLEAN, 16, NULL, 0x0001, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_device_capability_extension_6g_regulatory_info,
+            {
+                "6GHz Regulatory Info",
+                "wifi_nan.device_capability_extension.6g_regulatory",
+                FT_UINT16, BASE_HEX_DEC, VALS(device_capability_extension_6g_regulatoty_info), 0x000e, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_device_capability_extension_6g_regulatory_info_reserved,
+            {
+                "Reserved for 6GHz Regulatory Info",
+                "wifi_nan.device_capability_extension.6g_regulatory_reserved",
+                FT_UINT16, BASE_HEX_DEC, NULL, 0x00f0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_device_capability_extension_paring_setup_enabled,
+            {
+                "Paring Enable",
+                "wifi_nan.device_capability_extension.paring_enable",
+                FT_BOOLEAN, 16, NULL, 0x0100, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_device_capability_extension_npk_nik_cache_enabled,
+            {
+                "NPK/NIK Caching Enable",
+                "wifi_nan.device_capability_extension.npk_nik_caching_enable",
+                FT_BOOLEAN, 16, NULL, 0x0200, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_identity_cipher_version,
+            {
+                "Cipher Version",
+                "wifi_nan.identity_resolution.cipher_version",
+                FT_UINT8, BASE_DEC | BASE_RANGE_STRING, RVALS(nan_identity_resolution_cipher_version), 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_identity_resolution_nonce,
+            {
+                "Nonce",
+                "wifi_nan.identity_resolution.nonce",
+                FT_BYTES, SEP_DASH, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_identity_resolution_tag,
+            {
+                "Tag",
+                "wifi_nan.identity_resolution.tag",
+                FT_BYTES, SEP_DASH, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_reserved,
+            {
+                "Reserved",
+                "wifi_nan.reserved",
+                FT_BYTES, SEP_DASH, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_dialog_token,
+            {
+                "Dialog Token",
+                "wifi_nan.nan_pairing_bootstrapping.dialog_token",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_type_status,
+            {
+                "Type and Status",
+                "wifi_nan.nan_pairing_bootstrapping.type_status",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_type,
+            {
+                "Type",
+                "wifi_nan.nan_pairing_bootstrapping.type",
+                FT_UINT8, BASE_HEX_DEC, VALS(nan_pairing_bootstrapping_pairing_bootstrapping_type), 0x0f, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_status,
+            {
+                "Status",
+                "wifi_nan.nan_pairing_bootstrapping.status",
+                FT_UINT8, BASE_HEX_DEC, VALS(nan_pairing_bootstrapping_pairing_bootstrapping_status), 0xf0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_comeback_after,
+            {
+                "Comeback after (TU)",
+                "wifi_nan.nan_pairing_bootstrapping.comeback_after",
+                FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_comeback_cookie_len,
+            {
+                "Cookie Length",
+                "wifi_nan.nan_pairing_bootstrapping.cookie_len",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_comeback_cookie,
+            {
+                "Cookie",
+                "wifi_nan.nan_pairing_bootstrapping.cookie",
+                FT_BYTES, SEP_DASH, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_methods,
+            {
+                "Bootstrapping Methods",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods",
+                FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_opportunistic_bootstrapping,
+            {
+                "Opportunistic Bootstrapping",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.opportunistic",
+                FT_UINT16, BASE_HEX, NULL, 0x0001, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_pin_code_display,
+            {
+                "Pin Code (Display)",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.pin_code_display",
+                FT_UINT16, BASE_HEX, NULL, 0x0002, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_passphrase_display,
+            {
+                "Passphrase (Display)",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.passphrase_display",
+                FT_UINT16, BASE_HEX, NULL, 0x0004, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_qr_code_display,
+            {
+                "QR Code (Display)",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.qr_code_display",
+                FT_UINT16, BASE_HEX, NULL, 0x0008, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_nfc_tag,
+            {
+                "NFC Tag",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.nfc_tag",
+                FT_UINT16, BASE_HEX, NULL, 0x0010, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_keypad_pin_code_only,
+            {
+                "Pin Code Only (Keypad)",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.pin_code_keypad",
+                FT_UINT16, BASE_HEX, NULL, 0x0020, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_keypad_passphrase,
+            {
+                "Passphrase (Keypad)",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.passphrase_keypad",
+                FT_UINT16, BASE_HEX, NULL, 0x0040, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_qr_code_scan,
+            {
+                "QR Code (Scan)",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.qr_code_scan",
+                FT_UINT16, BASE_HEX, NULL, 0x0080, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_nfc_reader,
+            {
+                "NFC Reader",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.nfc_reader",
+                FT_UINT16, BASE_HEX, NULL, 0x0100, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_reserved,
+            {
+                "Reserved",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.reserved",
+                FT_UINT16, BASE_HEX, NULL, 0x3e00, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_service_managed_bootstrapping,
+            {
+                "Service Managed",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.service_managed",
+                FT_UINT16, BASE_HEX, NULL, 0x4000, NULL, HFILL
+            }
+        },
+        { &hf_nan_attr_pairing_bootstrapping_method_bootstrapping_handshakes_skipped,
+            {
+                "Bootstrapping Handshakes Skipped",
+                "wifi_nan.nan_pairing_bootstrapping.bootstrapping_methods.bootstrapping_handshakes_skipped",
+                FT_UINT16, BASE_HEX, NULL, 0x8000, NULL, HFILL
+            }
+        },
     };
 
     static gint* ett[] = {
@@ -4118,6 +4567,9 @@ proto_register_nan(void)
         &ett_security_context_identifiers,
         &ett_public_availability_sch_entries,
         &ett_ie_tree,
+        &ett_device_capability_extension,
+        &ett_nan_pairing_bootstrapping_type_status,
+        &ett_nan_pairing_bootstrapping_method
     };
 
     static ei_register_info ei[] = {
@@ -4155,10 +4607,7 @@ proto_register_nan(void)
         },
     };
 
-    proto_nan = proto_register_protocol(
-        "Wi-Fi Neighbor Awareness Networking (NAN)",
-        "Wi-Fi NAN",
-        "wifi_nan");
+    proto_nan = proto_register_protocol("Wi-Fi Neighbor Awareness Networking (NAN)", "Wi-Fi NAN", "wifi_nan");
 
     proto_register_field_array(proto_nan, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));

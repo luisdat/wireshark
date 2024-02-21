@@ -103,20 +103,20 @@ static next_tvb_list_t *h245_list;
 static next_tvb_list_t *tp_list;
 
 /* Initialize the protocol and registered fields */
-static int h225_tap = -1;
-static int proto_h225 = -1;
+static int h225_tap;
+static int proto_h225;
 
-static int hf_h221Manufacturer = -1;
-static int hf_h225_ras_req_frame = -1;
-static int hf_h225_ras_rsp_frame = -1;
-static int hf_h225_ras_dup = -1;
-static int hf_h225_ras_deltatime = -1;
-static int hf_h225_debug_dissector_try_string = -1;
+static int hf_h221Manufacturer;
+static int hf_h225_ras_req_frame;
+static int hf_h225_ras_rsp_frame;
+static int hf_h225_ras_dup;
+static int hf_h225_ras_deltatime;
+static int hf_h225_debug_dissector_try_string;
 
 #include "packet-h225-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_h225 = -1;
+static gint ett_h225;
 #include "packet-h225-ett.c"
 
 /* Preferences */
@@ -766,12 +766,12 @@ h225_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *edt _U_,
 
   if (tag_idx >= 0) {
     stat_tap_table*table = g_array_index(stat_data->stat_tap_data->tables, stat_tap_table*, 0);
-    stat_tap_table_item_type* msg_data = stat_tap_get_field_data(table, tag_idx, COUNT_COLUMN);;
+    stat_tap_table_item_type* msg_data = stat_tap_get_field_data(table, tag_idx, COUNT_COLUMN);
     msg_data->value.uint_value++;
     stat_tap_set_field_data(table, tag_idx, COUNT_COLUMN, msg_data);
 
     if (reason_idx >= 0) {
-      msg_data = stat_tap_get_field_data(table, reason_idx, COUNT_COLUMN);;
+      msg_data = stat_tap_get_field_data(table, reason_idx, COUNT_COLUMN);
       msg_data->value.uint_value++;
       stat_tap_set_field_data(table, reason_idx, COUNT_COLUMN, msg_data);
     }

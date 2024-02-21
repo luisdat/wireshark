@@ -54,7 +54,7 @@
 #include <epan/uat-int.h>
 #include <epan/secrets.h>
 
-#include <wsutil/codecs.h>
+#include <wsutil/codecs_priv.h>
 
 #include <wsutil/str_util.h>
 #include <wsutil/utf8_entities.h>
@@ -183,8 +183,6 @@ main(int argc, char *argv[])
     /* Load libwireshark settings from the current profile. */
     prefs_p = epan_load_settings();
 
-    read_filter_list(CFILTER_LIST);
-
     if (!color_filters_init(&err_msg, NULL)) {
         fprintf(stderr, "%s\n", err_msg);
         g_free(err_msg);
@@ -209,39 +207,17 @@ main(int argc, char *argv[])
     ret = sharkd_loop(argc, argv);
 clean_exit:
     col_cleanup(&cfile.cinfo);
-    free_filter_lists();
     codecs_cleanup();
     wtap_cleanup();
     free_progdirs();
     return ret;
 }
 
-static const nstime_t *
-sharkd_get_frame_ts(struct packet_provider_data *prov, guint32 frame_num)
-{
-    if (prov->ref && prov->ref->num == frame_num)
-        return &prov->ref->abs_ts;
-
-    if (prov->prev_dis && prov->prev_dis->num == frame_num)
-        return &prov->prev_dis->abs_ts;
-
-    if (prov->prev_cap && prov->prev_cap->num == frame_num)
-        return &prov->prev_cap->abs_ts;
-
-    if (prov->frames) {
-        frame_data *fd = frame_data_sequence_find(prov->frames, frame_num);
-
-        return (fd) ? &fd->abs_ts : NULL;
-    }
-
-    return NULL;
-}
-
 static epan_t *
 sharkd_epan_new(capture_file *cf)
 {
     static const struct packet_provider_funcs funcs = {
-        sharkd_get_frame_ts,
+        cap_file_provider_get_frame_ts,
         cap_file_provider_get_interface_name,
         cap_file_provider_get_interface_description,
         cap_file_provider_get_modified_block

@@ -66,394 +66,396 @@ typedef struct _attribute_common_fields {
   int value;
 } attribute_common_fields;
 
-static int proto_isakmp = -1;
+static int proto_isakmp;
 
-static int hf_isakmp_nat_keepalive = -1;
-static int hf_isakmp_nat_hash = -1;
-static int hf_isakmp_nat_original_address_ipv6 = -1;
-static int hf_isakmp_nat_original_address_ipv4 = -1;
+static int hf_isakmp_nat_keepalive;
+static int hf_isakmp_nat_hash;
+static int hf_isakmp_nat_original_address_ipv6;
+static int hf_isakmp_nat_original_address_ipv4;
 
-static int hf_isakmp_ispi         = -1;
-static int hf_isakmp_rspi         = -1;
-static int hf_isakmp_typepayload     = -1;
-static int hf_isakmp_nextpayload     = -1;
-static int hf_isakmp_criticalpayload = -1;
-static int hf_isakmp_reserved2       = -1;
-static int hf_isakmp_reserved7       = -1;
-static int hf_isakmp_reserved        = -1;
-static int hf_isakmp_datapayload     = -1;
-static int hf_isakmp_extradata       = -1;
-static int hf_isakmp_version         = -1;
-static int hf_isakmp_mjver           = -1;
-static int hf_isakmp_mnver           = -1;
-static int hf_isakmp_exchangetype_v1 = -1;
-static int hf_isakmp_exchangetype_v2 = -1;
-static int hf_isakmp_flags           = -1;
-static int hf_isakmp_flag_e          = -1;
-static int hf_isakmp_flag_c          = -1;
-static int hf_isakmp_flag_a          = -1;
-static int hf_isakmp_flag_i          = -1;
-static int hf_isakmp_flag_v          = -1;
-static int hf_isakmp_flag_r          = -1;
-static int hf_isakmp_messageid       = -1;
-static int hf_isakmp_length          = -1;
-static int hf_isakmp_payloadlen      = -1;
-static int hf_isakmp_sa_doi          = -1;
-static int hf_isakmp_sa_situation    = -1;
-static int hf_isakmp_sa_attribute_next_payload     = -1;
-static int hf_isakmp_sa_situation_identity_only    = -1;
-static int hf_isakmp_sa_situation_secrecy          = -1;
-static int hf_isakmp_sa_situation_integrity        = -1;
-static int hf_isakmp_prop_protoid_v1 = -1;
-static int hf_isakmp_prop_protoid_v2 = -1;
-static int hf_isakmp_prop_number     = -1;
-static int hf_isakmp_prop_transforms = -1;
-static int hf_isakmp_spisize         = -1;
-static int hf_isakmp_spi             = -1;
-static int hf_isakmp_trans_number    = -1;
-static int hf_isakmp_trans_id        = -1;
-static int hf_isakmp_id_type_v1      = -1;
-static int hf_isakmp_id_type_v2      = -1;
-static int hf_isakmp_id_protoid      = -1;
-static int hf_isakmp_id_port         = -1;
-static int hf_isakmp_id_data         = -1;
-static int hf_isakmp_id_data_ipv4_addr = -1;
-static int hf_isakmp_id_data_fqdn    = -1;
-static int hf_isakmp_id_data_user_fqdn = -1;
-static int hf_isakmp_id_data_ipv4_subnet = -1;
-static int hf_isakmp_id_data_ipv4_range_start = -1;
-static int hf_isakmp_id_data_ipv4_range_end = -1;
-static int hf_isakmp_id_data_ipv6_addr = -1;
-static int hf_isakmp_id_data_ipv6_subnet = -1;
-static int hf_isakmp_id_data_ipv6_range_start = -1;
-static int hf_isakmp_id_data_ipv6_range_end = -1;
-static int hf_isakmp_id_data_key_id = -1;
-static int hf_isakmp_id_data_cert = -1;
-static int hf_isakmp_cert_encoding_v1 = -1;
-static int hf_isakmp_cert_encoding_v2 = -1;
-static int hf_isakmp_cert_data = -1;
-static int hf_isakmp_cert_x509_hash = -1;
-static int hf_isakmp_cert_x509_url = -1;
-static int hf_isakmp_certreq_type_v1 = -1;
-static int hf_isakmp_certreq_type_v2 = -1;
-static int hf_isakmp_certreq_authority_v1  = -1;
-static int hf_isakmp_certreq_authority_v2 = -1;
-static int hf_isakmp_certreq_authority_sig = -1;
-static int hf_isakmp_auth_meth = -1;
-static int hf_isakmp_auth_data = -1;
-static int hf_isakmp_auth_digital_sig_asn1_len = -1;
-static int hf_isakmp_auth_digital_sig_asn1_data = -1;
-static int hf_isakmp_auth_digital_sig_value = -1;
-static int hf_isakmp_notify_doi = -1;
-static int hf_isakmp_notify_protoid_v1 = -1;
-static int hf_isakmp_notify_protoid_v2 = -1;
-static int hf_isakmp_notify_msgtype_v1 = -1;
-static int hf_isakmp_notify_msgtype_v2 = -1;
-static int hf_isakmp_notify_data = -1;
-static int hf_isakmp_notify_data_dpd_are_you_there = -1;
-static int hf_isakmp_notify_data_dpd_are_you_there_ack = -1;
-static int hf_isakmp_notify_data_unity_load_balance = -1;
-static int hf_isakmp_notify_data_fortinet_network_overlay_id = -1;
-static int hf_isakmp_notify_data_accepted_dh_group = -1;
-static int hf_isakmp_notify_data_ipcomp_cpi = -1;
-static int hf_isakmp_notify_data_ipcomp_transform_id = -1;
-static int hf_isakmp_notify_data_auth_lifetime = -1;
-static int hf_isakmp_notify_data_redirect_gw_ident_type = -1;
-static int hf_isakmp_notify_data_redirect_gw_ident_len = -1;
-static int hf_isakmp_notify_data_redirect_new_resp_gw_ident_ipv4 = -1;
-static int hf_isakmp_notify_data_redirect_new_resp_gw_ident_ipv6 = -1;
-static int hf_isakmp_notify_data_redirect_new_resp_gw_ident_fqdn = -1;
-static int hf_isakmp_notify_data_redirect_new_resp_gw_ident = -1;
-static int hf_isakmp_notify_data_redirect_nonce_data = -1;
-static int hf_isakmp_notify_data_redirect_org_resp_gw_ident_ipv4 = -1;
-static int hf_isakmp_notify_data_redirect_org_resp_gw_ident_ipv6 = -1;
-static int hf_isakmp_notify_data_redirect_org_resp_gw_ident = -1;
-static int hf_isakmp_notify_data_ticket_lifetime = -1;
-static int hf_isakmp_notify_data_ticket_data = -1;
+static int hf_isakmp_ispi;
+static int hf_isakmp_rspi;
+static int hf_isakmp_typepayload;
+static int hf_isakmp_nextpayload;
+static int hf_isakmp_criticalpayload;
+static int hf_isakmp_reserved2;
+static int hf_isakmp_reserved7;
+static int hf_isakmp_reserved;
+static int hf_isakmp_datapayload;
+static int hf_isakmp_extradata;
+static int hf_isakmp_version;
+static int hf_isakmp_mjver;
+static int hf_isakmp_mnver;
+static int hf_isakmp_exchangetype_v1;
+static int hf_isakmp_exchangetype_v2;
+static int hf_isakmp_flags;
+static int hf_isakmp_flag_e;
+static int hf_isakmp_flag_c;
+static int hf_isakmp_flag_a;
+static int hf_isakmp_flag_i;
+static int hf_isakmp_flag_v;
+static int hf_isakmp_flag_r;
+static int hf_isakmp_messageid;
+static int hf_isakmp_length;
+static int hf_isakmp_payloadlen;
+static int hf_isakmp_sa_doi;
+static int hf_isakmp_sa_situation;
+static int hf_isakmp_sa_attribute_next_payload;
+static int hf_isakmp_sa_situation_identity_only;
+static int hf_isakmp_sa_situation_secrecy;
+static int hf_isakmp_sa_situation_integrity;
+static int hf_isakmp_prop_protoid_v1;
+static int hf_isakmp_prop_protoid_v2;
+static int hf_isakmp_prop_number;
+static int hf_isakmp_prop_transforms;
+static int hf_isakmp_spisize;
+static int hf_isakmp_spi;
+static int hf_isakmp_trans_number;
+static int hf_isakmp_trans_id;
+static int hf_isakmp_id_type_v1;
+static int hf_isakmp_id_type_v2;
+static int hf_isakmp_id_protoid;
+static int hf_isakmp_id_port;
+static int hf_isakmp_id_data;
+static int hf_isakmp_id_data_ipv4_addr;
+static int hf_isakmp_id_data_fqdn;
+static int hf_isakmp_id_data_user_fqdn;
+static int hf_isakmp_id_data_ipv4_subnet;
+static int hf_isakmp_id_data_ipv4_range_start;
+static int hf_isakmp_id_data_ipv4_range_end;
+static int hf_isakmp_id_data_ipv6_addr;
+static int hf_isakmp_id_data_ipv6_subnet;
+static int hf_isakmp_id_data_ipv6_range_start;
+static int hf_isakmp_id_data_ipv6_range_end;
+static int hf_isakmp_id_data_key_id;
+static int hf_isakmp_id_data_cert;
+static int hf_isakmp_cert_encoding_v1;
+static int hf_isakmp_cert_encoding_v2;
+static int hf_isakmp_cert_data;
+static int hf_isakmp_cert_x509_hash;
+static int hf_isakmp_cert_x509_url;
+static int hf_isakmp_certreq_type_v1;
+static int hf_isakmp_certreq_type_v2;
+static int hf_isakmp_certreq_authority_v1;
+static int hf_isakmp_certreq_authority_v2;
+static int hf_isakmp_certreq_authority_sig;
+static int hf_isakmp_auth_meth;
+static int hf_isakmp_auth_data;
+static int hf_isakmp_auth_digital_sig_asn1_len;
+static int hf_isakmp_auth_digital_sig_asn1_data;
+static int hf_isakmp_auth_digital_sig_value;
+static int hf_isakmp_notify_doi;
+static int hf_isakmp_notify_protoid_v1;
+static int hf_isakmp_notify_protoid_v2;
+static int hf_isakmp_notify_msgtype_v1;
+static int hf_isakmp_notify_msgtype_v2;
+static int hf_isakmp_notify_data;
+static int hf_isakmp_notify_data_dpd_are_you_there;
+static int hf_isakmp_notify_data_dpd_are_you_there_ack;
+static int hf_isakmp_notify_data_unity_load_balance;
+static int hf_isakmp_notify_data_fortinet_network_overlay_id;
+static int hf_isakmp_notify_data_accepted_dh_group;
+static int hf_isakmp_notify_data_ipcomp_cpi;
+static int hf_isakmp_notify_data_ipcomp_transform_id;
+static int hf_isakmp_notify_data_auth_lifetime;
+static int hf_isakmp_notify_data_redirect_gw_ident_type;
+static int hf_isakmp_notify_data_redirect_gw_ident_len;
+static int hf_isakmp_notify_data_redirect_new_resp_gw_ident_ipv4;
+static int hf_isakmp_notify_data_redirect_new_resp_gw_ident_ipv6;
+static int hf_isakmp_notify_data_redirect_new_resp_gw_ident_fqdn;
+static int hf_isakmp_notify_data_redirect_new_resp_gw_ident;
+static int hf_isakmp_notify_data_redirect_nonce_data;
+static int hf_isakmp_notify_data_redirect_org_resp_gw_ident_ipv4;
+static int hf_isakmp_notify_data_redirect_org_resp_gw_ident_ipv6;
+static int hf_isakmp_notify_data_redirect_org_resp_gw_ident;
+static int hf_isakmp_notify_data_ticket_lifetime;
+static int hf_isakmp_notify_data_ticket_data;
 
-static attribute_common_fields hf_isakmp_notify_data_rohc_attr = { -1, -1, -1, -1, -1 };
-static int hf_isakmp_notify_data_rohc_attr_max_cid = -1;
-static int hf_isakmp_notify_data_rohc_attr_profile = -1;
-static int hf_isakmp_notify_data_rohc_attr_integ = -1;
-static int hf_isakmp_notify_data_rohc_attr_icv_len = -1;
-static int hf_isakmp_notify_data_rohc_attr_mrru = -1;
-static int hf_isakmp_notify_data_qcd_token_secret_data = -1;
-static int hf_isakmp_notify_data_ha_nonce_data = -1;
-static int hf_isakmp_notify_data_ha_expected_send_req_msg_id = -1;
-static int hf_isakmp_notify_data_ha_expected_recv_req_msg_id = -1;
-static int hf_isakmp_notify_data_ha_incoming_ipsec_sa_delta_value = -1;
-static int hf_isakmp_notify_data_secure_password_methods = -1;
-static int hf_isakmp_notify_data_signature_hash_algorithms = -1;
-static int hf_isakmp_delete_doi = -1;
-static int hf_isakmp_delete_protoid_v1 = -1;
-static int hf_isakmp_delete_protoid_v2 = -1;
-static int hf_isakmp_delete_spi = -1;
-static int hf_isakmp_vid_bytes = -1;
-static int hf_isakmp_vid_string = -1;
-static int hf_isakmp_vid_cp_product = -1;
-static int hf_isakmp_vid_cp_version = -1;
-static int hf_isakmp_vid_cp_timestamp = -1;
-static int hf_isakmp_vid_cp_reserved = -1;
-static int hf_isakmp_vid_cp_features = -1;
-static int hf_isakmp_vid_cisco_unity_major = -1;
-static int hf_isakmp_vid_cisco_unity_minor = -1;
-static int hf_isakmp_vid_ms_nt5_isakmpoakley = -1;
-static int hf_isakmp_vid_aruba_via_auth_profile = -1;
-static int hf_isakmp_vid_fortinet_fortigate_release = -1;
-static int hf_isakmp_vid_fortinet_fortigate_build = -1;
-static int hf_isakmp_ts_number_of_ts = -1;
-static int hf_isakmp_ts_type = -1;
-static int hf_isakmp_ts_protoid = -1;
-static int hf_isakmp_ts_selector_length = -1;
-static int hf_isakmp_ts_start_port = -1;
-static int hf_isakmp_ts_end_port = -1;
-static int hf_isakmp_ts_start_addr_ipv4 = -1;
-static int hf_isakmp_ts_end_addr_ipv4 = -1;
-static int hf_isakmp_ts_start_addr_ipv6 = -1;
-static int hf_isakmp_ts_end_addr_ipv6 = -1;
-static int hf_isakmp_ts_start_addr_fc = -1;
-static int hf_isakmp_ts_end_addr_fc = -1;
-static int hf_isakmp_ts_start_r_ctl = -1;
-static int hf_isakmp_ts_end_r_ctl = -1;
-static int hf_isakmp_ts_start_type = -1;
-static int hf_isakmp_ts_end_type = -1;
-static int hf_isakmp_ts_data = -1;
-static int hf_isakmp_num_spis = -1;
-static int hf_isakmp_hash = -1;
-static int hf_isakmp_sig = -1;
-static int hf_isakmp_nonce = -1;
+static attribute_common_fields hf_isakmp_notify_data_rohc_attr;
+static int hf_isakmp_notify_data_rohc_attr_max_cid;
+static int hf_isakmp_notify_data_rohc_attr_profile;
+static int hf_isakmp_notify_data_rohc_attr_integ;
+static int hf_isakmp_notify_data_rohc_attr_icv_len;
+static int hf_isakmp_notify_data_rohc_attr_mrru;
+static int hf_isakmp_notify_data_qcd_token_secret_data;
+static int hf_isakmp_notify_data_ha_nonce_data;
+static int hf_isakmp_notify_data_ha_expected_send_req_msg_id;
+static int hf_isakmp_notify_data_ha_expected_recv_req_msg_id;
+static int hf_isakmp_notify_data_ha_incoming_ipsec_sa_delta_value;
+static int hf_isakmp_notify_data_secure_password_methods;
+static int hf_isakmp_notify_data_signature_hash_algorithms;
+static int hf_isakmp_delete_doi;
+static int hf_isakmp_delete_protoid_v1;
+static int hf_isakmp_delete_protoid_v2;
+static int hf_isakmp_delete_spi;
+static int hf_isakmp_vid_bytes;
+static int hf_isakmp_vid_string;
+static int hf_isakmp_vid_cp_product;
+static int hf_isakmp_vid_cp_version;
+static int hf_isakmp_vid_cp_timestamp;
+static int hf_isakmp_vid_cp_reserved;
+static int hf_isakmp_vid_cp_features;
+static int hf_isakmp_vid_cisco_unity_major;
+static int hf_isakmp_vid_cisco_unity_minor;
+static int hf_isakmp_vid_ms_nt5_isakmpoakley;
+static int hf_isakmp_vid_aruba_via_auth_profile;
+static int hf_isakmp_vid_fortinet_fortigate_release;
+static int hf_isakmp_vid_fortinet_fortigate_build;
+static int hf_isakmp_ts_number_of_ts;
+static int hf_isakmp_ts_type;
+static int hf_isakmp_ts_protoid;
+static int hf_isakmp_ts_selector_length;
+static int hf_isakmp_ts_start_port;
+static int hf_isakmp_ts_end_port;
+static int hf_isakmp_ts_start_addr_ipv4;
+static int hf_isakmp_ts_end_addr_ipv4;
+static int hf_isakmp_ts_start_addr_ipv6;
+static int hf_isakmp_ts_end_addr_ipv6;
+static int hf_isakmp_ts_start_addr_fc;
+static int hf_isakmp_ts_end_addr_fc;
+static int hf_isakmp_ts_start_r_ctl;
+static int hf_isakmp_ts_end_r_ctl;
+static int hf_isakmp_ts_start_type;
+static int hf_isakmp_ts_end_type;
+static int hf_isakmp_ts_data;
+static int hf_isakmp_num_spis;
+static int hf_isakmp_hash;
+static int hf_isakmp_sig;
+static int hf_isakmp_nonce;
+static int hf_isakmp_symmetric_key;
 
-static int hf_isakmp_notify_data_3gpp_backoff_timer_len = -1;
+static int hf_isakmp_notify_data_3gpp_backoff_timer_len;
 
-static int hf_isakmp_notify_data_3gpp_device_identity_len = -1;
-static int hf_isakmp_notify_data_3gpp_device_identity_type = -1;
-static int hf_isakmp_notify_data_3gpp_device_identity_imei = -1;
-static int hf_isakmp_notify_data_3gpp_device_identity_imeisv = -1;
+static int hf_isakmp_notify_data_3gpp_device_identity_len;
+static int hf_isakmp_notify_data_3gpp_device_identity_type;
+static int hf_isakmp_notify_data_3gpp_device_identity_imei;
+static int hf_isakmp_notify_data_3gpp_device_identity_imeisv;
 
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_len = -1;
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_spare = -1;
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_element_len = -1;
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flags = -1;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_len;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_spare;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_element_len;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flags;
 
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b1_police = -1;
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b2_ambulance = -1;
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b3_fire_brigade = -1;
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b4_marine_guard = -1;
-static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b5_mountain_rescue = -1;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b1_police;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b2_ambulance;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b3_fire_brigade;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b4_marine_guard;
+static int hf_isakmp_notify_data_3gpp_emergency_call_numbers_flag_b5_mountain_rescue;
 
-static int hf_iskamp_notify_data_3gpp_emergency_call_number = -1;
+static int hf_iskamp_notify_data_3gpp_emergency_call_number;
 
-static attribute_common_fields hf_isakmp_tek_key_attr = { -1, -1, -1, -1, -1 };
+static attribute_common_fields hf_isakmp_tek_key_attr;
 
-static attribute_common_fields hf_isakmp_ipsec_attr = { -1, -1, -1, -1, -1 };
-static int hf_isakmp_ipsec_attr_life_type = -1;
-static int hf_isakmp_ipsec_attr_life_duration_uint32 = -1;
-static int hf_isakmp_ipsec_attr_life_duration_uint64 = -1;
-static int hf_isakmp_ipsec_attr_life_duration_bytes = -1;
-static int hf_isakmp_ipsec_attr_group_description = -1;
-static int hf_isakmp_ipsec_attr_encap_mode = -1;
-static int hf_isakmp_ipsec_attr_auth_algorithm = -1;
-static int hf_isakmp_ipsec_attr_key_length = -1;
-static int hf_isakmp_ipsec_attr_key_rounds = -1;
-static int hf_isakmp_ipsec_attr_cmpr_dict_size = -1;
-static int hf_isakmp_ipsec_attr_cmpr_algorithm = -1;
-static int hf_isakmp_ipsec_attr_ecn_tunnel = -1;
-static int hf_isakmp_ipsec_attr_ext_seq_nbr = -1;
-static int hf_isakmp_ipsec_attr_auth_key_length = -1;
-static int hf_isakmp_ipsec_attr_sig_enco_algorithm = -1;
-static int hf_isakmp_ipsec_attr_addr_preservation = -1;
-static int hf_isakmp_ipsec_attr_sa_direction = -1;
+static attribute_common_fields hf_isakmp_ipsec_attr;
+static int hf_isakmp_ipsec_attr_life_type;
+static int hf_isakmp_ipsec_attr_life_duration_uint32;
+static int hf_isakmp_ipsec_attr_life_duration_uint64;
+static int hf_isakmp_ipsec_attr_life_duration_bytes;
+static int hf_isakmp_ipsec_attr_group_description;
+static int hf_isakmp_ipsec_attr_encap_mode;
+static int hf_isakmp_ipsec_attr_auth_algorithm;
+static int hf_isakmp_ipsec_attr_key_length;
+static int hf_isakmp_ipsec_attr_key_rounds;
+static int hf_isakmp_ipsec_attr_cmpr_dict_size;
+static int hf_isakmp_ipsec_attr_cmpr_algorithm;
+static int hf_isakmp_ipsec_attr_ecn_tunnel;
+static int hf_isakmp_ipsec_attr_ext_seq_nbr;
+static int hf_isakmp_ipsec_attr_auth_key_length;
+static int hf_isakmp_ipsec_attr_sig_enco_algorithm;
+static int hf_isakmp_ipsec_attr_addr_preservation;
+static int hf_isakmp_ipsec_attr_sa_direction;
 
-static attribute_common_fields hf_isakmp_resp_lifetime_ipsec_attr = { -1, -1, -1, -1, -1 };
-static int hf_isakmp_resp_lifetime_ipsec_attr_life_type = -1;
-static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint32 = -1;
-static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint64 = -1;
-static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_bytes = -1;
+static attribute_common_fields hf_isakmp_resp_lifetime_ipsec_attr;
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_type;
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint32;
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_uint64;
+static int hf_isakmp_resp_lifetime_ipsec_attr_life_duration_bytes;
 
-static attribute_common_fields hf_isakmp_ike_attr = { -1, -1, -1, -1, -1 };
-static int hf_isakmp_ike_attr_encryption_algorithm = -1;
-static int hf_isakmp_ike_attr_hash_algorithm = -1;
-static int hf_isakmp_ike_attr_authentication_method = -1;
-static int hf_isakmp_ike_attr_group_description = -1;
-static int hf_isakmp_ike_attr_group_type = -1;
-static int hf_isakmp_ike_attr_group_prime = -1;
-static int hf_isakmp_ike_attr_group_generator_one = -1;
-static int hf_isakmp_ike_attr_group_generator_two = -1;
-static int hf_isakmp_ike_attr_group_curve_a = -1;
-static int hf_isakmp_ike_attr_group_curve_b = -1;
-static int hf_isakmp_ike_attr_life_type = -1;
-static int hf_isakmp_ike_attr_life_duration_uint32 = -1;
-static int hf_isakmp_ike_attr_life_duration_uint64 = -1;
-static int hf_isakmp_ike_attr_life_duration_bytes = -1;
-static int hf_isakmp_ike_attr_prf = -1;
-static int hf_isakmp_ike_attr_key_length = -1;
-static int hf_isakmp_ike_attr_field_size = -1;
-static int hf_isakmp_ike_attr_group_order = -1;
-static int hf_isakmp_ike_attr_block_size = -1;
-static int hf_isakmp_ike_attr_asymmetric_cryptographic_algorithm_type = -1;
+static attribute_common_fields hf_isakmp_ike_attr;
+static int hf_isakmp_ike_attr_encryption_algorithm;
+static int hf_isakmp_ike_attr_hash_algorithm;
+static int hf_isakmp_ike_attr_authentication_method;
+static int hf_isakmp_ike_attr_authentication_method_china;
+static int hf_isakmp_ike_attr_group_description;
+static int hf_isakmp_ike_attr_group_type;
+static int hf_isakmp_ike_attr_group_prime;
+static int hf_isakmp_ike_attr_group_generator_one;
+static int hf_isakmp_ike_attr_group_generator_two;
+static int hf_isakmp_ike_attr_group_curve_a;
+static int hf_isakmp_ike_attr_group_curve_b;
+static int hf_isakmp_ike_attr_life_type;
+static int hf_isakmp_ike_attr_life_duration_uint32;
+static int hf_isakmp_ike_attr_life_duration_uint64;
+static int hf_isakmp_ike_attr_life_duration_bytes;
+static int hf_isakmp_ike_attr_prf;
+static int hf_isakmp_ike_attr_key_length;
+static int hf_isakmp_ike_attr_field_size;
+static int hf_isakmp_ike_attr_group_order;
+static int hf_isakmp_ike_attr_block_size;
+static int hf_isakmp_ike_attr_asymmetric_cryptographic_algorithm_type;
 
-static attribute_common_fields hf_isakmp_resp_lifetime_ike_attr = { -1, -1, -1, -1, -1 };
-static int hf_isakmp_resp_lifetime_ike_attr_life_type = -1;
-static int hf_isakmp_resp_lifetime_ike_attr_life_duration_uint32 = -1;
-static int hf_isakmp_resp_lifetime_ike_attr_life_duration_uint64 = -1;
-static int hf_isakmp_resp_lifetime_ike_attr_life_duration_bytes = -1;
+static attribute_common_fields hf_isakmp_resp_lifetime_ike_attr;
+static int hf_isakmp_resp_lifetime_ike_attr_life_type;
+static int hf_isakmp_resp_lifetime_ike_attr_life_duration_uint32;
+static int hf_isakmp_resp_lifetime_ike_attr_life_duration_uint64;
+static int hf_isakmp_resp_lifetime_ike_attr_life_duration_bytes;
 
-static int hf_isakmp_trans_type = -1;
-static int hf_isakmp_trans_encr = -1;
-static int hf_isakmp_trans_prf = -1;
-static int hf_isakmp_trans_integ = -1;
-static int hf_isakmp_trans_dh = -1;
-static int hf_isakmp_trans_esn = -1;
-static int hf_isakmp_trans_id_v2 = -1;
+static int hf_isakmp_trans_type;
+static int hf_isakmp_trans_encr;
+static int hf_isakmp_trans_prf;
+static int hf_isakmp_trans_integ;
+static int hf_isakmp_trans_dh;
+static int hf_isakmp_trans_esn;
+static int hf_isakmp_trans_id_v2;
 
-static attribute_common_fields hf_isakmp_ike2_attr = { -1, -1, -1, -1, -1 };
-static int hf_isakmp_ike2_attr_key_length = -1;
+static attribute_common_fields hf_isakmp_ike2_attr;
+static int hf_isakmp_ike2_attr_key_length;
 
-static int hf_isakmp_fragments = -1;
-static int hf_isakmp_fragment = -1;
-static int hf_isakmp_fragment_overlap = -1;
-static int hf_isakmp_fragment_overlap_conflicts = -1;
-static int hf_isakmp_fragment_multiple_tails = -1;
-static int hf_isakmp_fragment_too_long_fragment = -1;
-static int hf_isakmp_fragment_error = -1;
-static int hf_isakmp_fragment_count = -1;
-static int hf_isakmp_reassembled_in = -1;
-static int hf_isakmp_reassembled_length = -1;
+static int hf_isakmp_fragments;
+static int hf_isakmp_fragment;
+static int hf_isakmp_fragment_overlap;
+static int hf_isakmp_fragment_overlap_conflicts;
+static int hf_isakmp_fragment_multiple_tails;
+static int hf_isakmp_fragment_too_long_fragment;
+static int hf_isakmp_fragment_error;
+static int hf_isakmp_fragment_count;
+static int hf_isakmp_reassembled_in;
+static int hf_isakmp_reassembled_length;
 
-static int hf_isakmp_ike2_fragment_number = -1;
-static int hf_isakmp_ike2_total_fragments = -1;
+static int hf_isakmp_ike2_fragment_number;
+static int hf_isakmp_ike2_total_fragments;
 
-static int hf_isakmp_cisco_frag_packetid = -1;
-static int hf_isakmp_cisco_frag_seq = -1;
-static int hf_isakmp_cisco_frag_last = -1;
+static int hf_isakmp_cisco_frag_packetid;
+static int hf_isakmp_cisco_frag_seq;
+static int hf_isakmp_cisco_frag_last;
 
-static int hf_isakmp_key_exch_dh_group = -1;
-static int hf_isakmp_key_exch_data = -1;
-static int hf_isakmp_eap_data = -1;
+static int hf_isakmp_key_exch_dh_group;
+static int hf_isakmp_key_exch_data;
+static int hf_isakmp_eap_data;
 
-static int hf_isakmp_gspm_data = -1;
+static int hf_isakmp_gspm_data;
 
-static int hf_isakmp_cfg_type_v1 = -1;
-static int hf_isakmp_cfg_identifier = -1;
-static int hf_isakmp_cfg_type_v2 = -1;
+static int hf_isakmp_cfg_type_v1;
+static int hf_isakmp_cfg_identifier;
+static int hf_isakmp_cfg_type_v2;
 
-static attribute_common_fields hf_isakmp_cfg_attr = { -1, -1, -1, -1, -1 };
-static int hf_isakmp_cfg_attr_type_v1 = -1;
-static int hf_isakmp_cfg_attr_type_v2 = -1;
+static attribute_common_fields hf_isakmp_cfg_attr;
+static int hf_isakmp_cfg_attr_type_v1;
+static int hf_isakmp_cfg_attr_type_v2;
 
-static int hf_isakmp_cfg_attr_internal_ip4_address = -1;
-static int hf_isakmp_cfg_attr_internal_ip4_netmask = -1;
-static int hf_isakmp_cfg_attr_internal_ip4_dns = -1;
-static int hf_isakmp_cfg_attr_internal_ip4_nbns = -1;
-static int hf_isakmp_cfg_attr_internal_address_expiry = -1;
-static int hf_isakmp_cfg_attr_internal_ip4_dhcp = -1;
-static int hf_isakmp_cfg_attr_application_version = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_address_ip = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_address_prefix = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_netmask = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_dns = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_nbns = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_dhcp = -1;
-static int hf_isakmp_cfg_attr_internal_ip4_subnet_ip = -1;
-static int hf_isakmp_cfg_attr_internal_ip4_subnet_netmask = -1;
-static int hf_isakmp_cfg_attr_supported_attributes = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_subnet_ip = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_subnet_prefix = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_link_interface = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_link_id = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_prefix_ip = -1;
-static int hf_isakmp_cfg_attr_internal_ip6_prefix_length = -1;
-static int hf_isakmp_cfg_attr_p_cscf_ip4_address = -1;
-static int hf_isakmp_cfg_attr_p_cscf_ip6_address = -1;
-static int hf_isakmp_cfg_attr_xauth_type = -1;
-static int hf_isakmp_cfg_attr_xauth_user_name = -1;
-static int hf_isakmp_cfg_attr_xauth_user_password = -1;
-static int hf_isakmp_cfg_attr_xauth_passcode = -1;
-static int hf_isakmp_cfg_attr_xauth_message = -1;
-static int hf_isakmp_cfg_attr_xauth_challenge = -1;
-static int hf_isakmp_cfg_attr_xauth_domain = -1;
-static int hf_isakmp_cfg_attr_xauth_status = -1;
-static int hf_isakmp_cfg_attr_xauth_next_pin = -1;
-static int hf_isakmp_cfg_attr_xauth_answer = -1;
-static int hf_isakmp_cfg_attr_unity_banner = -1;
-static int hf_isakmp_cfg_attr_unity_def_domain = -1;
+static int hf_isakmp_cfg_attr_internal_ip4_address;
+static int hf_isakmp_cfg_attr_internal_ip4_netmask;
+static int hf_isakmp_cfg_attr_internal_ip4_dns;
+static int hf_isakmp_cfg_attr_internal_ip4_nbns;
+static int hf_isakmp_cfg_attr_internal_address_expiry;
+static int hf_isakmp_cfg_attr_internal_ip4_dhcp;
+static int hf_isakmp_cfg_attr_application_version;
+static int hf_isakmp_cfg_attr_internal_ip6_address_ip;
+static int hf_isakmp_cfg_attr_internal_ip6_address_prefix;
+static int hf_isakmp_cfg_attr_internal_ip6_netmask;
+static int hf_isakmp_cfg_attr_internal_ip6_dns;
+static int hf_isakmp_cfg_attr_internal_ip6_nbns;
+static int hf_isakmp_cfg_attr_internal_ip6_dhcp;
+static int hf_isakmp_cfg_attr_internal_ip4_subnet_ip;
+static int hf_isakmp_cfg_attr_internal_ip4_subnet_netmask;
+static int hf_isakmp_cfg_attr_supported_attributes;
+static int hf_isakmp_cfg_attr_internal_ip6_subnet_ip;
+static int hf_isakmp_cfg_attr_internal_ip6_subnet_prefix;
+static int hf_isakmp_cfg_attr_internal_ip6_link_interface;
+static int hf_isakmp_cfg_attr_internal_ip6_link_id;
+static int hf_isakmp_cfg_attr_internal_ip6_prefix_ip;
+static int hf_isakmp_cfg_attr_internal_ip6_prefix_length;
+static int hf_isakmp_cfg_attr_p_cscf_ip4_address;
+static int hf_isakmp_cfg_attr_p_cscf_ip6_address;
+static int hf_isakmp_cfg_attr_xauth_type;
+static int hf_isakmp_cfg_attr_xauth_user_name;
+static int hf_isakmp_cfg_attr_xauth_user_password;
+static int hf_isakmp_cfg_attr_xauth_passcode;
+static int hf_isakmp_cfg_attr_xauth_message;
+static int hf_isakmp_cfg_attr_xauth_challenge;
+static int hf_isakmp_cfg_attr_xauth_domain;
+static int hf_isakmp_cfg_attr_xauth_status;
+static int hf_isakmp_cfg_attr_xauth_next_pin;
+static int hf_isakmp_cfg_attr_xauth_answer;
+static int hf_isakmp_cfg_attr_unity_banner;
+static int hf_isakmp_cfg_attr_unity_def_domain;
 
-static int hf_isakmp_sak_next_payload = -1;
-static int hf_isakmp_sak_reserved = -1;
-static int hf_isakmp_sak_payload_len = -1;
-static int hf_isakmp_sak_protocol = -1;
-static int hf_isakmp_sak_src_id_type = -1;
-static int hf_isakmp_sak_src_id_port = -1;
-static int hf_isakmp_sak_src_id_length = -1;
-static int hf_isakmp_sak_src_id_data = -1;
-static int hf_isakmp_sak_dst_id_type = -1;
-static int hf_isakmp_sak_dst_id_port = -1;
-static int hf_isakmp_sak_dst_id_length = -1;
-static int hf_isakmp_sak_dst_id_data = -1;
-static int hf_isakmp_sak_spi = -1;
+static int hf_isakmp_sak_next_payload;
+static int hf_isakmp_sak_reserved;
+static int hf_isakmp_sak_payload_len;
+static int hf_isakmp_sak_protocol;
+static int hf_isakmp_sak_src_id_type;
+static int hf_isakmp_sak_src_id_port;
+static int hf_isakmp_sak_src_id_length;
+static int hf_isakmp_sak_src_id_data;
+static int hf_isakmp_sak_dst_id_type;
+static int hf_isakmp_sak_dst_id_port;
+static int hf_isakmp_sak_dst_id_length;
+static int hf_isakmp_sak_dst_id_data;
+static int hf_isakmp_sak_spi;
 
-static int hf_isakmp_sat_next_payload = -1;
-static int hf_isakmp_sat_reserved = -1;
-static int hf_isakmp_sat_payload_len = -1;
-static int hf_isakmp_sat_protocol_id = -1;
-static int hf_isakmp_sat_protocol = -1;
-static int hf_isakmp_sat_src_id_type = -1;
-static int hf_isakmp_sat_src_id_port = -1;
-static int hf_isakmp_sat_src_id_length = -1;
-static int hf_isakmp_sat_src_id_data = -1;
-static int hf_isakmp_sat_dst_id_type = -1;
-static int hf_isakmp_sat_dst_id_port = -1;
-static int hf_isakmp_sat_dst_id_length = -1;
-static int hf_isakmp_sat_dst_id_data = -1;
-static int hf_isakmp_sat_transform_id = -1;
-static int hf_isakmp_sat_spi = -1;
-static int hf_isakmp_sat_payload = -1;
+static int hf_isakmp_sat_next_payload;
+static int hf_isakmp_sat_reserved;
+static int hf_isakmp_sat_payload_len;
+static int hf_isakmp_sat_protocol_id;
+static int hf_isakmp_sat_protocol;
+static int hf_isakmp_sat_src_id_type;
+static int hf_isakmp_sat_src_id_port;
+static int hf_isakmp_sat_src_id_length;
+static int hf_isakmp_sat_src_id_data;
+static int hf_isakmp_sat_dst_id_type;
+static int hf_isakmp_sat_dst_id_port;
+static int hf_isakmp_sat_dst_id_length;
+static int hf_isakmp_sat_dst_id_data;
+static int hf_isakmp_sat_transform_id;
+static int hf_isakmp_sat_spi;
+static int hf_isakmp_sat_payload;
 
-static int hf_isakmp_kd_num_key_pkt = -1;
-static int hf_isakmp_kd_payload = -1;
-static int hf_isakmp_kdp_type = -1;
-static int hf_isakmp_kdp_length = -1;
-static int hf_isakmp_kdp_spi_size = -1;
-static int hf_isakmp_kdp_spi = -1;
+static int hf_isakmp_kd_num_key_pkt;
+static int hf_isakmp_kd_payload;
+static int hf_isakmp_kdp_type;
+static int hf_isakmp_kdp_length;
+static int hf_isakmp_kdp_spi_size;
+static int hf_isakmp_kdp_spi;
 
-static int hf_isakmp_seq_seq = -1;
+static int hf_isakmp_seq_seq;
 
-static int hf_isakmp_enc_decrypted_data = -1;
-static int hf_isakmp_enc_contained_data = -1;
-static int hf_isakmp_enc_pad_length= -1;
-static int hf_isakmp_enc_padding = -1;
-static int hf_isakmp_enc_data = -1;
-static int hf_isakmp_enc_iv = -1;
-static int hf_isakmp_enc_icd = -1;
+static int hf_isakmp_enc_decrypted_data;
+static int hf_isakmp_enc_contained_data;
+static int hf_isakmp_enc_pad_length;
+static int hf_isakmp_enc_padding;
+static int hf_isakmp_enc_data;
+static int hf_isakmp_enc_iv;
+static int hf_isakmp_enc_icd;
 
-static gint ett_isakmp = -1;
-static gint ett_isakmp_version = -1;
-static gint ett_isakmp_flags = -1;
-static gint ett_isakmp_payload = -1;
-static gint ett_isakmp_payload_digital_signature = -1;
-static gint ett_isakmp_payload_digital_signature_asn1_data = -1;
-static gint ett_isakmp_fragment = -1;
-static gint ett_isakmp_fragments = -1;
-static gint ett_isakmp_sa = -1;
-static gint ett_isakmp_attr = -1;
-static gint ett_isakmp_id = -1;
-static gint ett_isakmp_notify_data = -1;
-static gint ett_isakmp_notify_data_3gpp_emergency_call_numbers_main = -1;
-static gint ett_isakmp_notify_data_3gpp_emergency_call_numbers_element = -1;
-static gint ett_isakmp_ts = -1;
-static gint ett_isakmp_kd = -1;
+static gint ett_isakmp;
+static gint ett_isakmp_version;
+static gint ett_isakmp_flags;
+static gint ett_isakmp_payload;
+static gint ett_isakmp_payload_digital_signature;
+static gint ett_isakmp_payload_digital_signature_asn1_data;
+static gint ett_isakmp_fragment;
+static gint ett_isakmp_fragments;
+static gint ett_isakmp_sa;
+static gint ett_isakmp_attr;
+static gint ett_isakmp_id;
+static gint ett_isakmp_notify_data;
+static gint ett_isakmp_notify_data_3gpp_emergency_call_numbers_main;
+static gint ett_isakmp_notify_data_3gpp_emergency_call_numbers_element;
+static gint ett_isakmp_ts;
+static gint ett_isakmp_kd;
 /* For decrypted IKEv2 Encrypted payload*/
-static gint ett_isakmp_decrypted_data = -1;
-static gint ett_isakmp_decrypted_payloads = -1;
+static gint ett_isakmp_decrypted_data;
+static gint ett_isakmp_decrypted_payloads;
 
-static expert_field ei_isakmp_enc_iv = EI_INIT;
-static expert_field ei_isakmp_ikev2_integrity_checksum = EI_INIT;
-static expert_field ei_isakmp_enc_data_length_mult_block_size = EI_INIT;
-static expert_field ei_isakmp_enc_pad_length_big = EI_INIT;
-static expert_field ei_isakmp_attribute_value_empty = EI_INIT;
-static expert_field ei_isakmp_payload_bad_length = EI_INIT;
-static expert_field ei_isakmp_bad_fragment_number = EI_INIT;
-static expert_field ei_isakmp_notify_data_3gpp_unknown_device_identity = EI_INIT;
+static expert_field ei_isakmp_enc_iv;
+static expert_field ei_isakmp_ikev2_integrity_checksum;
+static expert_field ei_isakmp_enc_data_length_mult_block_size;
+static expert_field ei_isakmp_enc_pad_length_big;
+static expert_field ei_isakmp_attribute_value_empty;
+static expert_field ei_isakmp_payload_bad_length;
+static expert_field ei_isakmp_bad_fragment_number;
+static expert_field ei_isakmp_notify_data_3gpp_unknown_device_identity;
 
 static dissector_handle_t eap_handle = NULL;
 static dissector_handle_t isakmp_handle;
@@ -623,6 +625,7 @@ static const fragment_items isakmp_frag_items = {
 #define PLOAD_IKE2_GSA                  51
 #define PLOAD_IKE2_KD                   52
 #define PLOAD_IKE2_SKF                  53
+#define PLOAD_IKE_SK                    128
 #define PLOAD_IKE_NAT_D13               130
 #define PLOAD_IKE_NAT_OA14              131
 #define PLOAD_IKE_CISCO_FRAG            132
@@ -653,6 +656,12 @@ static const value_string exchange_v2_type[] = {
   { 36, "CREATE_CHILD_SA" },
   { 37, "INFORMATIONAL" },
   { 38, "IKE_SESSION_RESUME" }, /* RFC5723 */
+  { 39, "GSA_AUTH" },           /* draft-yeung-g-ikev2 */
+  { 40, "GSA_REGISTRATION" },   /* draft-yeung-g-ikev2 */
+  { 41, "GSA_REKEY	" },    /* draft-yeung-g-ikev2 */
+  { 42, "Unassigned" },
+  { 43, "IKE_INTERMEDIATE" },  /* [RFC9242] */
+  { 44, "IKE_FOLLOWUP_KE" },   /* [RFC9370] */
   { 0,  NULL },
 };
 
@@ -683,7 +692,7 @@ static const value_string protoid_v2_type[] = {
 };
 
 static const range_string payload_type[] = {
-  { PLOAD_IKE_NONE,PLOAD_IKE_NONE,             "NONE / No Next Payload " },
+  { PLOAD_IKE_NONE,PLOAD_IKE_NONE,             "NONE / No Next Payload" },
   { PLOAD_IKE_SA,PLOAD_IKE_SA,                 "Security Association" },
   { PLOAD_IKE_P,PLOAD_IKE_P,                   "Proposal" },
   { PLOAD_IKE_T,PLOAD_IKE_T,                   "Transform" },
@@ -728,7 +737,8 @@ static const range_string payload_type[] = {
   { PLOAD_IKE2_KD,PLOAD_IKE2_KD,               "Key Download"},
   { PLOAD_IKE2_SKF,PLOAD_IKE2_SKF,             "Encrypted and Authenticated Fragment"},
   { 54,127,                                    "Unassigned"     },
-  { 128,129,                                   "Private Use"   },
+  { PLOAD_IKE_SK,PLOAD_IKE_SK,                 "Symmetric-key"},
+  { 129,129,                                   "Private Use"   },
   { PLOAD_IKE_NAT_D13,PLOAD_IKE_NAT_D13,       "NAT-D (draft-ietf-ipsec-nat-t-ike-01 to 03)"},
   { PLOAD_IKE_NAT_OA14,PLOAD_IKE_NAT_OA14,     "NAT-OA (draft-ietf-ipsec-nat-t-ike-01 to 03)"},
   { PLOAD_IKE_CISCO_FRAG,PLOAD_IKE_CISCO_FRAG, "Cisco-Fragmentation"},
@@ -1086,6 +1096,14 @@ static const value_string ike_attr_authmeth[] = {
   { 0,  NULL },
 };
 
+/* For GM/T 0022 IPSec VPN specification
+   This specification only define one value for authmeth
+*/
+static const value_string ike_attr_authmeth_china[] = {
+  { 10,    "Digital Envelope" },
+  { 0,     NULL },
+};
+
 static const value_string dh_group[] = {
   { 0,  "UNDEFINED - 0" },
   { 1,  "Default 768-bit MODP group" },
@@ -1118,6 +1136,10 @@ static const value_string dh_group[] = {
   { 28, "256-bit Brainpool ECP group" },
   { 29, "384-bit Brainpool ECP group" },
   { 30, "512-bit Brainpool ECP group" },
+  { 31, "Curve25519" },
+  { 32, "Curve448" },
+  { 33, "GOST3410_2012_256" },
+  { 34, "GOST3410_2012_512" },
   { 0,  NULL }
 };
 
@@ -1134,6 +1156,14 @@ static const value_string ike_attr_grp_type[] = {
 #define TF_IKE2_INTEG   3
 #define TF_IKE2_DH      4
 #define TF_IKE2_ESN     5
+#define TF_IKE2_ADDKE1  6
+#define TF_IKE2_ADDKE2  7
+#define TF_IKE2_ADDKE3  8
+#define TF_IKE2_ADDKE4  9
+#define TF_IKE2_ADDKE5  10
+#define TF_IKE2_ADDKE6  11
+#define TF_IKE2_ADDKE7  12
+
 static const range_string transform_ike2_type[] = {
   { 0,0,        "RESERVED" },
   { TF_IKE2_ENCR,TF_IKE2_ENCR,  "Encryption Algorithm (ENCR)" },
@@ -1141,7 +1171,14 @@ static const range_string transform_ike2_type[] = {
   { TF_IKE2_INTEG,TF_IKE2_INTEG,"Integrity Algorithm (INTEG)"},
   { TF_IKE2_DH,TF_IKE2_DH,      "Diffie-Hellman Group (D-H)"},
   { TF_IKE2_ESN,TF_IKE2_ESN,    "Extended Sequence Numbers (ESN)"},
-  { 6,240,      "Reserved to IANA"},
+  { TF_IKE2_ADDKE1,TF_IKE2_ADDKE1, "ADDKE1"},
+  { TF_IKE2_ADDKE2,TF_IKE2_ADDKE2, "ADDKE2"},
+  { TF_IKE2_ADDKE3,TF_IKE2_ADDKE3, "ADDKE3"},
+  { TF_IKE2_ADDKE4,TF_IKE2_ADDKE4, "ADDKE4"},
+  { TF_IKE2_ADDKE5,TF_IKE2_ADDKE5, "ADDKE5"},
+  { TF_IKE2_ADDKE6,TF_IKE2_ADDKE6, "ADDKE6"},
+  { TF_IKE2_ADDKE7,TF_IKE2_ADDKE7, "ADDKE7"},
+  { 13,240,      "Reserved to IANA"},
   { 241,255,    "Private Use"},
   { 0,0,                NULL },
 };
@@ -1431,7 +1468,18 @@ static const range_string notifmsg_v2_type[] = {
   { 16429,16429,        "SENDER_REQUEST_ID" },                  /* [draft-yeung-g-ikev2] */
   { 16430,16430,        "IKEV2_FRAGMENTATION_SUPPORTED" },      /* RFC7383 */
   { 16431,16431,        "SIGNATURE_HASH_ALGORITHMS" },          /* RFC7427 */
-  { 16432,40959,        "RESERVED TO IANA - STATUS TYPES" },
+  { 16432,16432,        "CLONE_IKE_SA_SUPPORTED" },             /* [RFC7791] */
+  { 16433,16433,        "CLONE_IKE_SA" },                       /* [RFC7791] */
+  { 16434,16434,        "PUZZLE" },                             /* [RFC8019] */
+  { 16435,16435,        "USE_PPK" },                            /* [RFC8784] */
+  { 16436,16436,        "PPK_IDENTITY" },                       /* [RFC8784] */
+  { 16437,16437,        "NO_PPK_AUTH" },
+  { 16438,16438,        "INTERMEDIATE_EXCHANGE_SUPPORTED" },    /* RFC9242 */
+  { 16439,16439,        "IP4_ALLOWED" },                        /* RFC8983 */
+  { 16440,16440,        "IP4_ALLOWED" },                        /* RFC8983 */
+  { 16441,16441,        "ADDITIONAL_KEY_EXCHANGE" },            /* RFC9370 */
+  { 16442,16442,        "USE_AGGFRAG" },                        /* RFC9347 */
+  { 16443,40959,        "RESERVED TO IANA - STATUS TYPES" },
   { 40960,65535,        "Private Use - STATUS TYPES" },
   { 0,0,        NULL },
 };
@@ -1578,7 +1626,7 @@ static const range_string vs_v1_cfgattr[] = {
   { 16522,16522, "XAUTH_USER_PASSWORD" },
   { 16523,16523, "XAUTH_PASSCODE" },
   { 16524,16524, "XAUTH_MESSAGE" },
-  { 16525,16525, "XAUTH_CHALLANGE" },
+  { 16525,16525, "XAUTH_CHALLENGE" },
   { 16526,16526, "XAUTH_DOMAIN" },
   { 16527,16527, "XAUTH_STATUS" },
   { 16528,16528, "XAUTH_NEXT_PIN" },
@@ -2398,6 +2446,7 @@ static void dissect_ts_payload(tvbuff_t *, int, int, proto_tree *);
 static tvbuff_t * dissect_enc(tvbuff_t *, int, int, proto_tree *, packet_info *, guint8, gboolean, void*, gboolean);
 static void dissect_eap(tvbuff_t *, int, int, proto_tree *, packet_info *);
 static void dissect_gspm(tvbuff_t *, int, int, proto_tree *);
+static void dissect_symmetric_key(tvbuff_t *, int, int, proto_tree *);
 static void dissect_cisco_fragmentation(tvbuff_t *, int, int, proto_tree *, packet_info *);
 
 /* State of current fragmentation within a conversation */
@@ -3242,6 +3291,9 @@ dissect_payloads(tvbuff_t *tvb, proto_tree *tree,
               dissect_ikev2_fragmentation(tvb, offset + 4, ntree, pinfo, message_id, next_payload, is_request, decr_data );
             }
             break;
+          case PLOAD_IKE_SK:
+            dissect_symmetric_key(tvb, offset + 4, payload_length - 4, ntree);
+            break;
           default:
             proto_tree_add_item(ntree, hf_isakmp_datapayload, tvb, offset + 4, payload_length-4, ENC_NA);
             break;
@@ -4012,8 +4064,18 @@ dissect_ike_attribute(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
       if (decr) decr->ike_hash_alg = tvb_get_ntohs(tvb, offset);
       break;
     case IKE_ATTR_AUTHENTICATION_METHOD:
-      proto_tree_add_item(attr_tree, hf_isakmp_ike_attr_authentication_method, tvb, offset, value_len, ENC_BIG_ENDIAN);
-      proto_item_append_text(attr_item, ": %s", val_to_str(tvb_get_ntohs(tvb, offset), ike_attr_authmeth, "Unknown %d"));
+      /* for GM/T 0022 IPSec VPN specification */
+      if(decr && (decr->ike_hash_alg == HMAC_SM3 || decr->ike_encr_alg == ENC_SM1_CBC || decr->ike_encr_alg == ENC_SM4_CBC))
+      {
+        proto_tree_add_item(attr_tree, hf_isakmp_ike_attr_authentication_method_china, tvb, offset, value_len, ENC_BIG_ENDIAN);
+        proto_item_append_text(attr_item, ": %s", val_to_str(tvb_get_ntohs(tvb, offset), ike_attr_authmeth_china, "Unknown %d"));
+
+      }
+      else
+      {
+        proto_tree_add_item(attr_tree, hf_isakmp_ike_attr_authentication_method, tvb, offset, value_len, ENC_BIG_ENDIAN);
+        proto_item_append_text(attr_item, ": %s", val_to_str(tvb_get_ntohs(tvb, offset), ike_attr_authmeth, "Unknown %d"));
+      }
       if (decr) decr->is_psk = tvb_get_ntohs(tvb, offset) == 0x01 ? TRUE : FALSE;
       break;
     case IKE_ATTR_GROUP_DESCRIPTION:
@@ -4542,6 +4604,11 @@ static void
 dissect_nonce(tvbuff_t *tvb, int offset, int length, proto_tree *ntree)
 {
   proto_tree_add_item(ntree, hf_isakmp_nonce, tvb, offset, length, ENC_NA);
+}
+
+static void dissect_symmetric_key(tvbuff_t *tvb, int offset, int length, proto_tree *ntree)
+{
+  proto_tree_add_item(ntree, hf_isakmp_symmetric_key, tvb, offset, length, ENC_NA);
 }
 
 static void
@@ -7091,7 +7158,10 @@ proto_register_isakmp(void)
       { "Nonce DATA", "isakmp.nonce",
         FT_BYTES, BASE_NONE, NULL, 0x0,
         NULL, HFILL }},
-
+    { &hf_isakmp_symmetric_key,
+      { "symmetric key", "isakmp.symmetric_key",
+        FT_BYTES, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
     { &hf_isakmp_ike2_fragment_number,
       { "Fragment Number", "isakmp.frag.number",
         FT_UINT16, BASE_DEC, NULL, 0x0,
@@ -7356,6 +7426,10 @@ proto_register_isakmp(void)
     { &hf_isakmp_ike_attr_authentication_method,
       { "Authentication Method", "isakmp.ike.attr.authentication_method",
         FT_UINT16, BASE_DEC, VALS(ike_attr_authmeth), 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_ike_attr_authentication_method_china,
+      { "Authentication Method for China IPSsec VPN specification", "isakmp.ike.attr.authentication_method_china",
+        FT_UINT16, BASE_DEC, VALS(ike_attr_authmeth_china), 0x00,
         NULL, HFILL }},
     { &hf_isakmp_ike_attr_group_description,
       { "Group Description", "isakmp.ike.attr.group_description",

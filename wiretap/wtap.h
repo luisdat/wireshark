@@ -310,6 +310,8 @@ extern "C" {
 #define WTAP_ENCAP_FIRA_UCI                     221
 #define WTAP_ENCAP_SILABS_DEBUG_CHANNEL         222
 #define WTAP_ENCAP_MDB                          223
+#define WTAP_ENCAP_EMS                          224
+#define WTAP_ENCAP_DECT_NR                      225
 
 /* After adding new item here, please also add new item to encap_table_base array */
 
@@ -821,7 +823,6 @@ struct ieee_802_11_phdr {
  */
 #define PHDR_802_11_SOUNDING_PSDU                 0 /* sounding PPDU */
 #define PHDR_802_11_DATA_NOT_CAPTURED             1 /* data not captured, (e.g. multi-user PPDU) */
-#define PHDR_802_11_0_LENGTH_PSDU_S1G_NDP         2 /* S1G NDP CMAC */
 #define PHDR_802_11_0_LENGTH_PSDU_VENDOR_SPECIFIC 0xff
 
 /* Packet "pseudo-header" for the output from CoSine L2 debug output. */
@@ -1334,6 +1335,7 @@ typedef struct {
 } wtap_ft_specific_header;
 
 typedef struct {
+    const char *pathname;       /* Path name of file. */
     guint     record_type;      /* XXX match ft_specific_record_phdr so that we chain off of packet-pcapng_block for now. */
     int       byte_order;
     /* guint32 sentinel; */
@@ -1489,6 +1491,9 @@ typedef struct wtap_dump_params {
     int         snaplen;                    /**< Per-file snapshot length (what if it's per-interface?) */
     int         tsprec;                     /**< Per-file time stamp precision */
     GArray     *shb_hdrs;                   /**< The section header block(s) information, or NULL. */
+    const GArray *shb_iface_to_global;      /**< An array mapping the per-section interface numbers to global IDs
+                                                 This array may grow after the dumper is opened if a new
+                                                 section header is read. */
     wtapng_iface_descriptions_t *idb_inf;   /**< The interface description information, or NULL. */
     const GArray *nrbs_growing;             /**< NRBs that will be written while writing packets, or NULL.
                                                  This array may grow since the dumper was opened and will subsequently
@@ -1497,7 +1502,7 @@ typedef struct wtap_dump_params {
     const GArray *dsbs_growing;             /**< DSBs that will be written while writing packets, or NULL.
                                                  This array may grow since the dumper was opened and will subsequently
                                                  be written before newer packets are written in wtap_dump. */
-    const GArray *sysdig_mev_growing;       /**< Meta events that will be written while writing packets, or NULL.
+    const GArray *mevs_growing;             /**< Meta events that will be written while writing packets, or NULL.
                                                  This array may grow since the dumper was opened and will subsequently
                                                  be written before newer packets are written in wtap_dump. */
     gboolean    dont_copy_idbs;             /**< XXX - don't copy IDBs; this should eventually always be the case. */
@@ -1845,13 +1850,6 @@ typedef void (*wtap_new_secrets_callback_t)(guint32 secrets_type, const void *se
 WS_DLL_PUBLIC
 void wtap_set_cb_new_secrets(wtap *wth, wtap_new_secrets_callback_t add_new_secrets);
 
-/**
- * Set callback function to receive new sysdig meta events. Currently pcapng-only.
- */
-typedef void (*wtap_new_sysdig_meta_event_callback_t)(uint32_t mev_type, const uint8_t *mev_data, unsigned mev_data_size);
-WS_DLL_PUBLIC
-void wtap_set_cb_new_sysdig_meta_event(wtap *wth, wtap_new_sysdig_meta_event_callback_t add_new_sysdig_meta_event);
-
 /** Read the next record in the file, filling in *phdr and *buf.
  *
  * @wth a wtap * returned by a call that opened a file for reading.
@@ -1978,6 +1976,20 @@ WS_DLL_PUBLIC
 void wtap_write_shb_comment(wtap *wth, gchar *comment);
 
 /**
+ * @brief Gets the unique interface id for a SHB's interface
+ * @details Given an existing SHB number and an interface ID within
+ *          that section, returns the unique ordinal number (0-based)
+ *          of that interface over the entire wiretap session.
+ *
+ * @param wth The wiretap session.
+ * @param shb_num The ordinal number (0-based) of a section header
+ * @param interface_id An interface id within the section
+ * @return The unique wtap session-wide interface id for that interface
+ */
+WS_DLL_PUBLIC
+unsigned wtap_file_get_shb_global_interface_id(wtap *wth, guint shb_num, uint32_t interface_id);
+
+/**
  * @brief Gets existing interface descriptions.
  * @details Returns a new struct containing a pointer to the existing
  *          description, without creating new descriptions internally.
@@ -2047,6 +2059,29 @@ gchar *wtap_get_debug_if_descr(const wtap_block_t if_descr,
  */
 WS_DLL_PUBLIC
 wtap_block_t wtap_file_get_nrb(wtap *wth);
+
+/**
+ * @brief Gets number of decryption secrets blocks.
+ * @details Returns the number of existing DSBs.
+ *
+ * @param wth The wiretap session.
+ * @return The number of existing decryption secrets blocks.
+ */
+WS_DLL_PUBLIC
+guint wtap_file_get_num_dsbs(wtap *wth);
+
+/**
+ * @brief Gets existing decryption secrets block, not for new file.
+ * @details Returns the pointer to an existing DSB, without creating a
+ *          new one. This should only be used for accessing info.
+ *
+ * @param wth The wiretap session.
+ * @param dsb_num The ordinal number (0-based) of the decryption secrets block
+ * in the file
+ * @return The specified existing decryption secrets block, which must NOT be g_free'd.
+ */
+WS_DLL_PUBLIC
+wtap_block_t wtap_file_get_dsb(wtap *wth, guint dsb_num);
 
 /**
  * @brief Adds a Decryption Secrets Block to the open wiretap session.

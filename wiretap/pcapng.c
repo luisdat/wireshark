@@ -249,6 +249,7 @@ typedef struct interface_info_s {
     guint32 snap_len;
     guint64 time_units_per_second;
     int tsprecision;
+    gint64 tsoffset;
     int fcslen;
 } interface_info_t;
 
@@ -799,6 +800,58 @@ pcapng_process_uint64_option(wtapng_block_t *wblock,
          * we silently ignore the failure.
          */
         wtap_block_add_uint64_option(wblock->block, option_code, uint64);
+    }
+}
+
+void
+pcapng_process_int64_option(wtapng_block_t *wblock,
+                            const section_info_t *section_info,
+                            pcapng_opt_byte_order_e byte_order,
+                            guint16 option_code, guint16 option_length,
+                            const guint8 *option_content)
+{
+    gint64 int64;
+
+    if (option_length == 8) {
+        /*  Don't cast a gint8 * into a gint64 *--the
+         *  guint8 * may not point to something that's
+         *  aligned correctly.
+         */
+        memcpy(&int64, option_content, sizeof(gint64));
+        switch (byte_order) {
+
+        case OPT_SECTION_BYTE_ORDER:
+            if (section_info->byte_swapped) {
+                int64 = GUINT64_SWAP_LE_BE(int64);
+            }
+            break;
+
+        case OPT_BIG_ENDIAN:
+            int64 = GUINT64_FROM_BE(int64);
+            break;
+
+        case OPT_LITTLE_ENDIAN:
+            int64 = GUINT64_FROM_LE(int64);
+            break;
+
+        default:
+            /*
+             * This should not happen - this is called by pcapng_process_options(),
+             * which returns an error for an invalid byte_order argument, and
+             * otherwise passes the known-to-be-valid byte_order argument to
+             * us.
+             *
+             * Just ignore the option.
+             */
+            return;
+        }
+
+        /*
+         * If this option can appear only once in a block, this call
+         * will fail on the second and later occurrences of the option;
+         * we silently ignore the failure.
+         */
+        wtap_block_add_int64_option(wblock->block, option_code, int64);
     }
 }
 
@@ -1509,22 +1562,29 @@ pcapng_process_if_descr_block_option(wtapng_block_t *wblock,
              break;
         case(OPT_IDB_TZONE):
             /*
-             * Time zone for GMT support. TODO: specify better.
-             * TODO: give a good example.
+             * Time zone for GMT support.  This option has never been
+             * specified in greater detail and, unless it were to identify
+             * something such as an IANA time zone database timezone,
+             * would be insufficient for converting between UTC and local
+             * time.  Therefore, it SHOULD NOT be used; instead, the
+             * if_iana_tzname option SHOULD be used if time zone
+             * information is to be specified.
+             *
+             * Given that, we don't do anything with it.
              */
              break;
         case(OPT_IDB_TSOFFSET):
             /*
-             * A 64 bits integer value that specifies an offset (in
+             * A 64-bit integer value that specifies an offset (in
              * seconds) that must be added to the timestamp of each packet
-             * to obtain the absolute timestamp of a packet. If the option
-             * is missing, the timestamps stored in the packet must be
-             * considered absolute timestamps. The time zone of the offset
-             * can be specified with the option if_tzone.
-             *
-             * TODO: won't a if_tsoffset_low for fractional second offsets
-             * be useful for highly synchronized capture systems? 1234
+             * to obtain the absolute timestamp of a packet. If this optio
+             * is not present, an offset of 0 is assumed (i.e., timestamps
+             * in blocks are absolute timestamps.)
              */
+            pcapng_process_int64_option(wblock, section_info,
+                                        OPT_SECTION_BYTE_ORDER,
+                                        option_code, option_length,
+                                        option_content);
              break;
         default:
             if (!pcapng_process_unhandled_option(wblock, BT_INDEX_IDB,
@@ -1838,23 +1898,23 @@ pcapng_read_decryption_secrets_block(FILE_T fh, pcapng_block_header_t *bh,
 }
 
 static bool
-pcapng_read_sysdig_meta_event_block(FILE_T fh, pcapng_block_header_t *bh,
+pcapng_read_meta_event_block(FILE_T fh, pcapng_block_header_t *bh,
                                      wtapng_block_t *wblock,
                                      int *err, gchar **err_info)
 {
     guint to_read;
-    wtapng_sysdig_mev_mandatory_t *mev_mand;
+    wtapng_meta_event_mandatory_t *mev_mand;
 
     /*
      * Set wblock->block to a newly-allocated Sysdig meta event block.
      */
-    wblock->block = wtap_block_create(WTAP_BLOCK_SYSDIG_META_EVENT);
+    wblock->block = wtap_block_create(WTAP_BLOCK_META_EVENT);
 
     /*
      * Set the mandatory values for the block.
      */
-    mev_mand = (wtapng_sysdig_mev_mandatory_t *)wtap_block_get_mandatory_data(wblock->block);
-    mev_mand->mev_type = bh->block_type;
+    mev_mand = (wtapng_meta_event_mandatory_t *)wtap_block_get_mandatory_data(wblock->block);
+    mev_mand->mev_block_type = bh->block_type;
     mev_mand->mev_data_len = bh->block_total_length -
         (int)sizeof(pcapng_block_header_t) -
         (int)sizeof(bh->block_total_length);
@@ -2244,8 +2304,13 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
 
     /* Combine the two 32-bit pieces of the timestamp into one 64-bit value */
     ts = (((guint64)packet.ts_high) << 32) | ((guint64)packet.ts_low);
+
+    /* Convert it to seconds and nanoseconds. */
     wblock->rec->ts.secs = (time_t)(ts / iface_info.time_units_per_second);
     wblock->rec->ts.nsecs = (int)(((ts % iface_info.time_units_per_second) * 1000000000) / iface_info.time_units_per_second);
+
+    /* Add the time stamp offset. */
+    wblock->rec->ts.secs = (time_t)(wblock->rec->ts.secs + iface_info.tsoffset);
 
     /* "(Enhanced) Packet Block" read capture data */
     if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
@@ -2278,8 +2343,11 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
      */
     if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_uint32_option_value(wblock->block, OPT_PKT_FLAGS, &flags)) {
         if (PACK_FLAGS_FCS_LENGTH(flags) != 0) {
-            /* The FCS length is present */
-            fcslen = PACK_FLAGS_FCS_LENGTH(flags);
+            /*
+             * The FCS length is present, but in units of octets, not
+             * bits; convert it to bits.
+             */
+            fcslen = PACK_FLAGS_FCS_LENGTH(flags)*8;
         }
     }
     /*
@@ -3090,7 +3158,7 @@ pcapng_read_custom_block(FILE_T fh, pcapng_block_header_t *bh,
 }
 
 static gboolean
-pcapng_read_sysdig_event_block(FILE_T fh, pcapng_block_header_t *bh,
+pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
                                const section_info_t *section_info,
                                wtapng_block_t *wblock,
                                int *err, gchar **err_info)
@@ -3124,7 +3192,7 @@ pcapng_read_sysdig_event_block(FILE_T fh, pcapng_block_header_t *bh,
 
     wblock->rec->rec_type = REC_TYPE_SYSCALL;
     wblock->rec->rec_header.syscall_header.record_type = bh->block_type;
-    wblock->rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN /*|WTAP_HAS_INTERFACE_ID */;
+    wblock->rec->presence_flags = WTAP_HAS_CAP_LEN /*|WTAP_HAS_INTERFACE_ID */;
     wblock->rec->tsprec = WTAP_TSPREC_NSEC;
 
     if (!wtap_read_bytes(fh, &cpu_id, sizeof cpu_id, err, err_info)) {
@@ -3154,6 +3222,7 @@ pcapng_read_sysdig_event_block(FILE_T fh, pcapng_block_header_t *bh,
         }
     }
 
+    wblock->rec->rec_header.syscall_header.pathname = wth->pathname;
     wblock->rec->rec_header.syscall_header.byte_order = G_BYTE_ORDER;
 
     /* XXX Use Gxxx_FROM_LE macros instead? */
@@ -3177,6 +3246,10 @@ pcapng_read_sysdig_event_block(FILE_T fh, pcapng_block_header_t *bh,
         wblock->rec->rec_header.syscall_header.event_len = event_len;
         wblock->rec->rec_header.syscall_header.event_type = event_type;
         wblock->rec->rec_header.syscall_header.nparams = nparams;
+    }
+
+    if (ts) {
+        wblock->rec->presence_flags |= WTAP_HAS_TS;
     }
 
     wblock->rec->ts.secs = (time_t) (ts / 1000000000);
@@ -3549,7 +3622,7 @@ pcapng_read_block(wtap *wth, FILE_T fh, pcapng_t *pn,
             case BLOCK_TYPE_SYSDIG_FDL_V2:
             case BLOCK_TYPE_SYSDIG_IL_V2:
             case BLOCK_TYPE_SYSDIG_UL_V2:
-                if (!pcapng_read_sysdig_meta_event_block(fh, &bh, wblock, err, err_info))
+                if (!pcapng_read_meta_event_block(fh, &bh, wblock, err, err_info))
                     return FALSE;
                 break;
             case(BLOCK_TYPE_CB_COPY):
@@ -3561,7 +3634,7 @@ pcapng_read_block(wtap *wth, FILE_T fh, pcapng_t *pn,
             case(BLOCK_TYPE_SYSDIG_EVENT_V2):
             case(BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE):
             /* case(BLOCK_TYPE_SYSDIG_EVF): */
-                if (!pcapng_read_sysdig_event_block(fh, &bh, section_info, wblock, err, err_info))
+                if (!pcapng_read_sysdig_event_block(wth, fh, &bh, section_info, wblock, err, err_info))
                     return FALSE;
                 break;
             case(BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT):
@@ -3612,11 +3685,42 @@ pcapng_process_idb(wtap *wth, section_info_t *section_info,
     iface_info.time_units_per_second = wblock_if_descr_mand->time_units_per_second;
     iface_info.tsprecision = wblock_if_descr_mand->tsprecision;
 
+    /*
+     * Did we get an FCS length option?
+     */
     if (wtap_block_get_uint8_option_value(wblock->block, OPT_IDB_FCSLEN,
-                                          &if_fcslen) == WTAP_OPTTYPE_SUCCESS)
+                                          &if_fcslen) == WTAP_OPTTYPE_SUCCESS) {
+        /*
+         * Yes.
+         */
         iface_info.fcslen = if_fcslen;
-    else
+    } else {
+        /*
+         * No.  Mark the FCS length as unknown.
+         */
         iface_info.fcslen = -1;
+    }
+
+    /*
+     * Did we get a time stamp offset option?
+     */
+    if (wtap_block_get_int64_option_value(wblock->block, OPT_IDB_TSOFFSET,
+                                          &iface_info.tsoffset) == WTAP_OPTTYPE_SUCCESS) {
+        /*
+         * Yes.
+         *
+         * Remove the option, as the time stamps we provide will be
+         * absolute time stamps, with the offset added in, so it will
+         * appear as if there were no such option.
+         */
+        wtap_block_remove_option(wblock->block, OPT_IDB_TSOFFSET);
+    } else {
+        /*
+         * No.  Default to 0, meahing that time stamps in the file are
+         * absolute time stamps.
+         */
+        iface_info.tsoffset = 0;
+    }
 
     g_array_append_val(section_info->interfaces, iface_info);
 }
@@ -3646,12 +3750,12 @@ pcapng_process_dsb(wtap *wth, wtapng_block_t *wblock)
 
 /* Process a Sysdig meta event block that we have just read. */
 static void
-pcapng_process_sysdig_mev(wtap *wth, wtapng_block_t *wblock)
+pcapng_process_meta_event(wtap *wth, wtapng_block_t *wblock)
 {
-    // XXX add wtapng_process_sysdig_meb(wth, wblock->block);
+    // XXX add wtapng_process_meta_event(wth, wblock->block);
 
     /* Store meta event such that it can be saved by the dumper. */
-    g_array_append_val(wth->sysdig_meta_events, wblock->block);
+    g_array_append_val(wth->meta_events, wblock->block);
 }
 
 static void
@@ -3671,6 +3775,7 @@ pcapng_process_internal_block(wtap *wth, pcapng_t *pcapng, section_info_t *curre
              * Add this SHB to the table of SHBs.
              */
             g_array_append_val(wth->shb_hdrs, wblock->block);
+            g_array_append_val(wth->shb_iface_to_global, wth->interface_data->len);
 
             /*
              * Update the current section number, and add
@@ -3769,9 +3874,9 @@ pcapng_process_internal_block(wtap *wth, pcapng_t *pcapng, section_info_t *curre
         case BLOCK_TYPE_SYSDIG_FDL_V2:
         case BLOCK_TYPE_SYSDIG_IL_V2:
         case BLOCK_TYPE_SYSDIG_UL_V2:
-            /* Decryption secrets. */
+            /* Meta events */
             ws_debug("block type Sysdig meta event");
-            pcapng_process_sysdig_mev(wth, wblock);
+            pcapng_process_meta_event(wth, wblock);
             /* Do not free wblock->block, it is consumed by pcapng_process_sysdig_meb */
             break;
 
@@ -3935,7 +4040,7 @@ pcapng_open(wtap *wth, int *err, gchar **err_info)
      * file. */
     wth->dsbs = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
     wth->nrbs = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
-    wth->sysdig_meta_events = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
+    wth->meta_events = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
 
     /* Most other capture types (such as pcap) support a single link-layer
      * type, indicated in the header, and don't support WTAP_ENCAP_PER_PACKET.
@@ -5180,9 +5285,16 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
      * Check the interface ID. Do this before writing the header,
      * in case we need to add a new IDB.
      */
-    if (rec->presence_flags & WTAP_HAS_INTERFACE_ID)
+    if (rec->presence_flags & WTAP_HAS_INTERFACE_ID) {
         epb.interface_id        = rec->rec_header.packet_header.interface_id;
-    else {
+        if (rec->presence_flags & WTAP_HAS_SECTION_NUMBER && wdh->shb_iface_to_global) {
+            /*
+             * In the extremely unlikely event this overflows we give the
+             * wrong interface ID.
+             */
+            epb.interface_id += g_array_index(wdh->shb_iface_to_global, unsigned, rec->section_number);
+        }
+    } else {
         /*
          * The source isn't sending us IDBs. See if we already have a
          * matching interface, and use it if so.
@@ -5241,12 +5353,13 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
         return FALSE;
 
     /* write block fixed content */
+    /* Calculate the time stamp as a 64-bit integer. */
+    ts = ((guint64)rec->ts.secs) * int_data_mand->time_units_per_second +
+        (((guint64)rec->ts.nsecs) * int_data_mand->time_units_per_second) / 1000000000;
     /*
      * Split the 64-bit timestamp into two 32-bit pieces, using
      * the time stamp resolution for the interface.
      */
-    ts = ((guint64)rec->ts.secs) * int_data_mand->time_units_per_second +
-        (((guint64)rec->ts.nsecs) * int_data_mand->time_units_per_second) / 1000000000;
     epb.timestamp_high      = (guint32)(ts >> 32);
     epb.timestamp_low       = (guint32)ts;
     epb.captured_len        = rec->rec_header.packet_header.caplen + phdr_len;
@@ -5602,14 +5715,14 @@ pcapng_write_decryption_secrets_block(wtap_dumper *wdh, wtap_block_t sdata, int 
 }
 
 static bool
-pcapng_write_sysdig_meta_event_block(wtap_dumper *wdh, wtap_block_t mev_data, int *err)
+pcapng_write_meta_event_block(wtap_dumper *wdh, wtap_block_t mev_data, int *err)
 {
     pcapng_block_header_t bh;
-    wtapng_sysdig_mev_mandatory_t *mand_data = (wtapng_sysdig_mev_mandatory_t *)wtap_block_get_mandatory_data(mev_data);
+    wtapng_meta_event_mandatory_t *mand_data = (wtapng_meta_event_mandatory_t *)wtap_block_get_mandatory_data(mev_data);
     unsigned pad_len = (4 - (mand_data->mev_data_len & 3)) & 3;
 
     /* write block header */
-    bh.block_type = mand_data->mev_type;
+    bh.block_type = mand_data->mev_block_type;
     bh.block_total_length = MIN_BLOCK_SIZE + mand_data->mev_data_len + pad_len;
     ws_debug("Sysdig mev total len %u", bh.block_total_length);
 
@@ -6143,6 +6256,19 @@ static guint32 compute_idb_option_size(wtap_block_t block _U_, guint option_id, 
     case OPT_IDB_FCSLEN:
         size = 1;
         break;
+    case OPT_IDB_TSOFFSET:
+        /*
+         * The time stamps handed to us when writing a file are
+         * absolute time staps, so the time stamp offset is
+         * zero.
+         *
+         * We do not adjust them when writing, so we should not
+         * write if_tsoffset options; that is interpreted as
+         * the offset is zero, i.e. the time stamps in the file
+         * are absolute.
+         */
+        size = 0;
+        break;
     default:
         /* Unknown options - size by datatype? */
         size = 0;
@@ -6177,6 +6303,11 @@ static gboolean write_wtap_idb_option(wtap_dumper *wdh, wtap_block_t block _U_, 
     case OPT_IDB_FCSLEN:
         if (!pcapng_write_uint8_option(wdh, option_id, optval, err))
             return FALSE;
+        break;
+    case OPT_IDB_TSOFFSET:
+        /*
+         * As noted above, we discard these.
+         */
         break;
     default:
         /* Unknown options - size by datatype? */
@@ -6276,14 +6407,14 @@ static gboolean pcapng_write_internal_blocks(wtap_dumper *wdh, int *err)
 
     /* Write (optional) Sysdig Meta Event Blocks that were collected while
      * reading packet blocks. */
-    if (wdh->sysdig_mev_growing) {
-        for (unsigned i = wdh->sysdig_mev_growing_written; i < wdh->sysdig_mev_growing->len; i++) {
+    if (wdh->mevs_growing) {
+        for (unsigned i = wdh->mevs_growing_written; i < wdh->mevs_growing->len; i++) {
             ws_debug("writing Sysdig mev %u", i);
-            wtap_block_t mev = g_array_index(wdh->sysdig_mev_growing, wtap_block_t, i);
-            if (!pcapng_write_sysdig_meta_event_block(wdh, mev, err)) {
+            wtap_block_t mev = g_array_index(wdh->mevs_growing, wtap_block_t, i);
+            if (!pcapng_write_meta_event_block(wdh, mev, err)) {
                 return false;
             }
-            ++wdh->sysdig_mev_growing_written;
+            ++wdh->mevs_growing_written;
         }
     }
 
@@ -6644,8 +6775,8 @@ static const struct supported_option_type decryption_secrets_block_options_suppo
     { OPT_CUSTOM_BIN_NO_COPY, MULTIPLE_OPTIONS_SUPPORTED }
 };
 
-/* Options for Sysdig meta event blocks. */
-static const struct supported_option_type sysdig_meta_events_block_options_supported[] = {
+/* Options for meta event blocks. */
+static const struct supported_option_type meta_events_block_options_supported[] = {
     { OPT_COMMENT, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_STR_COPY, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_BIN_COPY, MULTIPLE_OPTIONS_SUPPORTED },
@@ -6668,7 +6799,7 @@ static const struct supported_option_type packet_block_options_supported[] = {
     { OPT_CUSTOM_BIN_NO_COPY, MULTIPLE_OPTIONS_SUPPORTED }
 };
 
-/* Options for file-type-sepcific reports. */
+/* Options for file-type-specific reports. */
 static const struct supported_option_type ft_specific_report_block_options_supported[] = {
     { OPT_COMMENT, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_STR_COPY, MULTIPLE_OPTIONS_SUPPORTED },
@@ -6677,7 +6808,7 @@ static const struct supported_option_type ft_specific_report_block_options_suppo
     { OPT_CUSTOM_BIN_NO_COPY, MULTIPLE_OPTIONS_SUPPORTED }
 };
 
-/* Options for file-type-sepcific event. */
+/* Options for file-type-specific event. */
 static const struct supported_option_type ft_specific_event_block_options_supported[] = {
     { OPT_COMMENT, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_STR_COPY, MULTIPLE_OPTIONS_SUPPORTED },
@@ -6712,7 +6843,7 @@ static const struct supported_block_type pcapng_blocks_supported[] = {
     { WTAP_BLOCK_DECRYPTION_SECRETS, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(decryption_secrets_block_options_supported) },
 
     /* Multiple blocks of decryption secrets. */
-    { WTAP_BLOCK_SYSDIG_META_EVENT, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(sysdig_meta_events_block_options_supported) },
+    { WTAP_BLOCK_META_EVENT, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(meta_events_block_options_supported) },
 
     /* And, obviously, multiple packets. */
     { WTAP_BLOCK_PACKET, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(packet_block_options_supported) },

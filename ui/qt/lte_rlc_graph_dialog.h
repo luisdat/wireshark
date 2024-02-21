@@ -33,7 +33,7 @@ public:
     explicit LteRlcGraphDialog(QWidget &parent, CaptureFile &cf, bool channelKnown);
     ~LteRlcGraphDialog();
 
-    void setChannelInfo(guint16 ueid, guint8 rlcMode,
+    void setChannelInfo(uint8_t rat, guint16 ueid, guint8 rlcMode,
                         guint16 channelType, guint16 channelId, guint8 direction,
                         bool maybe_empty=false);
 
@@ -51,14 +51,14 @@ private:
     QPoint rb_origin_;
     QMenu *ctx_menu_;
 
-    // Data gleaned directly from tapping packets (shared with gtk impl)
+    // Data gleaned directly from tapping packets
     struct rlc_graph graph_;
 
     // Data
-    QMultiMap<double, struct rlc_segment *> time_stamp_map_;
+    QMultiMap<double, struct rlc_segment *> time_stamp_map_;  // used for mapping clicks back to segment/frame
     QMap<double, struct rlc_segment *> sequence_num_map_;
 
-    QCPGraph *base_graph_; // Clickable packets
+    QCPGraph *base_graph_; // Data SNs - clickable packets
     QCPGraph *reseg_graph_;
     QCPGraph *acks_graph_;
     QCPGraph *nacks_graph_;

@@ -32,42 +32,42 @@
 
 void proto_register_sftp(void);
 
-static int proto_sftp = -1;
+static int proto_sftp;
 
-static int hf_ssh_sftp_len = -1;
-static int hf_ssh_sftp_type = -1;
-static int hf_ssh_sftp_version = -1;
-static int hf_ssh_sftp_id = -1;
-static int hf_ssh_sftp_path_len = -1;
-static int hf_ssh_sftp_path = -1;
-static int hf_ssh_sftp_pflags = -1;
-static int hf_ssh_sftp_name_count = -1;
-static int hf_ssh_sftp_name_fn_len = -1;
-static int hf_ssh_sftp_name_fn = -1;
-static int hf_ssh_sftp_name_ln_len = -1;
-static int hf_ssh_sftp_name_ln = -1;
-static int hf_ssh_sftp_attrs_flags = -1;
-static int hf_ssh_sftp_attrs_size = -1;
-static int hf_ssh_sftp_attrs_uid = -1;
-static int hf_ssh_sftp_attrs_gid = -1;
-static int hf_ssh_sftp_attrs_permissions = -1;
-static int hf_ssh_sftp_attrs_atime = -1;
-static int hf_ssh_sftp_attrs_mtime = -1;
-static int hf_ssh_sftp_attrs_extended_count = -1;
-static int hf_ssh_sftp_handle_len = -1;
-static int hf_ssh_sftp_handle = -1;
-static int hf_ssh_sftp_status = -1;
-static int hf_ssh_sftp_error_message_len = -1;
-static int hf_ssh_sftp_error_message = -1;
-static int hf_ssh_sftp_offset = -1;
-static int hf_ssh_sftp_length = -1;
-static int hf_ssh_sftp_data_len = -1;
-static int hf_ssh_sftp_data = -1;
-static int hf_ssh_lang_tag_length = -1;
-static int hf_ssh_lang_tag = -1;
+static int hf_ssh_sftp_len;
+static int hf_ssh_sftp_type;
+static int hf_ssh_sftp_version;
+static int hf_ssh_sftp_id;
+static int hf_ssh_sftp_path_len;
+static int hf_ssh_sftp_path;
+static int hf_ssh_sftp_pflags;
+static int hf_ssh_sftp_name_count;
+static int hf_ssh_sftp_name_fn_len;
+static int hf_ssh_sftp_name_fn;
+static int hf_ssh_sftp_name_ln_len;
+static int hf_ssh_sftp_name_ln;
+static int hf_ssh_sftp_attrs_flags;
+static int hf_ssh_sftp_attrs_size;
+static int hf_ssh_sftp_attrs_uid;
+static int hf_ssh_sftp_attrs_gid;
+static int hf_ssh_sftp_attrs_permissions;
+static int hf_ssh_sftp_attrs_atime;
+static int hf_ssh_sftp_attrs_mtime;
+static int hf_ssh_sftp_attrs_extended_count;
+static int hf_ssh_sftp_handle_len;
+static int hf_ssh_sftp_handle;
+static int hf_ssh_sftp_status;
+static int hf_ssh_sftp_error_message_len;
+static int hf_ssh_sftp_error_message;
+static int hf_ssh_sftp_offset;
+static int hf_ssh_sftp_length;
+static int hf_ssh_sftp_data_len;
+static int hf_ssh_sftp_data;
+static int hf_ssh_lang_tag_length;
+static int hf_ssh_lang_tag;
 
-static gint ett_sftp = -1;
-static gint ett_sftp_attrs = -1;
+static gint ett_sftp;
+static gint ett_sftp_attrs;
 
 static dissector_handle_t sftp_handle;
 
@@ -146,16 +146,32 @@ static int dissect_sftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 static int dissect_sftp_attrs(tvbuff_t *packet_tvb, packet_info *pinfo,
         int offset, proto_item *msg_type_tree);
 
-//static int dissect_sftp(tvbuff_t *packet_tvb, packet_info *pinfo,
-//        int offset, proto_item *msg_type_tree)
 static int dissect_sftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
         int offset = 0;
         guint   plen;
         guint   slen;
-        plen = tvb_get_ntohl(tvb, offset) ;
-        wmem_strbuf_t *title = wmem_strbuf_new(wmem_packet_scope(), "SFTP");
-        proto_item * sftp_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_sftp, NULL, NULL);
+        if (pinfo->can_desegment) {
+                if (tvb_captured_length_remaining(tvb, offset) < 4) {
+                        pinfo->desegment_offset = offset;
+                        pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
+                        return tvb_captured_length(tvb);
+                }
+        }
+
+        plen = tvb_get_ntohl(tvb, offset);
+        if (pinfo->can_desegment) {
+                unsigned length_remaining = tvb_captured_length_remaining(tvb, offset + 4);
+                if (length_remaining < plen) {
+                        pinfo->desegment_offset = offset;
+                        pinfo->desegment_len = plen - length_remaining;
+                        return tvb_captured_length(tvb);
+                }
+        }
+
+        wmem_strbuf_t *title = wmem_strbuf_new(pinfo->pool, "");
+        proto_item *ti = proto_tree_add_item(tree, proto_sftp, tvb, offset, -1, ENC_NA);
+        proto_tree *sftp_tree = proto_item_add_subtree(ti, ett_sftp);
         proto_tree_add_item(sftp_tree, hf_ssh_sftp_len, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
         guint8  typ;
@@ -479,7 +495,7 @@ static int dissect_sftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
                 break;
                 }
         }
-        proto_item_set_text(sftp_tree, "%s", wmem_strbuf_get_str(title));
+        proto_item_append_text(ti, ",%s", wmem_strbuf_get_str(title));
         proto_item_set_len(sftp_tree, plen+4);
         return offset;
 }

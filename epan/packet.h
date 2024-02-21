@@ -383,6 +383,10 @@ WS_DLL_PUBLIC int dissector_try_guid(dissector_table_t sub_dissectors,
 WS_DLL_PUBLIC int dissector_try_guid_new(dissector_table_t sub_dissectors,
     guid_key* guid_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const gboolean add_proto_name, void *data);
 
+/* Delete a GUID from a dissector table. */
+WS_DLL_PUBLIC void dissector_delete_guid(const char *name, guid_key* guid_val,
+    dissector_handle_t handle);
+
 /** Look for a given value in a given guid dissector table and, if found,
  * return the current dissector handle for that value.
  *
@@ -465,7 +469,22 @@ typedef struct heur_dtbl_entry {
 	const gchar *display_name;     /* the string used to present heuristic to user */
 	gchar *short_name;     /* string used for "internal" use to uniquely identify heuristic */
 	gboolean enabled;
+	bool enabled_by_default;
 } heur_dtbl_entry_t;
+
+/** A protocol uses this function to register a heuristic sub-dissector list.
+ *  Call this in the parent dissectors proto_register function.
+ *
+ * @param name the name of this protocol
+ * @param proto the value obtained when registering the protocol
+ */
+WS_DLL_PUBLIC heur_dissector_list_t register_heur_dissector_list_with_description(const char *name, const char *ui_name, const int proto);
+
+/** Get description of heuristic sub-dissector list.
+ *
+ * @param list the dissector list
+ */
+WS_DLL_PUBLIC const char *heur_dissector_list_get_description(heur_dissector_list_t list);
 
 /** A protocol uses this function to register a heuristic sub-dissector list.
  *  Call this in the parent dissectors proto_register function.

@@ -20,7 +20,6 @@
 #include <wsutil/plugins.h>
 #endif
 #include <wsutil/ws_assert.h>
-#include <wsutil/wslog.h>
 
 #include "wtap-int.h"
 #include "wtap_modules.h"
@@ -93,6 +92,7 @@
 #include "eri_enb_log.h"
 #include "autosar_dlt.h"
 #include "rtpdump.h"
+#include "ems.h"
 
 
 /*
@@ -142,6 +142,7 @@ static const struct file_extension_info file_type_extensions_base[] = {
 	{ "Wireshark/tcpdump/... - pcap", TRUE, "pcap;cap;dmp" },
 	{ "Wireshark/... - pcapng", TRUE, "pcapng;ntar;scap" },
 	{ "Network Monitor, Surveyor, NetScaler", TRUE, "cap" },
+	{ "Sun snoop", TRUE, "snoop" },
 	{ "InfoVista 5View capture", TRUE, "5vw" },
 	{ "Sniffer (DOS)", TRUE, "cap;enc;trc;fdc;syc" },
 	{ "Cinco NetXRay, Sniffer (Windows)", TRUE, "cap;caz" },
@@ -174,6 +175,7 @@ static const struct file_extension_info file_type_extensions_base[] = {
 	{ "JavaScript Object Notation file", FALSE, "json" },
 	{ "MP4 file", FALSE, "mp4" },
 	{ "RTPDump file", FALSE, "rtp;rtpdump" },
+	{ "EMS file", FALSE, "ems" },
 };
 
 #define	N_FILE_TYPE_EXTENSIONS	(sizeof file_type_extensions_base / sizeof file_type_extensions_base[0])
@@ -315,11 +317,15 @@ wtap_get_file_extension_type_extensions(guint extension_type)
  * know that Wireshark can open the file:
  *	1) resources/freedesktop/org.wireshark.Wireshark-mime.xml (for freedesktop.org environments)
  *	2) packaging/macosx/WiresharkInfo.plist.in (for macOS)
- *	3) packaging/nsis/AdditionalTasksPage.ini, packaging/nsis/wireshark-common.nsh,
- *	   and packaging/wix/ComponentGroups.wxi (for Windows)
  *
- * If your file format has an expected extension (e.g., ".pcap") then you
- * should probably also add it to file_type_extensions_base[] (in this file).
+ * If your file format has a commonly-used extension (e.g., ".pcap") then you
+ * should probably also add it to file_type_extensions_base[] (in this file),
+ * to the list of "<glob pattern=...>" entries for this file format in
+ * resources/freedesktop/org.wireshark.Wireshark-mime.xml, to the
+ * CFBundleTypeExtensions array for this file format in
+ * packaging/macosx/WiresharkInfo.plist, and to the PushFileExtensions macro
+ * in packaging/nsis/wireshark-common.nsh and the File Associations in
+ * packaging/wix/ComponentGroups.wxi (for Windows).
  */
 static const struct open_info open_info_base[] = {
 	/* Open routines that look for magic numbers */
@@ -407,6 +413,7 @@ static const struct open_info open_info_base[] = {
 	/* ASCII trace files from Telnet sessions. */
 	{ "Lucent/Ascend access server trace",      OPEN_INFO_HEURISTIC, ascend_open,              "txt",      NULL, NULL },
 	{ "Toshiba Compact ISDN Router snoop",      OPEN_INFO_HEURISTIC, toshiba_open,             "txt",      NULL, NULL },
+	{ "EGNOS Message Server (EMS) file",        OPEN_INFO_HEURISTIC, ems_open,                 "ems",      NULL, NULL },
 	/* Extremely weak heuristics - put them at the end. */
 	{ "Ixia IxVeriWave .vwr Raw Capture",       OPEN_INFO_HEURISTIC, vwr_open,                 "vwr",      NULL, NULL },
 	{ "CAM Inspector file",                     OPEN_INFO_HEURISTIC, camins_open,              "camins",   NULL, NULL },
@@ -909,6 +916,9 @@ wtap_open_offline(const char *filename, unsigned int type, int *err, char **err_
 	 * will return.
 	 */
 	wth->next_interface_data = 0;
+
+	wth->shb_iface_to_global = g_array_new(FALSE, FALSE, sizeof(unsigned));
+	g_array_append_val(wth->shb_iface_to_global, wth->interface_data->len);
 
 	if (wth->random_fh) {
 		wth->fast_seek = g_ptr_array_new();
@@ -2333,6 +2343,7 @@ wtap_dump_init_dumper(int file_type_subtype, wtap_compression_type compression_t
 	wdh->file_encap = params->encap;
 	wdh->compression_type = compression_type;
 	wdh->wslua_data = NULL;
+	wdh->shb_iface_to_global = params->shb_iface_to_global;
 	wdh->interface_data = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
 
 	/* Set Section Header Block data */
@@ -2378,7 +2389,7 @@ wtap_dump_init_dumper(int file_type_subtype, wtap_compression_type compression_t
 	wdh->dsbs_initial = params->dsbs_initial;
 	wdh->dsbs_growing = params->dsbs_growing;
 	/* Set Sysdig meta events */
-	wdh->sysdig_mev_growing = params->sysdig_mev_growing;
+	wdh->mevs_growing = params->mevs_growing;
 	return wdh;
 }
 
@@ -2755,11 +2766,11 @@ void
 wtap_dump_discard_sysdig_meta_events(wtap_dumper *wdh)
 {
 	/* As above for DSBs. */
-	if (wdh->sysdig_mev_growing) {
+	if (wdh->mevs_growing) {
 		/*
 		 * Pretend we've written all of them.
 		 */
-		wdh->sysdig_mev_growing_written = wdh->sysdig_mev_growing->len;
+		wdh->mevs_growing_written = wdh->mevs_growing->len;
 	}
 }
 

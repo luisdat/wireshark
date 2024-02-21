@@ -43,11 +43,12 @@ set_source_files_properties(
 
 register_plugin_files(plugin.c
 	plugin
+	"PROFINET dissector"
 	${DISSECTOR_SRC}
 	${DISSECTOR_SUPPORT_SRC}
 )
 
-add_wireshark_plugin_library(profinet epan)
+add_wireshark_epan_plugin_library(profinet)
 
 target_link_libraries(profinet epan)
 

@@ -24,28 +24,28 @@ void proto_register_gsm_bsslap(void);
 static dissector_handle_t bsslap_rrlp_handle = NULL;
 
 /* Initialize the protocol and registered fields */
-static int proto_gsm_bsslap = -1;
-static int hf_gsm_bsslap_msg_type = -1;
-int hf_gsm_a_bsslap_elem_id = -1;
-static int hf_gsm_bsslap_ta = -1;
-static int hf_gsm_bsslap_timer_value = -1;
-static int hf_gsm_bsslap_ms_pow = -1;
-static int hf_gsm_bsslap_cause = -1;
-static int hf_gsm_bsslap_rrlp_flg = -1;
-static int hf_gsm_bsslap_tfi = -1;
-static int hf_gsm_bsslap_poll_rep = -1;
-static int hf_gsm_bsslap_lac = -1;
-static int hf_gsm_bsslap_cell_id_disc = -1;
-static int hf_gsm_bsslap_encryption_key = -1;
+static int proto_gsm_bsslap;
+static int hf_gsm_bsslap_msg_type;
+int hf_gsm_a_bsslap_elem_id;
+static int hf_gsm_bsslap_ta;
+static int hf_gsm_bsslap_timer_value;
+static int hf_gsm_bsslap_ms_pow;
+static int hf_gsm_bsslap_cause;
+static int hf_gsm_bsslap_rrlp_flg;
+static int hf_gsm_bsslap_tfi;
+static int hf_gsm_bsslap_poll_rep;
+static int hf_gsm_bsslap_lac;
+static int hf_gsm_bsslap_cell_id_disc;
+static int hf_gsm_bsslap_encryption_key;
 
 /* Initialize the subtree pointers */
-static int ett_gsm_bsslap = -1;
-static int ett_bsslap_cell_list = -1;
+static int ett_gsm_bsslap;
+static int ett_bsslap_cell_list;
 
-static expert_field ei_gsm_bsslap_missing_mandatory_element = EI_INIT;
-static expert_field ei_gsm_bsslap_not_decoded_yet = EI_INIT;
+static expert_field ei_gsm_bsslap_missing_mandatory_element;
+static expert_field ei_gsm_bsslap_not_decoded_yet;
 
-/* Table 5.1: Element Indentifier codes */
+/* Table 5.1: Element Identifier codes */
 #define BSSLAP_PARAM_TIMING_ADVANCE                  0x01
 #define BSSLAP_PARAM_RESERVED_01                     0x08
 #define BSSLAP_PARAM_CELL_IDENTITY                   0x09
@@ -311,7 +311,7 @@ de_cell_id_list(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, guint32 off
         }
         curr_offset += consumed;
         len-=consumed;
-        /* lengt is "cell id" + discriminator */
+        /* length is "cell id" + discriminator */
         proto_item_set_len(item, consumed+1);
     }
 
@@ -730,7 +730,7 @@ dissect_gsm_bsslap_u_tdoa_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
 
     /* Delta Timer IE 5.22 O (note 1) TV 2 */
     ELEM_OPT_TV(BSSLAP_PARAM_DELTA_TIMER, GSM_A_PDU_TYPE_BSSLAP, DE_BLAP_DELTA_TIME, NULL);
-    /*  Polling Repitition IE 5.28 (note) C (note 2) TV 2 */
+    /*  Polling Repetition IE 5.28 (note) C (note 2) TV 2 */
     ELEM_OPT_TV(BSSLAP_PARAM_POLLING_REPETITION, GSM_A_PDU_TYPE_BSSLAP, DE_BLAP_POLL_REP, NULL);
 
     return;
@@ -935,13 +935,11 @@ proto_register_gsm_bsslap(void)
 
     for (i=0; i < NUM_GSM_BSSLAP_MSG; i++, last_offset++)
     {
-        ett_gsm_bsslap_msg[i] = -1;
         ett[last_offset] = &ett_gsm_bsslap_msg[i];
     }
 
     for (i=0; i < NUM_GSM_BSSLAP_ELEM; i++, last_offset++)
     {
-        ett_gsm_bsslap_elem[i] = -1;
         ett[last_offset] = &ett_gsm_bsslap_elem[i];
     }
 

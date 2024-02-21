@@ -31,6 +31,7 @@
 #include <glib.h>
 
 #include <epan/prefs.h>
+#include <epan/prefs-int.h>
 
 #include "ui/iface_toolbar.h"
 
@@ -90,7 +91,11 @@ typedef struct _extcap_callback_info_t
     gchar ** err_str;
 } extcap_callback_info_t;
 
-/* Callback definition for extcap_foreach */
+/* Callback definition for extcap_run_one.
+ * N.B.: extcap_run_one does not use the return value, which is
+ * vestigial from extcap_foreach, which no longer exists.
+ * Now extcap operations are run in parallel in multiple threads.
+ */
 typedef gboolean(*extcap_cb_t)(extcap_callback_info_t info_structure);
 
 /** GThreadPool does not support pushing new work from a thread while waiting
@@ -188,7 +193,7 @@ compare_tools(gconstpointer a, gconstpointer b)
 }
 
 void
-extcap_get_descriptions(plugin_description_callback callback, void *callback_data)
+extcap_get_descriptions(extcap_plugin_description_callback callback, void *callback_data)
 {
     extcap_ensure_all_interfaces_loaded();
 
@@ -543,7 +548,7 @@ static gboolean cb_dlt(extcap_callback_info_t cb_info)
     /*
      * Allocate the interface capabilities structure.
      */
-    caps = (if_capabilities_t *) g_malloc(sizeof * caps);
+    caps = (if_capabilities_t *) g_malloc0(sizeof * caps);
     caps->can_set_rfmon = FALSE;
     caps->timestamp_types = NULL;
 
@@ -566,19 +571,32 @@ static gboolean cb_dlt(extcap_callback_info_t cb_info)
     }
 
     /* Check to see if we built a list */
-    if (linktype_list != NULL && cb_info.data != NULL)
+    if (linktype_list != NULL)
     {
         caps->data_link_types = linktype_list;
-        *(if_capabilities_t **) cb_info.data = caps;
     }
     else
     {
+        caps->primary_msg = g_strdup("Extcap returned no DLTs");
         if (cb_info.err_str)
         {
             ws_debug("  returned no DLTs");
-            *(cb_info.err_str) = g_strdup("Extcap returned no DLTs");
+            *(cb_info.err_str) = g_strdup(caps->primary_msg);
         }
+    }
+    if (cb_info.data != NULL)
+    {
+        *(if_capabilities_t **) cb_info.data = caps;
+    } else
+    {
+#ifdef HAVE_LIBPCAP
+        free_if_capabilities(caps);
+#else
+        /* TODO: free_if_capabilities is in capture-pcap-util.c and doesn't
+         * get defined unless HAVE_LIBPCAP is set.
+         */
         g_free(caps);
+#endif
     }
 
     extcap_free_dlts(temp);
@@ -723,6 +741,12 @@ append_extcap_interface_list(GList *list)
 
 void extcap_register_preferences(void)
 {
+    /* Unconditionally register the extcap configuration file, so that
+     * it is copied if we copy the profile even if we're not going to
+     * read it because extcaps are disabled.
+     */
+    profile_register_persconffile("extcap");
+
     if (prefs.capture_no_extcap)
         return;
 
@@ -845,6 +869,7 @@ extcap_pref_for_argument(const gchar *ifname, struct _extcap_arg *arg)
 
 static gboolean cb_preference(extcap_callback_info_t cb_info)
 {
+    gboolean new_pref = false;
     GList *arguments = NULL;
     GList **il = (GList **) cb_info.data;
     module_t *dev_module = NULL;
@@ -877,7 +902,7 @@ static gboolean cb_preference(extcap_callback_info_t cb_info)
                     {
                         char *pref_name_for_prefs;
                         char *pref_title = wmem_strdup(wmem_epan_scope(), arg->display);
-
+                        new_pref = TRUE;
                         arg->pref_valptr = extcap_prefs_dynamic_valptr(pref_ifname, &pref_name_for_prefs);
                         /* Set an initial value if any (the string will be copied at registration) */
                         if (arg->default_complex)
@@ -922,10 +947,13 @@ static gboolean cb_preference(extcap_callback_info_t cb_info)
         }
     }
 
-    *il = g_list_append(*il, arguments);
+    if (il) {
+        *il = g_list_append(*il, arguments);
+    } else {
+        extcap_free_arg_list(arguments);
+    }
 
-    /* By returning false, extcap_foreach will break on first found */
-    return TRUE;
+    return new_pref;
 }
 
 GList *
@@ -969,7 +997,6 @@ static gboolean cb_reload_preference(extcap_callback_info_t cb_info)
     }
     g_list_free(arguments);
 
-    /* By returning false, extcap_foreach will break on first found */
     return FALSE;
 }
 
@@ -2135,6 +2162,7 @@ extcap_list_interfaces_cb(thread_pool_t *pool, void *data, char *output)
 static void
 extcap_load_interface_list(void)
 {
+    bool prefs_registered = false;
     if (prefs.capture_no_extcap)
         return;
 
@@ -2160,7 +2188,6 @@ extcap_load_interface_list(void)
         int minor = 0;
         guint count = 0;
         extcap_run_extcaps_info_t *infos;
-        GList *unused_arguments = NULL;
 
         _loaded_interfaces = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, extcap_free_interface_info);
         /* Cleanup lookup table */
@@ -2199,15 +2226,18 @@ extcap_load_interface_list(void)
                 extcap_callback_info_t cb_info = {
                     .ifname = iface_info->ifname,
                     .output = iface_info->output,
-                    .data = &unused_arguments,
+                    .data = NULL,
                 };
-                cb_preference(cb_info);
+                prefs_registered = cb_preference(cb_info);
             }
         }
-        /* XXX rework cb_preference such that this unused list can be removed. */
-        extcap_free_if_configuration(unused_arguments, TRUE);
         extcap_free_extcaps_info_array(infos, count);
         g_free(arg_version);
+    }
+
+    if (prefs_registered)
+    {
+        prefs_read_module("extcap");
     }
 }
 

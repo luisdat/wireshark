@@ -38,6 +38,7 @@ prefs_to_capture_opts(void)
     /* Set promiscuous mode from the preferences setting. */
     /* the same applies to other preferences settings as well. */
     global_capture_opts.default_options.promisc_mode = prefs.capture_prom_mode;
+    global_capture_opts.default_options.monitor_mode = prefs.capture_monitor_mode;
     global_capture_opts.use_pcapng                   = prefs.capture_pcap_ng;
     global_capture_opts.show_info                    = prefs.capture_show_info;
     global_capture_opts.real_time_mode               = prefs.capture_real_time;
@@ -93,7 +94,7 @@ prefs_store_ext_helper(const char * module_name, const char *pref_name, const ch
     if (!pref)
         return 0;
 
-    if (prefs_get_type(pref) == PREF_STRING )
+    if (prefs_get_type(pref) == PREF_STRING || prefs_get_type(pref) == PREF_DISSECTOR)
     {
         pref_changed |= prefs_set_string_value(pref, pref_value, pref_stashed);
         if ( !pref_changed || prefs_get_string_value(pref, pref_stashed) != 0 )
@@ -186,7 +187,8 @@ column_prefs_add_custom(gint fmt, const gchar *title, const gchar *custom_fields
         last_cfmt = (fmt_data *) clp->data;
         if (position > 0 && position <= colnr) {
             /* Custom fields may be added at any position, depending on the given argument */
-            prefs.col_list = g_list_insert(prefs.col_list, cfmt, position);
+            colnr = position;
+            prefs.col_list = g_list_insert(prefs.col_list, cfmt, colnr);
         } else if (last_cfmt->fmt == COL_INFO) {
             /* Last column is COL_INFO, add custom column before this */
             colnr -= 1;
@@ -198,6 +200,7 @@ column_prefs_add_custom(gint fmt, const gchar *title, const gchar *custom_fields
         cfmt->visible = FALSE;  /* Will be set to TRUE in visible_toggled() when added to list */
         prefs.col_list = g_list_append(prefs.col_list, cfmt);
     }
+    recent_insert_column(colnr);
 
     return colnr;
 }
@@ -232,8 +235,8 @@ column_prefs_custom_resolve(const gchar* custom_field)
     bool resolve = false;
 
     fields = g_regex_split_simple(COL_CUSTOM_PRIME_REGEX, custom_field,
-                                  (GRegexCompileFlags) (G_REGEX_ANCHORED | G_REGEX_RAW),
-                                  G_REGEX_MATCH_ANCHORED);
+                                  (GRegexCompileFlags) (G_REGEX_RAW),
+                                  0);
 
     for (guint i = 0; i < g_strv_length(fields); i++) {
         if (fields[i] && *fields[i]) {
@@ -273,6 +276,7 @@ void
 column_prefs_remove_nth(gint col)
 {
     column_prefs_remove_link(g_list_nth(prefs.col_list, col));
+    recent_remove_column(col);
 }
 
 void save_migrated_uat(const char *uat_name, gboolean *old_pref)

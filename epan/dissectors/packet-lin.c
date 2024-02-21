@@ -35,32 +35,32 @@
 static heur_dissector_list_t                 heur_subdissector_list;
 static heur_dtbl_entry_t                    *heur_dtbl_entry;
 
-static int proto_lin = -1;
+static int proto_lin;
 
 static dissector_handle_t lin_handle;
 
 /* header field */
-static int hf_lin_msg_format_rev = -1;
-static int hf_lin_reserved1 = -1;
-static int hf_lin_payload_length = -1;
-static int hf_lin_message_type = -1;
-static int hf_lin_checksum_type = -1;
-static int hf_lin_pid = -1;
-static int hf_lin_id = -1;
-static int hf_lin_parity = -1;
-static int hf_lin_checksum = -1;
-static int hf_lin_err_errors = -1;
-static int hf_lin_err_no_slave_response = -1;
-static int hf_lin_err_framing = -1;
-static int hf_lin_err_parity = -1;
-static int hf_lin_err_checksum = -1;
-static int hf_lin_err_invalidid = -1;
-static int hf_lin_err_overflow = -1;
-static int hf_lin_event_id = -1;
+static int hf_lin_msg_format_rev;
+static int hf_lin_reserved1;
+static int hf_lin_payload_length;
+static int hf_lin_message_type;
+static int hf_lin_checksum_type;
+static int hf_lin_pid;
+static int hf_lin_id;
+static int hf_lin_parity;
+static int hf_lin_checksum;
+static int hf_lin_err_errors;
+static int hf_lin_err_no_slave_response;
+static int hf_lin_err_framing;
+static int hf_lin_err_parity;
+static int hf_lin_err_checksum;
+static int hf_lin_err_invalidid;
+static int hf_lin_err_overflow;
+static int hf_lin_event_id;
 
-static gint ett_lin = -1;
-static gint ett_lin_pid = -1;
-static gint ett_errors = -1;
+static gint ett_lin;
+static gint ett_lin_pid;
+static gint ett_errors;
 
 static int * const error_fields[] = {
     &hf_lin_err_overflow,
@@ -252,13 +252,14 @@ post_update_lin_interfaces_cb(void) {
 
 static guint
 get_bus_id(packet_info *pinfo) {
-    guint32             interface_id = pinfo->rec->rec_header.packet_header.interface_id;
-    const char         *interface_name = epan_get_interface_name(pinfo->epan, interface_id);
-    interface_config_t *tmp = NULL;
-
     if (!(pinfo->rec->presence_flags & WTAP_HAS_INTERFACE_ID)) {
         return 0;
     }
+
+    guint32             interface_id = pinfo->rec->rec_header.packet_header.interface_id;
+    unsigned            section_number = pinfo->rec->presence_flags & WTAP_HAS_SECTION_NUMBER ? pinfo->rec->section_number : 0;
+    const char         *interface_name = epan_get_interface_name(pinfo->epan, interface_id, section_number);
+    interface_config_t *tmp = NULL;
 
     if (interface_name != NULL && interface_name[0] != 0) {
         tmp = ht_lookup_interface_config_by_name(interface_name);
@@ -424,6 +425,7 @@ dissect_lin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     guint payload_length;
     guint msg_type;
     lin_info_t lininfo;
+    guint64 errors;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, LIN_NAME);
     col_clear(pinfo->cinfo, COL_INFO);
@@ -451,9 +453,15 @@ dissect_lin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         lininfo.len = 0;
         lin_set_source_and_destination_columns(pinfo, &lininfo);
     }
-    proto_tree_add_bitmask(lin_tree, tvb, 7, hf_lin_err_errors, ett_errors, error_fields, ENC_BIG_ENDIAN);
+    proto_tree_add_bitmask_ret_uint64(lin_tree, tvb, 7, hf_lin_err_errors, ett_errors, error_fields, ENC_BIG_ENDIAN, &errors);
 
     col_add_fstr(pinfo->cinfo, COL_INFO, "LIN %s", val_to_str(msg_type, lin_msg_type_names, "(0x%02x)"));
+
+    if (errors != 0) {
+        col_append_fstr(pinfo->cinfo, COL_INFO, " - ERR");
+        proto_item_set_end(ti_root, tvb, 8);
+        return 8;
+    }
 
     switch (msg_type) {
     case LIN_MSG_TYPE_EVENT: {
@@ -571,7 +579,7 @@ proto_register_lin(void) {
 
     /* the lin.frame_id subdissector table carries the bus id in the higher 16 bits */
     subdissector_table = register_dissector_table("lin.frame_id", "LIN Frame ID", proto_lin, FT_UINT8, BASE_HEX);
-    heur_subdissector_list = register_heur_dissector_list(LIN_NAME_FILTER, proto_lin);
+    heur_subdissector_list = register_heur_dissector_list_with_description(LIN_NAME_FILTER, "LIN Message data fallback", proto_lin);
 
     static uat_field_t lin_interface_mapping_uat_fields[] = {
         UAT_FLD_HEX(interface_configs,      interface_id,   "Interface ID",   "ID of the Interface with 0xffffffff = any (hex uint32 without leading 0x)"),

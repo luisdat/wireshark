@@ -268,8 +268,8 @@ print_usage (FILE *output)
 
     fprintf(output, "\n"
             "Miscellaneous:\n"
-            "  -h                     display this help and exit\n"
-            "  -v                     print version information and exit\n"
+            "  -h, --help             display this help and exit\n"
+            "  -v, --version          print version information and exit\n"
             "  -q                     don't report processed packet counts\n"
             "");
 }
@@ -480,6 +480,7 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
 
         case 'P':
             hdr_export_pdu = TRUE;
+            wtap_encap_type = WTAP_ENCAP_WIRESHARK_UPPER_PDU;
             info->payload = ws_optarg;
             break;
 

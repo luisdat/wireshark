@@ -210,7 +210,7 @@ int ether_name_resolution_len(void)
  ******************************************************************************/
 static int ipv4_to_str(const address* addr, gchar *buf, int buf_len)
 {
-    ip_to_str_buf((const guint8*)addr->data, buf, buf_len);
+    ip_addr_to_str_buf(addr->data, buf, buf_len);
     return (int)(strlen(buf)+1);
 }
 
@@ -341,11 +341,11 @@ static int fc_len(void)
  ******************************************************************************/
 /* FC Network Header Network Address Authority Identifiers */
 #define FC_NH_NAA_IEEE          1   /* IEEE 802.1a */
-#define FC_NH_NAA_IEEE_E        2   /* IEEE Exteneded */
+#define FC_NH_NAA_IEEE_E        2   /* IEEE Extended */
 #define FC_NH_NAA_LOCAL         3
 #define FC_NH_NAA_IP            4   /* 32-bit IP address */
 #define FC_NH_NAA_IEEE_R        5   /* IEEE Registered */
-#define FC_NH_NAA_IEEE_R_E      6   /* IEEE Registered Exteneded */
+#define FC_NH_NAA_IEEE_R_E      6   /* IEEE Registered Extended */
 /* according to FC-PH 3 draft these are now reclaimed and reserved */
 #define FC_NH_NAA_CCITT_INDV    12  /* CCITT 60 bit individual address */
 #define FC_NH_NAA_CCITT_GRP     14  /* CCITT 60 bit group address */

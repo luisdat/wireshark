@@ -66,7 +66,7 @@ typedef struct _fragment_head {
 	struct _fragment_item *first_gap;	/**< pointer to last fragment before first gap.
 					 * NULL if there is no fragment starting at offset 0 */
 	guint ref_count; 		/**< reference count in reassembled_table */
-	guint32 contiguous_len;	/**< contigous length from head up to first gap */
+	guint32 contiguous_len;	/**< contiguous length from head up to first gap */
 	guint32 frame;			/**< maximum of all frame numbers added to reassembly */
 	guint32	len;			/**< When flags&FD_BLOCKSEQUENCE and FD_DEFRAGMENTED
 					 * are set, the number of bytes of the full datagram.
@@ -571,13 +571,13 @@ reassembly_table_cleanup(void);
  *
  * will create global variables:
  *
- *     static gint ett_foo_body_fragment = -1;
- *     static gint ett_foo_body_fragments = -1;
- *     static int hf_foo_body_fragment = -1;
- *     static int hf_foo_body_fragments = -1;
- *     static int hf_foo_body_fragment_overlap = -1;
+ *     static gint ett_foo_body_fragment;
+ *     static gint ett_foo_body_fragments;
+ *     static int hf_foo_body_fragment;
+ *     static int hf_foo_body_fragments;
+ *     static int hf_foo_body_fragment_overlap;
  *     ...
- *     static int hf_foo_body_segment = -1;
+ *     static int hf_foo_body_segment;
  *
  *     static const fragment_items foo_body_fragment_items = {
  *         &ett_foo_body_fragment,
@@ -590,20 +590,20 @@ reassembly_table_cleanup(void);
  *     };
  */
 #define REASSEMBLE_ITEMS_DEFINE(var_prefix, name_prefix) \
-    static gint ett_##var_prefix##_fragment = -1; \
-    static gint ett_##var_prefix##_fragments = -1; \
-    static int hf_##var_prefix##_fragments = -1; \
-    static int hf_##var_prefix##_fragment = -1; \
-    static int hf_##var_prefix##_fragment_overlap = -1; \
-    static int hf_##var_prefix##_fragment_overlap_conflicts = -1; \
-    static int hf_##var_prefix##_fragment_multiple_tails = -1; \
-    static int hf_##var_prefix##_fragment_too_long_fragment = -1; \
-    static int hf_##var_prefix##_fragment_error = -1; \
-    static int hf_##var_prefix##_fragment_count = -1; \
-    static int hf_##var_prefix##_reassembled_in = -1; \
-    static int hf_##var_prefix##_reassembled_length = -1; \
-    static int hf_##var_prefix##_reassembled_data = -1; \
-    static int hf_##var_prefix##_segment = -1; \
+    static gint ett_##var_prefix##_fragment; \
+    static gint ett_##var_prefix##_fragments; \
+    static int hf_##var_prefix##_fragments; \
+    static int hf_##var_prefix##_fragment; \
+    static int hf_##var_prefix##_fragment_overlap; \
+    static int hf_##var_prefix##_fragment_overlap_conflicts; \
+    static int hf_##var_prefix##_fragment_multiple_tails; \
+    static int hf_##var_prefix##_fragment_too_long_fragment; \
+    static int hf_##var_prefix##_fragment_error; \
+    static int hf_##var_prefix##_fragment_count; \
+    static int hf_##var_prefix##_reassembled_in; \
+    static int hf_##var_prefix##_reassembled_length; \
+    static int hf_##var_prefix##_reassembled_data; \
+    static int hf_##var_prefix##_segment; \
     static const fragment_items var_prefix##_fragment_items = { \
         &ett_##var_prefix##_fragment, \
         &ett_##var_prefix##_fragments, \
@@ -916,20 +916,20 @@ streaming_reassembly_info_new(void);
  *     static reassembly_table proto_a_streaming_reassembly_table;
  *     ...
  *     // heads for displaying reassembley information
- *     static int hf_msg_fragments = -1;
- *     static int hf_msg_fragment = -1;
- *     static int hf_msg_fragment_overlap = -1;
- *     static int hf_msg_fragment_overlap_conflicts = -1;
- *     static int hf_msg_fragment_multiple_tails = -1;
- *     static int hf_msg_fragment_too_long_fragment = -1;
- *     static int hf_msg_fragment_error = -1;
- *     static int hf_msg_fragment_count = -1;
- *     static int hf_msg_reassembled_in = -1;
- *     static int hf_msg_reassembled_length = -1;
- *     static int hf_msg_body_segment = -1;
+ *     static int hf_msg_fragments;
+ *     static int hf_msg_fragment;
+ *     static int hf_msg_fragment_overlap;
+ *     static int hf_msg_fragment_overlap_conflicts;
+ *     static int hf_msg_fragment_multiple_tails;
+ *     static int hf_msg_fragment_too_long_fragment;
+ *     static int hf_msg_fragment_error;
+ *     static int hf_msg_fragment_count;
+ *     static int hf_msg_reassembled_in;
+ *     static int hf_msg_reassembled_length;
+ *     static int hf_msg_body_segment;
  *     ...
- *     static gint ett_msg_fragment = -1;
- *     static gint ett_msg_fragments = -1;
+ *     static gint ett_msg_fragment;
+ *     static gint ett_msg_fragments;
  *     ...
  *     static const fragment_items msg_frag_items = {
  *         &ett_msg_fragment,

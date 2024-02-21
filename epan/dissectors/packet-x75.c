@@ -26,21 +26,21 @@ void proto_reg_handoff_x75(void);
 #define X75_ADDRESS_MLP_STE_C 0x0F
 #define X75_ADDRESS_MLP_STE_D 0x07
 
-static int proto_x75 = -1;
-static int hf_x75_address = -1;
-static int hf_x75_control = -1;
-static int hf_x75_n_r = -1;
-static int hf_x75_n_s = -1;
-static int hf_x75_p = -1;
-static int hf_x75_f = -1;
-static int hf_x75_s_ftype = -1;
-static int hf_x75_u_modifier_cmd = -1;
-static int hf_x75_u_modifier_resp = -1;
-static int hf_x75_ftype_i = -1;
-static int hf_x75_ftype_s_u = -1;
+static int proto_x75;
+static int hf_x75_address;
+static int hf_x75_control;
+static int hf_x75_n_r;
+static int hf_x75_n_s;
+static int hf_x75_p;
+static int hf_x75_f;
+static int hf_x75_s_ftype;
+static int hf_x75_u_modifier_cmd;
+static int hf_x75_u_modifier_resp;
+static int hf_x75_ftype_i;
+static int hf_x75_ftype_s_u;
 
-static gint ett_x75 = -1;
-static gint ett_x75_control = -1;
+static gint ett_x75;
+static gint ett_x75_control;
 
 static dissector_handle_t data_handle;
 static dissector_handle_t x75_handle;
@@ -156,11 +156,7 @@ dissect_x75(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         if (len > 128)
             len = 128;
 
-        char *tmp = (char*)wmem_alloc(pinfo->pool, len + 1);
-        tmp[len] = 0x00;
-        tvb_memcpy(next_tvb, tmp, 0, len);
-        col_append_fstr(pinfo->cinfo, COL_INFO, ", %s", tmp);
-        wmem_free(pinfo->pool, tmp);
+        col_append_fstr(pinfo->cinfo, COL_INFO, ", %s", tvb_format_text(pinfo->pool, next_tvb, 0, len));
 
         call_dissector(data_handle, next_tvb, pinfo, tree);
     }
@@ -232,8 +228,6 @@ void
 proto_reg_handoff_x75(void)
 {
     data_handle = find_dissector("data");
-
-    dissector_add_uint("wtap_encap", WTAP_ENCAP_LAPB, x75_handle);
 }
 
 /*

@@ -29,16 +29,24 @@
 #include "irda-appl.h"
 
 /*
- * This plugin dissects infrared data transmissions as defined by the IrDA
- * specification (www.irda.org).  See
+ * This plugin dissects infrared data transmissions as defined by IrDA
+ * specifications.  See
  *
- *      http://www.irdajp.info/specifications.php
+ *    https://web.archive.org/web/20040405053146/http://www.irda.org/standards/specifications.asp
  *
  * or
  *
- *      https://web.archive.org/web/20040405053146/http://www.irda.org/standards/specifications.asp
+ *    https://archive.org/search?query=creator%3A%22Infrared+Data+Association%22
  *
- * for various IrDA specifications.
+ * for various IrDA specifications, including a zip archive of the IrPHY
+ * 1.4, IrLAP 1.1, IrLMP 1.1, IrDA Tiny TP 1.1, and IrDA Point and Shoot
+ * Profile 1.1 and Test Specification 1.0 at
+ *
+ *    https://web.archive.org/web/20040405053146/http://www.irda.org/standards/pubs/IrData.zip
+ *
+ * or the the IrLAP 1.1 specification at
+ *
+ *    https://archive.org/details/ir-lap-11
  *
  * The plugin operates both offline with libpcap files and online on supported
  * platforms. Live dissection is currently available for Linux-IrDA
@@ -133,99 +141,99 @@ void proto_reg_handoff_irda(void);
 void proto_register_irda(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_irlap = -1;
-static int hf_lap_a = -1;
-static int hf_lap_a_cr = -1;
-static int hf_lap_a_address = -1;
-static int hf_lap_c = -1;
-static int hf_lap_c_nr = -1;
-static int hf_lap_c_ns = -1;
-static int hf_lap_c_p = -1;
-static int hf_lap_c_f = -1;
-static int hf_lap_c_s = -1;
-static int hf_lap_c_u_cmd = -1;
-static int hf_lap_c_u_rsp = -1;
-static int hf_lap_c_i = -1;
-static int hf_lap_c_s_u = -1;
-static int hf_lap_i = -1;
-static int hf_snrm_saddr = -1;
-static int hf_snrm_daddr = -1;
-static int hf_snrm_ca = -1;
-static int hf_ua_saddr = -1;
-static int hf_ua_daddr = -1;
-static int hf_negotiation_param = -1;
-static int hf_param_pi = -1;
-static int hf_param_pl = -1;
-static int hf_param_pv = -1;
-static int hf_xid_ident = -1;
-static int hf_xid_saddr = -1;
-static int hf_xid_daddr = -1;
-static int hf_xid_flags = -1;
-static int hf_xid_s = -1;
-static int hf_xid_conflict = -1;
-static int hf_xid_slotnr = -1;
-static int hf_xid_version = -1;
+static int proto_irlap;
+static int hf_lap_a;
+static int hf_lap_a_cr;
+static int hf_lap_a_address;
+static int hf_lap_c;
+static int hf_lap_c_nr;
+static int hf_lap_c_ns;
+static int hf_lap_c_p;
+static int hf_lap_c_f;
+static int hf_lap_c_s;
+static int hf_lap_c_u_cmd;
+static int hf_lap_c_u_rsp;
+static int hf_lap_c_i;
+static int hf_lap_c_s_u;
+static int hf_lap_i;
+static int hf_snrm_saddr;
+static int hf_snrm_daddr;
+static int hf_snrm_ca;
+static int hf_ua_saddr;
+static int hf_ua_daddr;
+static int hf_negotiation_param;
+static int hf_param_pi;
+static int hf_param_pl;
+static int hf_param_pv;
+static int hf_xid_ident;
+static int hf_xid_saddr;
+static int hf_xid_daddr;
+static int hf_xid_flags;
+static int hf_xid_s;
+static int hf_xid_conflict;
+static int hf_xid_slotnr;
+static int hf_xid_version;
 
-static int proto_irlmp = -1;
-static int hf_lmp_xid_hints = -1;
-static int hf_lmp_xid_charset = -1;
-static int hf_lmp_xid_name = -1;
-static int hf_lmp_xid_name_no_encoding = -1;
-static int hf_lmp_dst = -1;
-static int hf_lmp_dst_control = -1;
-static int hf_lmp_dst_lsap = -1;
-static int hf_lmp_src = -1;
-static int hf_lmp_src_r = -1;
-static int hf_lmp_src_lsap = -1;
-static int hf_lmp_opcode = -1;
-static int hf_lmp_rsvd = -1;
-static int hf_lmp_reason = -1;
-static int hf_lmp_mode = -1;
-static int hf_lmp_status = -1;
+static int proto_irlmp;
+static int hf_lmp_xid_hints;
+static int hf_lmp_xid_charset;
+static int hf_lmp_xid_name;
+static int hf_lmp_xid_name_no_encoding;
+static int hf_lmp_dst;
+static int hf_lmp_dst_control;
+static int hf_lmp_dst_lsap;
+static int hf_lmp_src;
+static int hf_lmp_src_r;
+static int hf_lmp_src_lsap;
+static int hf_lmp_opcode;
+static int hf_lmp_rsvd;
+static int hf_lmp_reason;
+static int hf_lmp_mode;
+static int hf_lmp_status;
 
-static int proto_iap = -1;
-static int hf_iap_ctl = -1;
-static int hf_iap_ctl_lst = -1;
-static int hf_iap_ctl_ack = -1;
-static int hf_iap_ctl_opcode = -1;
-static int hf_iap_class_name = -1;
-static int hf_iap_attr_name = -1;
-static int hf_iap_return = -1;
-static int hf_iap_list_len = -1;
-static int hf_iap_list_entry = -1;
-static int hf_iap_obj_id = -1;
-static int hf_iap_attr_type = -1;
-static int hf_iap_int = -1;
-static int hf_iap_seq_len = -1;
-static int hf_iap_oct_seq = -1;
-static int hf_iap_char_set = -1;
-static int hf_iap_string = -1;
-static int hf_iap_invaloctet = -1;
-static int hf_iap_invallsap = -1;
+static int proto_iap;
+static int hf_iap_ctl;
+static int hf_iap_ctl_lst;
+static int hf_iap_ctl_ack;
+static int hf_iap_ctl_opcode;
+static int hf_iap_class_name;
+static int hf_iap_attr_name;
+static int hf_iap_return;
+static int hf_iap_list_len;
+static int hf_iap_list_entry;
+static int hf_iap_obj_id;
+static int hf_iap_attr_type;
+static int hf_iap_int;
+static int hf_iap_seq_len;
+static int hf_iap_oct_seq;
+static int hf_iap_char_set;
+static int hf_iap_string;
+static int hf_iap_invaloctet;
+static int hf_iap_invallsap;
 
-static int proto_ttp = -1;
-static int hf_ttp_p = -1;
-static int hf_ttp_icredit = -1;
-static int hf_ttp_m = -1;
-static int hf_ttp_dcredit = -1;
+static int proto_ttp;
+static int hf_ttp_p;
+static int hf_ttp_icredit;
+static int hf_ttp_m;
+static int hf_ttp_dcredit;
 
-static int proto_log = -1;
-static int hf_log_msg = -1;
-static int hf_log_missed = -1;
+static int proto_log;
+static int hf_log_msg;
+static int hf_log_missed;
 
 /* Initialize the subtree pointers */
-static gint ett_irlap = -1;
-static gint ett_lap_a = -1;
-static gint ett_lap_c = -1;
-static gint ett_lap_i = -1;
-static gint ett_xid_flags = -1;
-static gint ett_log = -1;
-static gint ett_irlmp = -1;
-static gint ett_lmp_dst = -1;
-static gint ett_lmp_src = -1;
-static gint ett_iap = -1;
-static gint ett_iap_ctl = -1;
-static gint ett_ttp = -1;
+static gint ett_irlap;
+static gint ett_lap_a;
+static gint ett_lap_c;
+static gint ett_lap_i;
+static gint ett_xid_flags;
+static gint ett_log;
+static gint ett_irlmp;
+static gint ett_lmp_dst;
+static gint ett_lmp_src;
+static gint ett_iap;
+static gint ett_iap_ctl;
+static gint ett_ttp;
 
 #define MAX_PARAMETERS      32
 static gint ett_param[MAX_PARAMETERS];
@@ -1488,6 +1496,7 @@ static void dissect_xid(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root, pro
 
     if (lap_tree)
     {
+        /* Discovery flags */
         ti = proto_tree_add_item(i_tree, hf_xid_flags, tvb, offset, 1, ENC_BIG_ENDIAN);
         flags_tree = proto_item_add_subtree(ti, ett_xid_flags);
         proto_tree_add_item(flags_tree, hf_xid_s, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1509,6 +1518,7 @@ static void dissect_xid(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root, pro
                 proto_item_append_text(ti, " (final)");
         }
     }
+    /* Skip (empty?) byte even if no command.. Have seen non-zero values in a capture */
     offset++;
 
     if (lap_tree)
@@ -1796,7 +1806,7 @@ static void dissect_irlap(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root)
     offset++;
 
     /* process the control field */
-    c = dissect_xdlc_control(tvb, 1, pinfo, tree, hf_lap_c,
+    c = dissect_xdlc_control(tvb, offset, pinfo, tree, hf_lap_c,
             ett_lap_c, &irlap_cf_items, NULL, lap_c_u_cmd_abbr_vals,
             lap_c_u_rsp_abbr_vals, is_response, FALSE, FALSE);
     offset++;
@@ -2287,13 +2297,11 @@ void proto_register_irda(void)
     proto_register_subtree_array(ett, array_length(ett));
     for (i = 0; i < MAX_PARAMETERS; i++)
     {
-        ett_param[i] = -1;
         ett_p[i]     = &ett_param[i];
     }
     proto_register_subtree_array(ett_p, MAX_PARAMETERS);
     for (i = 0; i < MAX_IAP_ENTRIES; i++)
     {
-        ett_iap_entry[i] = -1;
         ett_iap_e[i]     = &ett_iap_entry[i];
     }
     proto_register_subtree_array(ett_iap_e, MAX_IAP_ENTRIES);

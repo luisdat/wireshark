@@ -1,7 +1,7 @@
 /* packet-ocp1.c
  * Dissector for Open Control Protocol OCP.1/AES70
  *
- * Copyright (c) 2021-2022 by Martin Mayer <martin.mayer@m2-it-solutions.de>
+ * Copyright (c) 2021-2024 by Martin Mayer <martin.mayer@m2-it-solutions.de>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -19,6 +19,7 @@
 #define OCP1_SYNC_VAL                0x3B
 #define OCP1_PROTO_VER             0x0001
 #define OCP1_FRAME_HEADER_LEN          10
+#define OCP1_MESSAGE_SIZE_LEN           4
 
 /* PDU Types */
 #define OCP1_PDU_TYPE_OCA_CMD        0x00
@@ -59,125 +60,126 @@ void proto_reg_handoff_ocp1(void);
 static dissector_handle_t ocp1_tcp_handle;
 static dissector_handle_t ocp1_udp_handle;
 
-static int proto_ocp1 = -1;
+static int proto_ocp1;
 expert_module_t* expert_ocp1;
 
 /* Header Fields */
-static int hf_ocp1_sync_value = -1;
-static int hf_ocp1_protocol_version = -1;
-static int hf_ocp1_pdu_size = -1;
-static int hf_ocp1_pdu_type = -1;
-static int hf_ocp1_message_count = -1;
+static int hf_ocp1_sync_value;
+static int hf_ocp1_protocol_version;
+static int hf_ocp1_pdu_size;
+static int hf_ocp1_pdu_type;
+static int hf_ocp1_message_count;
 
 /* Keep-Alive Fields */
-static int hf_ocp1_heartbeat_time_s = -1;
-static int hf_ocp1_heartbeat_time_ms = -1;
+static int hf_ocp1_heartbeat_time_s;
+static int hf_ocp1_heartbeat_time_ms;
 
 /* Common Fields */
-static int hf_ocp1_message_size = -1;
-static int hf_ocp1_message_handle = -1;
-static int hf_ocp1_message_target_ono = -1;
-static int hf_ocp1_message_emitter_ono = -1;
-static int hf_ocp1_message_occ = -1;
-static int hf_ocp1_message_method_id = -1;
-static int hf_ocp1_message_method_tree_level = -1;
-static int hf_ocp1_message_method_index = -1;
-static int hf_ocp1_message_event_id = -1;
-static int hf_ocp1_message_event_tree_level = -1;
-static int hf_ocp1_message_event_index = -1;
-static int hf_ocp1_message_parameter_count = -1;
-static int hf_ocp1_message_status_code = -1;
-static int hf_ocp1_response_in = -1;
-static int hf_ocp1_response_to = -1;
+static int hf_ocp1_message_size;
+static int hf_ocp1_message_handle;
+static int hf_ocp1_message_target_ono;
+static int hf_ocp1_message_emitter_ono;
+static int hf_ocp1_message_occ;
+static int hf_ocp1_message_method_id;
+static int hf_ocp1_message_method_tree_level;
+static int hf_ocp1_message_method_index;
+static int hf_ocp1_message_event_id;
+static int hf_ocp1_message_event_tree_level;
+static int hf_ocp1_message_event_index;
+static int hf_ocp1_message_parameter_count;
+static int hf_ocp1_message_status_code;
+static int hf_ocp1_response_in;
+static int hf_ocp1_response_to;
 
 /* Notification Fields */
-static int hf_ocp1_notification_parameter_context = -1;
+static int hf_ocp1_notification_parameter_context;
 
 /* Parameters */
-static int hf_ocp1_params = -1;
-static int hf_ocp1_params_bool = -1;
-static int hf_ocp1_params_ono = -1;
-static int hf_ocp1_params_event_id = -1;
-static int hf_ocp1_params_event_tree_level = -1;
-static int hf_ocp1_params_event_index = -1;
-static int hf_ocp1_params_method_id = -1;
-static int hf_ocp1_params_method_tree_level = -1;
-static int hf_ocp1_params_method_index = -1;
-static int hf_ocp1_params_property_id = -1;
-static int hf_ocp1_params_property_tree_level = -1;
-static int hf_ocp1_params_property_index = -1;
-static int hf_ocp1_params_blob = -1;
-static int hf_ocp1_params_blob_datasize = -1;
-static int hf_ocp1_params_blob_data = -1;
-static int hf_ocp1_params_string = -1;
-static int hf_ocp1_params_string_length = -1;
-static int hf_ocp1_params_string_value = -1;
-static int hf_ocp1_params_ntf_delivery_mode = -1;
-static int hf_ocp1_params_list_count = -1;
-static int hf_ocp1_params_map_count = -1;
-static int hf_ocp1_params_imageid = -1;
-static int hf_ocp1_params_classid = -1;
-static int hf_ocp1_params_classid_fields = -1;
-static int hf_ocp1_params_class_version = -1;
-static int hf_ocp1_params_oca_version = -1;
-static int hf_ocp1_params_reset_cause = -1;
-static int hf_ocp1_params_power_state = -1;
-static int hf_ocp1_params_media_clock_type = -1;
-static int hf_ocp1_params_component = -1;
-static int hf_ocp1_params_devicestate = -1;
-static int hf_ocp1_params_devicestate_oper = -1;
-static int hf_ocp1_params_devicestate_disabled = -1;
-static int hf_ocp1_params_devicestate_error = -1;
-static int hf_ocp1_params_devicestate_init = -1;
-static int hf_ocp1_params_devicestate_updating = -1;
-static int hf_ocp1_params_ocaver_major = -1;
-static int hf_ocp1_params_ocaver_minor = -1;
-static int hf_ocp1_params_ocaver_build = -1;
-static int hf_ocp1_params_ocaver_comp = -1;
-static int hf_ocp1_params_subscriber_ctx_len = -1;
-static int hf_ocp1_params_libvol_id = -1;
-static int hf_ocp1_params_libvoltype_id = -1;
-static int hf_ocp1_params_library_count = -1;
-static int hf_ocp1_params_time_ntp = -1;
-static int hf_ocp1_params_time_ptp = -1;
-static int hf_ocp1_params_time_ptp_negative = -1;
-static int hf_ocp1_params_time_ptp_seconds = -1;
-static int hf_ocp1_params_time_ptp_nanoseconds = -1;
-static int hf_ocp1_params_time_mode = -1;
-static int hf_ocp1_params_time_units = -1;
-static int hf_ocp1_params_task_id = -1;
-static int hf_ocp1_params_task_group_id = -1;
-static int hf_ocp1_params_time_interval = -1;
-static int hf_ocp1_params_start_time = -1;
-static int hf_ocp1_params_task_command = -1;
-static int hf_ocp1_params_task_manager_state = -1;
-static int hf_ocp1_params_task_state = -1;
-static int hf_ocp1_params_task_status_error_code = -1;
-static int hf_ocp1_params_media_coding_scheme_id = -1;
+static int hf_ocp1_params;
+static int hf_ocp1_params_bool;
+static int hf_ocp1_params_ono;
+static int hf_ocp1_params_event_id;
+static int hf_ocp1_params_event_tree_level;
+static int hf_ocp1_params_event_index;
+static int hf_ocp1_params_method_id;
+static int hf_ocp1_params_method_tree_level;
+static int hf_ocp1_params_method_index;
+static int hf_ocp1_params_property_id;
+static int hf_ocp1_params_property_tree_level;
+static int hf_ocp1_params_property_index;
+static int hf_ocp1_params_blob;
+static int hf_ocp1_params_blob_datasize;
+static int hf_ocp1_params_blob_data;
+static int hf_ocp1_params_string;
+static int hf_ocp1_params_string_length;
+static int hf_ocp1_params_string_value;
+static int hf_ocp1_params_ntf_delivery_mode;
+static int hf_ocp1_params_list_count;
+static int hf_ocp1_params_map_count;
+static int hf_ocp1_params_imageid;
+static int hf_ocp1_params_classid;
+static int hf_ocp1_params_classid_fields;
+static int hf_ocp1_params_class_version;
+static int hf_ocp1_params_oca_version;
+static int hf_ocp1_params_reset_cause;
+static int hf_ocp1_params_power_state;
+static int hf_ocp1_params_media_clock_type;
+static int hf_ocp1_params_component;
+static int hf_ocp1_params_devicestate;
+static int hf_ocp1_params_devicestate_oper;
+static int hf_ocp1_params_devicestate_disabled;
+static int hf_ocp1_params_devicestate_error;
+static int hf_ocp1_params_devicestate_init;
+static int hf_ocp1_params_devicestate_updating;
+static int hf_ocp1_params_ocaver_major;
+static int hf_ocp1_params_ocaver_minor;
+static int hf_ocp1_params_ocaver_build;
+static int hf_ocp1_params_ocaver_comp;
+static int hf_ocp1_params_subscriber_ctx_len;
+static int hf_ocp1_params_libvol_id;
+static int hf_ocp1_params_libvoltype_id;
+static int hf_ocp1_params_library_count;
+static int hf_ocp1_params_time_ntp;
+static int hf_ocp1_params_time_ptp;
+static int hf_ocp1_params_time_ptp_negative;
+static int hf_ocp1_params_time_ptp_seconds;
+static int hf_ocp1_params_time_ptp_nanoseconds;
+static int hf_ocp1_params_time_mode;
+static int hf_ocp1_params_time_units;
+static int hf_ocp1_params_task_id;
+static int hf_ocp1_params_task_group_id;
+static int hf_ocp1_params_time_interval;
+static int hf_ocp1_params_start_time;
+static int hf_ocp1_params_task_command;
+static int hf_ocp1_params_task_manager_state;
+static int hf_ocp1_params_task_state;
+static int hf_ocp1_params_task_status_error_code;
+static int hf_ocp1_params_media_coding_scheme_id;
 
 /* Expert fields */
-static expert_field ei_ocp1_handle_fail = EI_INIT;
-static expert_field ei_ocp1_bad_status_code = EI_INIT;
+static expert_field ei_ocp1_handle_fail;
+static expert_field ei_ocp1_bad_status_code;
+static expert_field ei_ocp1_invalid_length;
 
 /* Trees */
-static gint ett_ocp1 = -1;
-static gint ett_ocp1_pdu = -1;
-static gint ett_ocp1_keepalive = -1;
-static gint ett_ocp1_message_method = -1;
-static gint ett_ocp1_context = -1;
-static gint ett_ocp1_event_data = -1;
-static gint ett_ocp1_event_method = -1;
-static gint ett_ocp1_params = -1;
-static gint ett_ocp1_params_event = -1;
-static gint ett_ocp1_params_method = -1;
-static gint ett_ocp1_params_property = -1;
-static gint ett_ocp1_params_blob = -1;
-static gint ett_ocp1_params_string = -1;
-static gint ett_ocp1_params_manager_desc = -1;
-static gint ett_ocp1_params_devicestate = -1;
-static gint ett_ocp1_params_compversion = -1;
-static gint ett_ocp1_params_ocaver = -1;
-static gint ett_ocp1_params_ptp = -1;
+static gint ett_ocp1;
+static gint ett_ocp1_pdu;
+static gint ett_ocp1_keepalive;
+static gint ett_ocp1_message_method;
+static gint ett_ocp1_context;
+static gint ett_ocp1_event_data;
+static gint ett_ocp1_event_method;
+static gint ett_ocp1_params;
+static gint ett_ocp1_params_event;
+static gint ett_ocp1_params_method;
+static gint ett_ocp1_params_property;
+static gint ett_ocp1_params_blob;
+static gint ett_ocp1_params_string;
+static gint ett_ocp1_params_manager_desc;
+static gint ett_ocp1_params_devicestate;
+static gint ett_ocp1_params_compversion;
+static gint ett_ocp1_params_ocaver;
+static gint ett_ocp1_params_ptp;
 
 /* PDU Types */
 static const value_string pdu_type_vals[] = {
@@ -2316,8 +2318,8 @@ dissect_ocp1_msg_command(tvbuff_t *tvb, gint offset, gint length, packet_info *p
 
     gint offset_m = offset;
 
-    proto_tree_add_item(message_tree, hf_ocp1_message_size, tvb, offset_m, 4, ENC_BIG_ENDIAN);
-    offset_m += 4;
+    proto_tree_add_item(message_tree, hf_ocp1_message_size, tvb, offset_m, OCP1_MESSAGE_SIZE_LEN, ENC_BIG_ENDIAN);
+    offset_m += OCP1_MESSAGE_SIZE_LEN;
 
     proto_tree_add_item(message_tree, hf_ocp1_message_handle, tvb, offset_m, 4, ENC_BIG_ENDIAN);
     offset_m += 4;
@@ -2390,8 +2392,8 @@ dissect_ocp1_msg_notification(tvbuff_t *tvb, gint offset, gint length, proto_tre
 
     gint offset_m = offset;
 
-    proto_tree_add_item(message_tree, hf_ocp1_message_size, tvb, offset_m, 4, ENC_BIG_ENDIAN);
-    offset_m += 4;
+    proto_tree_add_item(message_tree, hf_ocp1_message_size, tvb, offset_m, OCP1_MESSAGE_SIZE_LEN, ENC_BIG_ENDIAN);
+    offset_m += OCP1_MESSAGE_SIZE_LEN;
 
     t_occ = proto_tree_add_item(message_tree, hf_ocp1_message_occ, tvb, offset_m, 8, ENC_BIG_ENDIAN);
     proto_item_set_generated(t_occ);
@@ -2452,8 +2454,8 @@ dissect_ocp1_msg_response(tvbuff_t *tvb, gint offset, gint length, packet_info *
 
     gint offset_m = offset;
 
-    proto_tree_add_item(message_tree, hf_ocp1_message_size, tvb, offset_m, 4, ENC_BIG_ENDIAN);
-    offset_m += 4;
+    proto_tree_add_item(message_tree, hf_ocp1_message_size, tvb, offset_m, OCP1_MESSAGE_SIZE_LEN, ENC_BIG_ENDIAN);
+    offset_m += OCP1_MESSAGE_SIZE_LEN;
 
     proto_tree_add_item(message_tree, hf_ocp1_message_handle, tvb, offset_m, 4, ENC_BIG_ENDIAN);
     offset_m += 4;
@@ -2512,6 +2514,7 @@ dissect_ocp1_pdu(tvbuff_t *tvb, packet_info *pinfo, gint offset, proto_tree *tre
 
     guint offset_d = offset;                         /* Increment counter for dissection */
     guint offset_m = offset + OCP1_FRAME_HEADER_LEN; /* Set offset to start of first message, will increment to next message later */
+    guint message_size;                              /* Message size (per iteration) */
 
     if (tvb_captured_length_remaining(tvb, offset) < OCP1_FRAME_HEADER_LEN)
         return offset;
@@ -2578,8 +2581,14 @@ dissect_ocp1_pdu(tvbuff_t *tvb, packet_info *pinfo, gint offset, proto_tree *tre
 
             while (offset_m < (offset + header_pdu_size + 1)) {
                 /* first 4 byte of message is command size (incl. these 4 bytes) */
+                message_size = tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN);
+                if(message_size < OCP1_MESSAGE_SIZE_LEN) {
+                    expert_add_info(pinfo, pdu_tree, &ei_ocp1_invalid_length);
+                    return 0;
+                }
+
                 dissect_ocp1_msg_command(tvb, offset_m, tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN), pinfo, pdu_tree, msg_counter);
-                offset_m += tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN);
+                offset_m += message_size;
                 msg_counter++;
             }
 
@@ -2588,8 +2597,14 @@ dissect_ocp1_pdu(tvbuff_t *tvb, packet_info *pinfo, gint offset, proto_tree *tre
 
             while (offset_m < (offset + header_pdu_size + 1)) {
                 /* first 4 byte of message is command size (incl. these 4 bytes) */
+                message_size = tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN);
+                if(message_size < OCP1_MESSAGE_SIZE_LEN) {
+                    expert_add_info(pinfo, pdu_tree, &ei_ocp1_invalid_length);
+                    return 0;
+                }
+
                 dissect_ocp1_msg_notification(tvb, offset_m, tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN), pdu_tree, msg_counter);
-                offset_m += tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN);
+                offset_m += message_size;
                 msg_counter++;
             }
 
@@ -2598,8 +2613,13 @@ dissect_ocp1_pdu(tvbuff_t *tvb, packet_info *pinfo, gint offset, proto_tree *tre
 
             while (offset_m < (offset + header_pdu_size + 1)) {
                 /* first 4 byte of message is response size (incl. these 4 bytes) */
+                message_size = tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN);
+                if(message_size < OCP1_MESSAGE_SIZE_LEN) {
+                    expert_add_info(pinfo, pdu_tree, &ei_ocp1_invalid_length);
+                    return 0;
+                }
                 dissect_ocp1_msg_response(tvb, offset_m, tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN), pinfo, pdu_tree, msg_counter);
-                offset_m += tvb_get_guint32(tvb, offset_m, ENC_BIG_ENDIAN);
+                offset_m += message_size;
                 msg_counter++;
             }
 
@@ -3288,6 +3308,10 @@ proto_register_ocp1(void)
         { &ei_ocp1_bad_status_code,
             { "ocp1.bad_status_code", PI_RESPONSE_CODE, PI_ERROR,
                 "Status code indicates failed command", EXPFILL }
+        },
+        { &ei_ocp1_invalid_length,
+            { "ocp1.invalid_length", PI_MALFORMED, PI_ERROR,
+                "Size or length field has invalid value", EXPFILL }
         }
     };
 

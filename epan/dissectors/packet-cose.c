@@ -34,8 +34,8 @@ static const char *const proto_name_cose = "COSE";
 /// Protocol preferences and defaults
 
 /// Protocol handles
-static int proto_cose = -1;
-static int proto_cose_params = -1;
+static int proto_cose;
+static int proto_cose_params;
 
 /// Dissect opaque CBOR data
 static dissector_handle_t handle_cbor = NULL;
@@ -164,54 +164,54 @@ static const val64_string crv_vals[] = {
     {0, NULL},
 };
 
-static int hf_msg_tag = -1;
-static int hf_hdr_prot_bstr = -1;
-static int hf_hdr_unprot = -1;
-static int hf_payload_null = -1;
-static int hf_payload_bstr = -1;
-static int hf_cose_signature_list = -1;
-static int hf_cose_signature = -1;
-static int hf_signature = -1;
-static int hf_ciphertext_null = -1;
-static int hf_ciphertext_bstr = -1;
-static int hf_cose_recipient_list = -1;
-static int hf_cose_recipient = -1;
-static int hf_tag = -1;
+static int hf_msg_tag;
+static int hf_hdr_prot_bstr;
+static int hf_hdr_unprot;
+static int hf_payload_null;
+static int hf_payload_bstr;
+static int hf_cose_signature_list;
+static int hf_cose_signature;
+static int hf_signature;
+static int hf_ciphertext_null;
+static int hf_ciphertext_bstr;
+static int hf_cose_recipient_list;
+static int hf_cose_recipient;
+static int hf_tag;
 
-static int hf_hdr_label_int = -1;
-static int hf_hdr_label_tstr = -1;
+static int hf_hdr_label_int;
+static int hf_hdr_label_tstr;
 
-static int hf_hdr_salt = -1;
-static int hf_hdr_static_key = -1;
-static int hf_hdr_ephem_key = -1;
-static int hf_hdr_alg_int = -1;
-static int hf_hdr_alg_tstr = -1;
-static int hf_hdr_crit_list = -1;
-static int hf_hdr_ctype_uint = -1;
-static int hf_hdr_ctype_tstr = -1;
-static int hf_hdr_kid = -1;
-static int hf_hdr_iv = -1;
-static int hf_hdr_piv = -1;
-static int hf_hdr_x5bag = -1;
-static int hf_hdr_x5chain = -1;
-static int hf_hdr_x5t = -1;
-static int hf_hdr_x5t_hash = -1;
-static int hf_hdr_x5u = -1;
+static int hf_hdr_salt;
+static int hf_hdr_static_key;
+static int hf_hdr_ephem_key;
+static int hf_hdr_alg_int;
+static int hf_hdr_alg_tstr;
+static int hf_hdr_crit_list;
+static int hf_hdr_ctype_uint;
+static int hf_hdr_ctype_tstr;
+static int hf_hdr_kid;
+static int hf_hdr_iv;
+static int hf_hdr_piv;
+static int hf_hdr_x5bag;
+static int hf_hdr_x5chain;
+static int hf_hdr_x5t;
+static int hf_hdr_x5t_hash;
+static int hf_hdr_x5u;
 
-static int hf_key = -1;
+static int hf_key;
 
-static int hf_keyparam_kty_int = -1;
-static int hf_keyparam_kty_tstr = -1;
-static int hf_keyparam_keyops_list = -1;
-static int hf_keyparam_keyops_int = -1;
-static int hf_keyparam_keyops_tstr = -1;
-static int hf_keyparam_baseiv = -1;
-static int hf_keyparam_crv_int = -1;
-static int hf_keyparam_crv_tstr = -1;
-static int hf_keyparam_xcoord = -1;
-static int hf_keyparam_ycoord = -1;
-static int hf_keyparam_dcoord = -1;
-static int hf_keyparam_k = -1;
+static int hf_keyparam_kty_int;
+static int hf_keyparam_kty_tstr;
+static int hf_keyparam_keyops_list;
+static int hf_keyparam_keyops_int;
+static int hf_keyparam_keyops_tstr;
+static int hf_keyparam_baseiv;
+static int hf_keyparam_crv_int;
+static int hf_keyparam_crv_tstr;
+static int hf_keyparam_xcoord;
+static int hf_keyparam_ycoord;
+static int hf_keyparam_dcoord;
+static int hf_keyparam_k;
 
 /// Field definitions
 static hf_register_info fields[] = {
@@ -267,23 +267,23 @@ static hf_register_info fields[] = {
     {&hf_keyparam_k, {"Key", "cose.key.k", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL}},
 };
 
-static int ett_msg = -1;
-static int ett_sig_list = -1;
-static int ett_sig = -1;
-static int ett_recip_list = -1;
-static int ett_recip = -1;
-static int ett_prot_bstr = -1;
-static int ett_unprot = -1;
-static int ett_hdr_map = -1;
-static int ett_hdr_label = -1;
-static int ett_hdr_static_key = -1;
-static int ett_hdr_ephem_key = -1;
-static int ett_hdr_crit_list = -1;
-static int ett_hdr_x5cert_list = -1;
-static int ett_hdr_x5t_list = -1;
-static int ett_key = -1;
-static int ett_key_set = -1;
-static int ett_keyops_list = -1;
+static int ett_msg;
+static int ett_sig_list;
+static int ett_sig;
+static int ett_recip_list;
+static int ett_recip;
+static int ett_prot_bstr;
+static int ett_unprot;
+static int ett_hdr_map;
+static int ett_hdr_label;
+static int ett_hdr_static_key;
+static int ett_hdr_ephem_key;
+static int ett_hdr_crit_list;
+static int ett_hdr_x5cert_list;
+static int ett_hdr_x5t_list;
+static int ett_key;
+static int ett_key_set;
+static int ett_keyops_list;
 /// Tree structures
 static int *ett[] = {
     &ett_msg,
@@ -305,8 +305,8 @@ static int *ett[] = {
     &ett_keyops_list,
 };
 
-static expert_field ei_invalid_tag = EI_INIT;
-static expert_field ei_value_partial_decode = EI_INIT;
+static expert_field ei_invalid_tag;
+static expert_field ei_value_partial_decode;
 static ei_register_info expertitems[] = {
     {&ei_invalid_tag, { "cose.invalid_tag", PI_UNDECODED, PI_WARN, "COSE dissector did not match any known tag", EXPFILL}},
     {&ei_value_partial_decode, { "cose.partial_decode", PI_MALFORMED, PI_WARN, "Value is only partially decoded", EXPFILL}},
@@ -445,6 +445,20 @@ static gboolean dissect_header_pair(dissector_table_t dis_table, cose_header_con
     return TRUE;
 }
 
+static void
+cose_header_context_cleanup(void *user_data) {
+
+    cose_header_context_t *ctx = (cose_header_context_t*)user_data;
+
+    if (ctx->principal) {
+        g_variant_unref(ctx->principal);
+    }
+    if (ctx->label) {
+        g_variant_unref(ctx->label);
+        ctx->label = NULL;
+    }
+}
+
 /** Dissect an entire header map, either for messages, recipients, or keys.
  *
  * @param dis_table The cose_param_key_t dissector table.
@@ -462,15 +476,16 @@ static void dissect_header_map(dissector_table_t dis_table, tvbuff_t *tvb, packe
 
         cose_header_context_t *ctx = wmem_new0(pinfo->pool, cose_header_context_t);
 
+        CLEANUP_PUSH(cose_header_context_cleanup, ctx);
+
         for (guint64 ix = 0; ix < chunk_hdr_map->head_value; ++ix) {
             if (!dissect_header_pair(dis_table, ctx, tvb, pinfo, tree_hdr_map, offset)) {
                 break;
             }
         }
 
-        if (ctx->principal) {
-            g_variant_unref(ctx->principal);
-        }
+        CLEANUP_CALL_AND_POP;
+
         wmem_free(pinfo->pool, ctx);
     }
 
@@ -774,6 +789,9 @@ static void dissect_value_alg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             gint64 *val = wscbor_require_int64(pinfo->pool, chunk);
             proto_tree_add_cbor_int64(tree, hf_hdr_alg_int, pinfo, tvb, chunk, val);
             if (value && val) {
+                if (*value) {
+                    g_variant_unref(*value);
+                }
                 *value = g_variant_new_int64(*val);
             }
             break;
@@ -782,6 +800,9 @@ static void dissect_value_alg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             const char *val = wscbor_require_tstr(pinfo->pool, chunk);
             proto_tree_add_cbor_tstr(tree, hf_hdr_alg_tstr, pinfo, tvb, chunk);
             if (value && val) {
+                if (*value) {
+                    g_variant_unref(*value);
+                }
                 *value = g_variant_new_string(val);
             }
             break;
@@ -1051,6 +1072,9 @@ static int dissect_keyparam_kty(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
             gint64 *val = wscbor_require_int64(pinfo->pool, chunk);
             proto_tree_add_cbor_int64(tree, hf_keyparam_kty_int, pinfo, tvb, chunk, val);
             if (val) {
+                if (ctx->principal) {
+                    g_variant_unref(ctx->principal);
+                }
                 ctx->principal = g_variant_new_int64(*val);
             }
             break;
@@ -1059,6 +1083,9 @@ static int dissect_keyparam_kty(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
             const char *val = wscbor_require_tstr(pinfo->pool, chunk);
             proto_tree_add_cbor_tstr(tree, hf_keyparam_kty_tstr, pinfo, tvb, chunk);
             if (val) {
+                if (ctx->principal) {
+                    g_variant_unref(ctx->principal);
+                }
                 ctx->principal = g_variant_new_string(val);
             }
             break;
@@ -1244,11 +1271,7 @@ static void cose_reinit(void) {
 
 /// Overall registration of the protocol
 void proto_register_cose(void) {
-    proto_cose = proto_register_protocol(
-        "CBOR Object Signing and Encryption", /* name */
-        proto_name_cose, /* short name */
-        "cose" /* abbrev */
-    );
+    proto_cose = proto_register_protocol("CBOR Object Signing and Encryption", proto_name_cose, "cose");
     register_init_routine(&cose_init);
     register_cleanup_routine(&cose_cleanup);
 

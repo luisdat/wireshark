@@ -25,6 +25,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/proto_data.h>
 #include <epan/expert.h>
 #include <wiretap/wtap.h>
 
@@ -44,6 +45,8 @@ void proto_reg_handoff_jfif(void);
 #else
 #define DebugLog(x) ;
 #endif
+
+#define MAX_RECURSION_DEPTH 10 // Arbitrarily chosen.
 
 /************************** Variable declarations **************************/
 
@@ -460,95 +463,95 @@ static const value_string vals_exif_types[] = {
 };
 
 /* Initialize the protocol and registered fields */
-static int proto_jfif = -1;
+static int proto_jfif;
 
 /* Marker */
-static gint hf_marker = -1;
+static gint hf_marker;
 /* Marker segment */
-static gint hf_marker_segment = -1;
-static gint hf_len = -1;
+static gint hf_marker_segment;
+static gint hf_len;
 /* MARKER_APP0 */
-static gint hf_identifier = -1;
+static gint hf_identifier;
 /* MARKER_APP0 - JFIF */
-static gint hf_version = -1;
-static gint hf_version_major = -1;
-static gint hf_version_minor = -1;
-static gint hf_units = -1;
-static gint hf_xdensity = -1;
-static gint hf_ydensity = -1;
-static gint hf_xthumbnail = -1;
-static gint hf_ythumbnail = -1;
-static gint hf_rgb = -1;
+static gint hf_version;
+static gint hf_version_major;
+static gint hf_version_minor;
+static gint hf_units;
+static gint hf_xdensity;
+static gint hf_ydensity;
+static gint hf_xthumbnail;
+static gint hf_ythumbnail;
+static gint hf_rgb;
 /* MARKER_APP0 - JFXX */
-static gint hf_extension_code = -1;
+static gint hf_extension_code;
 /* start of Frame */
-static gint hf_sof_header = -1;
-static gint hf_sof_precision = -1;
-static gint hf_sof_lines = -1;
-static gint hf_sof_samples_per_line = -1;
-static gint hf_sof_nf = -1;
-static gint hf_sof_c_i = -1;
-static gint hf_sof_h_i = -1;
-static gint hf_sof_v_i = -1;
-static gint hf_sof_tq_i = -1;
+static gint hf_sof_header;
+static gint hf_sof_precision;
+static gint hf_sof_lines;
+static gint hf_sof_samples_per_line;
+static gint hf_sof_nf;
+static gint hf_sof_c_i;
+static gint hf_sof_h_i;
+static gint hf_sof_v_i;
+static gint hf_sof_tq_i;
 
 /* Start of Scan */
-static gint hf_sos_header = -1;
-static gint hf_sos_ns = -1;
-static gint hf_sos_cs_j = -1;
-static gint hf_sos_td_j = -1;
-static gint hf_sos_ta_j = -1;
-static gint hf_sos_ss = -1;
-static gint hf_sos_se = -1;
-static gint hf_sos_ah = -1;
-static gint hf_sos_al = -1;
+static gint hf_sos_header;
+static gint hf_sos_ns;
+static gint hf_sos_cs_j;
+static gint hf_sos_td_j;
+static gint hf_sos_ta_j;
+static gint hf_sos_ss;
+static gint hf_sos_se;
+static gint hf_sos_ah;
+static gint hf_sos_al;
 
 /* Comment */
-static gint hf_comment_header = -1;
-static gint hf_comment = -1;
+static gint hf_comment_header;
+static gint hf_comment;
 
-static gint hf_remain_seg_data = -1;
-static gint hf_endianness = -1;
-static gint hf_start_ifd_offset = -1;
-static gint hf_next_ifd_offset = -1;
-static gint hf_exif_flashpix_marker = -1;
-static gint hf_entropy_coded_segment = -1;
-static gint hf_fill_bytes = -1;
-static gint hf_skipped_tiff_data = -1;
-static gint hf_ifd_num_fields = -1;
-static gint hf_ifd_tag = -1;
-static gint hf_ifd_tag_exif = -1;
-static gint hf_ifd_tag_gps = -1;
-static gint hf_ifd_tag_interop = -1;
-static gint hf_ifd_type = -1;
-static gint hf_ifd_count = -1;
-static gint hf_ifd_offset = -1;
-static gint hf_ifd_value_byte = -1;
-static gint hf_ifd_value_ascii = -1;
-static gint hf_ifd_value_short = -1;
-static gint hf_ifd_value_long = -1;
-static gint hf_ifd_value_rational = -1;
-static gint hf_ifd_value_rational_numerator = -1;
-static gint hf_ifd_value_rational_denominator = -1;
-static gint hf_ifd_value_undefined = -1;
-static gint hf_ifd_value_slong = -1;
-static gint hf_ifd_value_srational = -1;
-static gint hf_ifd_value_srational_numerator = -1;
-static gint hf_ifd_value_srational_denominator = -1;
+static gint hf_remain_seg_data;
+static gint hf_endianness;
+static gint hf_start_ifd_offset;
+static gint hf_next_ifd_offset;
+static gint hf_exif_flashpix_marker;
+static gint hf_entropy_coded_segment;
+static gint hf_fill_bytes;
+static gint hf_skipped_tiff_data;
+static gint hf_ifd_num_fields;
+static gint hf_ifd_tag;
+static gint hf_ifd_tag_exif;
+static gint hf_ifd_tag_gps;
+static gint hf_ifd_tag_interop;
+static gint hf_ifd_type;
+static gint hf_ifd_count;
+static gint hf_ifd_offset;
+static gint hf_ifd_value_byte;
+static gint hf_ifd_value_ascii;
+static gint hf_ifd_value_short;
+static gint hf_ifd_value_long;
+static gint hf_ifd_value_rational;
+static gint hf_ifd_value_rational_numerator;
+static gint hf_ifd_value_rational_denominator;
+static gint hf_ifd_value_undefined;
+static gint hf_ifd_value_slong;
+static gint hf_ifd_value_srational;
+static gint hf_ifd_value_srational_numerator;
+static gint hf_ifd_value_srational_denominator;
 
 
 /* Initialize the subtree pointers */
-static gint ett_jfif = -1;
-static gint ett_marker_segment = -1;
-static gint ett_details = -1;
-static gint ett_ifd = -1;
-static gint ett_rational = -1;
-static gint ett_srational = -1;
+static gint ett_jfif;
+static gint ett_marker_segment;
+static gint ett_details;
+static gint ett_ifd;
+static gint ett_rational;
+static gint ett_srational;
 
-static expert_field ei_file_jpeg_first_identifier_not_jfif   = EI_INIT;
-static expert_field ei_start_ifd_offset   = EI_INIT;
-static expert_field ei_next_ifd_offset   = EI_INIT;
-static expert_field ei_ifd_value_offset   = EI_INIT;
+static expert_field ei_file_jpeg_first_identifier_not_jfif;
+static expert_field ei_start_ifd_offset;
+static expert_field ei_next_ifd_offset;
+static expert_field ei_ifd_value_offset;
 
 /****************** JFIF protocol dissection functions ******************/
 
@@ -770,6 +773,7 @@ process_app0_segment(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, guint3
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 process_tiff_ifd_chain(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
         guint encoding, guint32 start_ifd_offset,
         int hf_tag, const char *ifd_type_desc)
@@ -893,9 +897,13 @@ process_tiff_ifd_chain(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
 
                             if (extension_ifd_type_desc) {
                                 if (extension_ifd_offset < tvb_reported_length(tvb)) {
+                                    unsigned recursion_depth = p_get_proto_depth(pinfo, proto_jfif);
+                                    DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
+                                    p_set_proto_depth(pinfo, proto_jfif, recursion_depth + 1);
                                     process_tiff_ifd_chain(tree, tvb, pinfo, encoding,
                                             extension_ifd_offset, extension_hf_ifd_tag,
                                             extension_ifd_type_desc);
+                                    p_set_proto_depth(pinfo, proto_jfif, recursion_depth);
                                 } else {
                                     expert_add_info_format(pinfo, value_item, &ei_start_ifd_offset,
                                         "bogus, should be < %u", tvb_reported_length(tvb));

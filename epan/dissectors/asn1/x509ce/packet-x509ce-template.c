@@ -30,12 +30,15 @@ void proto_register_x509ce(void);
 void proto_reg_handoff_x509ce(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_x509ce = -1;
-static int hf_x509ce_id_ce_invalidityDate = -1;
-static int hf_x509ce_id_ce_baseUpdateTime = -1;
-static int hf_x509ce_object_identifier_id = -1;
-static int hf_x509ce_IPAddress_ipv4 = -1;
-static int hf_x509ce_IPAddress_ipv6 = -1;
+static int proto_x509ce;
+static int hf_x509ce_id_ce_invalidityDate;
+static int hf_x509ce_id_ce_baseUpdateTime;
+static int hf_x509ce_object_identifier_id;
+static int hf_x509ce_IPAddress_ipv4;
+static int hf_x509ce_IPAddress_ipv4_mask;
+static int hf_x509ce_IPAddress_ipv6;
+static int hf_x509ce_IPAddress_ipv6_mask;
+static int hf_x509ce_IPAddress_unknown;
 #include "packet-x509ce-hf.c"
 
 /* Initialize the subtree pointers */
@@ -119,9 +122,18 @@ void proto_register_x509ce(void) {
     { &hf_x509ce_IPAddress_ipv4,
       { "iPAddress", "x509ce.IPAddress.ipv4", FT_IPv4, BASE_NONE, NULL, 0,
         "IPv4 address", HFILL }},
+    { &hf_x509ce_IPAddress_ipv4_mask,
+      { "iPAddress Mask", "x509ce.IPAddress.ipv4_mask", FT_IPv4, BASE_NONE, NULL, 0,
+        "IPv4 address Mask", HFILL }},
     { &hf_x509ce_IPAddress_ipv6,
       { "iPAddress", "x509ce.IPAddress.ipv6", FT_IPv6, BASE_NONE, NULL, 0,
         "IPv6 address", HFILL }},
+    { &hf_x509ce_IPAddress_ipv6_mask,
+      { "iPAddress Mask", "x509ce.IPAddress.ipv6_mask", FT_IPv6, BASE_NONE, NULL, 0,
+        "IPv6 address Mask", HFILL }},
+    { &hf_x509ce_IPAddress_unknown,
+      { "iPAddress", "x509ce.IPAddress.unknown", FT_BYTES, BASE_NONE, NULL, 0,
+        "Unknown Address", HFILL }},
 
 #include "packet-x509ce-hfarr.c"
   };

@@ -26,58 +26,58 @@
 void proto_register_cbor(void);
 void proto_reg_handoff_cbor(void);
 
-static int proto_cbor				= -1;
+static int proto_cbor;
 
-static int hf_cbor_item_major_type		= -1;
-static int hf_cbor_item_integer_size		= -1;
-static int hf_cbor_item_length_size		= -1;
-static int hf_cbor_item_length5			= -1;
-static int hf_cbor_item_length			= -1;
-static int hf_cbor_item_items5			= -1;
-static int hf_cbor_item_items			= -1;
-static int hf_cbor_item_pairs5			= -1;
-static int hf_cbor_item_pairs			= -1;
-static int hf_cbor_item_float_simple_type	= -1;
-static int hf_cbor_item_unsigned_integer	= -1;
-static int hf_cbor_item_negative_integer	= -1;
-static int hf_cbor_item_text_string		= -1;
-static int hf_cbor_item_byte_string		= -1;
-static int hf_cbor_item_array			= -1;
-static int hf_cbor_item_map			= -1;
-static int hf_cbor_item_tag			= -1;
-static int hf_cbor_item_float_simple		= -1;
-static int hf_cbor_type_uint5			= -1;
-static int hf_cbor_type_uint			= -1;
-static int hf_cbor_type_nint			= -1;
-static int hf_cbor_type_byte_string		= -1;
-static int hf_cbor_type_byte_string_indef	= -1;
-static int hf_cbor_type_text_string		= -1;
-static int hf_cbor_type_text_string_indef	= -1;
-static int hf_cbor_type_tag5			= -1;
-static int hf_cbor_type_tag			= -1;
-static int hf_cbor_type_simple_data5		= -1;
-static int hf_cbor_type_simple_data8		= -1;
-static int hf_cbor_type_float16			= -1;
-static int hf_cbor_type_float32			= -1;
-static int hf_cbor_type_float64			= -1;
+static int hf_cbor_item_major_type;
+static int hf_cbor_item_integer_size;
+static int hf_cbor_item_length_size;
+static int hf_cbor_item_length5;
+static int hf_cbor_item_length;
+static int hf_cbor_item_items5;
+static int hf_cbor_item_items;
+static int hf_cbor_item_pairs5;
+static int hf_cbor_item_pairs;
+static int hf_cbor_item_float_simple_type;
+static int hf_cbor_item_unsigned_integer;
+static int hf_cbor_item_negative_integer;
+static int hf_cbor_item_text_string;
+static int hf_cbor_item_byte_string;
+static int hf_cbor_item_array;
+static int hf_cbor_item_map;
+static int hf_cbor_item_tag;
+static int hf_cbor_item_float_simple;
+static int hf_cbor_type_uint5;
+static int hf_cbor_type_uint;
+static int hf_cbor_type_nint;
+static int hf_cbor_type_byte_string;
+static int hf_cbor_type_byte_string_indef;
+static int hf_cbor_type_text_string;
+static int hf_cbor_type_text_string_indef;
+static int hf_cbor_type_tag5;
+static int hf_cbor_type_tag;
+static int hf_cbor_type_simple_data5;
+static int hf_cbor_type_simple_data8;
+static int hf_cbor_type_float16;
+static int hf_cbor_type_float32;
+static int hf_cbor_type_float64;
 
-static gint ett_cbor				= -1;
-static gint ett_cbor_type			= -1;
-static gint ett_cbor_unsigned_integer		= -1;
-static gint ett_cbor_negative_integer		= -1;
-static gint ett_cbor_byte_string		= -1;
-static gint ett_cbor_byte_string_indef		= -1;
-static gint ett_cbor_text_string		= -1;
-static gint ett_cbor_text_string_indef		= -1;
-static gint ett_cbor_array			= -1;
-static gint ett_cbor_map			= -1;
-static gint ett_cbor_tag			= -1;
-static gint ett_cbor_float_simple		= -1;
+static gint ett_cbor;
+static gint ett_cbor_type;
+static gint ett_cbor_unsigned_integer;
+static gint ett_cbor_negative_integer;
+static gint ett_cbor_byte_string;
+static gint ett_cbor_byte_string_indef;
+static gint ett_cbor_text_string;
+static gint ett_cbor_text_string_indef;
+static gint ett_cbor_array;
+static gint ett_cbor_map;
+static gint ett_cbor_tag;
+static gint ett_cbor_float_simple;
 
-static expert_field ei_cbor_invalid_minor_type  = EI_INIT;
-static expert_field ei_cbor_invalid_element     = EI_INIT;
-static expert_field ei_cbor_too_long_length     = EI_INIT;
-static expert_field ei_cbor_max_recursion_depth_reached = EI_INIT;
+static expert_field ei_cbor_invalid_minor_type;
+static expert_field ei_cbor_invalid_element;
+static expert_field ei_cbor_too_long_length;
+static expert_field ei_cbor_max_recursion_depth_reached;
 
 static dissector_handle_t cbor_handle;
 static dissector_handle_t cborseq_handle;
@@ -90,6 +90,8 @@ static dissector_handle_t cborseq_handle;
 #define CBOR_TYPE_MAP		5
 #define CBOR_TYPE_TAGGED	6
 #define CBOR_TYPE_FLOAT		7
+
+#define MAX_RECURSION_DEPTH 100 /* pretty arbitrary */
 
 static const value_string major_type_vals[] = {
 	{ 0, "Unsigned Integer" },
@@ -336,6 +338,7 @@ dissect_cbor_negative_integer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbo
 
 #define CBOR_MAX_RECURSION_DEPTH 10 // Arbitrary
 static gboolean
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_cbor_byte_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint *offset, guint8 type_minor)
 {
 	guint64  length;
@@ -391,14 +394,14 @@ dissect_cbor_byte_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tre
 			}
 
 			unsigned recursion_depth = p_get_proto_depth(pinfo, proto_cbor);
-			if (++recursion_depth >= CBOR_MAX_RECURSION_DEPTH) {
+			if (recursion_depth > CBOR_MAX_RECURSION_DEPTH) {
 				proto_tree_add_expert(subtree, pinfo, &ei_cbor_max_recursion_depth_reached, tvb, 0, 0);
 				return FALSE;
 			}
-			p_set_proto_depth(pinfo, proto_cbor, recursion_depth);
+			p_set_proto_depth(pinfo, proto_cbor, recursion_depth + 1);
 
 			gboolean recursed = dissect_cbor_byte_string(tvb, pinfo, subtree, offset, eof_type & 0x1f);
-			p_set_proto_depth(pinfo, proto_cbor, recursion_depth - 1);
+			p_set_proto_depth(pinfo, proto_cbor, recursion_depth);
 
 			if (!recursed) {
 				return FALSE;
@@ -431,6 +434,7 @@ dissect_cbor_byte_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tre
 }
 
 static gboolean
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_cbor_text_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint *offset, guint8 type_minor)
 {
 	const guint8 *value = NULL;
@@ -487,14 +491,14 @@ dissect_cbor_text_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tre
 			}
 
 			unsigned recursion_depth = p_get_proto_depth(pinfo, proto_cbor);
-			if (++recursion_depth >= CBOR_MAX_RECURSION_DEPTH) {
+			if (recursion_depth > CBOR_MAX_RECURSION_DEPTH) {
 				proto_tree_add_expert(subtree, pinfo, &ei_cbor_max_recursion_depth_reached, tvb, 0, 0);
 				return FALSE;
 			}
-			p_set_proto_depth(pinfo, proto_cbor, recursion_depth);
+			p_set_proto_depth(pinfo, proto_cbor, recursion_depth + 1);
 
 			gboolean recursed = dissect_cbor_text_string(tvb, pinfo, subtree, offset, eof_type & 0x1f);
-			p_set_proto_depth(pinfo, proto_cbor, recursion_depth - 1);
+			p_set_proto_depth(pinfo, proto_cbor, recursion_depth);
 
 			if (!recursed) {
 				return FALSE;
@@ -527,6 +531,7 @@ dissect_cbor_text_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tre
 }
 
 static gboolean
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_cbor_array(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint *offset, guint8 type_minor)
 {
 	guint64  length = 0;
@@ -602,6 +607,7 @@ dissect_cbor_array(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gin
 }
 
 static gboolean
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_cbor_map(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint *offset, guint8 type_minor)
 {
 	guint64     length = 0;
@@ -681,11 +687,18 @@ dissect_cbor_map(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint 
 }
 
 static gboolean
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_cbor_tag(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint *offset, guint8 type_minor)
 {
 	guint64          tag = 0;
 	proto_item      *item;
 	proto_tree      *subtree;
+	unsigned recursion_depth = p_get_proto_depth(pinfo, proto_cbor);
+
+	/* dissect_cbor_main_type and dissect_cbor_tag can exhaust the stack
+	 * calling each other recursively on malformed packets otherwise */
+	DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
+	p_set_proto_depth(pinfo, proto_cbor, recursion_depth + 1);
 
 	item = proto_tree_add_item(cbor_tree, hf_cbor_item_tag, tvb, *offset, -1, ENC_NA);
 	subtree = proto_item_add_subtree(item, ett_cbor_tag);
@@ -721,17 +734,20 @@ dissect_cbor_tag(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint 
 		if (type_minor > 0x17) {
 			expert_add_info_format(pinfo, subtree, &ei_cbor_invalid_minor_type,
 					"invalid minor type %i in tag", type_minor);
+			p_set_proto_depth(pinfo, proto_cbor, recursion_depth);
 			return FALSE;
 		}
 		break;
 	}
 
 	if (!dissect_cbor_main_type(tvb, pinfo, subtree, offset)) {
+		p_set_proto_depth(pinfo, proto_cbor, recursion_depth);
 		return FALSE;
 	}
 
 	proto_item_append_text(item, ": %s (%" PRIu64 ")", val64_to_str(tag, tag64_vals, "Unknown"), tag);
 	proto_item_set_end(item, tvb, *offset);
+	p_set_proto_depth(pinfo, proto_cbor, recursion_depth);
 
 	return TRUE;
 }
@@ -832,6 +848,7 @@ dissect_cbor_float_simple_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cb
 
 
 static gboolean
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_cbor_main_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *cbor_tree, gint *offset)
 {
 	guint8      type;

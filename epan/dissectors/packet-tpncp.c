@@ -90,21 +90,21 @@ static tpncp_data_field_info tpncp_commands_info_db[MAX_TPNCP_DB_SIZE];
 static gint bits[] = {0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80};
 
 /* TPNCP packet header fields. */
-static gint proto_tpncp = -1;
-static gint hf_tpncp_version = -1;
-static gint hf_tpncp_length = -1;
-static gint hf_tpncp_seq_number = -1;
-static gint hf_tpncp_length_ext = -1;
-static gint hf_tpncp_reserved = -1;
-static gint hf_tpncp_command_id = -1;
-static gint hf_tpncp_event_id = -1;
-static gint hf_tpncp_cid = -1;
+static gint proto_tpncp;
+static gint hf_tpncp_version;
+static gint hf_tpncp_length;
+static gint hf_tpncp_seq_number;
+static gint hf_tpncp_length_ext;
+static gint hf_tpncp_reserved;
+static gint hf_tpncp_command_id;
+static gint hf_tpncp_event_id;
+static gint hf_tpncp_cid;
 
-static expert_field ei_tpncp_unknown_data = EI_INIT;
+static expert_field ei_tpncp_unknown_data;
 
 /* TPNCP fields defining a subtree. */
-static gint ett_tpncp = -1;
-static gint ett_tpncp_body = -1;
+static gint ett_tpncp;
+static gint ett_tpncp_body;
 
 static gboolean global_tpncp_load_db = FALSE;
 
@@ -313,7 +313,7 @@ dissect_tpncp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
             if (len > 8)
                 proto_tree_add_int(tpncp_tree, hf_tpncp_cid, tvb, 12, 4, cid);
             offset += 16;
-            if (tpncp_events_info_db[id].size && len > 12) {
+            if (id < MAX_TPNCP_DB_SIZE && tpncp_events_info_db[id].size && len > 12) {
                 event_tree = proto_tree_add_subtree_format(
                     tree, tvb, offset, -1, ett_tpncp_body, NULL,
                     "TPNCP Event: %s (%d)",
@@ -330,7 +330,7 @@ dissect_tpncp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
         if (try_val_to_str(id, tpncp_commands_id_vals)) {
             proto_tree_add_uint(tpncp_tree, hf_tpncp_command_id, tvb, 8, 4, id);
             offset += 12;
-            if (tpncp_commands_info_db[id].size && len > 8) {
+            if (id < MAX_TPNCP_DB_SIZE && tpncp_commands_info_db[id].size && len > 8) {
                 command_tree = proto_tree_add_subtree_format(
                     tree, tvb, offset, -1, ett_tpncp_body, NULL,
                     "TPNCP Command: %s (%d)",
@@ -812,6 +812,10 @@ init_tpncp_data_fields_info(tpncp_data_field_info *data_fields_info, FILE *file)
 
         is_address_family = FALSE;
         if (current_data_id != data_id) { /* new data */
+            if (data_id >= MAX_TPNCP_DB_SIZE) {
+                report_failure("ERROR! The data_id %d is too large.", data_id);
+                continue;
+            }
             if (registered_struct_ids[data_id] == TRUE) {
                 report_failure(
                     "ERROR! The data_id %d already registered. Cannot register two identical events/command",
@@ -829,7 +833,7 @@ init_tpncp_data_fields_info(tpncp_data_field_info *data_fields_info, FILE *file)
             field->p_next = NULL;
         }
 
-        /* Register specific fields of hf_register_info struture. */
+        /* Register specific fields of hf_register_info structure. */
         if (strcmp(tmp, "primitive")) {
             enum_val = get_enum_name_val(tmp);
             if (enum_val == -1) {
@@ -929,7 +933,7 @@ proto_reg_handoff_tpncp(void)
 {
     static gboolean initialized = FALSE;
 
-    if (proto_tpncp == -1) return;
+    if (proto_tpncp <= 0) return;
 
     if (!initialized) {
         dissector_add_uint_with_preference("udp.port", UDP_PORT_TPNCP_TRUNKPACK, tpncp_handle);

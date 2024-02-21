@@ -1,7 +1,7 @@
 /* packet-iso10681.c
  * ISO 10681-2 ISO FlexRay TP
  * By Dr. Lars Voelker <lars.voelker@technica-engineering.de>
- * Copyright 2021-2021 Dr. Lars Voelker
+ * Copyright 2021-2023 Dr. Lars Voelker
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -62,70 +62,70 @@ typedef struct iso10681_frame {
 } iso10681_frame_t;
 
 static const value_string iso10681_message_types[] = {
-        {ISO10681_TYPE_START_FRAME,           "Start Frame"},
-        {ISO10681_TYPE_CONSECUTIVE_FRAME_1,   "Consecutive Frame 1"},
-        {ISO10681_TYPE_CONSECUTIVE_FRAME_2,   "Consecutive Frame 2"},
-        {ISO10681_TYPE_CONSECUTIVE_FRAME_EOB, "Consecutive Frame EOB"},
-        {ISO10681_TYPE_FLOW_CONTROL,          "Flow Control"},
-        {ISO10681_TYPE_LAST_FRAME,            "Last Frame"},
-        {0, NULL}
+    {ISO10681_TYPE_START_FRAME,           "Start Frame"},
+    {ISO10681_TYPE_CONSECUTIVE_FRAME_1,   "Consecutive Frame 1"},
+    {ISO10681_TYPE_CONSECUTIVE_FRAME_2,   "Consecutive Frame 2"},
+    {ISO10681_TYPE_CONSECUTIVE_FRAME_EOB, "Consecutive Frame EOB"},
+    {ISO10681_TYPE_FLOW_CONTROL,          "Flow Control"},
+    {ISO10681_TYPE_LAST_FRAME,            "Last Frame"},
+    {0, NULL}
 };
 
 static const value_string iso10681_flow_status_values[] = {
-        {ISO10681_FLOW_STATUS_CTS,            "Continue to Send"},
-        {ISO10681_FLOW_STATUS_ACK_RETRY,      "Ack/Retry"},
-        {ISO10681_FLOW_STATUS_WAIT,           "Wait"},
-        {ISO10681_FLOW_STATUS_ABORT,          "Abort"},
-        {ISO10681_FLOW_STATUS_OVERFLOW,       "Overflow"},
-        {0, NULL}
+    {ISO10681_FLOW_STATUS_CTS,            "Continue to Send"},
+    {ISO10681_FLOW_STATUS_ACK_RETRY,      "Ack/Retry"},
+    {ISO10681_FLOW_STATUS_WAIT,           "Wait"},
+    {ISO10681_FLOW_STATUS_ABORT,          "Abort"},
+    {ISO10681_FLOW_STATUS_OVERFLOW,       "Overflow"},
+    {0, NULL}
 };
 
 static const value_string iso10681_start_type2_values[] = {
-        {0,      "Unacknowledged"},
-        {1,      "Acknowledged"},
-        {0, NULL}
+    {0,      "Unacknowledged"},
+    {1,      "Acknowledged"},
+    {0, NULL}
 };
 
 static const value_string iso10681_fc_bc_scexp_values[] = {
-        {0,      "0 cycles"},
-        {1,      "1 cycle"},
-        {2,      "3 cycles"},
-        {3,      "7 cycles"},
-        {4,      "15 cycles"},
-        {5,      "31 cycles"},
-        {6,      "63 cycles"},
-        {7,      "127 cycles"},
-        {0, NULL}
+    {0,      "0 cycles"},
+    {1,      "1 cycle"},
+    {2,      "3 cycles"},
+    {3,      "7 cycles"},
+    {4,      "15 cycles"},
+    {5,      "31 cycles"},
+    {6,      "63 cycles"},
+    {7,      "127 cycles"},
+    {0, NULL}
 };
 
 static const value_string iso10681_fc_ack_values[] = {
-        {0,      "Acknowledge"},
-        {1,      "Retry Request"},
-        {0, NULL}
+    {0,      "Acknowledge"},
+    {1,      "Retry Request"},
+    {0, NULL}
 };
 
-static int hf_iso10681_target_address = -1;
-static int hf_iso10681_source_address = -1;
-static int hf_iso10681_type = -1;
-static int hf_iso10681_type2 = -1;
-static int hf_iso10681_frame_payload_length = -1;
-static int hf_iso10681_message_length = -1;
-static int hf_iso10681_sequence_number = -1;
-static int hf_iso10681_fc_flow_status = -1;
-static int hf_iso10681_fc_bandwidth_control = -1;
-static int hf_iso10681_fc_bc_separation_cycle_exp = -1;
-static int hf_iso10681_fc_bc_max_num_pdu_per_cycle = -1;
-static int hf_iso10681_fc_buffer_size = -1;
-static int hf_iso10681_fc_ack = -1;
-static int hf_iso10681_fc_byte_position = -1;
+static int hf_iso10681_target_address;
+static int hf_iso10681_source_address;
+static int hf_iso10681_type;
+static int hf_iso10681_type2;
+static int hf_iso10681_frame_payload_length;
+static int hf_iso10681_message_length;
+static int hf_iso10681_sequence_number;
+static int hf_iso10681_fc_flow_status;
+static int hf_iso10681_fc_bandwidth_control;
+static int hf_iso10681_fc_bc_separation_cycle_exp;
+static int hf_iso10681_fc_bc_max_num_pdu_per_cycle;
+static int hf_iso10681_fc_buffer_size;
+static int hf_iso10681_fc_ack;
+static int hf_iso10681_fc_byte_position;
 
 
-static gint ett_iso10681 = -1;
-static gint ett_iso10681_bandwidth_control = -1;
+static gint ett_iso10681;
+static gint ett_iso10681_bandwidth_control;
 
-static expert_field ei_iso10681_message_type_bad = EI_INIT;
+static expert_field ei_iso10681_message_type_bad;
 
-static int proto_iso10681 = -1;
+static int proto_iso10681;
 static dissector_handle_t iso10681_handle_flexray = NULL;
 
 static dissector_table_t subdissector_table;
@@ -139,40 +139,40 @@ static wmem_map_t *iso10681_seq_table = NULL;
 static guint32     next_seqnum = 0;
 
 
-static int hf_iso10681_fragments = -1;
-static int hf_iso10681_fragment = -1;
-static int hf_iso10681_fragment_overlap = -1;
-static int hf_iso10681_fragment_overlap_conflicts = -1;
-static int hf_iso10681_fragment_multiple_tails = -1;
-static int hf_iso10681_fragment_too_long_fragment = -1;
-static int hf_iso10681_fragment_error = -1;
-static int hf_iso10681_fragment_count = -1;
-static int hf_iso10681_reassembled_in = -1;
-static int hf_iso10681_reassembled_length = -1;
+static int hf_iso10681_fragments;
+static int hf_iso10681_fragment;
+static int hf_iso10681_fragment_overlap;
+static int hf_iso10681_fragment_overlap_conflicts;
+static int hf_iso10681_fragment_multiple_tails;
+static int hf_iso10681_fragment_too_long_fragment;
+static int hf_iso10681_fragment_error;
+static int hf_iso10681_fragment_count;
+static int hf_iso10681_reassembled_in;
+static int hf_iso10681_reassembled_length;
 
-static gint ett_iso10681_fragment = -1;
-static gint ett_iso10681_fragments = -1;
+static gint ett_iso10681_fragment;
+static gint ett_iso10681_fragments;
 
 static const fragment_items iso10681_frag_items = {
-        /* Fragment subtrees */
-        &ett_iso10681_fragment,
-        &ett_iso10681_fragments,
-        /* Fragment fields */
-        &hf_iso10681_fragments,
-        &hf_iso10681_fragment,
-        &hf_iso10681_fragment_overlap,
-        &hf_iso10681_fragment_overlap_conflicts,
-        &hf_iso10681_fragment_multiple_tails,
-        &hf_iso10681_fragment_too_long_fragment,
-        &hf_iso10681_fragment_error,
-        &hf_iso10681_fragment_count,
-        /* Reassembled in field */
-        &hf_iso10681_reassembled_in,
-        /* Reassembled length field */
-        &hf_iso10681_reassembled_length,
-        /* Reassembled data field */
-        NULL,
-        "ISO10681 fragments"
+    /* Fragment subtrees */
+    &ett_iso10681_fragment,
+    &ett_iso10681_fragments,
+    /* Fragment fields */
+    &hf_iso10681_fragments,
+    &hf_iso10681_fragment,
+    &hf_iso10681_fragment_overlap,
+    &hf_iso10681_fragment_overlap_conflicts,
+    &hf_iso10681_fragment_multiple_tails,
+    &hf_iso10681_fragment_too_long_fragment,
+    &hf_iso10681_fragment_error,
+    &hf_iso10681_fragment_count,
+    /* Reassembled in field */
+    &hf_iso10681_reassembled_in,
+    /* Reassembled length field */
+    &hf_iso10681_reassembled_length,
+    /* Reassembled data field */
+    NULL,
+    "ISO10681 fragments"
 };
 
 static guint32
@@ -430,101 +430,73 @@ proto_register_iso10681(void) {
 
     static hf_register_info hf[] = {
         { &hf_iso10681_source_address, {
-            "Source Address", "iso10681.source_address",
-            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
+            "Source Address", "iso10681.source_address", FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
         { &hf_iso10681_target_address, {
-            "Target Address", "iso10681.target_address",
-            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
+            "Target Address", "iso10681.target_address", FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
         { &hf_iso10681_type, {
-            "Type", "iso10681.type",
-            FT_UINT8, BASE_HEX, VALS(iso10681_message_types), ISO10681_TYPE_MASK, NULL, HFILL } },
+            "Type", "iso10681.type", FT_UINT8, BASE_HEX, VALS(iso10681_message_types), ISO10681_TYPE_MASK, NULL, HFILL } },
         { &hf_iso10681_type2, {
-            "Type Ack", "iso10681.type_ack",
-            FT_UINT8, BASE_HEX, VALS(iso10681_start_type2_values), ISO10681_TYPE_PART2_MASK, NULL, HFILL } },
+            "Type Ack", "iso10681.type_ack", FT_UINT8, BASE_HEX, VALS(iso10681_start_type2_values), ISO10681_TYPE_PART2_MASK, NULL, HFILL } },
         { &hf_iso10681_frame_payload_length, {
-            "Frame Payload Length", "iso10681.frame_payload_length",
-            FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
+            "Frame Payload Length", "iso10681.frame_payload_length", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
         { &hf_iso10681_message_length, {
-            "Message Length", "iso10681.message_length",
-            FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
+            "Message Length", "iso10681.message_length", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
         { &hf_iso10681_sequence_number, {
-            "Sequence Number", "iso10681.sequence_number",
-            FT_UINT8, BASE_DEC, NULL, ISO10681_TYPE_PART2_MASK, NULL, HFILL } },
+            "Sequence Number", "iso10681.sequence_number", FT_UINT8, BASE_DEC, NULL, ISO10681_TYPE_PART2_MASK, NULL, HFILL } },
         { &hf_iso10681_fc_flow_status, {
-            "Flow Status", "iso10681.flow_status",
-            FT_UINT8, BASE_DEC, VALS(iso10681_flow_status_values), ISO10681_TYPE_PART2_MASK, NULL, HFILL } },
+            "Flow Status", "iso10681.flow_status", FT_UINT8, BASE_DEC, VALS(iso10681_flow_status_values), ISO10681_TYPE_PART2_MASK, NULL, HFILL } },
         { &hf_iso10681_fc_bandwidth_control, {
-            "Bandwidth Control", "iso10681.bandwidth_control",
-            FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
+            "Bandwidth Control", "iso10681.bandwidth_control", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
         { &hf_iso10681_fc_bc_separation_cycle_exp, {
-            "Separation Cycle Exp", "iso10681.bandwidth_control.separation_cycle_exp",
-            FT_UINT8, BASE_DEC, VALS(iso10681_fc_bc_scexp_values), 0x07, NULL, HFILL } },
+            "Separation Cycle Exp", "iso10681.bandwidth_control.separation_cycle_exp", FT_UINT8, BASE_DEC, VALS(iso10681_fc_bc_scexp_values), 0x07, NULL, HFILL } },
         { &hf_iso10681_fc_bc_max_num_pdu_per_cycle, {
-            "Max Number of PDUs per Cycle", "iso10681.bandwidth_control.max_number_pdus_per_cycle",
-            FT_UINT8, BASE_DEC, NULL, 0xF8, NULL, HFILL } },
+            "Max Number of PDUs per Cycle", "iso10681.bandwidth_control.max_number_pdus_per_cycle", FT_UINT8, BASE_DEC, NULL, 0xF8, NULL, HFILL } },
         { &hf_iso10681_fc_buffer_size, {
-            "Buffer Size", "iso10681.buffer_size",
-            FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
+            "Buffer Size", "iso10681.buffer_size", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
         { &hf_iso10681_fc_ack, {
-            "Ack", "iso10681.ack",
-            FT_UINT8, BASE_HEX, VALS(iso10681_fc_ack_values), 0, NULL, HFILL } },
+            "Ack", "iso10681.ack", FT_UINT8, BASE_HEX, VALS(iso10681_fc_ack_values), 0, NULL, HFILL } },
         { &hf_iso10681_fc_byte_position, {
-            "Byte Position", "iso10681.byte_position",
-            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
+            "Byte Position", "iso10681.byte_position", FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
 
         { &hf_iso10681_fragments, {
-            "Message fragments", "iso10681.fragments",
-            FT_NONE, BASE_NONE, NULL, 0x00, NULL, HFILL } },
+            "Message fragments", "iso10681.fragments", FT_NONE, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_fragment, {
-            "Message fragment", "iso10681.fragment",
-            FT_FRAMENUM, BASE_NONE, NULL, 0x00, NULL, HFILL } },
+            "Message fragment", "iso10681.fragment", FT_FRAMENUM, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_fragment_overlap, {
-            "Message fragment overlap", "iso10681.fragment.overlap",
-            FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL } },
+            "Message fragment overlap", "iso10681.fragment.overlap", FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_fragment_overlap_conflicts, {
-            "Message fragment overlapping with conflicting data", "iso10681.fragment.overlap.conflicts",
-            FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL } },
+            "Message fragment overlapping with conflicting data", "iso10681.fragment.overlap.conflicts", FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_fragment_multiple_tails, {
-            "Message has multiple tail fragments", "iso10681.fragment.multiple_tails",
-            FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL } },
+            "Message has multiple tail fragments", "iso10681.fragment.multiple_tails", FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_fragment_too_long_fragment, {
-            "Message fragment too long", "iso10681.fragment.too_long_fragment",
-            FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL } },
+            "Message fragment too long", "iso10681.fragment.too_long_fragment", FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_fragment_error, {
-            "Message defragmentation error", "iso10681.fragment.error",
-            FT_FRAMENUM, BASE_NONE, NULL, 0x00, NULL, HFILL } },
+            "Message defragmentation error", "iso10681.fragment.error", FT_FRAMENUM, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_fragment_count, {
-            "Message fragment count", "iso10681.fragment.count",
-            FT_UINT32, BASE_DEC, NULL, 0x00, NULL, HFILL } },
+            "Message fragment count", "iso10681.fragment.count", FT_UINT32, BASE_DEC, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_reassembled_in, {
-            "Reassembled in", "iso10681.reassembled.in",
-            FT_FRAMENUM, BASE_NONE, NULL, 0x00, NULL, HFILL } },
+            "Reassembled in", "iso10681.reassembled.in", FT_FRAMENUM, BASE_NONE, NULL, 0x00, NULL, HFILL } },
         { &hf_iso10681_reassembled_length, {
-            "Reassembled length", "iso10681.reassembled.length",
-            FT_UINT32, BASE_DEC, NULL, 0x00, NULL, HFILL } },
+            "Reassembled length", "iso10681.reassembled.length", FT_UINT32, BASE_DEC, NULL, 0x00, NULL, HFILL } },
     };
 
     /* Setup protocol subtree array */
     static gint *ett[] = {
-                    &ett_iso10681,
-                    &ett_iso10681_bandwidth_control,
-                    &ett_iso10681_fragment,
-                    &ett_iso10681_fragments,
-            };
+        &ett_iso10681,
+        &ett_iso10681_bandwidth_control,
+        &ett_iso10681_fragment,
+        &ett_iso10681_fragments,
+    };
 
     static ei_register_info ei[] = {
-            {
-                    &ei_iso10681_message_type_bad, { "iso10681.message_type.bad", PI_MALFORMED, PI_ERROR, "Bad Message Type value", EXPFILL }
-            },
+        {
+            &ei_iso10681_message_type_bad, { "iso10681.message_type.bad", PI_MALFORMED, PI_ERROR, "Bad Message Type value", EXPFILL }
+        },
     };
 
     expert_module_t* expert_iso10681;
 
-    proto_iso10681 = proto_register_protocol (
-            "ISO10681 Protocol", /* name       */
-            "ISO 10681",         /* short name */
-            "iso10681"           /* abbrev     */
-    );
+    proto_iso10681 = proto_register_protocol("ISO10681 Protocol", "ISO 10681", "iso10681");
     iso10681_handle_flexray = register_dissector("iso10681", dissect_iso10681_flexray, proto_iso10681);
 
     /* Register configuration options */

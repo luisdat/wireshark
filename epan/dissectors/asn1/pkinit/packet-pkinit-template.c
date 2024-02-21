@@ -13,6 +13,7 @@
 
 #include <epan/packet.h>
 #include <epan/asn1.h>
+#include <epan/proto_data.h>
 
 #include "packet-ber.h"
 #include "packet-pkinit.h"
@@ -28,7 +29,7 @@ void proto_register_pkinit(void);
 void proto_reg_handoff_pkinit(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_pkinit = -1;
+static int proto_pkinit;
 #include "packet-pkinit-hf.c"
 
 /* Initialize the subtree pointers */

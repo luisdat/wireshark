@@ -77,10 +77,12 @@ laplink.desegment_laplink_over_tcp: FALSE
 ldap.desegment_ldap_messages: FALSE
 ldp.desegment_ldp_messages: FALSE
 ltp.reassemble_block: FALSE
+m3ua.desegment: FALSE
 memcache.desegment_headers: FALSE
 memcache.desegment_pdus: FALSE
 mbrtu.desegment: FALSE
 mbtcp.desegment: FALSE
+monero.desegment: FALSE
 mq.desegment: FALSE
 mq.reassembly: FALSE
 mysql.desegment_buffers: FALSE

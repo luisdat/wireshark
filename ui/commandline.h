@@ -12,6 +12,8 @@
 #ifndef __COMMANDLINE_H__
 #define __COMMANDLINE_H__
 
+#include "cfile.h" /* For search_direction */
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
@@ -47,6 +49,8 @@ typedef struct commandline_param_info
     GSList *user_opts;
 
 } commandline_param_info_t;
+
+extern void commandline_override_prefs(int argc, char *argv[], gboolean opt_reset);
 
 extern void commandline_other_options(int argc, char *argv[], gboolean opt_reset);
 

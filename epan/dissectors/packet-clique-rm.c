@@ -18,40 +18,40 @@ void proto_register_clique_rm(void);
 void proto_reg_handoff_clique_rm(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_clique_rm = -1;
+static int proto_clique_rm;
 
-static int hf_clique_rm_version = -1;
-static int hf_clique_rm_type = -1;
-static int hf_clique_rm_sender = -1;
-static int hf_clique_rm_packet_id = -1;
-static int hf_clique_rm_depends = -1;
-static int hf_clique_rm_depend_sender = -1;
-static int hf_clique_rm_depend_packet_id = -1;
-static int hf_clique_rm_failures = -1;
-static int hf_clique_rm_failures_senders = -1;
-static int hf_clique_rm_attempt_join = -1;
-static int hf_clique_rm_attempt_join_senders = -1;
-static int hf_clique_rm_join_failures = -1;
-static int hf_clique_rm_join_failures_senders = -1;
-static int hf_clique_rm_data_flags = -1;
-static int hf_clique_rm_data_size = -1;
-static int hf_clique_rm_data_stream_id = -1;
-static int hf_clique_rm_data_data = -1;
-static int hf_clique_rm_whois_request_id = -1;
-static int hf_clique_rm_whois_reply_name = -1;
-static int hf_clique_rm_whois_reply_name_length = -1;
-static int hf_clique_rm_repair_request_sender_id = -1;
-static int hf_clique_rm_repair_request_packet_id = -1;
+static int hf_clique_rm_version;
+static int hf_clique_rm_type;
+static int hf_clique_rm_sender;
+static int hf_clique_rm_packet_id;
+static int hf_clique_rm_depends;
+static int hf_clique_rm_depend_sender;
+static int hf_clique_rm_depend_packet_id;
+static int hf_clique_rm_failures;
+static int hf_clique_rm_failures_senders;
+static int hf_clique_rm_attempt_join;
+static int hf_clique_rm_attempt_join_senders;
+static int hf_clique_rm_join_failures;
+static int hf_clique_rm_join_failures_senders;
+static int hf_clique_rm_data_flags;
+static int hf_clique_rm_data_size;
+static int hf_clique_rm_data_stream_id;
+static int hf_clique_rm_data_data;
+static int hf_clique_rm_whois_request_id;
+static int hf_clique_rm_whois_reply_name;
+static int hf_clique_rm_whois_reply_name_length;
+static int hf_clique_rm_repair_request_sender_id;
+static int hf_clique_rm_repair_request_packet_id;
 
 /* Initialize the subtree pointers */
-static gint ett_clique_rm = -1;
-static gint ett_clique_rm_data = -1;
-static gint ett_clique_rm_depends = -1;
-static gint ett_clique_rm_depends_item = -1;
-static gint ett_clique_rm_failures = -1;
-static gint ett_clique_rm_join_failures = -1;
-static gint ett_clique_rm_attempt_join = -1;
-static gint ett_clique_rm_join = -1;
+static gint ett_clique_rm;
+static gint ett_clique_rm_data;
+static gint ett_clique_rm_depends;
+static gint ett_clique_rm_depends_item;
+static gint ett_clique_rm_failures;
+static gint ett_clique_rm_join_failures;
+static gint ett_clique_rm_attempt_join;
+static gint ett_clique_rm_join;
 
 /* Packet types */
 typedef enum {
@@ -450,8 +450,7 @@ proto_register_clique_rm(void)
   };
 
 /* Register the protocol name and description */
-  proto_clique_rm = proto_register_protocol(
-    "Clique Reliable Multicast Protocol", "Clique-rm", "clique-rm");
+  proto_clique_rm = proto_register_protocol("Clique Reliable Multicast Protocol", "Clique-rm", "clique-rm");
 
 /* Required function calls to register the header fields and subtrees used */
   proto_register_field_array(proto_clique_rm, hf, array_length(hf));

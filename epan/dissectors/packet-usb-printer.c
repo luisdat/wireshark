@@ -27,17 +27,17 @@
 
 static dissector_handle_t usb_printer_ctl_handle;
 
-static int proto_usb_printer = -1;
+static int proto_usb_printer;
 
-static int hf_usb_printer_req = -1;
-static int hf_usb_printer_cfg_idx = -1;
-static int hf_usb_printer_intf = -1;
-static int hf_usb_printer_alt_set = -1;
-static int hf_usb_printer_max_len = -1;
-static int hf_usb_printer_dev_id_len = -1;
-static int hf_usb_printer_dev_id = -1;
+static int hf_usb_printer_req;
+static int hf_usb_printer_cfg_idx;
+static int hf_usb_printer_intf;
+static int hf_usb_printer_alt_set;
+static int hf_usb_printer_max_len;
+static int hf_usb_printer_dev_id_len;
+static int hf_usb_printer_dev_id;
 
-static gint ett_usb_printer   = -1;
+static gint ett_usb_printer;
 
 void proto_register_usb_printer(void);
 void proto_reg_handoff_usb_printer(void);
@@ -161,8 +161,7 @@ void proto_register_usb_printer(void)
         &ett_usb_printer
     };
 
-    proto_usb_printer = proto_register_protocol(
-            "USB Printer", "USBPRINTER", "usbprinter");
+    proto_usb_printer = proto_register_protocol("USB Printer", "USBPRINTER", "usbprinter");
     proto_register_field_array(proto_usb_printer, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
     usb_printer_ctl_handle = register_dissector("usbprinter",  dissect_usb_printer_ctl, proto_usb_printer);

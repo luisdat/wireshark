@@ -29,13 +29,13 @@ static const value_string xsap_vals[] = {
 	{ 0x00,         NULL }
 };
 
-static int proto_hpext = -1;
+static int proto_hpext;
 
-static int hf_hpext_dxsap = -1;
-static int hf_hpext_reserved = -1;
-static int hf_hpext_sxsap = -1;
+static int hf_hpext_dxsap;
+static int hf_hpext_reserved;
+static int hf_hpext_sxsap;
 
-static gint ett_hpext = -1;
+static gint ett_hpext;
 
 static int
 dissect_hpext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
@@ -100,8 +100,7 @@ proto_register_hpext(void)
 		&ett_hpext
 	};
 
-	proto_hpext = proto_register_protocol(
-	    "HP Extended Local-Link Control", "HPEXT", "hpext");
+	proto_hpext = proto_register_protocol("HP Extended Local-Link Control", "HPEXT", "hpext");
 	proto_register_field_array(proto_hpext, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 

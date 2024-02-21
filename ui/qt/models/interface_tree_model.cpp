@@ -136,7 +136,7 @@ QVariant InterfaceTreeModel::data(const QModelIndex &index, int role) const
             }
             else if (col == IFTREE_COL_DESCRIPTION)
             {
-                return QString(device->friendly_name);
+                return QString(device->if_info.friendly_name);
             }
             else if (col == IFTREE_COL_DISPLAY_NAME)
             {
@@ -415,6 +415,12 @@ QVariant InterfaceTreeModel::toolTipForInterface(int idx) const
 }
 
 #ifdef HAVE_LIBPCAP
+void InterfaceTreeModel::setCache(if_stat_cache_t *stat_cache)
+{
+    stopStatistic();
+    stat_cache_ = stat_cache;
+}
+
 void InterfaceTreeModel::stopStatistic()
 {
     if (stat_cache_)
@@ -439,7 +445,11 @@ void InterfaceTreeModel::updateStatistic(unsigned int idx)
     if (!stat_cache_)
     {
         // Start gathering statistics using dumpcap
-        // We crash (on macOS at least) if we try to do this from ::showEvent.
+        //
+        // The stat cache will only properly configure if it has the list
+        // of interfaces in global_capture_opts->all_ifaces.
+        // We crash if we try to do this from InterfaceFrame::showEvent,
+        // because main.cpp calls mainw->show() before capture_opts_init().
         stat_cache_ = capture_stat_start(&global_capture_opts);
     }
 
@@ -464,9 +474,9 @@ void InterfaceTreeModel::updateStatistic(unsigned int idx)
 
     if (active[device->name] != isActive)
     {
-        beginResetModel();
+        emit layoutAboutToBeChanged();
         active[device->name] = isActive;
-        endResetModel();
+        emit layoutChanged();
     }
 
     emit dataChanged(index(idx, IFTREE_COL_STATS), index(idx, IFTREE_COL_STATS));

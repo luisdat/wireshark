@@ -41,8 +41,6 @@ extern "C" {
 #define RECENT_KEY_REMOTE_HOST          "recent.remote_host"
 
 typedef struct _col_width_data {
-    gint   cfmt;
-    gchar *cfield;
     gint   width;
     gchar  xalign;
 } col_width_data;
@@ -102,6 +100,12 @@ typedef enum {
 } bytes_show_type;
 
 typedef enum {
+    FOLLOW_DELTA_NONE,
+    FOLLOW_DELTA_TURN,
+    FOLLOW_DELTA_ALL
+} follow_delta_type;
+
+typedef enum {
     DecodeAsNone,
     DecodeAsBASE64,
     DecodeAsCompressed,
@@ -139,6 +143,7 @@ typedef struct recent_settings_tag {
     gboolean    gui_search_multiple_occurs;
     search_type_type gui_search_type;
     bytes_show_type gui_follow_show;
+    follow_delta_type gui_follow_delta;
     bytes_decode_type gui_show_bytes_decode;
     bytes_show_type gui_show_bytes_show;
 
@@ -152,7 +157,9 @@ typedef struct recent_settings_tag {
 
     gint        gui_geometry_main_upper_pane;
     gint        gui_geometry_main_lower_pane;
-    gint        gui_geometry_wlan_stats_pane;
+    gchar      *gui_geometry_main;
+    gchar      *gui_geometry_main_master_split;
+    gchar      *gui_geometry_main_extra_split;
     gboolean    privs_warn_if_elevated;
     gboolean    sys_warn_if_no_capture;
     GList      *col_width_list;                     /* column widths */
@@ -223,6 +230,28 @@ extern gboolean recent_read_dynamic(char **rf_path_return, int *rf_errno_return)
  */
 extern int recent_set_arg(char *prefarg);
 
+/** Free the recent settings list of column width information
+ *
+ * @param rs the recent settings (currently a global)
+ */
+extern void recent_free_column_width_info(recent_settings_t *rs);
+
+/** Insert an entry in the recent column width setting for
+ * the given column, which should have been just added to
+ * the column list preference. (This keeps them in sync.)
+ *
+ * @param col column number
+ */
+extern void recent_insert_column(int col);
+
+/** Remove an entry in the recent column width setting for
+ * the given column, which should have been just removed to
+ * the column list preference. (This keeps them in sync.)
+ *
+ * @param col column number
+ */
+extern void recent_remove_column(int col);
+
 /** Get the column width for the given column
  *
  * @param col column number
@@ -254,6 +283,10 @@ extern void window_geom_save(const gchar *name, window_geometry_t *geom);
 
 /* load the desired geometry for this window from the geometry hashtable */
 extern gboolean window_geom_load(const gchar *name, window_geometry_t *geom);
+
+extern void window_splitter_save(const char *name, const char *splitter_state);
+
+extern const char * window_splitter_load(const char *name);
 
 /**
  * Returns a list of recent capture filters.
@@ -294,7 +327,7 @@ extern int recent_get_remote_host_list_size(void);
  * @param func function to be called
  * @param user_data argument to pass as user data to the function
  */
-extern void recent_remote_host_list_foreach(GHFunc func, gpointer user_data);
+extern void recent_remote_host_list_foreach(GFunc func, gpointer user_data);
 
 /**
  * Free all entries of the remote host list.

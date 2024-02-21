@@ -121,7 +121,7 @@ static heur_dissector_list_t atn_ulcs_heur_subdissector_list;
 static dissector_handle_t atn_cm_handle = NULL;
 static dissector_handle_t atn_cpdlc_handle = NULL;
 
-static int proto_atn_ulcs          = -1;
+static int proto_atn_ulcs;
 static guint32 ulcs_context_value = 0;
 static const char *object_identifier_id;
 
@@ -177,8 +177,8 @@ static gint dissect_atn_ulcs(
 #include "packet-atn-ulcs-hf.c"
 
 #include "packet-atn-ulcs-ett.c"
-static gint ett_atn_ulcs = -1;
-static gint ett_atn_acse = -1;
+static gint ett_atn_ulcs;
+static gint ett_atn_acse;
 
 #include "packet-atn-ulcs-fn.c"
 
@@ -223,30 +223,30 @@ static const per_choice_t External_encoding_choice[] =
 #define SES_PARAM_B2_MASK     0x02
 #define SES_PARAM_B1_MASK     0x01
 
-static int hf_atn_ses_type = -1;
-static int hf_atn_ses_param_ind = -1;
-static int hf_atn_ses_param_b1 = -1;
-static int hf_atn_ses_param_b2 = -1;
+static int hf_atn_ses_type;
+static int hf_atn_ses_param_ind;
+static int hf_atn_ses_param_b1;
+static int hf_atn_ses_param_b2;
 
-static gint ett_atn_ses = -1;
+static gint ett_atn_ses;
 
 #define ATN_SES_PROTO "ICAO Doc9705 ULCS Session (ISO 8326/8327-1:1994)"
 
-const value_string atn_ses_param_ind[] =
+static const value_string atn_ses_param_ind[] =
 {
     {0, "No Parameter Indication "},
     {1, "Parameter Indication "},
     {0, NULL }
 };
 
-const value_string srf_b2[] =
+static const value_string srf_b2[] =
 {
     {0, "Transport Connection is kept"},
     {1, "Transport Connection is released" },
     {0, NULL }
 };
 
-const value_string srf_b1[] =
+static const value_string srf_b1[] =
 {
     {0, "Transport Connection is transient"},
     {1, "Transport Connection is persistent"},
@@ -260,7 +260,7 @@ const value_string srf_b1[] =
 #define SES_ATN_SRF       0xe0
 #define SES_ATN_SRFC      0xa0
 
-const value_string atn_ses_type[] =
+static const value_string atn_ses_type[] =
 {
     { 0x1d, "Short Connect (SCN) SPDU" },
     { 0x1f, "Short Connect Accept (SAC) SPDU" },
@@ -273,15 +273,15 @@ const value_string atn_ses_type[] =
 /* ATN Presentation layer */
 #define ATN_PRES_PROTO "ICAO Doc9705 ULCS Presentation (ISO 8822/8823-1:1994)"
 
-static int hf_atn_pres_err   = -1;
-static int hf_atn_pres_pdu_type = -1;
-static gint ett_atn_pres    = -1;
+static int hf_atn_pres_err;
+static int hf_atn_pres_pdu_type;
+static gint ett_atn_pres;
 
 #define ATN_SES_PRES_MASK 0xf803
 #define PRES_CPR_ER_MASK    0x70
 
 /* type determined by SPDU and PPDU */
-const value_string atn_pres_vals[] =
+static const value_string atn_pres_vals[] =
 {
     { 0xe802, "Short Presentation Connect PPDU (CP) " },
     { 0xf802, "Short Presentation Connect PPDU (CP) " },
@@ -293,7 +293,7 @@ const value_string atn_pres_vals[] =
 };
 
 /* Short Presentation Connect Reject PPDU's 0yyy 00zz */
-const value_string atn_pres_err[] =
+static const value_string atn_pres_err[] =
 {
     { 0x00, "Presentation-user" },
     { 0x01, "Reason not specified (transient)"},
@@ -400,7 +400,7 @@ guint32 get_aircraft_24_bit_address_from_nsap(
     if((adr_prefix == 0x470027c1) ||
         (adr_prefix == 0x47002741)) {
       /* ICAO doc9507 Ed2 SV5 5.4.3.8.4.4 */
-      /* states that the ARS subfield containes */
+      /* states that the ARS subfield contains */
       /* the  24-bitaddress of the aircraft */
         ars = ((addr[8])<<16) |
             ((addr[9])<<8) |
@@ -425,7 +425,7 @@ guint32 get_aircraft_24_bit_address_from_nsap(
     if((adr_prefix == 0x470027c1) ||
         (adr_prefix == 0x47002741)) {
       /* ICAO doc9507 Ed2 SV5 5.4.3.8.4.4 */
-      /* states that the ARS subfield containes */
+      /* states that the ARS subfield contains */
       /* the  24-bitaddress of the aircraft */
       ars = ((addr[8])<<16) |
             ((addr[9])<<8) |
@@ -435,7 +435,7 @@ guint32 get_aircraft_24_bit_address_from_nsap(
 }
 
 /* determine whether a PDU is uplink or downlink */
-/* by checking for known aircraft  address prefices*/
+/* by checking for known aircraft address prefixes*/
 int check_heur_msg_type(packet_info *pinfo  _U_)
 {
     int t = no_msg;
@@ -855,7 +855,7 @@ void proto_register_atn_ulcs (void)
         proto_atn_ulcs);
 
     /* initiate sub dissector list */
-    atn_ulcs_heur_subdissector_list = register_heur_dissector_list("atn-ulcs", proto_atn_ulcs);
+    atn_ulcs_heur_subdissector_list = register_heur_dissector_list_with_description("atn-ulcs", "ATN-ULCS unhandled data", proto_atn_ulcs);
 
     /* init aare/aare data */
     aarq_data_tree = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());

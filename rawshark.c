@@ -55,6 +55,7 @@
 
 #ifdef _WIN32
 #include <wsutil/unicode-utils.h>
+#include <wsutil/win32-utils.h>
 #endif
 
 #include "globals.h"
@@ -169,7 +170,8 @@ print_usage(FILE *output)
     fprintf(output, "\n");
 
     fprintf(output, "Input file:\n");
-    fprintf(output, "  -r <infile>              set the pipe or file name to read from\n");
+    fprintf(output, "  -r <infile>, --read-file <infile>\n");
+    fprintf(output,"                            set the pipe or file name to read from\n");
 
     fprintf(output, "\n");
     fprintf(output, "Processing:\n");
@@ -184,8 +186,11 @@ print_usage(FILE *output)
     fprintf(output, "  -N <name resolve flags>  enable specific name resolution(s): \"mnNtdv\"\n");
     fprintf(output, "  -p                       use the system's packet header format\n");
     fprintf(output, "                           (which may have 64-bit timestamps)\n");
-    fprintf(output, "  -R <read filter>         packet filter in Wireshark display filter syntax\n");
+    fprintf(output, "  -R <read filter>, --read-filter <read filter>\n");
+    fprintf(output, "                           packet filter in Wireshark display filter syntax\n");
     fprintf(output, "  -s                       skip PCAP header on input\n");
+    fprintf(output, "  -Y <display filter>, --display-filter <display filter>\n");
+    fprintf(output, "                           packet filter in Wireshark display filter syntax\n");
     fprintf(output, "  --enable-protocol <proto_name>\n");
     fprintf(output, "                           enable dissection of proto_name\n");
     fprintf(output, "  --disable-protocol <proto_name>\n");
@@ -234,7 +239,6 @@ raw_pipe_open(const char *pipe_name)
 #ifndef _WIN32
     ws_statb64 pipe_stat;
 #else
-    char *pncopy, *pos = NULL;
     DWORD err;
     wchar_t *err_str;
     HANDLE hPipe = NULL;
@@ -282,20 +286,7 @@ raw_pipe_open(const char *pipe_name)
             return -1;
         }
 #else /* _WIN32 */
-#define PIPE_STR "\\pipe\\"
-        /* Under Windows, named pipes _must_ have the form
-         * "\\<server>\pipe\<pipe_name>".  <server> may be "." for localhost.
-         */
-        pncopy = g_strdup(pipe_name);
-        if (strstr(pncopy, "\\\\") == pncopy) {
-            pos = strchr(pncopy + 3, '\\');
-            if (pos && g_ascii_strncasecmp(pos, PIPE_STR, strlen(PIPE_STR)) != 0)
-                pos = NULL;
-        }
-
-        g_free(pncopy);
-
-        if (!pos) {
+        if (!win32_is_pipe_name(pipe_name)) {
             fprintf(stderr, "rawshark: \"%s\" is neither an interface nor a pipe\n",
                     pipe_name);
             return -1;
@@ -432,10 +423,11 @@ main(int argc, char *argv[])
       {"help", ws_no_argument, NULL, 'h'},
       {"version", ws_no_argument, NULL, 'v'},
       LONGOPT_DISSECT_COMMON
+      LONGOPT_READ_CAPTURE_COMMON
       {0, 0, 0, 0 }
     };
 
-#define OPTSTRING_INIT OPTSTRING_DISSECT_COMMON "F:hlm:o:pr:R:sS:v"
+#define OPTSTRING_INIT OPTSTRING_DISSECT_COMMON OPTSTRING_READ_CAPTURE_COMMON "F:hlm:o:psS:v"
 
     static const char    optstring[] = OPTSTRING_INIT;
     static const struct report_message_routines rawshark_report_routines = {
@@ -640,6 +632,8 @@ main(int argc, char *argv[])
                 pipe_name = g_strdup(ws_optarg);
                 break;
             case 'R':        /* Read file filter */
+            case 'Y':        /* Read file filter */
+                /* Read and display filters are the same for rawshark */
                 if(n_rfilters < (int) sizeof(rfilters) / (int) sizeof(rfilters[0])) {
                     rfilters[n_rfilters++] = ws_optarg;
                 }
@@ -1418,26 +1412,11 @@ show_print_file_io_error(int err)
     }
 }
 
-static const nstime_t *
-raw_get_frame_ts(struct packet_provider_data *prov, guint32 frame_num)
-{
-    if (prov->ref && prov->ref->num == frame_num)
-        return &prov->ref->abs_ts;
-
-    if (prov->prev_dis && prov->prev_dis->num == frame_num)
-        return &prov->prev_dis->abs_ts;
-
-    if (prov->prev_cap && prov->prev_cap->num == frame_num)
-        return &prov->prev_cap->abs_ts;
-
-    return NULL;
-}
-
 static epan_t *
 raw_epan_new(capture_file *cf)
 {
     static const struct packet_provider_funcs funcs = {
-        raw_get_frame_ts,
+        cap_file_provider_get_frame_ts,
         cap_file_provider_get_interface_name,
         cap_file_provider_get_interface_description,
         NULL,

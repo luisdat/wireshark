@@ -33,10 +33,10 @@ void proto_register_text_lines(void);
 void proto_reg_handoff_text_lines(void);
 
 /* Filterable header fields */
-static gint proto_text_lines = -1;
+static gint proto_text_lines;
 
 /* Subtrees */
-static gint ett_text_lines = -1;
+static gint ett_text_lines;
 
 /* Dissector handles */
 static dissector_handle_t xml_handle;
@@ -134,10 +134,7 @@ proto_register_text_lines(void)
 
 	proto_register_subtree_array(ett, array_length(ett));
 
-	proto_text_lines = proto_register_protocol(
-			"Line-based text data",	/* Long name */
-			"Line-based text data",	/* Short name */
-			"data-text-lines");		/* Filter name */
+	proto_text_lines = proto_register_protocol("Line-based text data", "Line-based text data", "data-text-lines");
 	register_dissector("data-text-lines", dissect_text_lines, proto_text_lines);
 }
 

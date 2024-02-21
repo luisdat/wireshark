@@ -348,135 +348,135 @@ static guint32 get_CDR_typeCode_with_params(tvbuff_t *tvb, packet_info* pinfo, p
  * ------------------------------------------------------------------------------------------+
  */
 
-static int giop_tap = -1;
-static int proto_giop = -1;
-static int hf_giop_message_magic = -1;
-static int hf_giop_message_major_version = -1;
-static int hf_giop_message_minor_version = -1;
-static int hf_giop_message_flags = -1;
-static int hf_giop_message_flags_ziop_enabled = -1;
-static int hf_giop_message_flags_ziop_supported = -1;
-static int hf_giop_message_flags_fragment = -1;
-static int hf_giop_message_flags_little_endian = -1;
-static int hf_giop_message_type = -1;
-static int hf_giop_message_size = -1;
-static int hf_giop_repoid = -1;
-static int hf_giop_req_id = -1;
-static int hf_giop_req_operation_len = -1;
-static int hf_giop_req_operation = -1;
-static int hf_giop_req_principal_len = -1;
-static int hf_giop_req_principal = -1;
-static int hf_giop_string_length = -1;
-static int hf_giop_sequence_length = -1;
-static int hf_giop_profile_id = -1;
-static int hf_giop_type_id = -1;
-static int hf_giop_type_id_match = -1;
-static int hf_giop_iiop_v_maj = -1;
-static int hf_giop_iiop_v_min = -1;
-static int hf_giop_endianness = -1; /* esp encapsulations */
-/* static int hf_giop_compressed = -1; */
-/* static int hf_giop_IOR_tag = -1; */
-static int hf_giop_IIOP_tag = -1;
-static int hf_giop_locale_status = -1;
-static int hf_giop_addressing_disposition = -1;
-static int hf_giop_profile_data = -1;
-static int hf_giop_component_data = -1;
-static int hf_giop_char_data = -1;
-static int hf_giop_wchar_data = -1;
-static int hf_giop_rt_corba_priority = -1;
-static int hf_giop_context_data = -1;
-static int hf_giop_target_address_discriminant = -1;
-static int hf_giop_target_address_key_addr_len = -1;
-static int hf_giop_target_address_key_addr = -1;
-static int hf_giop_target_address_ref_addr_len = -1;
+static int giop_tap;
+static int proto_giop;
+static int hf_giop_message_magic;
+static int hf_giop_message_major_version;
+static int hf_giop_message_minor_version;
+static int hf_giop_message_flags;
+static int hf_giop_message_flags_ziop_enabled;
+static int hf_giop_message_flags_ziop_supported;
+static int hf_giop_message_flags_fragment;
+static int hf_giop_message_flags_little_endian;
+static int hf_giop_message_type;
+static int hf_giop_message_size;
+static int hf_giop_repoid;
+static int hf_giop_req_id;
+static int hf_giop_req_operation_len;
+static int hf_giop_req_operation;
+static int hf_giop_req_principal_len;
+static int hf_giop_req_principal;
+static int hf_giop_string_length;
+static int hf_giop_sequence_length;
+static int hf_giop_profile_id;
+static int hf_giop_type_id;
+static int hf_giop_type_id_match;
+static int hf_giop_iiop_v_maj;
+static int hf_giop_iiop_v_min;
+static int hf_giop_endianness; /* esp encapsulations */
+/* static int hf_giop_compressed; */
+/* static int hf_giop_IOR_tag; */
+static int hf_giop_IIOP_tag;
+static int hf_giop_locale_status;
+static int hf_giop_addressing_disposition;
+static int hf_giop_profile_data;
+static int hf_giop_component_data;
+static int hf_giop_char_data;
+static int hf_giop_wchar_data;
+static int hf_giop_rt_corba_priority;
+static int hf_giop_context_data;
+static int hf_giop_target_address_discriminant;
+static int hf_giop_target_address_key_addr_len;
+static int hf_giop_target_address_key_addr;
+static int hf_giop_target_address_ref_addr_len;
 
-static int hf_giop_TCKind = -1;
-static int hf_giop_typecode_count = -1;
-static int hf_giop_typecode_default_used = -1;
-static int hf_giop_typecode_digits = -1;
-static int hf_giop_typecode_length = -1;
-static int hf_giop_typecode_max_length = -1;
-static int hf_giop_typecode_member_name = -1;
-static int hf_giop_typecode_name = -1;
-static int hf_giop_typecode_scale = -1;
-static int hf_giop_typecode_ValueModifier = -1;
-static int hf_giop_typecode_Visibility = -1;
+static int hf_giop_TCKind;
+static int hf_giop_typecode_count;
+static int hf_giop_typecode_default_used;
+static int hf_giop_typecode_digits;
+static int hf_giop_typecode_length;
+static int hf_giop_typecode_max_length;
+static int hf_giop_typecode_member_name;
+static int hf_giop_typecode_name;
+static int hf_giop_typecode_scale;
+static int hf_giop_typecode_ValueModifier;
+static int hf_giop_typecode_Visibility;
 
-static int hf_giop_type_boolean = -1;
-static int hf_giop_type_char = -1;
-static int hf_giop_type_double = -1;
-static int hf_giop_type_enum = -1;
-static int hf_giop_type_float = -1;
-static int hf_giop_type_long = -1;
-static int hf_giop_type_longlong = -1;
-static int hf_giop_type_ulonglong = -1;
-static int hf_giop_type_octet = -1;
-static int hf_giop_type_short = -1;
-static int hf_giop_type_string = -1;
-static int hf_giop_type_ulong = -1;
-static int hf_giop_type_ushort = -1;
+static int hf_giop_type_boolean;
+static int hf_giop_type_char;
+static int hf_giop_type_double;
+static int hf_giop_type_enum;
+static int hf_giop_type_float;
+static int hf_giop_type_long;
+static int hf_giop_type_longlong;
+static int hf_giop_type_ulonglong;
+static int hf_giop_type_octet;
+static int hf_giop_type_short;
+static int hf_giop_type_string;
+static int hf_giop_type_ulong;
+static int hf_giop_type_ushort;
 
-static int hf_giop_iiop_host = -1;
-static int hf_giop_iiop_port = -1;
-static int hf_giop_iiop_sc = -1;
-static int hf_giop_iiop_sc_vscid = -1;
-static int hf_giop_iiop_sc_omg_scid = -1;
-static int hf_giop_iiop_sc_vendor_scid = -1;
+static int hf_giop_iiop_host;
+static int hf_giop_iiop_port;
+static int hf_giop_iiop_sc;
+static int hf_giop_iiop_sc_vscid;
+static int hf_giop_iiop_sc_omg_scid;
+static int hf_giop_iiop_sc_vendor_scid;
 
-static int hf_giop_reply_status = -1;
-static int hf_giop_exception_id = -1;
-static int hf_giop_exception_len = -1;
-static int hf_giop_objekt_key = -1;
-static int hf_giop_rsp_expected = -1;
-static int hf_giop_response_flag = -1;
-static int hf_giop_reserved = -1;
-static int hf_giop_objekt_key_len = -1;
-static int hf_giop_type_id_len = -1;
-static int hf_giop_stub_data = -1;
-static int hf_giop_address_disp = -1;
-static int hf_giop_reply_body = -1;
-static int hf_giop_minor_code_value = -1;
-static int hf_giop_completion_status = -1;
+static int hf_giop_reply_status;
+static int hf_giop_exception_id;
+static int hf_giop_exception_len;
+static int hf_giop_objekt_key;
+static int hf_giop_rsp_expected;
+static int hf_giop_response_flag;
+static int hf_giop_reserved;
+static int hf_giop_objekt_key_len;
+static int hf_giop_type_id_len;
+static int hf_giop_stub_data;
+static int hf_giop_address_disp;
+static int hf_giop_reply_body;
+static int hf_giop_minor_code_value;
+static int hf_giop_completion_status;
 
 /*
  * (sub)Tree declares
  */
 
-static gint ett_giop = -1;
-static gint ett_giop_header = -1;
-static gint ett_giop_header_version = -1;
-static gint ett_giop_message_flags = -1;
-static gint ett_giop_reply = -1;
-static gint ett_giop_request = -1;
-static gint ett_giop_cancel_request = -1;
-static gint ett_giop_locate_request = -1;
-static gint ett_giop_locate_reply = -1;
-static gint ett_giop_fragment = -1;
+static gint ett_giop;
+static gint ett_giop_header;
+static gint ett_giop_header_version;
+static gint ett_giop_message_flags;
+static gint ett_giop_reply;
+static gint ett_giop_request;
+static gint ett_giop_cancel_request;
+static gint ett_giop_locate_request;
+static gint ett_giop_locate_reply;
+static gint ett_giop_fragment;
 
-static gint ett_giop_scl = -1;  /* ServiceContextList */
-static gint ett_giop_sc = -1;   /* ServiceContext */
-static gint ett_giop_ior = -1;  /* IOR  */
+static gint ett_giop_scl;  /* ServiceContextList */
+static gint ett_giop_sc;   /* ServiceContext */
+static gint ett_giop_ior;  /* IOR  */
 
 // for complex data types like arrays, structs, sequences
-static gint ett_giop_array               = -1;
-static gint ett_giop_sequence            = -1;
-static gint ett_giop_struct              = -1;
-static gint ett_giop_typecode_parameters = -1;
+static gint ett_giop_array;
+static gint ett_giop_sequence;
+static gint ett_giop_struct;
+static gint ett_giop_typecode_parameters;
 
-static gint ett_giop_fragments  = -1;
-static gint ett_giop_fragment_  = -1;
+static gint ett_giop_fragments;
+static gint ett_giop_fragment_;
 
 
-static int hf_giop_fragments    = -1;
-static int hf_giop_fragment     = -1;
-static int hf_giop_fragment_overlap          = -1;
-static int hf_giop_fragment_overlap_conflict = -1;
-static int hf_giop_fragment_multiple_tails   = -1;
-static int hf_giop_fragment_too_long_fragment = -1;
-static int hf_giop_fragment_error            = -1;
-static int hf_giop_fragment_count            = -1;
-static int hf_giop_reassembled_in           = -1;
-static int hf_giop_reassembled_length       = -1;
+static int hf_giop_fragments;
+static int hf_giop_fragment;
+static int hf_giop_fragment_overlap;
+static int hf_giop_fragment_overlap_conflict;
+static int hf_giop_fragment_multiple_tails;
+static int hf_giop_fragment_too_long_fragment;
+static int hf_giop_fragment_error;
+static int hf_giop_fragment_count;
+static int hf_giop_reassembled_in;
+static int hf_giop_reassembled_length;
 
 
 static const fragment_items giop_frag_items = {
@@ -503,15 +503,15 @@ static const fragment_items giop_frag_items = {
 static reassembly_table giop_reassembly_table;
 
 
-static expert_field ei_giop_unknown_typecode_datatype = EI_INIT;
-static expert_field ei_giop_unknown_sign_value = EI_INIT;
-static expert_field ei_giop_unknown_tckind = EI_INIT;
-static expert_field ei_giop_length_too_big = EI_INIT;
-static expert_field ei_giop_version_not_supported = EI_INIT;
-static expert_field ei_giop_message_size_too_big = EI_INIT;
-static expert_field ei_giop_invalid_v_minor = EI_INIT;
-static expert_field ei_giop_max_recursion_depth_reached = EI_INIT;
-static expert_field ei_giop_offset_error = EI_INIT;
+static expert_field ei_giop_unknown_typecode_datatype;
+static expert_field ei_giop_unknown_sign_value;
+static expert_field ei_giop_unknown_tckind;
+static expert_field ei_giop_length_too_big;
+static expert_field ei_giop_version_not_supported;
+static expert_field ei_giop_message_size_too_big;
+static expert_field ei_giop_invalid_v_minor;
+static expert_field ei_giop_max_recursion_depth_reached;
+static expert_field ei_giop_offset_error;
 
 
 static int * const giop_message_flags[] = {
@@ -2183,6 +2183,7 @@ static void set_new_alignment(int *offset, int delta, int  alignment) {
  *
  * data_name is allowed to be NULL or empty string
  */
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_data_for_typecode_with_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                                       proto_item *item, gint *offset,
                                       gboolean stream_is_big_endian, guint32 boundary,
@@ -2220,11 +2221,11 @@ static void dissect_data_for_typecode_with_params(tvbuff_t *tvb, packet_info *pi
   const gchar *buf = NULL;            /* ptr to string buffer */
 
   unsigned recursion_depth = p_get_proto_depth(pinfo, proto_giop);
-  if (++recursion_depth >= GIOP_MAX_RECURSION_DEPTH) {
+  if (recursion_depth > GIOP_MAX_RECURSION_DEPTH) {
     proto_tree_add_expert(tree, pinfo, &ei_giop_max_recursion_depth_reached, tvb, 0, 0);
     return;
   }
-  p_set_proto_depth(pinfo, proto_giop, recursion_depth);
+  p_set_proto_depth(pinfo, proto_giop, recursion_depth + 1);
 
   /* Grab the data according to data type */
 
@@ -2483,7 +2484,7 @@ static void dissect_data_for_typecode_with_params(tvbuff_t *tvb, packet_info *pi
     expert_add_info_format(pinfo, item, &ei_giop_unknown_typecode_datatype, "Unknown typecode data type %u", data_type);
     break;
   }
-  p_set_proto_depth(pinfo, proto_giop, recursion_depth - 1);
+  p_set_proto_depth(pinfo, proto_giop, recursion_depth);
 }
 
 /*
@@ -2546,6 +2547,7 @@ static void dissect_tk_objref_params(tvbuff_t *tvb, proto_tree *tree, gint *offs
 }
 
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_struct_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset,
                                      gboolean stream_is_big_endian, guint32 boundary,
                                      MessageHeader * header, wmem_list_t *params) {
@@ -2606,6 +2608,7 @@ static void dissect_tk_struct_params(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 }
 
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_union_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item* item,
                                     gint *offset, gboolean stream_is_big_endian, guint32 boundary,
                                     MessageHeader * header) {
@@ -2716,6 +2719,7 @@ static void dissect_tk_enum_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 }
 
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_sequence_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset,
                                        gboolean stream_is_big_endian, guint32 boundary,
                                        MessageHeader * header, wmem_list_t *params) {
@@ -2748,6 +2752,7 @@ static void dissect_tk_sequence_params(tvbuff_t *tvb, packet_info *pinfo, proto_
 }
 
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_array_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset,
                                     gboolean stream_is_big_endian, guint32 boundary,
                                     MessageHeader * header, wmem_list_t *params) {
@@ -2787,6 +2792,7 @@ static void dissect_tk_array_params(tvbuff_t *tvb, packet_info *pinfo, proto_tre
  * dissection of nested (complex) types. Those are saved into a nested linked
  * list which can be handed into dissect_data_for_typecode_with_params
  */
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_alias_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset,
                                     gboolean stream_is_big_endian, guint32 boundary,
                                     MessageHeader * header, wmem_list_t *params) {
@@ -2822,6 +2828,7 @@ static void dissect_tk_alias_params(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 }
 
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_except_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset,
                                      gboolean stream_is_big_endian, guint32 boundary,
                                      MessageHeader * header) {
@@ -2868,6 +2875,7 @@ static void dissect_tk_except_params(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_value_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset,
                                     gboolean stream_is_big_endian, guint32 boundary,
                                     MessageHeader * header) {
@@ -2928,6 +2936,7 @@ static void dissect_tk_value_params(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 }
 
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void dissect_tk_value_box_params(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset,
                                         gboolean stream_is_big_endian, guint32 boundary,
                                         MessageHeader * header) {
@@ -3087,6 +3096,7 @@ guint32 get_CDR_encap_info(tvbuff_t *tvb, proto_tree *tree, gint *offset,
  * followed by the encoded value.
  */
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void get_CDR_any(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *item,
                  gint *offset, gboolean stream_is_big_endian, int boundary,
                  MessageHeader * header ) {
@@ -3625,6 +3635,7 @@ guint32 get_CDR_string(tvbuff_t *tvb, const gchar **seq, int *offset, gboolean s
  *
  * It returns a guint32 representing a TCKind value.
  */
+// NOLINTNEXTLINE(misc-no-recursion)
 guint32 get_CDR_typeCode(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
                          gint *offset, gboolean stream_is_big_endian,
                          int boundary, MessageHeader * header ) {
@@ -3636,6 +3647,7 @@ guint32 get_CDR_typeCode(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
 }
 
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static guint32 get_CDR_typeCode_with_params(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
                          gint *offset, gboolean stream_is_big_endian,
                          int boundary, MessageHeader * header,
@@ -3648,6 +3660,14 @@ static guint32 get_CDR_typeCode_with_params(tvbuff_t *tvb, packet_info* pinfo, p
   proto_item *ti;
 
   val = get_CDR_ulong(tvb, offset, stream_is_big_endian, boundary); /* get TCKind enum */
+
+  unsigned recursion_depth = p_get_proto_depth(pinfo, proto_giop);
+  if (recursion_depth > GIOP_MAX_RECURSION_DEPTH) {
+    proto_tree_add_expert(tree, pinfo, &ei_giop_max_recursion_depth_reached, tvb, 0, 0);
+    return val;
+  }
+  p_set_proto_depth(pinfo, proto_giop, recursion_depth + 1);
+
   ti = proto_tree_add_uint(tree, hf_giop_TCKind, tvb, *offset-4, 4, val);
   proto_tree *params_tree = proto_tree_add_subtree(tree, tvb, *offset, -1, ett_giop_typecode_parameters, NULL, "TypeCode-Parameters");
 
@@ -3762,6 +3782,8 @@ static guint32 get_CDR_typeCode_with_params(tvbuff_t *tvb, packet_info* pinfo, p
     expert_add_info_format(pinfo, ti, &ei_giop_unknown_tckind, "Unknown TCKind %u", val);
     break;
   } /* val */
+
+  p_set_proto_depth(pinfo, proto_giop, recursion_depth);
 
   return val;
 }

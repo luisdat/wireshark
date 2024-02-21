@@ -12,6 +12,7 @@
 #include <glib.h>
 
 #include <epan/dfilter/dfilter.h>
+#include <epan/dfilter/dfunctions.h>
 
 #include <ui/recent.h>
 
@@ -58,8 +59,16 @@
 #define DEFAULT_MODIFIER "Ctrl-"
 #endif
 
-// proto.c:fld_abbrev_chars
-static const QString fld_abbrev_chars_ = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+// ':' is not a legal field character, but it appears inside literals and
+// having it as a token character will keep field completion from being
+// offered in a place where it is syntactically impossible.
+//
+// The other place ':' is used in the grammar is to separate display filter
+// macros from their argument lists in the ${macro:arg;arg} format. Adding
+// ':' here means that the first argument of the list won't have a completion
+// pop-up. (We don't do completion for the macro names, maybe we should?)
+// ${macro;arg;arg} is allowed now, though.
+static const QString fld_abbrev_chars_ = ":-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
 
 DisplayFilterEdit::DisplayFilterEdit(QWidget *parent, DisplayFilterEditType type) :
     SyntaxLineEdit(parent),
@@ -150,20 +159,21 @@ void DisplayFilterEdit::contextMenuEvent(QContextMenuEvent *event) {
         return;
     }
 
-    QAction * first = menu->actions().at(0);
+    QAction *first = menu->actions().at(0);
 
-    QAction * na = new QAction(tr("Left align buttons"), this);
-    na->setCheckable(true);
-    na->setChecked(leftAlignActions_);
-    connect(na, &QAction::triggered, this, &DisplayFilterEdit::triggerAlignementAction);
-    menu->addSeparator();
-    menu->addAction(na);
-
-    na = new QAction(tr("Display Filter Expression…"), this);
+    QAction *na = new QAction(tr("Display Filter Expression…"), this);
     connect(na, &QAction::triggered, this, &DisplayFilterEdit::displayFilterExpression);
     menu->insertAction(first, na);
-
     menu->insertSeparator(first);
+
+    if (type_ == DisplayFilterToApply) {
+        na = new QAction(tr("Left align buttons"), this);
+        na->setCheckable(true);
+        na->setChecked(leftAlignActions_);
+        connect(na, &QAction::triggered, this, &DisplayFilterEdit::triggerAlignementAction);
+        menu->addSeparator();
+        menu->addAction(na);
+    }
 
     menu->popup(event->globalPos());
 }
@@ -212,8 +222,8 @@ void DisplayFilterEdit::alignActionButtons()
         rightMargin = 0;
     }
 
-    setStyleSheet(QString(
-            "DisplayFilterEdit {"
+    SyntaxLineEdit::setStyleSheet(style_sheet_ + QString(
+            "SyntaxLineEdit {"
             "  padding-left: %1px;"
             "  margin-left: %2px;"
             "  margin-right: %3px;"
@@ -587,11 +597,25 @@ void DisplayFilterEdit::buildCompletionList(const QString &field_word, const QSt
                 }
             }
         }
+
+        // Add display filter functions to the completion list
+        GPtrArray *func_list = df_func_name_list();
+        for (guint i = 0; i < func_list->len; i++) {
+            field_list << QString::fromUtf8(static_cast<const char *>(func_list->pdata[i])).append("(");
+        }
+        g_ptr_array_unref(func_list);
+
         field_list.sort();
     }
 
     completion_model_->setStringList(complex_list + field_list);
     completer()->setCompletionPrefix(field_word);
+}
+
+void DisplayFilterEdit::setStyleSheet(const QString &style_sheet)
+{
+    style_sheet_ = style_sheet;
+    SyntaxLineEdit::setStyleSheet(style_sheet_);
 }
 
 void DisplayFilterEdit::clearFilter()
@@ -607,12 +631,36 @@ void DisplayFilterEdit::clearFilter()
 void DisplayFilterEdit::applyDisplayFilter()
 {
     if (completer()->popup()->currentIndex().isValid()) {
-        // If the popup (not the QCompleter itself) has a currently
-        // valid QModelIndex, that means that the popup's
-        // QAbstractItemView::activated() signal has not yet
-        // been handled, which means that text() has the old value,
-        // not the one from the completer.
-        return;
+        // If the popup (not the QCompleter itself) has a currently valid
+        // QModelIndex, check to see if text() matches the text from the popup.
+        // If it does, then all is well, go ahead and filter (this happens
+        // if the popup entry is selected via mouse.)
+        //
+        // If it doesn't match, then it has the old value. There are two
+        // possibilities:
+        // 1) The user clicked away from the popup *without* selecting
+        // anything (making the popup disappear), and then hit Enter, in
+        // which case the user wants to filter with text() and doesn't care
+        // about what's in the popup. However, the QModelIndex for the popup
+        // is still valid until some time after this signal is handled.
+        //
+        // 2) The user pressed Return on an entry in the popup, in which
+        // case the user wants to filter with the new value in the popup,
+        // not the value in text(), but for some reason the popup's
+        // activated() signal gets handled *after* returnPressed on the
+        // LineEdit, unfortunately (#19323).
+        //
+        // We haven't figured out how to distinguish case 1 from case 2 yet,
+        // so ignore this force the user to press Enter again, and which
+        // point everything will have reconciled.
+        //
+        // Note that the currentCompletion() / currentIndex.data() of
+        // the completer() itself is "what would be the first completion
+        // of the text currently displayed in the line edit" and has naught
+        // to do with what was selected in the popup.
+        if (text() != completer()->popup()->currentIndex().data()) {
+            return;
+        }
     }
 
     if (syntaxState() == Invalid)

@@ -21,14 +21,14 @@
 void proto_register_smb_mailslot(void);
 void proto_reg_handoff_smb_mailslot(void);
 
-static int proto_smb_msp = -1;
-static int hf_opcode = -1;
-static int hf_priority = -1;
-static int hf_class = -1;
-static int hf_size = -1;
-static int hf_name = -1;
+static int proto_smb_msp;
+static int hf_opcode;
+static int hf_priority;
+static int hf_class;
+static int hf_size;
+static int hf_name;
 
-static int ett_smb_msp = -1;
+static int ett_smb_msp;
 
 static dissector_handle_t mailslot_browse_handle;
 static dissector_handle_t mailslot_lanman_handle;
@@ -229,8 +229,7 @@ proto_register_smb_mailslot(void)
 		&ett_smb_msp
 	};
 
-	proto_smb_msp = proto_register_protocol(
-		"SMB MailSlot Protocol", "SMB Mailslot", "mailslot");
+	proto_smb_msp = proto_register_protocol("SMB MailSlot Protocol", "SMB Mailslot", "mailslot");
 
 	proto_register_field_array(proto_smb_msp, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));

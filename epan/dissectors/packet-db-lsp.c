@@ -32,18 +32,18 @@
 void proto_register_db_lsp(void);
 void proto_reg_handoff_db_lsp(void);
 
-static int proto_db_lsp = -1;
-static int proto_db_lsp_disc = -1;
+static int proto_db_lsp;
+static int proto_db_lsp_disc;
 
-static int hf_type = -1;
-static int hf_magic = -1;
-static int hf_length = -1;
-static int hf_opvalue = -1;
-static int hf_data = -1;
-static int hf_value = -1;
-static int hf_text = -1;
+static int hf_type;
+static int hf_magic;
+static int hf_length;
+static int hf_opvalue;
+static int hf_data;
+static int hf_value;
+static int hf_text;
 
-static gint ett_db_lsp = -1;
+static gint ett_db_lsp;
 
 static heur_dissector_list_t heur_subdissector_list;
 
@@ -231,7 +231,7 @@ proto_register_db_lsp (void)
   db_lsp_tcp_handle = register_dissector ("db-lsp.tcp", dissect_db_lsp_tcp, proto_db_lsp);
   db_lsp_udp_handle = register_dissector ("db-lsp.udp", dissect_db_lsp_disc, proto_db_lsp_disc);
 
-  heur_subdissector_list = register_heur_dissector_list("db-lsp", proto_db_lsp);
+  heur_subdissector_list = register_heur_dissector_list_with_description("db-lsp", PSNAME_DISC " payload", proto_db_lsp);
 
   proto_register_field_array (proto_db_lsp, hf, array_length (hf));
   proto_register_subtree_array (ett, array_length (ett));

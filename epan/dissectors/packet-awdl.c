@@ -37,258 +37,272 @@ typedef struct awdl_tagged_field_data
 
 static const unit_name_string units_ieee80211_tu = { " TU", NULL }; /* 1 TU = 1024 microseconds */
 
-static int proto_awdl = -1;
-static int proto_awdl_data = -1;
+static int proto_awdl;
+static int proto_awdl_data;
 
-static int hf_awdl_unknown = -1;
+static int hf_awdl_unknown;
 
-static int hf_awdl_fixed_parameters = -1;
-static int hf_awdl_tagged_parameters = -1;
+static int hf_awdl_fixed_parameters;
+static int hf_awdl_tagged_parameters;
 
-static int hf_awdl_data_seq = -1;
-static int hf_awdl_data_header = -1;
-static int hf_awdl_data_ethertype = -1;
+static int hf_awdl_data_seq;
+static int hf_awdl_data_header;
+static int hf_awdl_data_ethertype;
 
-static int hf_awdl_type = -1;
-static int hf_awdl_subtype = -1;
-static int hf_awdl_rsvd = -1;
-static int hf_awdl_phytime = -1;
-static int hf_awdl_targettime = -1;
-static int hf_awdl_txdelay = -1;
+static int hf_awdl_type;
+static int hf_awdl_subtype;
+static int hf_awdl_rsvd;
+static int hf_awdl_phytime;
+static int hf_awdl_targettime;
+static int hf_awdl_txdelay;
 
-static int hf_awdl_tag = -1;
-static int hf_awdl_tag_number = -1;
-static int hf_awdl_tag_length = -1;
-static int hf_awdl_tag_data = -1;
-static int hf_awdl_tag_padding = -1;
+static int hf_awdl_tag;
+static int hf_awdl_tag_number;
+static int hf_awdl_tag_length;
+static int hf_awdl_tag_data;
+static int hf_awdl_tag_padding;
 
-static int hf_awdl_version = -1;
-static int hf_awdl_version_minor = -1;
-static int hf_awdl_version_major = -1;
-static int hf_awdl_version_devclass = -1;
+static int hf_awdl_version;
+static int hf_awdl_version_minor;
+static int hf_awdl_version_major;
+static int hf_awdl_version_devclass;
 
-static int hf_awdl_datastate_flags = -1;
-static int hf_awdl_datastate_flags_0 = -1;
-static int hf_awdl_datastate_flags_1 = -1;
-static int hf_awdl_datastate_flags_2 = -1;
-static int hf_awdl_datastate_flags_3 = -1;
-static int hf_awdl_datastate_flags_4 = -1;
-static int hf_awdl_datastate_flags_5 = -1;
-static int hf_awdl_datastate_flags_6 = -1;
-static int hf_awdl_datastate_flags_7 = -1;
-static int hf_awdl_datastate_flags_8 = -1;
-static int hf_awdl_datastate_flags_9 = -1;
-static int hf_awdl_datastate_flags_10 = -1;
-static int hf_awdl_datastate_flags_11 = -1;
-static int hf_awdl_datastate_flags_12 = -1;
-static int hf_awdl_datastate_flags_13 = -1;
-static int hf_awdl_datastate_flags_14 = -1;
-static int hf_awdl_datastate_flags_15 = -1;
-static int hf_awdl_datastate_extflags = -1;
-static int hf_awdl_datastate_extflags_0 = -1;
-static int hf_awdl_datastate_extflags_1 = -1;
-static int hf_awdl_datastate_extflags_2 = -1;
-static int hf_awdl_datastate_extflags_3to15 = -1;
-static int hf_awdl_datastate_infra_channel = -1;
-static int hf_awdl_datastate_countrycode = -1;
-static int hf_awdl_datastate_social_channel = -1;
-static int hf_awdl_datastate_social_channel_map = -1;
-static int hf_awdl_datastate_social_channel_map_6 = -1;
-static int hf_awdl_datastate_social_channel_map_44 = -1;
-static int hf_awdl_datastate_social_channel_map_149 = -1;
-static int hf_awdl_datastate_social_channel_map_unused = -1;
-static int hf_awdl_datastate_infra_bssid = -1;
-static int hf_awdl_datastate_infra_address = -1;
-static int hf_awdl_datastate_awdl_address = -1;
-static int hf_awdl_datastate_umi = -1;
-static int hf_awdl_datastate_umioptions = -1;
-static int hf_awdl_datastate_umioptions_length = -1;
-static int hf_awdl_datastate_logtrigger = -1;
-static int hf_awdl_datastate_undecoded = -1;
+static int hf_awdl_datastate_flags;
+static int hf_awdl_datastate_flags_0;
+static int hf_awdl_datastate_flags_1;
+static int hf_awdl_datastate_flags_2;
+static int hf_awdl_datastate_flags_3;
+static int hf_awdl_datastate_flags_4;
+static int hf_awdl_datastate_flags_5;
+static int hf_awdl_datastate_flags_6;
+static int hf_awdl_datastate_flags_7;
+static int hf_awdl_datastate_flags_8;
+static int hf_awdl_datastate_flags_9;
+static int hf_awdl_datastate_flags_10;
+static int hf_awdl_datastate_flags_11;
+static int hf_awdl_datastate_flags_12;
+static int hf_awdl_datastate_flags_13;
+static int hf_awdl_datastate_flags_14;
+static int hf_awdl_datastate_flags_15;
+static int hf_awdl_datastate_extflags;
+static int hf_awdl_datastate_extflags_0;
+static int hf_awdl_datastate_extflags_1;
+static int hf_awdl_datastate_extflags_2;
+static int hf_awdl_datastate_extflags_3;
+static int hf_awdl_datastate_extflags_4;
+static int hf_awdl_datastate_extflags_5;
+static int hf_awdl_datastate_extflags_6;
+static int hf_awdl_datastate_extflags_7;
+static int hf_awdl_datastate_extflags_8;
+static int hf_awdl_datastate_extflags_9;
+static int hf_awdl_datastate_extflags_10;
+static int hf_awdl_datastate_extflags_11;
+static int hf_awdl_datastate_extflags_12;
+static int hf_awdl_datastate_extflags_13;
+static int hf_awdl_datastate_extflags_14to15;
+static int hf_awdl_datastate_infra_channel;
+static int hf_awdl_datastate_countrycode;
+static int hf_awdl_datastate_social_channel;
+static int hf_awdl_datastate_social_channel_map;
+static int hf_awdl_datastate_social_channel_map_6;
+static int hf_awdl_datastate_social_channel_map_44;
+static int hf_awdl_datastate_social_channel_map_149;
+static int hf_awdl_datastate_social_channel_map_unused;
+static int hf_awdl_datastate_infra_bssid;
+static int hf_awdl_datastate_infra_address;
+static int hf_awdl_datastate_awdl_address;
+static int hf_awdl_datastate_umi;
+static int hf_awdl_datastate_umioptions;
+static int hf_awdl_datastate_umioptions_length;
+static int hf_awdl_datastate_logtrigger;
+static int hf_awdl_datastate_rlfc;
+static int hf_awdl_datastate_active_time;
+static int hf_awdl_datastate_aw_sequence_counter;
+static int hf_awdl_datastate_update_counter;
 
-static int hf_awdl_synctree_addr = -1;
+static int hf_awdl_synctree_addr;
 
-static int hf_awdl_syncparams_master = -1;
-static int hf_awdl_syncparams_awcounter = -1;
-static int hf_awdl_syncparams_apbeaconalignment = -1;
-static int hf_awdl_syncparams_tx_chan = -1;
-static int hf_awdl_syncparams_tx_counter = -1;
-static int hf_awdl_syncparams_master_chan = -1;
-static int hf_awdl_syncparams_guard_time = -1;
-static int hf_awdl_syncparams_aw_period = -1;
-static int hf_awdl_syncparams_action_frame_period = -1;
-static int hf_awdl_syncparams_awdl_flags = -1;
-static int hf_awdl_syncparams_aw_ext_length = -1;
-static int hf_awdl_syncparams_aw_cmn_length = -1;
-static int hf_awdl_syncparams_aw_remaining = -1;
-static int hf_awdl_syncparams_ext_min = -1;
-static int hf_awdl_syncparams_ext_max_multi = -1;
-static int hf_awdl_syncparams_ext_max_uni = -1;
-static int hf_awdl_syncparams_ext_max_af = -1;
-static int hf_awdl_syncparams_presence_mode = -1;
+static int hf_awdl_syncparams_master;
+static int hf_awdl_syncparams_awcounter;
+static int hf_awdl_syncparams_apbeaconalignment;
+static int hf_awdl_syncparams_tx_chan;
+static int hf_awdl_syncparams_tx_counter;
+static int hf_awdl_syncparams_master_chan;
+static int hf_awdl_syncparams_guard_time;
+static int hf_awdl_syncparams_aw_period;
+static int hf_awdl_syncparams_action_frame_period;
+static int hf_awdl_syncparams_awdl_flags;
+static int hf_awdl_syncparams_aw_ext_length;
+static int hf_awdl_syncparams_aw_cmn_length;
+static int hf_awdl_syncparams_aw_remaining;
+static int hf_awdl_syncparams_ext_min;
+static int hf_awdl_syncparams_ext_max_multi;
+static int hf_awdl_syncparams_ext_max_uni;
+static int hf_awdl_syncparams_ext_max_af;
+static int hf_awdl_syncparams_presence_mode;
 
-static int hf_awdl_channelseq_enc = -1;
-static int hf_awdl_channelseq_duplicate = -1;
-static int hf_awdl_channelseq_step_count = -1;
-static int hf_awdl_channelseq_fill_chan = -1;
-static int hf_awdl_channelseq_channel_count = -1;
-static int hf_awdl_channelseq_channel_list = -1;
-static int hf_awdl_channelseq_channel = -1;
-static int hf_awdl_channelseq_channel_number = -1;
-static int hf_awdl_channelseq_channel_flags = -1;
-static int hf_awdl_channelseq_channel_operating_class = -1;
+static int hf_awdl_channelseq_enc;
+static int hf_awdl_channelseq_duplicate;
+static int hf_awdl_channelseq_step_count;
+static int hf_awdl_channelseq_fill_chan;
+static int hf_awdl_channelseq_channel_count;
+static int hf_awdl_channelseq_channel_list;
+static int hf_awdl_channelseq_channel;
+static int hf_awdl_channelseq_channel_number;
+static int hf_awdl_channelseq_channel_flags;
+static int hf_awdl_channelseq_channel_operating_class;
 /* legacy encoding flags */
-static int hf_awdl_channelseq_legacy_unused = -1;
-static int hf_awdl_channelseq_legacy_band = -1;
-static int hf_awdl_channelseq_legacy_bandwidth = -1;
-static int hf_awdl_channelseq_legacy_control_channel = -1;
+static int hf_awdl_channelseq_legacy_unused;
+static int hf_awdl_channelseq_legacy_band;
+static int hf_awdl_channelseq_legacy_bandwidth;
+static int hf_awdl_channelseq_legacy_control_channel;
 
-static int hf_awdl_electionparams_master = -1;
-static int hf_awdl_electionparams_flags = -1;
-static int hf_awdl_electionparams_id = -1;
-static int hf_awdl_electionparams_distance = -1;
-static int hf_awdl_electionparams_mastermetric = -1;
-static int hf_awdl_electionparams_selfmetric = -1;
-static int hf_awdl_electionparams_unknown = -1;
-static int hf_awdl_electionparams_private_master = -1;
-static int hf_awdl_electionparams_private_mastermetric = -1;
-static int hf_awdl_electionparams_private_id = -1;
-static int hf_awdl_electionparams_private_phc = -1;
+static int hf_awdl_electionparams_master;
+static int hf_awdl_electionparams_flags;
+static int hf_awdl_electionparams_id;
+static int hf_awdl_electionparams_distance;
+static int hf_awdl_electionparams_mastermetric;
+static int hf_awdl_electionparams_selfmetric;
+static int hf_awdl_electionparams_unknown;
+static int hf_awdl_electionparams_private_master;
+static int hf_awdl_electionparams_private_mastermetric;
+static int hf_awdl_electionparams_private_id;
+static int hf_awdl_electionparams_private_phc;
 
-static int hf_awdl_electionparams2_master = -1;
-static int hf_awdl_electionparams2_other = -1;
-static int hf_awdl_electionparams2_mastermetric = -1;
-static int hf_awdl_electionparams2_selfmetric = -1;
-static int hf_awdl_electionparams2_mastercounter = -1;
-static int hf_awdl_electionparams2_selfcounter = -1;
-static int hf_awdl_electionparams2_distance = -1;
-static int hf_awdl_electionparams2_unknown = -1;
-static int hf_awdl_electionparams2_reserved = -1;
+static int hf_awdl_electionparams2_master;
+static int hf_awdl_electionparams2_other;
+static int hf_awdl_electionparams2_mastermetric;
+static int hf_awdl_electionparams2_selfmetric;
+static int hf_awdl_electionparams2_mastercounter;
+static int hf_awdl_electionparams2_selfcounter;
+static int hf_awdl_electionparams2_distance;
+static int hf_awdl_electionparams2_unknown;
+static int hf_awdl_electionparams2_reserved;
 
-static int hf_awdl_dns_name_len = -1;
-static int hf_awdl_dns_name = -1;
-static int hf_awdl_dns_name_label = -1;
-static int hf_awdl_dns_name_short = -1;
-static int hf_awdl_dns_type = -1;
-static int hf_awdl_dns_data_len = -1;
-static int hf_awdl_dns_txt = -1;
-static int hf_awdl_dns_ptr = -1;
-static int hf_awdl_dns_ptr_label = -1;
-static int hf_awdl_dns_ptr_short = -1;
-static int hf_awdl_dns_target = -1;
-static int hf_awdl_dns_target_label = -1;
-static int hf_awdl_dns_target_short = -1;
-static int hf_awdl_dns_unknown = -1;
-static int hf_awdl_dns_priority = -1;
-static int hf_awdl_dns_weight = -1;
-static int hf_awdl_dns_port = -1;
+static int hf_awdl_dns_name_len;
+static int hf_awdl_dns_name;
+static int hf_awdl_dns_name_label;
+static int hf_awdl_dns_name_short;
+static int hf_awdl_dns_type;
+static int hf_awdl_dns_data_len;
+static int hf_awdl_dns_txt;
+static int hf_awdl_dns_ptr;
+static int hf_awdl_dns_ptr_label;
+static int hf_awdl_dns_ptr_short;
+static int hf_awdl_dns_target;
+static int hf_awdl_dns_target_label;
+static int hf_awdl_dns_target_short;
+static int hf_awdl_dns_unknown;
+static int hf_awdl_dns_priority;
+static int hf_awdl_dns_weight;
+static int hf_awdl_dns_port;
 
-static int hf_awdl_serviceparams_sui = -1;
-static int hf_awdl_serviceparams_enc_values = -1;
-static int hf_awdl_serviceparams_bitmask = -1;
-static int hf_awdl_serviceparams_bitmask_0 = -1;
-static int hf_awdl_serviceparams_bitmask_1 = -1;
-static int hf_awdl_serviceparams_bitmask_2 = -1;
-static int hf_awdl_serviceparams_bitmask_3 = -1;
-static int hf_awdl_serviceparams_bitmask_4 = -1;
-static int hf_awdl_serviceparams_bitmask_5 = -1;
-static int hf_awdl_serviceparams_bitmask_6 = -1;
-static int hf_awdl_serviceparams_bitmask_7 = -1;
-static int hf_awdl_serviceparams_bitmask_8 = -1;
-static int hf_awdl_serviceparams_bitmask_9 = -1;
-static int hf_awdl_serviceparams_bitmask_10 = -1;
-static int hf_awdl_serviceparams_bitmask_11 = -1;
-static int hf_awdl_serviceparams_bitmask_12= -1;
-static int hf_awdl_serviceparams_bitmask_13 = -1;
-static int hf_awdl_serviceparams_bitmask_14 = -1;
-static int hf_awdl_serviceparams_bitmask_15 = -1;
-static int hf_awdl_serviceparams_bitmask_16 = -1;
-static int hf_awdl_serviceparams_bitmask_17 = -1;
-static int hf_awdl_serviceparams_bitmask_18 = -1;
-static int hf_awdl_serviceparams_bitmask_19 = -1;
-static int hf_awdl_serviceparams_bitmask_20 = -1;
-static int hf_awdl_serviceparams_bitmask_21 = -1;
-static int hf_awdl_serviceparams_bitmask_22 = -1;
-static int hf_awdl_serviceparams_bitmask_23 = -1;
-static int hf_awdl_serviceparams_bitmask_24 = -1;
-static int hf_awdl_serviceparams_bitmask_25 = -1;
-static int hf_awdl_serviceparams_bitmask_26 = -1;
-static int hf_awdl_serviceparams_bitmask_27 = -1;
-static int hf_awdl_serviceparams_bitmask_28 = -1;
-static int hf_awdl_serviceparams_bitmask_29 = -1;
-static int hf_awdl_serviceparams_bitmask_30 = -1;
-static int hf_awdl_serviceparams_bitmask_31 = -1;
-static int hf_awdl_serviceparams_values = -1;
-static int hf_awdl_serviceparams_values_0 = -1;
-static int hf_awdl_serviceparams_values_1 = -1;
-static int hf_awdl_serviceparams_values_2 = -1;
-static int hf_awdl_serviceparams_values_3 = -1;
-static int hf_awdl_serviceparams_values_4 = -1;
-static int hf_awdl_serviceparams_values_5 = -1;
-static int hf_awdl_serviceparams_values_6 = -1;
-static int hf_awdl_serviceparams_values_7 = -1;
+static int hf_awdl_serviceparams_sui;
+static int hf_awdl_serviceparams_enc_values;
+static int hf_awdl_serviceparams_bitmask;
+static int hf_awdl_serviceparams_bitmask_0;
+static int hf_awdl_serviceparams_bitmask_1;
+static int hf_awdl_serviceparams_bitmask_2;
+static int hf_awdl_serviceparams_bitmask_3;
+static int hf_awdl_serviceparams_bitmask_4;
+static int hf_awdl_serviceparams_bitmask_5;
+static int hf_awdl_serviceparams_bitmask_6;
+static int hf_awdl_serviceparams_bitmask_7;
+static int hf_awdl_serviceparams_bitmask_8;
+static int hf_awdl_serviceparams_bitmask_9;
+static int hf_awdl_serviceparams_bitmask_10;
+static int hf_awdl_serviceparams_bitmask_11;
+static int hf_awdl_serviceparams_bitmask_12;
+static int hf_awdl_serviceparams_bitmask_13;
+static int hf_awdl_serviceparams_bitmask_14;
+static int hf_awdl_serviceparams_bitmask_15;
+static int hf_awdl_serviceparams_bitmask_16;
+static int hf_awdl_serviceparams_bitmask_17;
+static int hf_awdl_serviceparams_bitmask_18;
+static int hf_awdl_serviceparams_bitmask_19;
+static int hf_awdl_serviceparams_bitmask_20;
+static int hf_awdl_serviceparams_bitmask_21;
+static int hf_awdl_serviceparams_bitmask_22;
+static int hf_awdl_serviceparams_bitmask_23;
+static int hf_awdl_serviceparams_bitmask_24;
+static int hf_awdl_serviceparams_bitmask_25;
+static int hf_awdl_serviceparams_bitmask_26;
+static int hf_awdl_serviceparams_bitmask_27;
+static int hf_awdl_serviceparams_bitmask_28;
+static int hf_awdl_serviceparams_bitmask_29;
+static int hf_awdl_serviceparams_bitmask_30;
+static int hf_awdl_serviceparams_bitmask_31;
+static int hf_awdl_serviceparams_values;
+static int hf_awdl_serviceparams_values_0;
+static int hf_awdl_serviceparams_values_1;
+static int hf_awdl_serviceparams_values_2;
+static int hf_awdl_serviceparams_values_3;
+static int hf_awdl_serviceparams_values_4;
+static int hf_awdl_serviceparams_values_5;
+static int hf_awdl_serviceparams_values_6;
+static int hf_awdl_serviceparams_values_7;
 
-static int hf_awdl_arpa = -1;
-static int hf_awdl_arpa_flags = -1;
-static int hf_awdl_arpa_name = -1;
-static int hf_awdl_arpa_short = -1;
+static int hf_awdl_arpa;
+static int hf_awdl_arpa_flags;
+static int hf_awdl_arpa_name;
+static int hf_awdl_arpa_short;
 
-static int hf_awdl_ht_unknown = -1;
+static int hf_awdl_ht_unknown;
 /* from hf_ieee80211_* from packet-ieee80211.c */
-static int hf_awdl_ht_cap = -1;
-static int hf_awdl_ht_ldpc_coding = -1;
-static int hf_awdl_ht_chan_width = -1;
-static int hf_awdl_ht_sm_pwsave = -1;
-static int hf_awdl_ht_green = -1;
-static int hf_awdl_ht_short20 = -1;
-static int hf_awdl_ht_short40 = -1;
-static int hf_awdl_ht_tx_stbc = -1;
-static int hf_awdl_ht_rx_stbc = -1;
-static int hf_awdl_ht_delayed_block_ack = -1;
-static int hf_awdl_ht_max_amsdu = -1;
-static int hf_awdl_ht_dss_cck_40 = -1;
-static int hf_awdl_ht_psmp = -1;
-static int hf_awdl_ht_40_mhz_intolerant = -1;
-static int hf_awdl_ht_l_sig = -1;
-static int hf_awdl_ampduparam = -1;
-static int hf_awdl_ampduparam_mpdu = -1;
-static int hf_awdl_ampduparam_mpdu_start_spacing = -1;
-static int hf_awdl_ampduparam_reserved = -1;
-static int hf_awdl_mcsset = -1;
-static int hf_awdl_mcsset_rx_bitmask = -1;
-static int hf_awdl_mcsset_rx_bitmask_0to7 = -1;
-static int hf_awdl_mcsset_rx_bitmask_8to15 = -1;
-static int hf_awdl_mcsset_rx_bitmask_16to23 = -1;
-static int hf_awdl_mcsset_rx_bitmask_24to31 = -1;
+static int hf_awdl_ht_cap;
+static int hf_awdl_ht_ldpc_coding;
+static int hf_awdl_ht_chan_width;
+static int hf_awdl_ht_sm_pwsave;
+static int hf_awdl_ht_green;
+static int hf_awdl_ht_short20;
+static int hf_awdl_ht_short40;
+static int hf_awdl_ht_tx_stbc;
+static int hf_awdl_ht_rx_stbc;
+static int hf_awdl_ht_delayed_block_ack;
+static int hf_awdl_ht_max_amsdu;
+static int hf_awdl_ht_dss_cck_40;
+static int hf_awdl_ht_psmp;
+static int hf_awdl_ht_40_mhz_intolerant;
+static int hf_awdl_ht_l_sig;
+static int hf_awdl_ampduparam;
+static int hf_awdl_ampduparam_mpdu;
+static int hf_awdl_ampduparam_mpdu_start_spacing;
+static int hf_awdl_ampduparam_reserved;
+static int hf_awdl_mcsset;
+static int hf_awdl_mcsset_rx_bitmask;
+static int hf_awdl_mcsset_rx_bitmask_0to7;
+static int hf_awdl_mcsset_rx_bitmask_8to15;
+static int hf_awdl_mcsset_rx_bitmask_16to23;
+static int hf_awdl_mcsset_rx_bitmask_24to31;
 
-static int hf_llc_apple_awdl_pid = -1;
+static int hf_llc_apple_awdl_pid;
 
-static gint ett_awdl_data = -1;
-static gint ett_awdl = -1;
-static gint ett_awdl_fixed_parameters = -1;
-static gint ett_awdl_tagged_parameters = -1;
-static gint ett_awdl_unknown = -1;
-static gint ett_awdl_tag = -1;
-static gint ett_awdl_channelseq_flags = -1;
-static gint ett_awdl_version = -1;
-static gint ett_awdl_dns_record = -1;
-static gint ett_awdl_dns_name = -1;
-static gint ett_awdl_channelseq_channel_list = -1;
-static gint ett_awdl_channelseq_channel = -1;
-static gint ett_awdl_datastate_flags = -1;
-static gint ett_awdl_datastate_social_channel_map = -1;
-static gint ett_awdl_datastate_extflags = -1;
-static gint ett_awdl_ht_capabilities = -1;
-static gint ett_awdl_ht_ampduparam = -1;
-static gint ett_awdl_ht_mcsset_tree = -1;
-static gint ett_awdl_ht_mcsbit_tree = -1;
-static gint ett_awdl_serviceparams_bitmask = -1;
-static gint ett_awdl_serviceparams_values = -1;
-static gint ett_awdl_serviceparams_value = -1;
+static gint ett_awdl_data;
+static gint ett_awdl;
+static gint ett_awdl_fixed_parameters;
+static gint ett_awdl_tagged_parameters;
+static gint ett_awdl_unknown;
+static gint ett_awdl_tag;
+static gint ett_awdl_channelseq_flags;
+static gint ett_awdl_version;
+static gint ett_awdl_dns_record;
+static gint ett_awdl_dns_name;
+static gint ett_awdl_channelseq_channel_list;
+static gint ett_awdl_channelseq_channel;
+static gint ett_awdl_datastate_flags;
+static gint ett_awdl_datastate_social_channel_map;
+static gint ett_awdl_datastate_extflags;
+static gint ett_awdl_ht_capabilities;
+static gint ett_awdl_ht_ampduparam;
+static gint ett_awdl_ht_mcsset_tree;
+static gint ett_awdl_ht_mcsbit_tree;
+static gint ett_awdl_serviceparams_bitmask;
+static gint ett_awdl_serviceparams_values;
+static gint ett_awdl_serviceparams_value;
 
-static expert_field ei_awdl_tag_length = EI_INIT;
-static expert_field ei_awdl_tag_data = EI_INIT;
-static expert_field ei_awdl_dns_data_len = EI_INIT;
+static expert_field ei_awdl_tag_length;
+static expert_field ei_awdl_tag_data;
+static expert_field ei_awdl_dns_data_len;
 
 static dissector_table_t ethertype_subdissector_table;
 static dissector_table_t tagged_field_table;
@@ -424,12 +438,14 @@ static const value_string awdl_chanseq_fill_chan[] = {
 enum {
   AWDL_VERSION_MACOS = 1,
   AWDL_VERSION_IOS = 2,
+  AWDL_VERSION_WATCHOS = 4,
   AWDL_VERSION_TVOS = 8,
 };
 
 static const value_string awdl_version_devclass[] = {
   { AWDL_VERSION_MACOS, "macOS" },
-  { AWDL_VERSION_IOS, "iOS or watchOS" },
+  { AWDL_VERSION_IOS, "iOS" },
+  { AWDL_VERSION_WATCHOS, "watchOS" },
   { AWDL_VERSION_TVOS, "tvOS" },
   { 0, NULL }
 };
@@ -757,7 +773,7 @@ awdl_tag_channel_sequence(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     chanlist_tree = proto_item_add_subtree(chanlist_item, ett_awdl_channelseq_channel_list);
     for (guint i = 0; i < channels; i++) {
       /* channel number is 2nd byte */
-      channel_item = proto_tree_add_item_ret_uint(chanlist_tree, hf_awdl_channelseq_channel, tvb, offset, 2,
+      channel_item = proto_tree_add_item_ret_uint(chanlist_tree, hf_awdl_channelseq_channel, tvb, offset + 1, 1,
                                                   ENC_LITTLE_ENDIAN, &chan_number);
       channel_tree = proto_item_add_subtree(channel_item, ett_awdl_channelseq_channel);
       proto_tree_add_bitmask(channel_tree, tvb, offset, hf_awdl_channelseq_channel_flags,
@@ -778,8 +794,8 @@ awdl_tag_channel_sequence(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     chanlist_item = proto_tree_add_item(tree, hf_awdl_channelseq_channel_list, tvb, offset, 2 * channels, ENC_NA);
     chanlist_tree = proto_item_add_subtree(chanlist_item, ett_awdl_channelseq_channel_list);
     for (guint i = 0; i < channels; i++) {
-      /* channel number is 2nd byte */
-      channel_item = proto_tree_add_item_ret_uint(chanlist_tree, hf_awdl_channelseq_channel, tvb, offset, 2,
+      /* channel number is 1st byte */
+      channel_item = proto_tree_add_item_ret_uint(chanlist_tree, hf_awdl_channelseq_channel, tvb, offset, 1,
                                                   ENC_LITTLE_ENDIAN, &chan_number);
       channel_tree = proto_item_add_subtree(channel_item, ett_awdl_channelseq_channel);
       proto_tree_add_item(channel_tree, hf_awdl_channelseq_channel_number, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -962,7 +978,18 @@ awdl_tag_datapath_state(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     &hf_awdl_datastate_extflags_0,
     &hf_awdl_datastate_extflags_1,
     &hf_awdl_datastate_extflags_2,
-    &hf_awdl_datastate_extflags_3to15,
+    &hf_awdl_datastate_extflags_3,
+    &hf_awdl_datastate_extflags_4,
+    &hf_awdl_datastate_extflags_5,
+    &hf_awdl_datastate_extflags_6,
+    &hf_awdl_datastate_extflags_7,
+    &hf_awdl_datastate_extflags_8,
+    &hf_awdl_datastate_extflags_9,
+    &hf_awdl_datastate_extflags_10,
+    &hf_awdl_datastate_extflags_11,
+    &hf_awdl_datastate_extflags_12,
+    &hf_awdl_datastate_extflags_13,
+    &hf_awdl_datastate_extflags_14to15,
     NULL
   };
 
@@ -1020,23 +1047,23 @@ awdl_tag_datapath_state(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
                            ett_awdl_datastate_extflags, extflags_fields, ENC_LITTLE_ENDIAN);
     offset += 2;
 
+    if (extflags & 0x1) {
+      /* The logtrigger is actually two bytes. */
+      proto_tree_add_item(tree, hf_awdl_datastate_logtrigger, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+    }
     if (extflags & 0x4) {
-      proto_tree_add_item(tree, hf_awdl_datastate_logtrigger, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+      /* Meaning unknown. */
+      proto_tree_add_item(tree, hf_awdl_datastate_rlfc, tvb, offset, 4, ENC_LITTLE_ENDIAN);
       offset += 4;
     }
-    if (extflags & 0x1) {
-      /* TODO add actual fields
-       *
-       * Binary: IO80211Family
-       * Method: IO80211AWDLPeer::parseAwdlDataPathTLVAndTakeAction
-       *
-       * __cstring:0000000000091E2A aRlfc           db 'RLFC',0
-       * __cstring:0000000000091E2F aMsecsince      db 'msecSince',0
-       * __cstring:0000000000091E39 aAwseq          db 'awSeq',0
-       * __cstring:0000000000091E3F aPayupdatecount db 'payUpdateCounter',0
-       */
-      proto_tree_add_item(tree, hf_awdl_datastate_undecoded, tvb, offset, 14, ENC_NA);
-      offset += 14;
+    if (extflags & 0x40) {
+      proto_tree_add_item(tree, hf_awdl_datastate_active_time, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+      offset += 4;
+      proto_tree_add_item(tree, hf_awdl_datastate_aw_sequence_counter, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+      offset += 4;
+      proto_tree_add_item(tree, hf_awdl_datastate_update_counter, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+      offset += 4;
     }
   }
 
@@ -1654,7 +1681,7 @@ void proto_register_awdl(void)
       }
     },
     { &hf_awdl_datastate_flags_3,
-      { "Bit 3", "awdl.datastate.flags.3",
+      { "RSDB Support", "awdl.datastate.flags.3",
         FT_BOOLEAN, 16, NULL, 0x0008, NULL, HFILL
       }
     },
@@ -1664,17 +1691,17 @@ void proto_register_awdl(void)
       }
     },
     { &hf_awdl_datastate_flags_5,
-      { "Bit 5", "awdl.datastate.flags.5",
+      { "Dualband Support", "awdl.datastate.flags.5",
         FT_BOOLEAN, 16, NULL, 0x0020, NULL, HFILL
       }
     },
     { &hf_awdl_datastate_flags_6,
-      { "Is AirPlay (?)", "awdl.datastate.flags.6",
+      { "AirPlay Sink", "awdl.datastate.flags.6",
         FT_BOOLEAN, 16, NULL, 0x0040, NULL, HFILL
       }
     },
     { &hf_awdl_datastate_flags_7,
-      { "Bit 7", "awdl.datastate.flags.7",
+      { "Follow Channel Sequence", "awdl.datastate.flags.7",
         FT_BOOLEAN, 16, NULL, 0x0080, NULL, HFILL
       }
     },
@@ -1689,12 +1716,12 @@ void proto_register_awdl(void)
       }
     },
     { &hf_awdl_datastate_flags_10,
-      { "Bit 10", "awdl.datastate.flags.10",
+      { "AirPlay Solo Mode", "awdl.datastate.flags.10",
         FT_BOOLEAN, 16, NULL, 0x0400, NULL, HFILL
       }
     },
     { &hf_awdl_datastate_flags_11,
-      { "Bit 11", "awdl.datastate.flags.11",
+      { "UMI Supported", "awdl.datastate.flags.11",
         FT_BOOLEAN, 16, NULL, 0x0800, NULL, HFILL
       }
     },
@@ -1704,12 +1731,12 @@ void proto_register_awdl(void)
       }
     },
     { &hf_awdl_datastate_flags_13,
-      { "Bit 13", "awdl.datastate.flags.13",
+      { "Real-Time", "awdl.datastate.flags.13",
         FT_BOOLEAN, 16, NULL, 0x2000, NULL, HFILL
       }
     },
     { &hf_awdl_datastate_flags_14,
-      { "Is Rangeable", "awdl.datastate.flags.14",
+      { "Rangeable", "awdl.datastate.flags.14",
         FT_BOOLEAN, 16, NULL, 0x4000, NULL, HFILL
       }
     },
@@ -1797,34 +1824,106 @@ void proto_register_awdl(void)
       }
     },
     { &hf_awdl_datastate_extflags_0,
-      { "Undecoded (?)", "awdl.datastate.extflags.0",
-        FT_BOOLEAN, 16, NULL, 0x1, NULL, HFILL
+      { "Logtrigger ID", "awdl.datastate.extflags.0",
+        FT_BOOLEAN, 16, NULL, 0x0001, NULL, HFILL
       }
     },
     { &hf_awdl_datastate_extflags_1,
       { "Ranging Discovery", "awdl.datastate.extflags.1",
-        FT_BOOLEAN, 16, NULL, 0x2, NULL, HFILL
+        FT_BOOLEAN, 16, NULL, 0x0002, NULL, HFILL
       }
     },
     { &hf_awdl_datastate_extflags_2,
-      { "Logtrigger ID", "awdl.datastate.extflags.2",
-        FT_BOOLEAN, 16, NULL, 0x4, NULL, HFILL
+      { "RLFC", "awdl.datastate.extflags.2",
+        FT_BOOLEAN, 16, NULL, 0x0004, NULL, HFILL
       }
     },
-    { &hf_awdl_datastate_extflags_3to15,
-      { "Unknown", "awdl.datastate.extflags.3to15",
-        FT_UINT16, BASE_HEX_DEC, NULL, 0xfff8, NULL, HFILL
+    { &hf_awdl_datastate_extflags_3,
+      { "Is Social Channel Map Supported", "awdl.datastate.extflags.3",
+        FT_BOOLEAN, 16, NULL, 0x0008, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_4,
+      { "Dynamic SDB Support", "awdl.datastate.extflags.4",
+        FT_BOOLEAN, 16, NULL, 0x0010, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_5,
+      { "Misc", "awdl.datastate.extflags.5",
+        FT_BOOLEAN, 16, NULL, 0x0020,
+        "Indicates the presence of the rlfc, active_time and update_counter fields.", HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_6,
+      { "DFS Proxy Support", "awdl.datastate.extflags.6",
+        FT_BOOLEAN, 16, NULL, 0x0040, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_7,
+      { "Unknown", "awdl.datastate.extflags.7",
+        FT_BOOLEAN, 16, NULL, 0x0080, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_8,
+      { "High Efficiency Support", "awdl.datastate.extflags.8",
+        FT_BOOLEAN, 16, NULL, 0x0100, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_9,
+      { "Sidekick Hub", "awdl.datastate.extflags.9",
+        FT_BOOLEAN, 16, NULL, 0x0200, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_10,
+      { "Fast Discovery Enabled", "awdl.datastate.extflags.10",
+        FT_BOOLEAN, 16, NULL, 0x0400, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_11,
+      { "WiFi 6E Support", "awdl.datastate.extflags.11",
+        FT_BOOLEAN, 16, NULL, 0x0800, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_12,
+      { "Ultra Low Latency Infra Supported", "awdl.datastate.extflags.12",
+        FT_BOOLEAN, 16, NULL, 0x1000, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_13,
+      { "In Pro Mode", "awdl.datastate.extflags.13",
+        FT_BOOLEAN, 16, NULL, 0x2000, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_extflags_14to15,
+      { "Unknown", "awdl.datastate.extflags.14to15",
+        FT_UINT16, BASE_HEX_DEC, NULL, 0xc000, NULL, HFILL
       }
     },
     { &hf_awdl_datastate_logtrigger,
       { "Logtrigger ID", "awdl.datastate.logtrigger",
-        FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL
+        FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL
       }
     },
-    { &hf_awdl_datastate_undecoded,
-      { "Undecoded", "awdl.datastate.undecoded",
-        FT_BYTES, BASE_NONE, NULL, 0,
-        "Possibly contains 'RLFC', a timestamp in ms, a AW sequence number, and 'payUpdateCounter'", HFILL
+    { &hf_awdl_datastate_rlfc,
+      { "RLFC", "awdl.datastate.rlfc",
+        FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_active_time,
+      { "Active Time", "awdl.datastate.active_time",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        "The amount of milliseconds, which have passed since the activation of the peer.", HFILL
+      }
+    },
+    { &hf_awdl_datastate_aw_sequence_counter,
+      { "AW Sequence Counter", "awdl.datastate.aw_sequence_counter",
+        FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL
+      }
+    },
+    { &hf_awdl_datastate_update_counter,
+      { "Update Counter", "awdl.datastate.update_counter",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        "Incremented by one on every AF change.", HFILL
       }
     },
 

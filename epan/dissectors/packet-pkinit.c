@@ -18,6 +18,7 @@
 
 #include <epan/packet.h>
 #include <epan/asn1.h>
+#include <epan/proto_data.h>
 
 #include "packet-ber.h"
 #include "packet-pkinit.h"
@@ -33,54 +34,54 @@ void proto_register_pkinit(void);
 void proto_reg_handoff_pkinit(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_pkinit = -1;
-static int hf_pkinit_AuthPack_PDU = -1;           /* AuthPack */
-static int hf_pkinit_KRB5PrincipalName_PDU = -1;  /* KRB5PrincipalName */
-static int hf_pkinit_KDCDHKeyInfo_PDU = -1;       /* KDCDHKeyInfo */
-static int hf_pkinit_signedAuthPack = -1;         /* ContentInfo */
-static int hf_pkinit_trustedCertifiers = -1;      /* SEQUENCE_OF_TrustedCA */
-static int hf_pkinit_trustedCertifiers_item = -1;  /* TrustedCA */
-static int hf_pkinit_kdcCert = -1;                /* IssuerAndSerialNumber */
-static int hf_pkinit_caName = -1;                 /* Name */
-static int hf_pkinit_issuerAndSerial = -1;        /* IssuerAndSerialNumber */
-static int hf_pkinit_pkAuthenticator = -1;        /* PKAuthenticator */
-static int hf_pkinit_clientPublicValue = -1;      /* SubjectPublicKeyInfo */
-static int hf_pkinit_supportedCMSTypes = -1;      /* SEQUENCE_OF_AlgorithmIdentifier */
-static int hf_pkinit_supportedCMSTypes_item = -1;  /* AlgorithmIdentifier */
-static int hf_pkinit_clientDHNonce = -1;          /* DHNonce */
-static int hf_pkinit_cusec = -1;                  /* INTEGER */
-static int hf_pkinit_ctime = -1;                  /* KerberosTime */
-static int hf_pkinit_paNonce = -1;                /* INTEGER_0_4294967295 */
-static int hf_pkinit_paChecksum = -1;             /* OCTET_STRING */
-static int hf_pkinit_realm = -1;                  /* Realm */
-static int hf_pkinit_principalName = -1;          /* PrincipalName */
-static int hf_pkinit_dhSignedData = -1;           /* ContentInfo */
-static int hf_pkinit_encKeyPack = -1;             /* ContentInfo */
-static int hf_pkinit_subjectPublicKey = -1;       /* BIT_STRING */
-static int hf_pkinit_dhNonce = -1;                /* INTEGER */
-static int hf_pkinit_dhKeyExpiration = -1;        /* KerberosTime */
-static int hf_pkinit_kdcName = -1;                /* PrincipalName */
-static int hf_pkinit_kdcRealm = -1;               /* Realm */
-static int hf_pkinit_cusecWin2k = -1;             /* INTEGER_0_4294967295 */
-static int hf_pkinit_paNonceWin2k = -1;           /* INTEGER_M2147483648_2147483647 */
-static int hf_pkinit_signed_auth_pack = -1;       /* ContentInfo */
-static int hf_pkinit_trusted_certifiers = -1;     /* SEQUENCE_OF_TrustedCA */
-static int hf_pkinit_trusted_certifiers_item = -1;  /* TrustedCA */
-static int hf_pkinit_kdc_cert = -1;               /* OCTET_STRING */
-static int hf_pkinit_encryption_cert = -1;        /* OCTET_STRING */
+static int proto_pkinit;
+static int hf_pkinit_AuthPack_PDU;                /* AuthPack */
+static int hf_pkinit_KRB5PrincipalName_PDU;       /* KRB5PrincipalName */
+static int hf_pkinit_KDCDHKeyInfo_PDU;            /* KDCDHKeyInfo */
+static int hf_pkinit_signedAuthPack;              /* ContentInfo */
+static int hf_pkinit_trustedCertifiers;           /* SEQUENCE_OF_TrustedCA */
+static int hf_pkinit_trustedCertifiers_item;      /* TrustedCA */
+static int hf_pkinit_kdcCert;                     /* IssuerAndSerialNumber */
+static int hf_pkinit_caName;                      /* Name */
+static int hf_pkinit_issuerAndSerial;             /* IssuerAndSerialNumber */
+static int hf_pkinit_pkAuthenticator;             /* PKAuthenticator */
+static int hf_pkinit_clientPublicValue;           /* SubjectPublicKeyInfo */
+static int hf_pkinit_supportedCMSTypes;           /* SEQUENCE_OF_AlgorithmIdentifier */
+static int hf_pkinit_supportedCMSTypes_item;      /* AlgorithmIdentifier */
+static int hf_pkinit_clientDHNonce;               /* DHNonce */
+static int hf_pkinit_cusec;                       /* INTEGER */
+static int hf_pkinit_ctime;                       /* KerberosTime */
+static int hf_pkinit_paNonce;                     /* INTEGER_0_4294967295 */
+static int hf_pkinit_paChecksum;                  /* OCTET_STRING */
+static int hf_pkinit_realm;                       /* Realm */
+static int hf_pkinit_principalName;               /* PrincipalName */
+static int hf_pkinit_dhSignedData;                /* ContentInfo */
+static int hf_pkinit_encKeyPack;                  /* ContentInfo */
+static int hf_pkinit_subjectPublicKey;            /* BIT_STRING */
+static int hf_pkinit_dhNonce;                     /* INTEGER */
+static int hf_pkinit_dhKeyExpiration;             /* KerberosTime */
+static int hf_pkinit_kdcName;                     /* PrincipalName */
+static int hf_pkinit_kdcRealm;                    /* Realm */
+static int hf_pkinit_cusecWin2k;                  /* INTEGER_0_4294967295 */
+static int hf_pkinit_paNonceWin2k;                /* INTEGER_M2147483648_2147483647 */
+static int hf_pkinit_signed_auth_pack;            /* ContentInfo */
+static int hf_pkinit_trusted_certifiers;          /* SEQUENCE_OF_TrustedCA */
+static int hf_pkinit_trusted_certifiers_item;     /* TrustedCA */
+static int hf_pkinit_kdc_cert;                    /* OCTET_STRING */
+static int hf_pkinit_encryption_cert;             /* OCTET_STRING */
 
 /* Initialize the subtree pointers */
-static gint ett_pkinit_PaPkAsReq = -1;
-static gint ett_pkinit_SEQUENCE_OF_TrustedCA = -1;
-static gint ett_pkinit_TrustedCA = -1;
-static gint ett_pkinit_AuthPack = -1;
-static gint ett_pkinit_SEQUENCE_OF_AlgorithmIdentifier = -1;
-static gint ett_pkinit_PKAuthenticator = -1;
-static gint ett_pkinit_KRB5PrincipalName = -1;
-static gint ett_pkinit_PaPkAsRep = -1;
-static gint ett_pkinit_KDCDHKeyInfo = -1;
-static gint ett_pkinit_PKAuthenticator_Win2k = -1;
-static gint ett_pkinit_PA_PK_AS_REQ_Win2k = -1;
+static gint ett_pkinit_PaPkAsReq;
+static gint ett_pkinit_SEQUENCE_OF_TrustedCA;
+static gint ett_pkinit_TrustedCA;
+static gint ett_pkinit_AuthPack;
+static gint ett_pkinit_SEQUENCE_OF_AlgorithmIdentifier;
+static gint ett_pkinit_PKAuthenticator;
+static gint ett_pkinit_KRB5PrincipalName;
+static gint ett_pkinit_PaPkAsRep;
+static gint ett_pkinit_KDCDHKeyInfo;
+static gint ett_pkinit_PKAuthenticator_Win2k;
+static gint ett_pkinit_PA_PK_AS_REQ_Win2k;
 
 static int dissect_KerberosV5Spec2_KerberosTime(bool implicit_tag _U_, tvbuff_t *tvb, int offset,  asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_);
 static int dissect_KerberosV5Spec2_Realm(bool implicit_tag _U_, tvbuff_t *tvb, int offset,  asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_);
@@ -189,7 +190,8 @@ static const ber_sequence_t PKAuthenticator_sequence[] = {
 
 static int
 dissect_pkinit_PKAuthenticator(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	if (kerberos_is_win2k_pkinit(actx)) {
+
+	if (p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_pkinit, 0)) {
 		return dissect_pkinit_PKAuthenticator_Win2k(implicit_tag, tvb, offset, actx, tree, hf_index);
 	}
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
@@ -333,8 +335,18 @@ static const ber_sequence_t PA_PK_AS_REQ_Win2k_sequence[] = {
 
 int
 dissect_pkinit_PA_PK_AS_REQ_Win2k(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	guint8 v = 1;
+
+	if (kerberos_is_win2k_pkinit(actx)) {
+		p_set_proto_data(actx->pinfo->pool, actx->pinfo, proto_pkinit, 0, &v);
+	}
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PA_PK_AS_REQ_Win2k_sequence, hf_index, ett_pkinit_PA_PK_AS_REQ_Win2k);
+
+	if (kerberos_is_win2k_pkinit(actx)) {
+		p_remove_proto_data(actx->pinfo->pool, actx->pinfo, proto_pkinit, 0);
+	}
+
 
   return offset;
 }

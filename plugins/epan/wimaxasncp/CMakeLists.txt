@@ -33,10 +33,11 @@ set_source_files_properties(
 
 register_plugin_files(plugin.c
 	plugin
+	"WiMAX ASN Control Plane dissection"
 	${DISSECTOR_SRC}
 )
 
-add_wireshark_plugin_library(wimaxasncp epan)
+add_wireshark_epan_plugin_library(wimaxasncp)
 
 target_link_libraries(wimaxasncp epan)
 

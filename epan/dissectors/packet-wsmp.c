@@ -42,36 +42,36 @@ static const value_string wsmp_elemenid_names[] = {
 
 
 /* Initialize the protocol and registered fields */
-static int proto_wsmp = -1;
-static int hf_wsmp_version = -1;
-static int hf_wsmp_var_len_det = -1;
-static int hf_wsmp_psid = -1;
-static int hf_wsmp_rate = -1;
-static int hf_wsmp_channel = -1;
-static int hf_wsmp_txpower = -1;
-static int hf_wsmp_WAVEid = -1;
-static int hf_wsmp_wsmlength = -1;
-static int hf_wsmp_WSMP_S_data = -1;
+static int proto_wsmp;
+static int hf_wsmp_version;
+static int hf_wsmp_var_len_det;
+static int hf_wsmp_psid;
+static int hf_wsmp_rate;
+static int hf_wsmp_channel;
+static int hf_wsmp_txpower;
+static int hf_wsmp_WAVEid;
+static int hf_wsmp_wsmlength;
+static int hf_wsmp_WSMP_S_data;
 
-static int hf_wsmp_subtype = -1;
-static int hf_wsmp_N_header_opt_ind = -1;
-static int hf_wsmp_version_v3 = -1;
-static int hf_wsmp_no_elements = -1;
-static int hf_wsmp_wave_ie = -1;
-static int hf_wsmp_wave_ie_len = -1;
-static int hf_wsmp_wave_ie_data = -1;
-static int hf_wsmp_tpid = -1;
+static int hf_wsmp_subtype;
+static int hf_wsmp_N_header_opt_ind;
+static int hf_wsmp_version_v3;
+static int hf_wsmp_no_elements;
+static int hf_wsmp_wave_ie;
+static int hf_wsmp_wave_ie_len;
+static int hf_wsmp_wave_ie_data;
+static int hf_wsmp_tpid;
 
 /* Initialize the subtree pointers */
-static int ett_wsmp = -1;
-static int ett_wsmdata = -1;
-static int ett_wsmp_n_hdr = -1;
-static int ett_wsmp_t_hdr = -1;
-static int ett_wsmp_ie_ext = -1;
-static int ett_wsmp_ie = -1;
+static int ett_wsmp;
+static int ett_wsmdata;
+static int ett_wsmp_n_hdr;
+static int ett_wsmp_t_hdr;
+static int ett_wsmp_ie_ext;
+static int ett_wsmp_ie;
 
-static expert_field ei_wsmp_length_field_err = EI_INIT;
-static expert_field ei_wsmp_psid_invalid = EI_INIT;
+static expert_field ei_wsmp_length_field_err;
+static expert_field ei_wsmp_psid_invalid;
 
 dissector_handle_t IEEE1609dot2_handle;
 
@@ -215,7 +215,7 @@ static int
 dissect_wsmp_v3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 oct)
 {
     proto_tree *sub_tree, *n_tree, *t_tree, *data_tree;
-    proto_item *item;
+    proto_item *item, *n_tree_item, *t_tree_item;
     int offset = 0, ie_start, len_to_set;
     guint8 header_opt_ind = (oct & 0x08) >> 3;
     guint8 ie;
@@ -231,7 +231,7 @@ dissect_wsmp_v3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 oct)
 
     /* 8.3.2 WSMP Network Header (WSMP-N-Header) */
 
-    n_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_wsmp_n_hdr, &item, "WSMP-N-Header");
+    n_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_wsmp_n_hdr, &n_tree_item, "WSMP-N-Header");
     /* In Version 3
     * B7     B4          B3            B2   B0     | Variable                            | 1 octet
     * Subtype    |WSMP-NHeader      | WSMP Version |  WAVE Information Element Extension | TPID
@@ -277,8 +277,11 @@ dissect_wsmp_v3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 oct)
     proto_tree_add_item_ret_uint(n_tree, hf_wsmp_tpid, tvb, offset, 1, ENC_BIG_ENDIAN, &tpid);
     offset++;
 
+    proto_item_set_end(n_tree_item, tvb, offset);
+
+
     /* WSMP-T-Header */
-    t_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_wsmp_t_hdr, &item, "WSMP-T-Header");
+    t_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_wsmp_t_hdr, &t_tree_item, "WSMP-T-Header");
     switch (tpid) {
         case 0:
             /* The Address Info field contains a PSID and a WAVE Information Element Extension field is not present.*/
@@ -290,6 +293,9 @@ dissect_wsmp_v3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 oct)
 
     /* WSM Length */
     offset = dissect_wsmp_length_and_count(tvb, pinfo, t_tree, offset, hf_wsmp_wave_ie_len, &wsm_len);
+
+    proto_item_set_end(t_tree_item, tvb, offset);
+
 
     /* WSM Data */
     data_tree = proto_tree_add_subtree(tree, tvb, offset, wsm_len, ett_wsmdata, NULL, "Wave Short Message");
@@ -485,7 +491,7 @@ proto_register_wsmp(void)
             NULL, HFILL }},
 
         { &hf_wsmp_tpid,
-          { "TPID", "wsmp.wave_ie", FT_UINT8, BASE_DEC, VALS(wsmp_tpid_vals), 0x0,
+          { "TPID", "wsmp.tpid", FT_UINT8, BASE_DEC, VALS(wsmp_tpid_vals), 0x0,
             NULL, HFILL }},
 
     };

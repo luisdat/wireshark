@@ -90,10 +90,12 @@ bool ATapDataModel::hasGeoIPData()
     while (!coordsFound && row < count)
     {
         QModelIndex idx = index(row, 0);
-        if (_type == ATapDataModel::DATAMODEL_ENDPOINT)
-            coordsFound = qobject_cast<EndpointDataModel *>(this)->data(idx, ATapDataModel::GEODATA_AVAILABLE).toBool();
-        else if (_type == ATapDataModel::DATAMODEL_CONVERSATION)
-            coordsFound = qobject_cast<ConversationDataModel *>(this)->data(idx, ATapDataModel::GEODATA_AVAILABLE).toBool();
+        if (!data(idx, ATapDataModel::ROW_IS_FILTERED).toBool()) {
+            if (_type == ATapDataModel::DATAMODEL_ENDPOINT)
+                coordsFound = qobject_cast<EndpointDataModel *>(this)->data(idx, ATapDataModel::GEODATA_AVAILABLE).toBool();
+            else if (_type == ATapDataModel::DATAMODEL_CONVERSATION)
+                coordsFound = qobject_cast<ConversationDataModel *>(this)->data(idx, ATapDataModel::GEODATA_AVAILABLE).toBool();
+        }
         row++;
     }
 
@@ -844,7 +846,11 @@ bool ConversationDataModel::showConversationId(int row) const
         return false;
 
     conv_item_t *conv_item = (conv_item_t *)&g_array_index(storage_, conv_item_t, row);
-    if (conv_item && (conv_item->ctype == CONVERSATION_TCP || conv_item->ctype == CONVERSATION_UDP))
+    if (conv_item && (conv_item->ctype == CONVERSATION_TCP ||
+                      conv_item->ctype == CONVERSATION_UDP ||
+                      conv_item->ctype == CONVERSATION_IP  ||
+                      conv_item->ctype == CONVERSATION_IPV6||
+                      conv_item->ctype == CONVERSATION_ETH))
         return true;
     return false;
 }

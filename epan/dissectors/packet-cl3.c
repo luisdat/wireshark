@@ -36,15 +36,15 @@ void proto_reg_handoff_cl3(void);
 static dissector_handle_t cl3_handle;
 
 /* persistent handles for this dissector */
-static int               proto_cl3              = -1;
+static int               proto_cl3;
 static dissector_table_t cl3_command_table;
-static gint              ett_cl3                = -1;
-static int               hf_cl3_version         = -1;
-static int               hf_cl3_headerlen       = -1;
-static int               hf_cl3_subproto        = -1;
-static int               hf_cl3_payload         = -1;
-static expert_field      ei_cl3_badheaderlen    = EI_INIT;
-static expert_field      ei_cl3_unsup_ver       = EI_INIT;
+static gint              ett_cl3;
+static int               hf_cl3_version;
+static int               hf_cl3_headerlen;
+static int               hf_cl3_subproto;
+static int               hf_cl3_payload;
+static expert_field      ei_cl3_badheaderlen;
+static expert_field      ei_cl3_unsup_ver;
 
 
 /* Known CL3 (sub-)protocol type strings: */
@@ -54,7 +54,7 @@ static const value_string cl3_protocols[] = {
 };
 
 
-/* called for each incomming framing matching the CL3 ethertype with a version number of 1: */
+/* called for each incoming framing matching the CL3 ethertype with a version number of 1: */
 static void
 dissect_cl3_v1(
   tvbuff_t    *tvb,
@@ -93,7 +93,7 @@ dissect_cl3_v1(
   }
 }
 
-/* called for each incomming framing matching the CL3 ethertype: */
+/* called for each incoming framing matching the CL3 ethertype: */
 static int
 dissect_cl3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
 
@@ -131,7 +131,7 @@ dissect_cl3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
     expert_add_info(pinfo, ti, &ei_cl3_badheaderlen);
   }
 
-  /* version-specific disscection... */
+  /* version-specific dissection... */
   switch (version) {
   case 1:
     dissect_cl3_v1(tvb, pinfo, tree, ti, cl3_tree, header_length);
@@ -179,11 +179,7 @@ proto_register_cl3(void) {
 
   expert_module_t* expert_cl3;
 
-  proto_cl3 = proto_register_protocol(
-    "CableLabs Layer 3 Protocol", /* name */
-    "CL3",                        /* short name */
-    "cl3"                         /* abbrev */
-  );
+  proto_cl3 = proto_register_protocol("CableLabs Layer 3 Protocol", "CL3", "cl3");
 
   proto_register_field_array(proto_cl3, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));

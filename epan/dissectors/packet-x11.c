@@ -147,55 +147,55 @@ static wmem_map_t *error_table;     /* hashtable of extension name <-> error lis
 static wmem_map_t *reply_table;     /* hashtable of extension name <-> reply list */
 
 /* Initialize the protocol and registered fields */
-static int proto_x11 = -1;
+static int proto_x11;
 
 #include "x11-declarations.h"
 
 /* Initialize the subtree pointers */
-static gint ett_x11 = -1;
-static gint ett_x11_color_flags = -1;
-static gint ett_x11_list_of_arc = -1;
-static gint ett_x11_arc = -1;
-static gint ett_x11_list_of_atom = -1;
-static gint ett_x11_list_of_card32 = -1;
-static gint ett_x11_list_of_float = -1;
-static gint ett_x11_list_of_double = -1;
-static gint ett_x11_list_of_color_item = -1;
-static gint ett_x11_color_item = -1;
-static gint ett_x11_list_of_keycode = -1;
-static gint ett_x11_list_of_keysyms = -1;
-static gint ett_x11_keysym = -1;
-static gint ett_x11_list_of_point = -1;
-static gint ett_x11_point = -1;
-static gint ett_x11_list_of_rectangle = -1;
-static gint ett_x11_rectangle = -1;
-static gint ett_x11_list_of_segment = -1;
-static gint ett_x11_segment = -1;
-static gint ett_x11_list_of_string8 = -1;
-static gint ett_x11_list_of_text_item = -1;
-static gint ett_x11_text_item = -1;
-static gint ett_x11_gc_value_mask = -1;         /* XXX - unused */
-static gint ett_x11_event_mask = -1;            /* XXX - unused */
-static gint ett_x11_do_not_propagate_mask = -1; /* XXX - unused */
-static gint ett_x11_set_of_key_mask = -1;
-static gint ett_x11_pointer_event_mask = -1;    /* XXX - unused */
-static gint ett_x11_window_value_mask = -1;     /* XXX - unused */
-static gint ett_x11_configure_window_mask = -1; /* XXX - unused */
-static gint ett_x11_keyboard_value_mask = -1;   /* XXX - unused */
-static gint ett_x11_same_screen_focus = -1;
-static gint ett_x11_event = -1;
-static gint ett_x11_list_of_pixmap_format = -1;
-static gint ett_x11_pixmap_format = -1;
-static gint ett_x11_list_of_screen = -1;
-static gint ett_x11_screen = -1;
-static gint ett_x11_list_of_depth_detail = -1;
-static gint ett_x11_depth_detail = -1;
-static gint ett_x11_list_of_visualtype= -1;
-static gint ett_x11_visualtype= -1;
+static gint ett_x11;
+static gint ett_x11_color_flags;
+static gint ett_x11_list_of_arc;
+static gint ett_x11_arc;
+static gint ett_x11_list_of_atom;
+static gint ett_x11_list_of_card32;
+static gint ett_x11_list_of_float;
+static gint ett_x11_list_of_double;
+static gint ett_x11_list_of_color_item;
+static gint ett_x11_color_item;
+static gint ett_x11_list_of_keycode;
+static gint ett_x11_list_of_keysyms;
+static gint ett_x11_keysym;
+static gint ett_x11_list_of_point;
+static gint ett_x11_point;
+static gint ett_x11_list_of_rectangle;
+static gint ett_x11_rectangle;
+static gint ett_x11_list_of_segment;
+static gint ett_x11_segment;
+static gint ett_x11_list_of_string8;
+static gint ett_x11_list_of_text_item;
+static gint ett_x11_text_item;
+static gint ett_x11_gc_value_mask;         /* XXX - unused */
+static gint ett_x11_event_mask;            /* XXX - unused */
+static gint ett_x11_do_not_propagate_mask; /* XXX - unused */
+static gint ett_x11_set_of_key_mask;
+static gint ett_x11_pointer_event_mask;    /* XXX - unused */
+static gint ett_x11_window_value_mask;     /* XXX - unused */
+static gint ett_x11_configure_window_mask; /* XXX - unused */
+static gint ett_x11_keyboard_value_mask;   /* XXX - unused */
+static gint ett_x11_same_screen_focus;
+static gint ett_x11_event;
+static gint ett_x11_list_of_pixmap_format;
+static gint ett_x11_pixmap_format;
+static gint ett_x11_list_of_screen;
+static gint ett_x11_screen;
+static gint ett_x11_list_of_depth_detail;
+static gint ett_x11_depth_detail;
+static gint ett_x11_list_of_visualtype;
+static gint ett_x11_visualtype;
 
-static expert_field ei_x11_invalid_format = EI_INIT;
-static expert_field ei_x11_request_length = EI_INIT;
-static expert_field ei_x11_keycode_value_out_of_range = EI_INIT;
+static expert_field ei_x11_invalid_format;
+static expert_field ei_x11_request_length;
+static expert_field ei_x11_keycode_value_out_of_range;
 
 /* desegmentation of X11 messages */
 static gboolean x11_desegment = TRUE;
@@ -3689,32 +3689,24 @@ static void dissect_x11_request(tvbuff_t *tvb, packet_info *pinfo,
       case X_ConfigureWindow:
             {
             guint16 bitmask16;
-            static int * const window_attributes_flags[] = {
-                  &hf_x11_window_value_mask_background_pixmap,
-                  &hf_x11_window_value_mask_background_pixel,
-                  &hf_x11_window_value_mask_border_pixmap,
-                  &hf_x11_window_value_mask_border_pixel,
-                  &hf_x11_window_value_mask_bit_gravity,
-                  &hf_x11_window_value_mask_win_gravity,
-                  &hf_x11_window_value_mask_backing_store,
-                  &hf_x11_window_value_mask_backing_planes,
-                  &hf_x11_window_value_mask_backing_pixel,
-                  &hf_x11_window_value_mask_override_redirect,
-                  &hf_x11_window_value_mask_save_under,
-                  &hf_x11_window_value_mask_event_mask,
-                  &hf_x11_window_value_mask_do_not_propagate_mask,
-                  &hf_x11_window_value_mask_colormap,
-                  &hf_x11_window_value_mask_cursor,
+            static int * const configure_window_mask_flags[] = {
+                  &hf_x11_configure_window_mask_x,
+                  &hf_x11_configure_window_mask_y,
+                  &hf_x11_configure_window_mask_width,
+                  &hf_x11_configure_window_mask_height,
+                  &hf_x11_configure_window_mask_border_width,
+                  &hf_x11_configure_window_mask_sibling,
+                  &hf_x11_configure_window_mask_stack_mode,
                   NULL
             };
 
             proto_tree_add_item(t, hf_x11_unused, tvb, *offsetp, 1, ENC_NA);
             *offsetp += 1;
             requestLength(tvb, offsetp, t, byte_order);
-            proto_tree_add_item(t, hf_x11_window, tvb, *offsetp, 1, byte_order);
+            proto_tree_add_item(t, hf_x11_window, tvb, *offsetp, 4, byte_order);
             *offsetp += 4;
             bitmask16 = tvb_get_guint16(tvb, *offsetp, byte_order);
-            proto_tree_add_bitmask(t, tvb, *offsetp, hf_x11_configure_window_mask, ett_x11_configure_window_mask, window_attributes_flags, byte_order);
+            proto_tree_add_bitmask(t, tvb, *offsetp, hf_x11_configure_window_mask, ett_x11_configure_window_mask, configure_window_mask_flags, byte_order);
             *offsetp += 2;
             proto_tree_add_item(t, hf_x11_unused, tvb, *offsetp, 2, ENC_NA);
             *offsetp += 2;

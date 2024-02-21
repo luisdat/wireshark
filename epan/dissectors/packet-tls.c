@@ -92,90 +92,90 @@ static gboolean tls_ignore_mac_failed  = FALSE;
  *********************************************************************/
 
 /* Initialize the protocol and registered fields */
-static gint tls_tap                           = -1;
+static gint tls_follow_tap                    = -1;
 static gint exported_pdu_tap                  = -1;
-static gint proto_tls                         = -1;
-static gint hf_tls_record                     = -1;
-static gint hf_tls_record_content_type        = -1;
-static gint hf_tls_record_opaque_type         = -1;
-static gint hf_tls_record_version             = -1;
-static gint hf_tls_record_length              = -1;
-static gint hf_tls_record_appdata             = -1;
-static gint hf_tls_record_appdata_proto       = -1;
-static gint hf_ssl2_record                    = -1;
-static gint hf_ssl2_record_is_escape          = -1;
-static gint hf_ssl2_record_padding_length     = -1;
-static gint hf_ssl2_msg_type                  = -1;
-static gint hf_tls_alert_message              = -1;
-static gint hf_tls_alert_message_level        = -1;
-static gint hf_tls_alert_message_description  = -1;
-static gint hf_tls_handshake_protocol         = -1;
-static gint hf_tls_handshake_type             = -1;
-static gint hf_tls_handshake_length           = -1;
-static gint hf_tls_handshake_npn_selected_protocol_len = -1;
-static gint hf_tls_handshake_npn_selected_protocol = -1;
-static gint hf_tls_handshake_npn_padding_len = -1;
-static gint hf_tls_handshake_npn_padding = -1;
-static gint hf_ssl2_handshake_cipher_spec_len = -1;
-static gint hf_ssl2_handshake_session_id_len  = -1;
-static gint hf_ssl2_handshake_challenge_len   = -1;
-static gint hf_ssl2_handshake_cipher_spec     = -1;
-static gint hf_ssl2_handshake_challenge       = -1;
-static gint hf_ssl2_handshake_clear_key_len   = -1;
-static gint hf_ssl2_handshake_enc_key_len     = -1;
-static gint hf_ssl2_handshake_key_arg_len     = -1;
-static gint hf_ssl2_handshake_clear_key       = -1;
-static gint hf_ssl2_handshake_enc_key         = -1;
-static gint hf_ssl2_handshake_key_arg         = -1;
-static gint hf_ssl2_handshake_session_id_hit  = -1;
-static gint hf_ssl2_handshake_cert_type       = -1;
-static gint hf_ssl2_handshake_connection_id_len = -1;
-static gint hf_ssl2_handshake_connection_id   = -1;
+static gint proto_tls;
+static gint hf_tls_record;
+static gint hf_tls_record_content_type;
+static gint hf_tls_record_opaque_type;
+static gint hf_tls_record_version;
+static gint hf_tls_record_length;
+static gint hf_tls_record_appdata;
+static gint hf_tls_record_appdata_proto;
+static gint hf_ssl2_record;
+static gint hf_ssl2_record_is_escape;
+static gint hf_ssl2_record_padding_length;
+static gint hf_ssl2_msg_type;
+static gint hf_tls_alert_message;
+static gint hf_tls_alert_message_level;
+static gint hf_tls_alert_message_description;
+static gint hf_tls_handshake_protocol;
+static gint hf_tls_handshake_type;
+static gint hf_tls_handshake_length;
+static gint hf_tls_handshake_npn_selected_protocol_len;
+static gint hf_tls_handshake_npn_selected_protocol;
+static gint hf_tls_handshake_npn_padding_len;
+static gint hf_tls_handshake_npn_padding;
+static gint hf_ssl2_handshake_cipher_spec_len;
+static gint hf_ssl2_handshake_session_id_len;
+static gint hf_ssl2_handshake_challenge_len;
+static gint hf_ssl2_handshake_cipher_spec;
+static gint hf_ssl2_handshake_challenge;
+static gint hf_ssl2_handshake_clear_key_len;
+static gint hf_ssl2_handshake_enc_key_len;
+static gint hf_ssl2_handshake_key_arg_len;
+static gint hf_ssl2_handshake_clear_key;
+static gint hf_ssl2_handshake_enc_key;
+static gint hf_ssl2_handshake_key_arg;
+static gint hf_ssl2_handshake_session_id_hit;
+static gint hf_ssl2_handshake_cert_type;
+static gint hf_ssl2_handshake_connection_id_len;
+static gint hf_ssl2_handshake_connection_id;
 
-static int hf_tls_reassembled_in              = -1;
-static int hf_tls_reassembled_length          = -1;
-static int hf_tls_reassembled_data            = -1;
-static int hf_tls_segments                    = -1;
-static int hf_tls_segment                     = -1;
-static int hf_tls_segment_overlap             = -1;
-static int hf_tls_segment_overlap_conflict    = -1;
-static int hf_tls_segment_multiple_tails      = -1;
-static int hf_tls_segment_too_long_fragment   = -1;
-static int hf_tls_segment_error               = -1;
-static int hf_tls_segment_count               = -1;
-static int hf_tls_segment_data                = -1;
+static int hf_tls_reassembled_in;
+static int hf_tls_reassembled_length;
+static int hf_tls_reassembled_data;
+static int hf_tls_segments;
+static int hf_tls_segment;
+static int hf_tls_segment_overlap;
+static int hf_tls_segment_overlap_conflict;
+static int hf_tls_segment_multiple_tails;
+static int hf_tls_segment_too_long_fragment;
+static int hf_tls_segment_error;
+static int hf_tls_segment_count;
+static int hf_tls_segment_data;
 
-static int hf_tls_handshake_reassembled_in    = -1;
-static int hf_tls_handshake_fragments         = -1;
-static int hf_tls_handshake_fragment          = -1;
-static int hf_tls_handshake_fragment_count    = -1;
+static int hf_tls_handshake_reassembled_in;
+static int hf_tls_handshake_fragments;
+static int hf_tls_handshake_fragment;
+static int hf_tls_handshake_fragment_count;
 
-static gint hf_tls_heartbeat_message                 = -1;
-static gint hf_tls_heartbeat_message_type            = -1;
-static gint hf_tls_heartbeat_message_payload_length  = -1;
-static gint hf_tls_heartbeat_message_payload         = -1;
-static gint hf_tls_heartbeat_message_padding         = -1;
+static gint hf_tls_heartbeat_message;
+static gint hf_tls_heartbeat_message_type;
+static gint hf_tls_heartbeat_message_payload_length;
+static gint hf_tls_heartbeat_message_payload;
+static gint hf_tls_heartbeat_message_padding;
 
-static ssl_hfs_t ssl_hfs = { -1, -1 };
+static ssl_hfs_t ssl_hfs;
 
 /* Initialize the subtree pointers */
-static gint ett_tls                   = -1;
-static gint ett_tls_record            = -1;
-static gint ett_tls_alert             = -1;
-static gint ett_tls_handshake         = -1;
-static gint ett_tls_heartbeat         = -1;
-static gint ett_tls_certs             = -1;
-static gint ett_tls_segments          = -1;
-static gint ett_tls_segment           = -1;
-static gint ett_tls_hs_fragments       = -1;
-static gint ett_tls_hs_fragment        = -1;
+static gint ett_tls;
+static gint ett_tls_record;
+static gint ett_tls_alert;
+static gint ett_tls_handshake;
+static gint ett_tls_heartbeat;
+static gint ett_tls_certs;
+static gint ett_tls_segments;
+static gint ett_tls_segment;
+static gint ett_tls_hs_fragments;
+static gint ett_tls_hs_fragment;
 
-static expert_field ei_ssl2_handshake_session_id_len_error = EI_INIT;
-static expert_field ei_ssl3_heartbeat_payload_length = EI_INIT;
-static expert_field ei_tls_unexpected_message = EI_INIT;
+static expert_field ei_ssl2_handshake_session_id_len_error;
+static expert_field ei_ssl3_heartbeat_payload_length;
+static expert_field ei_tls_unexpected_message;
 
 /* Generated from convert_proto_tree_add_text.pl */
-static expert_field ei_tls_ignored_unknown_record = EI_INIT;
+static expert_field ei_tls_ignored_unknown_record;
 
 /* not all of the hf_fields below make sense for TLS but we have to provide
    them anyways to comply with the api (which was aimed for ip fragment
@@ -807,7 +807,7 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
           ssl_debug_printf("  need_desegmentation: offset = %d, reported_length_remaining = %d\n",
                            offset, tvb_reported_length_remaining(tvb, offset));
           /* Make data available to ssl_follow_tap_listener */
-          tap_queue_packet(tls_tap, pinfo, p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num_ssl));
+          tap_queue_packet(tls_follow_tap, pinfo, p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num_ssl));
           return tvb_captured_length(tvb);
         }
     }
@@ -915,9 +915,20 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
     ssl_debug_flush();
 
     /* Make data available to ssl_follow_tap_listener */
-    tap_queue_packet(tls_tap, pinfo, p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num_ssl));
+    tap_queue_packet(tls_follow_tap, pinfo, p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num_ssl));
 
     return ret;
+}
+
+
+/*
+ * Dissect ECHConfigList structure, for use by the DNS dissector.
+ */
+static int
+dissect_tls_echconfig(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+    return ssl_dissect_ext_ech_echconfiglist(&dissect_ssl3_hf, tvb, pinfo,
+                                             tree, 0, tvb_reported_length(tvb));
 }
 
 /*
@@ -1568,6 +1579,11 @@ again:
                  */
                 fragment_set_partial_reassembly(&ssl_reassembly_table,
                                                 pinfo, tls_msp_fragment_id(msp), msp);
+                if (pinfo->desegment_offset == 0) {
+                    /* It didn't dissect anything in the reassembled TLS segment, so
+                     * remove the newly added data source. */
+                    remove_last_data_source(pinfo);
+                }
                 /* Update msp->nxtpdu to point to the new next
                  * pdu boundary.
                  */
@@ -2558,9 +2574,9 @@ dissect_tls_handshake(tvbuff_t *tvb, packet_info *pinfo,
                       const guint16 version)
 {
     // Handshake fragment processing:
-    // 1. (First pass:) If a previous handshake message needed reasembly, add
+    // 1. (First pass:) If a previous handshake message needed reassembly, add
     //    (a subset of) the new data for reassembly.
-    // 2. Did this fragment complete reasembly in the previous step?
+    // 2. Did this fragment complete reassembly in the previous step?
     //    - Yes: dissect message and continue.
     //    - No: show details and stop.
     // 3. Not part of a reassembly, so this is a new handshake message. Does it
@@ -2580,7 +2596,7 @@ dissect_tls_handshake(tvbuff_t *tvb, packet_info *pinfo,
     guint          *hs_reassembly_id_p = is_from_server ? &session->server_hs_reassembly_id : &session->client_hs_reassembly_id;
 
     if (!PINFO_FD_VISITED(pinfo)) {
-        // 1. (First pass:) If a previous handshake message needed reasembly.
+        // 1. (First pass:) If a previous handshake message needed reassembly.
         if (*hs_reassembly_id_p) {
             // Continuation, so a previous fragment *must* exist.
             fh = fragment_get(&tls_hs_reassembly_table, pinfo, *hs_reassembly_id_p, NULL);
@@ -2644,7 +2660,7 @@ dissect_tls_handshake(tvbuff_t *tvb, packet_info *pinfo,
         }
     }
 
-    // 2. Did this fragment complete reasembly in the previous step?
+    // 2. Did this fragment complete reassembly in the previous step?
     if (frag_info && frag_info->offset != 0) {
         fh = fragment_get_reassembled_id(&tls_hs_reassembly_table, pinfo, frag_info->reassembly_id);
         if (frag_info->is_last) {
@@ -2962,7 +2978,7 @@ dissect_tls_handshake_full(tvbuff_t *tvb, packet_info *pinfo,
                         &ssl_master_key_map);
                 /* try to find master key from pre-master key */
                 if (!ssl_generate_pre_master_secret(ssl, length, tvb, offset,
-                            ssl_options.psk,
+                            ssl_options.psk, pinfo,
 #ifdef HAVE_LIBGNUTLS
                             ssl_key_hash,
 #endif
@@ -4151,6 +4167,22 @@ tls_get_alpn(packet_info *pinfo)
     return session->session.alpn_name;
 }
 
+const char *
+tls_get_client_alpn(packet_info *pinfo)
+{
+    conversation_t *conv = find_conversation_pinfo(pinfo, 0);
+    if (!conv) {
+        return NULL;
+    }
+
+    SslDecryptSession *session = (SslDecryptSession *)conversation_get_proto_data(conv, proto_tls);
+    if (session == NULL) {
+        return NULL;
+    }
+
+    return session->session.client_alpn_name;
+}
+
 /* TLS Exporters {{{ */
 /**
  * Computes the TLS 1.3 Exporter value (RFC 8446 Section 7.5).
@@ -4801,7 +4833,7 @@ proto_register_tls(void)
     }
 
     /* heuristic dissectors for any premable e.g. CredSSP before RDP */
-    ssl_heur_subdissector_list = register_heur_dissector_list("tls", proto_tls);
+    ssl_heur_subdissector_list = register_heur_dissector_list_with_description("tls", "TLS data", proto_tls);
 
     ssl_common_register_ssl_alpn_dissector_table("tls.alpn",
         "SSL/TLS Application-Layer Protocol Negotiation (ALPN) Protocol IDs",
@@ -4809,6 +4841,7 @@ proto_register_tls(void)
 
     tls_handle = register_dissector("tls", dissect_ssl, proto_tls);
     register_dissector("tls13-handshake", dissect_tls13_handshake, proto_tls);
+    register_dissector("tls-echconfig", dissect_tls_echconfig, proto_tls);
 
     register_init_routine(ssl_init);
     register_cleanup_routine(ssl_cleanup);
@@ -4819,11 +4852,11 @@ proto_register_tls(void)
     register_decode_as(&ssl_da);
 
     /* XXX: this seems unused due to new "Follow TLS" method, remove? */
-    tls_tap = register_tap("tls");
+    tls_follow_tap = register_tap("tls_follow");
     ssl_debug_printf("proto_register_ssl: registered tap %s:%d\n",
-        "tls", tls_tap);
+        "tls_follow", tls_follow_tap);
 
-    register_follow_stream(proto_tls, "tls", tcp_follow_conv_filter, tcp_follow_index_filter, tcp_follow_address_filter,
+    register_follow_stream(proto_tls, "tls_follow", tcp_follow_conv_filter, tcp_follow_index_filter, tcp_follow_address_filter,
                             tcp_port_to_display, ssl_follow_tap_listener, get_tcp_stream_count, NULL);
     secrets_register_type(SECRETS_TYPE_TLS, tls_secrets_block_callback);
 }

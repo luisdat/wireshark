@@ -15,11 +15,11 @@
  *
  * and
  *
- *	https://tools.ietf.org/html/draft-ietf-krb-wg-kerberos-clarifications-07
+ *	https://tools.ietf.org/html/rfc4120
  *
  * and
  *
- *  https://tools.ietf.org/html/draft-ietf-krb-wg-kerberos-referrals-05
+ *  https://tools.ietf.org/html/rfc6806
  *
  * Some structures from RFC2630
  *
@@ -190,165 +190,169 @@ static int dissect_kerberos_FastOptions(bool implicit_tag _U_, tvbuff_t *tvb _U_
 /* Desegment Kerberos over TCP messages */
 static gboolean krb_desegment = TRUE;
 
-static gint proto_kerberos = -1;
+static gint proto_kerberos;
 
-static gint hf_krb_rm_reserved = -1;
-static gint hf_krb_rm_reclen = -1;
-static gint hf_krb_provsrv_location = -1;
-static gint hf_krb_pw_salt = -1;
-static gint hf_krb_ext_error_nt_status = -1;
-static gint hf_krb_ext_error_reserved = -1;
-static gint hf_krb_ext_error_flags = -1;
-static gint hf_krb_address_ip = -1;
-static gint hf_krb_address_netbios = -1;
-static gint hf_krb_address_ipv6 = -1;
-static gint hf_krb_gssapi_len = -1;
-static gint hf_krb_gssapi_bnd = -1;
-static gint hf_krb_gssapi_dlgopt = -1;
-static gint hf_krb_gssapi_dlglen = -1;
-static gint hf_krb_gssapi_c_flag_deleg = -1;
-static gint hf_krb_gssapi_c_flag_mutual = -1;
-static gint hf_krb_gssapi_c_flag_replay = -1;
-static gint hf_krb_gssapi_c_flag_sequence = -1;
-static gint hf_krb_gssapi_c_flag_conf = -1;
-static gint hf_krb_gssapi_c_flag_integ = -1;
-static gint hf_krb_gssapi_c_flag_dce_style = -1;
-static gint hf_krb_midl_version = -1;
-static gint hf_krb_midl_hdr_len = -1;
-static gint hf_krb_midl_fill_bytes = -1;
-static gint hf_krb_midl_blob_len = -1;
-static gint hf_krb_pac_signature_type = -1;
-static gint hf_krb_pac_signature_signature = -1;
-static gint hf_krb_w2k_pac_entries = -1;
-static gint hf_krb_w2k_pac_version = -1;
-static gint hf_krb_w2k_pac_type = -1;
-static gint hf_krb_w2k_pac_size = -1;
-static gint hf_krb_w2k_pac_offset = -1;
-static gint hf_krb_pac_clientid = -1;
-static gint hf_krb_pac_namelen = -1;
-static gint hf_krb_pac_clientname = -1;
-static gint hf_krb_pac_logon_info = -1;
-static gint hf_krb_pac_credential_data = -1;
-static gint hf_krb_pac_credential_info = -1;
-static gint hf_krb_pac_credential_info_version = -1;
-static gint hf_krb_pac_credential_info_etype = -1;
-static gint hf_krb_pac_s4u_delegation_info = -1;
-static gint hf_krb_pac_upn_dns_info = -1;
-static gint hf_krb_pac_upn_flags = -1;
-static gint hf_krb_pac_upn_flag_upn_constructed = -1;
-static gint hf_krb_pac_upn_flag_has_sam_name_and_sid = -1;
-static gint hf_krb_pac_upn_upn_offset = -1;
-static gint hf_krb_pac_upn_upn_len = -1;
-static gint hf_krb_pac_upn_upn_name = -1;
-static gint hf_krb_pac_upn_dns_offset = -1;
-static gint hf_krb_pac_upn_dns_len = -1;
-static gint hf_krb_pac_upn_dns_name = -1;
-static gint hf_krb_pac_upn_samaccountname_offset = -1;
-static gint hf_krb_pac_upn_samaccountname_len = -1;
-static gint hf_krb_pac_upn_samaccountname = -1;
-static gint hf_krb_pac_upn_objectsid_offset = -1;
-static gint hf_krb_pac_upn_objectsid_len = -1;
-static gint hf_krb_pac_server_checksum = -1;
-static gint hf_krb_pac_privsvr_checksum = -1;
-static gint hf_krb_pac_client_info_type = -1;
-static gint hf_krb_pac_client_claims_info = -1;
-static gint hf_krb_pac_device_info = -1;
-static gint hf_krb_pac_device_claims_info = -1;
-static gint hf_krb_pac_ticket_checksum = -1;
-static gint hf_krb_pac_attributes_info = -1;
-static gint hf_krb_pac_attributes_info_length = -1;
-static gint hf_krb_pac_attributes_info_flags = -1;
-static gint hf_krb_pac_attributes_info_flags_pac_was_requested = -1;
-static gint hf_krb_pac_attributes_info_flags_pac_was_given_implicitly = -1;
-static gint hf_krb_pac_requester_sid = -1;
-static gint hf_krb_pa_supported_enctypes = -1;
-static gint hf_krb_pa_supported_enctypes_des_cbc_crc = -1;
-static gint hf_krb_pa_supported_enctypes_des_cbc_md5 = -1;
-static gint hf_krb_pa_supported_enctypes_rc4_hmac = -1;
-static gint hf_krb_pa_supported_enctypes_aes128_cts_hmac_sha1_96 = -1;
-static gint hf_krb_pa_supported_enctypes_aes256_cts_hmac_sha1_96 = -1;
-static gint hf_krb_pa_supported_enctypes_fast_supported = -1;
-static gint hf_krb_pa_supported_enctypes_compound_identity_supported = -1;
-static gint hf_krb_pa_supported_enctypes_claims_supported = -1;
-static gint hf_krb_pa_supported_enctypes_resource_sid_compression_disabled = -1;
-static gint hf_krb_ad_ap_options = -1;
-static gint hf_krb_ad_ap_options_cbt = -1;
-static gint hf_krb_ad_target_principal = -1;
-static gint hf_krb_key_hidden_item = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_MessageType = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_Flags = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_ServiceTicketLength = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_TicketGrantingTicketLength = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_ServiceTicket = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_TicketGrantingTicket = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_FLAG_ALLOW_EXPIRED_TICKET = -1;
-static gint hf_kerberos_KERB_TICKET_LOGON_FLAG_REDIRECTED = -1;
+static gint hf_krb_rm_reserved;
+static gint hf_krb_rm_reclen;
+static gint hf_krb_provsrv_location;
+static gint hf_krb_pw_salt;
+static gint hf_krb_ext_error_nt_status;
+static gint hf_krb_ext_error_reserved;
+static gint hf_krb_ext_error_flags;
+static gint hf_krb_address_ip;
+static gint hf_krb_address_netbios;
+static gint hf_krb_address_ipv6;
+static gint hf_krb_gssapi_len;
+static gint hf_krb_gssapi_bnd;
+static gint hf_krb_gssapi_dlgopt;
+static gint hf_krb_gssapi_dlglen;
+static gint hf_krb_gssapi_c_flag_deleg;
+static gint hf_krb_gssapi_c_flag_mutual;
+static gint hf_krb_gssapi_c_flag_replay;
+static gint hf_krb_gssapi_c_flag_sequence;
+static gint hf_krb_gssapi_c_flag_conf;
+static gint hf_krb_gssapi_c_flag_integ;
+static gint hf_krb_gssapi_c_flag_dce_style;
+static gint hf_krb_midl_version;
+static gint hf_krb_midl_hdr_len;
+static gint hf_krb_midl_fill_bytes;
+static gint hf_krb_midl_blob_len;
+static gint hf_krb_pac_signature_type;
+static gint hf_krb_pac_signature_signature;
+static gint hf_krb_w2k_pac_entries;
+static gint hf_krb_w2k_pac_version;
+static gint hf_krb_w2k_pac_type;
+static gint hf_krb_w2k_pac_size;
+static gint hf_krb_w2k_pac_offset;
+static gint hf_krb_pac_clientid;
+static gint hf_krb_pac_namelen;
+static gint hf_krb_pac_clientname;
+static gint hf_krb_pac_logon_info;
+static gint hf_krb_pac_credential_data;
+static gint hf_krb_pac_credential_info;
+static gint hf_krb_pac_credential_info_version;
+static gint hf_krb_pac_credential_info_etype;
+static gint hf_krb_pac_s4u_delegation_info;
+static gint hf_krb_pac_upn_dns_info;
+static gint hf_krb_pac_upn_flags;
+static gint hf_krb_pac_upn_flag_upn_constructed;
+static gint hf_krb_pac_upn_flag_has_sam_name_and_sid;
+static gint hf_krb_pac_upn_upn_offset;
+static gint hf_krb_pac_upn_upn_len;
+static gint hf_krb_pac_upn_upn_name;
+static gint hf_krb_pac_upn_dns_offset;
+static gint hf_krb_pac_upn_dns_len;
+static gint hf_krb_pac_upn_dns_name;
+static gint hf_krb_pac_upn_samaccountname_offset;
+static gint hf_krb_pac_upn_samaccountname_len;
+static gint hf_krb_pac_upn_samaccountname;
+static gint hf_krb_pac_upn_objectsid_offset;
+static gint hf_krb_pac_upn_objectsid_len;
+static gint hf_krb_pac_server_checksum;
+static gint hf_krb_pac_privsvr_checksum;
+static gint hf_krb_pac_client_info_type;
+static gint hf_krb_pac_client_claims_info;
+static gint hf_krb_pac_device_info;
+static gint hf_krb_pac_device_claims_info;
+static gint hf_krb_pac_ticket_checksum;
+static gint hf_krb_pac_attributes_info;
+static gint hf_krb_pac_attributes_info_length;
+static gint hf_krb_pac_attributes_info_flags;
+static gint hf_krb_pac_attributes_info_flags_pac_was_requested;
+static gint hf_krb_pac_attributes_info_flags_pac_was_given_implicitly;
+static gint hf_krb_pac_requester_sid;
+static gint hf_krb_pac_full_checksum;
+static gint hf_krb_pa_supported_enctypes;
+static gint hf_krb_pa_supported_enctypes_des_cbc_crc;
+static gint hf_krb_pa_supported_enctypes_des_cbc_md5;
+static gint hf_krb_pa_supported_enctypes_rc4_hmac;
+static gint hf_krb_pa_supported_enctypes_aes128_cts_hmac_sha1_96;
+static gint hf_krb_pa_supported_enctypes_aes256_cts_hmac_sha1_96;
+static gint hf_krb_pa_supported_enctypes_aes256_cts_hmac_sha1_96_sk;
+static gint hf_krb_pa_supported_enctypes_fast_supported;
+static gint hf_krb_pa_supported_enctypes_compound_identity_supported;
+static gint hf_krb_pa_supported_enctypes_claims_supported;
+static gint hf_krb_pa_supported_enctypes_resource_sid_compression_disabled;
+static gint hf_krb_ad_ap_options;
+static gint hf_krb_ad_ap_options_cbt;
+static gint hf_krb_ad_ap_options_unverified_target_name;
+static gint hf_krb_ad_target_principal;
+static gint hf_krb_key_hidden_item;
+static gint hf_kerberos_KERB_TICKET_LOGON;
+static gint hf_kerberos_KERB_TICKET_LOGON_MessageType;
+static gint hf_kerberos_KERB_TICKET_LOGON_Flags;
+static gint hf_kerberos_KERB_TICKET_LOGON_ServiceTicketLength;
+static gint hf_kerberos_KERB_TICKET_LOGON_TicketGrantingTicketLength;
+static gint hf_kerberos_KERB_TICKET_LOGON_ServiceTicket;
+static gint hf_kerberos_KERB_TICKET_LOGON_TicketGrantingTicket;
+static gint hf_kerberos_KERB_TICKET_LOGON_FLAG_ALLOW_EXPIRED_TICKET;
+static gint hf_kerberos_KERB_TICKET_LOGON_FLAG_REDIRECTED;
 #ifdef HAVE_KERBEROS
-static gint hf_kerberos_KrbFastResponse = -1;
-static gint hf_kerberos_strengthen_key = -1;
-static gint hf_kerberos_finished = -1;
-static gint hf_kerberos_fast_options = -1;
-static gint hf_kerberos_ticket_checksum = -1;
-static gint hf_krb_patimestamp = -1;
-static gint hf_krb_pausec = -1;
-static gint hf_kerberos_FastOptions_reserved = -1;
-static gint hf_kerberos_FastOptions_hide_client_names = -1;
-static gint hf_kerberos_FastOptions_spare_bit2 = -1;
-static gint hf_kerberos_FastOptions_spare_bit3 = -1;
-static gint hf_kerberos_FastOptions_spare_bit4 = -1;
-static gint hf_kerberos_FastOptions_spare_bit5 = -1;
-static gint hf_kerberos_FastOptions_spare_bit6 = -1;
-static gint hf_kerberos_FastOptions_spare_bit7 = -1;
-static gint hf_kerberos_FastOptions_spare_bit8 = -1;
-static gint hf_kerberos_FastOptions_spare_bit9 = -1;
-static gint hf_kerberos_FastOptions_spare_bit10 = -1;
-static gint hf_kerberos_FastOptions_spare_bit11 = -1;
-static gint hf_kerberos_FastOptions_spare_bit12 = -1;
-static gint hf_kerberos_FastOptions_spare_bit13 = -1;
-static gint hf_kerberos_FastOptions_spare_bit14 = -1;
-static gint hf_kerberos_FastOptions_spare_bit15 = -1;
-static gint hf_kerberos_FastOptions_kdc_follow_referrals = -1;
+static gint hf_kerberos_KrbFastResponse;
+static gint hf_kerberos_strengthen_key;
+static gint hf_kerberos_finished;
+static gint hf_kerberos_fast_options;
+static gint hf_kerberos_ticket_checksum;
+static gint hf_krb_patimestamp;
+static gint hf_krb_pausec;
+static gint hf_kerberos_FastOptions_reserved;
+static gint hf_kerberos_FastOptions_hide_client_names;
+static gint hf_kerberos_FastOptions_spare_bit2;
+static gint hf_kerberos_FastOptions_spare_bit3;
+static gint hf_kerberos_FastOptions_spare_bit4;
+static gint hf_kerberos_FastOptions_spare_bit5;
+static gint hf_kerberos_FastOptions_spare_bit6;
+static gint hf_kerberos_FastOptions_spare_bit7;
+static gint hf_kerberos_FastOptions_spare_bit8;
+static gint hf_kerberos_FastOptions_spare_bit9;
+static gint hf_kerberos_FastOptions_spare_bit10;
+static gint hf_kerberos_FastOptions_spare_bit11;
+static gint hf_kerberos_FastOptions_spare_bit12;
+static gint hf_kerberos_FastOptions_spare_bit13;
+static gint hf_kerberos_FastOptions_spare_bit14;
+static gint hf_kerberos_FastOptions_spare_bit15;
+static gint hf_kerberos_FastOptions_kdc_follow_referrals;
 
 #endif
 #include "packet-kerberos-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_kerberos = -1;
-static gint ett_krb_recordmark = -1;
-static gint ett_krb_pac = -1;
-static gint ett_krb_pac_drep = -1;
-static gint ett_krb_pac_midl_blob = -1;
-static gint ett_krb_pac_logon_info = -1;
-static gint ett_krb_pac_credential_info = -1;
-static gint ett_krb_pac_s4u_delegation_info = -1;
-static gint ett_krb_pac_upn_dns_info = -1;
-static gint ett_krb_pac_upn_dns_info_flags = -1;
-static gint ett_krb_pac_device_info = -1;
-static gint ett_krb_pac_server_checksum = -1;
-static gint ett_krb_pac_privsvr_checksum = -1;
-static gint ett_krb_pac_client_info_type = -1;
-static gint ett_krb_pac_ticket_checksum = -1;
-static gint ett_krb_pac_attributes_info = -1;
-static gint ett_krb_pac_attributes_info_flags = -1;
-static gint ett_krb_pac_requester_sid = -1;
-static gint ett_krb_pa_supported_enctypes = -1;
-static gint ett_krb_ad_ap_options = -1;
-static gint ett_kerberos_KERB_TICKET_LOGON = -1;
+static gint ett_kerberos;
+static gint ett_krb_recordmark;
+static gint ett_krb_pac;
+static gint ett_krb_pac_drep;
+static gint ett_krb_pac_midl_blob;
+static gint ett_krb_pac_logon_info;
+static gint ett_krb_pac_credential_info;
+static gint ett_krb_pac_s4u_delegation_info;
+static gint ett_krb_pac_upn_dns_info;
+static gint ett_krb_pac_upn_dns_info_flags;
+static gint ett_krb_pac_device_info;
+static gint ett_krb_pac_server_checksum;
+static gint ett_krb_pac_privsvr_checksum;
+static gint ett_krb_pac_client_info_type;
+static gint ett_krb_pac_ticket_checksum;
+static gint ett_krb_pac_attributes_info;
+static gint ett_krb_pac_attributes_info_flags;
+static gint ett_krb_pac_requester_sid;
+static gint ett_krb_pac_full_checksum;
+static gint ett_krb_pa_supported_enctypes;
+static gint ett_krb_ad_ap_options;
+static gint ett_kerberos_KERB_TICKET_LOGON;
 #ifdef HAVE_KERBEROS
-static gint ett_krb_pa_enc_ts_enc = -1;
-static gint ett_kerberos_KrbFastFinished = -1;
-static gint ett_kerberos_KrbFastResponse = -1;
-static gint ett_kerberos_KrbFastReq = -1;
-static gint ett_kerberos_FastOptions = -1;
+static gint ett_krb_pa_enc_ts_enc;
+static gint ett_kerberos_KrbFastFinished;
+static gint ett_kerberos_KrbFastResponse;
+static gint ett_kerberos_KrbFastReq;
+static gint ett_kerberos_FastOptions;
 #endif
 #include "packet-kerberos-ett.c"
 
-static expert_field ei_kerberos_missing_keytype = EI_INIT;
-static expert_field ei_kerberos_decrypted_keytype = EI_INIT;
-static expert_field ei_kerberos_learnt_keytype = EI_INIT;
-static expert_field ei_kerberos_address = EI_INIT;
-static expert_field ei_krb_gssapi_dlglen = EI_INIT;
+static expert_field ei_kerberos_missing_keytype;
+static expert_field ei_kerberos_decrypted_keytype;
+static expert_field ei_kerberos_learnt_keytype;
+static expert_field ei_kerberos_address;
+static expert_field ei_krb_gssapi_dlglen;
 
 static dissector_handle_t krb4_handle=NULL;
 
@@ -435,7 +439,7 @@ static int dissect_kerberos_defer_PA_FX_FAST_REQUEST(bool implicit_tag _U_, tvbu
 	 */
 	ws_assert(implicit_tag == FALSE);
 	ws_assert(offset == 0);
-	ws_assert(hf_index == -1);
+	ws_assert(hf_index <= 0);
 
 	if (private_data->PA_FX_FAST_REQUEST.defer) {
 		/*
@@ -1884,6 +1888,8 @@ keytype_for_cksumtype(krb5_cksumtype checksum)
 }
 
 struct verify_krb5_pac_state {
+	int pacbuffer_length;
+	const guint8 *pacbuffer;
 	krb5_pac pac;
 	krb5_cksumtype server_checksum;
 	guint server_count;
@@ -1893,6 +1899,10 @@ struct verify_krb5_pac_state {
 	enc_key_t *kdc_ek;
 	krb5_cksumtype ticket_checksum_type;
 	const krb5_data *ticket_checksum_data;
+	krb5_cksumtype full_checksum_type;
+	const krb5_data *full_checksum_data;
+	guint full_count;
+	enc_key_t *full_ek;
 };
 
 static void
@@ -2074,7 +2084,7 @@ verify_krb5_pac_ticket_checksum(proto_tree *tree _U_,
 	}
 	checksum.length = MIN(checksum.length, (unsigned int)checksum_length);
 
-	tepdata.data = (void *)(uintptr_t)tepbuffer;
+	tepdata.data = (void *)tepbuffer;
 	tepdata.length = teplength;
 
 	ret = decode_krb5_enc_tkt_part(&tepdata, &tep);
@@ -2216,6 +2226,216 @@ verify_krb5_pac_ticket_checksum(proto_tree *tree _U_,
 #endif /* HAVE_DECODE_KRB5_ENC_TKT_PART */
 }
 
+#define __KRB5_PAC_FULL_CHECKSUM 19
+
+static void
+verify_krb5_pac_full_checksum(proto_tree *tree,
+			      asn1_ctx_t *actx,
+			      tvbuff_t *orig_pactvb,
+			      struct verify_krb5_pac_state *state)
+{
+	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+	krb5_error_code ret;
+	krb5_keyblock kdc_key = { .magic = KV5M_KEYBLOCK, };
+	size_t checksum_length = 0;
+	krb5_checksum checksum = { .checksum_type = 0, };
+	krb5_data pac_data = { .length = 0, };
+	tvbuff_t *copy_pactvb = NULL;
+	guint32 cur_offset;
+	guint32 num_buffers;
+	guint32 idx;
+	krb5_boolean valid = FALSE;
+
+	if (state->kdc_ek == NULL) {
+		int keytype = keytype_for_cksumtype(state->full_checksum_type);
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    orig_pactvb, state->full_checksum_type,
+				    keytype,
+				    "Missing KDC (for full)",
+				    "kdc_checksum_key",
+				    0,
+				    0);
+		return;
+	}
+
+	kdc_key.magic = KV5M_KEYBLOCK;
+	kdc_key.enctype = state->kdc_ek->keytype;
+	kdc_key.length = state->kdc_ek->keylength;
+	kdc_key.contents = (guint8 *)state->kdc_ek->keyvalue;
+
+	ret = krb5_c_checksum_length(krb5_ctx,
+				     state->full_checksum_type,
+				     &checksum_length);
+	if (ret != 0) {
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    orig_pactvb, state->full_checksum_type,
+				    state->kdc_ek->keytype,
+				    "krb5_c_checksum_length failed for Full Signature",
+				    "kdc_checksum_key",
+				    1,
+				    0);
+		return;
+	}
+
+	/*
+	 * The checksum element begins with 4 bytes of type
+	 * (state->full_checksum_type) before the crypto checksum
+	 */
+	if (state->full_checksum_data->length < (4 + checksum_length)) {
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    orig_pactvb, state->full_checksum_type,
+				    state->kdc_ek->keytype,
+				    "pacbuffer_length too short for Full Signature",
+				    "kdc_checksum_key",
+				    1,
+				    0);
+		return;
+	}
+
+	pac_data.data = wmem_memdup(actx->pinfo->pool, state->pacbuffer, state->pacbuffer_length);
+	if (pac_data.data == NULL) {
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    orig_pactvb, state->full_checksum_type,
+				    state->kdc_ek->keytype,
+				    "wmem_memdup(pacbuffer) failed",
+				    "kdc_checksum_key",
+				    1,
+				    0);
+		return;
+	}
+	pac_data.length = state->pacbuffer_length;
+
+	copy_pactvb = tvb_new_child_real_data(orig_pactvb,
+					      (guint8 *)pac_data.data,
+					      pac_data.length,
+					      pac_data.length);
+	if (copy_pactvb == NULL) {
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    orig_pactvb, state->full_checksum_type,
+				    state->kdc_ek->keytype,
+				    "tvb_new_child_real_data(pac_copy) failed",
+				    "kdc_checksum_key",
+				    1,
+				    0);
+		return;
+	}
+
+#define __PAC_CHECK_OFFSET_SIZE(__offset, __length, __reason) do { \
+	guint64 __end = state->pacbuffer_length; \
+	guint64 __offset64 = __offset; \
+	guint64 __length64 = __length; \
+	guint64 __last; \
+	if (__offset64 > G_MAXINT32) { \
+		missing_signing_key(tree, actx->pinfo, private_data, \
+				    orig_pactvb, state->full_checksum_type, \
+				    state->kdc_ek->keytype, \
+				    __reason, \
+				    "kdc_checksum_key", \
+				    1, \
+				    0); \
+		return; \
+	} \
+	if (__length64 > G_MAXINT32) { \
+		missing_signing_key(tree, actx->pinfo, private_data, \
+				    orig_pactvb, state->full_checksum_type, \
+				    state->kdc_ek->keytype, \
+				    __reason, \
+				    "kdc_checksum_key", \
+				    1, \
+				    0); \
+		return; \
+	} \
+	__last = __offset64 + __length64; \
+	if (__last > __end) { \
+		missing_signing_key(tree, actx->pinfo, private_data, \
+				    orig_pactvb, state->full_checksum_type, \
+				    state->kdc_ek->keytype, \
+				    __reason, \
+				    "kdc_checksum_key", \
+				    1, \
+				    0); \
+		return; \
+	} \
+} while(0)
+
+	cur_offset = 0;
+	__PAC_CHECK_OFFSET_SIZE(cur_offset, 8, "PACTYPE Header");
+	num_buffers = tvb_get_guint32(copy_pactvb, cur_offset, ENC_LITTLE_ENDIAN);
+	cur_offset += 4;
+	/* ignore 4 byte version */
+	cur_offset += 4;
+
+	for (idx = 0; idx < num_buffers; idx++) {
+		guint32 b_type;
+		guint32 b_length;
+		guint64 b_offset;
+
+		__PAC_CHECK_OFFSET_SIZE(cur_offset, 16, "PAC_INFO_BUFFER Header");
+		b_type = tvb_get_guint32(copy_pactvb, cur_offset, ENC_LITTLE_ENDIAN);
+		cur_offset += 4;
+		b_length = tvb_get_guint32(copy_pactvb, cur_offset, ENC_LITTLE_ENDIAN);
+		cur_offset += 4;
+		b_offset = tvb_get_guint64(copy_pactvb, cur_offset, ENC_LITTLE_ENDIAN);
+		cur_offset += 8;
+
+		__PAC_CHECK_OFFSET_SIZE(b_offset, b_length, "PAC_INFO_BUFFER Payload");
+
+		if (b_length <= 4) {
+			continue;
+		}
+
+		/*
+		 * Leave PAC_TICKET_CHECKSUM and clear all other checksums
+		 * and their possible RODC identifier, but leaving their
+		 * checksum type as is.
+		 */
+		switch (b_type) {
+		case KRB5_PAC_SERVER_CHECKSUM:
+		case KRB5_PAC_PRIVSVR_CHECKSUM:
+		case __KRB5_PAC_FULL_CHECKSUM:
+			memset(pac_data.data + b_offset+4, 0, b_length-4);
+			break;
+		}
+	}
+
+	checksum.checksum_type = state->full_checksum_type;
+	checksum.contents = (guint8 *)state->full_checksum_data->data + 4;
+	checksum.length = (unsigned)checksum_length;
+
+	ret = krb5_c_verify_checksum(krb5_ctx, &kdc_key,
+				     KRB5_KEYUSAGE_APP_DATA_CKSUM,
+				     &pac_data, &checksum, &valid);
+	if (ret != 0) {
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    orig_pactvb, state->full_checksum_type,
+				    state->kdc_ek->keytype,
+				    "krb5_c_verify_checksum failed for Full PAC Signature",
+				    "kdc_checksum_key",
+				    1,
+				    1);
+		return;
+	}
+
+	if (valid == FALSE) {
+		missing_signing_key(tree, actx->pinfo, private_data,
+				    orig_pactvb, state->full_checksum_type,
+				    state->kdc_ek->keytype,
+				    "Invalid Full PAC Signature",
+				    "kdc_checksum_key",
+				    1,
+				    1);
+		return;
+	}
+
+	used_signing_key(tree, actx->pinfo, private_data,
+			 state->kdc_ek, orig_pactvb,
+			 state->full_checksum_type,
+			 "Verified Full PAC",
+			 "kdc_checksum_key",
+			 1,
+			 1);
+}
+
 static void
 verify_krb5_pac(proto_tree *tree _U_, asn1_ctx_t *actx, tvbuff_t *pactvb)
 {
@@ -2223,6 +2443,7 @@ verify_krb5_pac(proto_tree *tree _U_, asn1_ctx_t *actx, tvbuff_t *pactvb)
 	krb5_error_code ret;
 	krb5_data checksum_data = {0,0,NULL};
 	krb5_data ticket_checksum_data = {0,0,NULL};
+	krb5_data full_checksum_data = {0,0,NULL};
 	int length = tvb_captured_length(pactvb);
 	const guint8 *pacbuffer = NULL;
 	struct verify_krb5_pac_state state = {
@@ -2240,6 +2461,8 @@ verify_krb5_pac(proto_tree *tree _U_, asn1_ctx_t *actx, tvbuff_t *pactvb)
 	}
 
 	pacbuffer = tvb_get_ptr(pactvb, 0, length);
+	state.pacbuffer_length = length;
+	state.pacbuffer = pacbuffer;
 
 	ret = krb5_pac_parse(krb5_ctx, pacbuffer, length, &state.pac);
 	if (ret != 0) {
@@ -2268,6 +2491,13 @@ verify_krb5_pac(proto_tree *tree _U_, asn1_ctx_t *actx, tvbuff_t *pactvb)
 	if (ret == 0) {
 		state.ticket_checksum_data = &ticket_checksum_data;
 		state.ticket_checksum_type = pletoh32(ticket_checksum_data.data);
+	};
+	ret = krb5_pac_get_buffer(krb5_ctx, state.pac,
+				  __KRB5_PAC_FULL_CHECKSUM,
+				  &full_checksum_data);
+	if (ret == 0) {
+		state.full_checksum_data = &full_checksum_data;
+		state.full_checksum_type = pletoh32(full_checksum_data.data);
 	};
 
 	read_keytab_file_from_preferences();
@@ -2317,6 +2547,14 @@ verify_krb5_pac(proto_tree *tree _U_, asn1_ctx_t *actx, tvbuff_t *pactvb)
 
 	if (state.ticket_checksum_data != NULL) {
 		krb5_free_data_contents(krb5_ctx, &ticket_checksum_data);
+	}
+
+	if (state.full_checksum_type != 0) {
+		verify_krb5_pac_full_checksum(tree, actx, pactvb, &state);
+	}
+
+	if (state.full_checksum_data != NULL) {
+		krb5_free_data_contents(krb5_ctx, &full_checksum_data);
 	}
 
 	krb5_pac_free(krb5_ctx, state.pac);
@@ -3021,6 +3259,7 @@ static const value_string krb5_error_codes[] = {
 #define PAC_TICKET_CHECKSUM	16
 #define PAC_ATTRIBUTES_INFO	17
 #define PAC_REQUESTER_SID	18
+#define PAC_FULL_CHECKSUM	19
 static const value_string w2k_pac_types[] = {
 	{ PAC_LOGON_INFO		, "Logon Info" },
 	{ PAC_CREDENTIAL_TYPE		, "Credential Type" },
@@ -3035,6 +3274,7 @@ static const value_string w2k_pac_types[] = {
 	{ PAC_TICKET_CHECKSUM		, "Ticket Checksum" },
 	{ PAC_ATTRIBUTES_INFO		, "Attributes Info" },
 	{ PAC_REQUESTER_SID		, "Requester Sid" },
+	{ PAC_FULL_CHECKSUM		, "Full Checksum" },
 	{ 0, NULL },
 };
 
@@ -3571,6 +3811,7 @@ static int * const hf_krb_pa_supported_enctypes_fields[] = {
 	&hf_krb_pa_supported_enctypes_rc4_hmac,
 	&hf_krb_pa_supported_enctypes_aes128_cts_hmac_sha1_96,
 	&hf_krb_pa_supported_enctypes_aes256_cts_hmac_sha1_96,
+	&hf_krb_pa_supported_enctypes_aes256_cts_hmac_sha1_96_sk,
 	&hf_krb_pa_supported_enctypes_fast_supported,
 	&hf_krb_pa_supported_enctypes_compound_identity_supported,
 	&hf_krb_pa_supported_enctypes_claims_supported,
@@ -3595,6 +3836,7 @@ dissect_kerberos_PA_SUPPORTED_ENCTYPES(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 
 static int * const hf_krb_ad_ap_options_fields[] = {
 	&hf_krb_ad_ap_options_cbt,
+	&hf_krb_ad_ap_options_unverified_target_name,
 	NULL,
 };
 
@@ -4225,6 +4467,25 @@ dissect_krb5_PAC_REQUESTER_SID(proto_tree *parent_tree, tvbuff_t *tvb, int offse
 }
 
 static int
+dissect_krb5_PAC_FULL_CHECKSUM(proto_tree *parent_tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_)
+{
+	proto_item *item;
+	proto_tree *tree;
+
+	item = proto_tree_add_item(parent_tree, hf_krb_pac_full_checksum, tvb, offset, -1, ENC_NA);
+	tree = proto_item_add_subtree(item, ett_krb_pac_full_checksum);
+
+	/* signature type */
+	proto_tree_add_item(tree, hf_krb_pac_signature_type, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset+=4;
+
+	/* signature data */
+	proto_tree_add_item(tree, hf_krb_pac_signature_signature, tvb, offset, -1, ENC_NA);
+
+	return offset;
+}
+
+static int
 dissect_krb5_AD_WIN2K_PAC_struct(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx)
 {
 	guint32 pac_type;
@@ -4291,6 +4552,9 @@ dissect_krb5_AD_WIN2K_PAC_struct(proto_tree *tree, tvbuff_t *tvb, int offset, as
 		break;
 	case PAC_REQUESTER_SID:
 		dissect_krb5_PAC_REQUESTER_SID(tr, next_tvb, 0, actx);
+		break;
+	case PAC_FULL_CHECKSUM:
+		dissect_krb5_PAC_FULL_CHECKSUM(tr, next_tvb, 0, actx);
 		break;
 
 	default:
@@ -5104,6 +5368,9 @@ void proto_register_kerberos(void) {
 	{ &hf_krb_pac_requester_sid, {
 		"PAC_REQUESTER_SID", "kerberos.pac_requester_sid", FT_BYTES, BASE_NONE,
 		NULL, 0, "PAC_REQUESTER_SID structure", HFILL }},
+	{ &hf_krb_pac_full_checksum, {
+		"PAC_FULL_CHECKSUM", "kerberos.pac_full_checksum", FT_BYTES, BASE_NONE,
+		NULL, 0, "PAC_FULL_CHECKSUM structure", HFILL }},
 	{ &hf_krb_pa_supported_enctypes,
 	  { "SupportedEnctypes", "kerberos.supported_entypes",
 	    FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }},
@@ -5122,6 +5389,9 @@ void proto_register_kerberos(void) {
 	{ &hf_krb_pa_supported_enctypes_aes256_cts_hmac_sha1_96,
 	  { "aes256-cts-hmac-sha1-96", "kerberos.supported_entypes.aes256-cts-hmac-sha1-96",
 		FT_BOOLEAN, 32, TFS(&tfs_supported_not_supported), 0x00000010, NULL, HFILL }},
+	{ &hf_krb_pa_supported_enctypes_aes256_cts_hmac_sha1_96_sk,
+	  { "aes256-cts-hmac-sha1-96-sk", "kerberos.supported_entypes.aes256-cts-hmac-sha1-96-sk",
+		FT_BOOLEAN, 32, TFS(&tfs_supported_not_supported), 0x00000020, NULL, HFILL }},
 	{ &hf_krb_pa_supported_enctypes_fast_supported,
 	  { "fast-supported", "kerberos.supported_entypes.fast-supported",
 		FT_BOOLEAN, 32, TFS(&tfs_supported_not_supported), 0x00010000, NULL, HFILL }},
@@ -5140,6 +5410,9 @@ void proto_register_kerberos(void) {
 	{ &hf_krb_ad_ap_options_cbt,
 	  { "ChannelBindings", "kerberos.ad_ap_options.cbt",
 		FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00004000, NULL, HFILL }},
+	{ &hf_krb_ad_ap_options_unverified_target_name,
+	  { "UnverifiedTargetName", "kerberos.ad_ap_options.unverified_target_name",
+		FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00008000, NULL, HFILL }},
 	{ &hf_krb_ad_target_principal,
 	  { "Target Principal", "kerberos.ad_target_principal",
 	    FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }},
@@ -5301,6 +5574,7 @@ void proto_register_kerberos(void) {
 		&ett_krb_pac_attributes_info,
 		&ett_krb_pac_attributes_info_flags,
 		&ett_krb_pac_requester_sid,
+		&ett_krb_pac_full_checksum,
 		&ett_krb_pa_supported_enctypes,
 		&ett_krb_ad_ap_options,
 		&ett_kerberos_KERB_TICKET_LOGON,

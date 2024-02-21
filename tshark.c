@@ -125,7 +125,7 @@
 #include "extcap.h"
 
 #ifdef HAVE_PLUGINS
-#include <wsutil/codecs.h>
+#include <wsutil/codecs_priv.h>
 #include <wsutil/plugins.h>
 #endif
 
@@ -797,13 +797,13 @@ about_folders(void)
     constpath = get_progfile_dir();
     printf("%-21s\t%s\n", "Program:", constpath);
 
-#ifdef HAVE_PLUGINS
-    /* pers plugins */
-    printf("%-21s\t%s\n", "Personal Plugins:", get_plugins_pers_dir_with_version());
+    if (plugins_supported()) {
+        /* pers plugins */
+        printf("%-21s\t%s\n", "Personal Plugins:", get_plugins_pers_dir());
 
-    /* global plugins */
-    printf("%-21s\t%s\n", "Global Plugins:", get_plugins_dir_with_version());
-#endif
+        /* global plugins */
+        printf("%-21s\t%s\n", "Global Plugins:", get_plugins_dir());
+    }
 
 #ifdef HAVE_LUA
     /* pers lua plugins */
@@ -873,7 +873,7 @@ must_do_dissection(dfilter_t *rfcode, dfilter_t *dfcode,
 
        we're using any taps that need dissection. */
     return print_packet_info || rfcode || dfcode || pdu_export_arg ||
-        tap_listeners_require_dissection() || dissect_color;
+        tap_listeners_require_dissection();
 }
 
 #ifdef HAVE_LIBPCAP
@@ -905,13 +905,22 @@ warn_about_capture_filter(const char *rfilter)
 #endif
 
 #ifdef HAVE_LIBPCAP
+static GList *cached_if_list = NULL;
+
 static GList *
 capture_opts_get_interface_list(int *err, char **err_str)
 {
+    if (cached_if_list == NULL) {
+        /*
+         * This isn't a GUI tool, so no need for a callback.
+         */
+        cached_if_list = capture_interface_list(err, err_str, NULL);
+    }
     /*
-     * This isn't a GUI tool, so no need for a callback.
+     * Routines expect to free the returned interface list, so return
+     * a deep copy.
      */
-    return capture_interface_list(err, err_str, NULL);
+    return interface_list_copy(cached_if_list);
 }
 #endif
 
@@ -937,6 +946,7 @@ main(int argc, char *argv[])
         {"version", ws_no_argument, NULL, 'v'},
         LONGOPT_CAPTURE_COMMON
         LONGOPT_DISSECT_COMMON
+        LONGOPT_READ_CAPTURE_COMMON
         {"print", ws_no_argument, NULL, 'P'},
         {"export-objects", ws_required_argument, NULL, LONGOPT_EXPORT_OBJECTS},
         {"export-tls-session-keys", ws_required_argument, NULL, LONGOPT_EXPORT_TLS_SESSION_KEYS},
@@ -1002,7 +1012,7 @@ main(int argc, char *argv[])
      * We do *not* use a leading - because the behavior of a leading - is
      * platform-dependent.
      */
-#define OPTSTRING "+2" OPTSTRING_CAPTURE_COMMON OPTSTRING_DISSECT_COMMON "M:C:e:E:F:gG:hH:j:J:lo:O:PqQr:R:S:T:U:vVw:W:xX:Y:z:"
+#define OPTSTRING "+2" OPTSTRING_CAPTURE_COMMON OPTSTRING_DISSECT_COMMON OPTSTRING_READ_CAPTURE_COMMON "M:C:e:E:F:gG:hH:j:J:lo:O:PqQS:T:U:vVw:W:xX:z:"
 
     static const char    optstring[] = OPTSTRING;
 
@@ -1239,21 +1249,34 @@ main(int argc, char *argv[])
        XXX - we do this here, for now, to support "-G" with no arguments.
        If none of our build or other processes uses "-G" with no arguments,
        we can just process it with the other arguments. */
+
+    /* NOTE: This is before the preferences are loaded with
+     * epan_load_settings() below, so if you add a new report
+     * and it depends on the profile settings, call epan_load_settings()
+     * first.
+     *
+     * It is after addr_resolv_init() is called (done by epan_init()),
+     * so "manuf", "enterprises", and "services" have the values from
+     * the global and personal profile files already loaded.
+     */
     if (argc >= 2 && strcmp(argv[1], "-G") == 0) {
         proto_initialize_all_prefixes();
 
-        if (argc == 2)
+        if (argc == 2) {
+            cmdarg_err("-G with no argument is deprecated and will removed in a future version.");
+            cmdarg_err_cont("Generating fields glossary.");
             proto_registrar_dump_fields();
-        else {
+        } else {
             if (strcmp(argv[2], "column-formats") == 0)
                 column_dump_column_formats();
             else if (strcmp(argv[2], "currentprefs") == 0) {
                 epan_load_settings();
                 write_prefs(NULL);
             }
-            else if (strcmp(argv[2], "decodes") == 0)
+            else if (strcmp(argv[2], "decodes") == 0) {
+                epan_load_settings();
                 dissector_dump_decodes();
-            else if (strcmp(argv[2], "defaultprefs") == 0)
+            } else if (strcmp(argv[2], "defaultprefs") == 0)
                 write_prefs(NULL);
             else if (strcmp(argv[2], "dissector-tables") == 0)
                 dissector_dump_dissector_tables();
@@ -1284,9 +1307,10 @@ main(int argc, char *argv[])
                 about_folders();
             } else if (strcmp(argv[2], "ftypes") == 0)
                 proto_registrar_dump_ftypes();
-            else if (strcmp(argv[2], "heuristic-decodes") == 0)
+            else if (strcmp(argv[2], "heuristic-decodes") == 0) {
+                epan_load_settings();
                 dissector_dump_heur_decodes();
-            else if (strcmp(argv[2], "manuf") == 0)
+            } else if (strcmp(argv[2], "manuf") == 0)
                 ws_manuf_dump(stdout);
             else if (strcmp(argv[2], "enterprises") == 0)
                 global_enterprises_dump(stdout);
@@ -1301,10 +1325,12 @@ main(int argc, char *argv[])
                 wslua_plugins_dump_all();
 #endif
                 extcap_dump_all();
+                epan_plugins_dump_all();
             }
-            else if (strcmp(argv[2], "protocols") == 0)
+            else if (strcmp(argv[2], "protocols") == 0) {
+                epan_load_settings();
                 proto_registrar_dump_protocols();
-            else if (strcmp(argv[2], "values") == 0)
+            } else if (strcmp(argv[2], "values") == 0)
                 proto_registrar_dump_values();
             else if (strcmp(argv[2], "help") == 0)
                 glossary_option_help();
@@ -1331,8 +1357,6 @@ main(int argc, char *argv[])
     /* Load libwireshark settings from the current profile. */
     prefs_p = epan_load_settings();
     prefs_loaded = TRUE;
-
-    read_filter_list(CFILTER_LIST);
 
     cap_file_init(&cfile);
 
@@ -1790,6 +1814,9 @@ main(int argc, char *argv[])
                 break;
             case LONGOPT_COLOR: /* print in color where appropriate */
                 dissect_color = TRUE;
+                /* This has no effect if we don't print packet info or filter
+                   (we can filter on the coloring rules). Should we warn or
+                   error later if so, instead of silently ignoring it? */
                 break;
             case LONGOPT_NO_DUPLICATE_KEYS:
                 no_duplicate_keys = TRUE;
@@ -1876,6 +1903,11 @@ main(int argc, char *argv[])
     }
 
     /* If we specified output fields, but not the output field type... */
+    /* XXX: If we specfied both output fields with -e *and* protocol filters
+     * with -j/-J, only the former are used. Should we warn or abort?
+     * This also doesn't distinguish PDML from PSML, but shouldn't allow the
+     * latter.
+     */
     if ((WRITE_FIELDS != output_action && WRITE_XML != output_action && WRITE_JSON != output_action && WRITE_EK != output_action) && 0 != output_fields_num_fields(output_fields)) {
         cmdarg_err("Output fields were specified with \"-e\", "
                 "but \"-Tek, -Tfields, -Tjson or -Tpdml\" was not specified.");
@@ -2513,20 +2545,33 @@ main(int argc, char *argv[])
 
             /* Get the list of link-layer types for the capture devices. */
             exit_status = EXIT_SUCCESS;
+            GList *if_cap_queries = NULL;
+            if_cap_query_t *if_cap_query;
+            GHashTable *capability_hash;
             for (i = 0; i < global_capture_opts.ifaces->len; i++) {
                 interface_options *interface_opts;
-                if_capabilities_t *caps;
-                char *auth_str = NULL;
-
                 interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
+                if_cap_query = g_new(if_cap_query_t, 1);
+                if_cap_query->name = interface_opts->name;
+                if_cap_query->monitor_mode = interface_opts->monitor_mode;
+                if_cap_query->auth_username = NULL;
+                if_cap_query->auth_password = NULL;
 #ifdef HAVE_PCAP_REMOTE
                 if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
-                    auth_str = ws_strdup_printf("%s:%s", interface_opts->auth_username, interface_opts->auth_password);
+                    if_cap_query->auth_username = interface_opts->auth_username;
+                    if_cap_query->auth_password = interface_opts->auth_password;
                 }
 #endif
-                caps = capture_get_if_capabilities(interface_opts->name, interface_opts->monitor_mode,
-                        auth_str, &err_str, &err_str_secondary, NULL);
-                g_free(auth_str);
+                if_cap_queries = g_list_prepend(if_cap_queries, if_cap_query);
+            }
+            if_cap_queries = g_list_reverse(if_cap_queries);
+            capability_hash = capture_get_if_list_capabilities(if_cap_queries, &err_str, &err_str_secondary, NULL);
+            g_list_free_full(if_cap_queries, g_free);
+            for (i = 0; i < global_capture_opts.ifaces->len; i++) {
+                interface_options *interface_opts;
+                interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
+                if_capabilities_t *caps;
+                caps = g_hash_table_lookup(capability_hash, interface_opts->name);
                 if (caps == NULL) {
                     cmdarg_err("%s%s%s", err_str, err_str_secondary ? "\n" : "", err_str_secondary ? err_str_secondary : "");
                     g_free(err_str);
@@ -2536,11 +2581,11 @@ main(int argc, char *argv[])
                 }
                 exit_status = capture_opts_print_if_capabilities(caps, interface_opts,
                         caps_queries);
-                free_if_capabilities(caps);
                 if (exit_status != EXIT_SUCCESS) {
                     break;
                 }
             }
+            g_hash_table_destroy(capability_hash);
             goto clean_exit;
         }
 
@@ -2717,9 +2762,11 @@ clean_exit:
     g_free(output_file_name);
 #ifdef HAVE_LIBPCAP
     capture_opts_cleanup(&global_capture_opts);
+    if (cached_if_list) {
+        free_interface_list(cached_if_list);
+    }
 #endif
     col_cleanup(&cfile.cinfo);
-    free_filter_lists();
     wtap_cleanup();
     free_progdirs();
     dfilter_free(dfcode);
@@ -2730,32 +2777,11 @@ clean_exit:
 gboolean loop_running = FALSE;
 guint32 packet_count = 0;
 
-static const nstime_t *
-tshark_get_frame_ts(struct packet_provider_data *prov, guint32 frame_num)
-{
-    if (prov->ref && prov->ref->num == frame_num)
-        return &prov->ref->abs_ts;
-
-    if (prov->prev_dis && prov->prev_dis->num == frame_num)
-        return &prov->prev_dis->abs_ts;
-
-    if (prov->prev_cap && prov->prev_cap->num == frame_num)
-        return &prov->prev_cap->abs_ts;
-
-    if (prov->frames) {
-        frame_data *fd = frame_data_sequence_find(prov->frames, frame_num);
-
-        return (fd) ? &fd->abs_ts : NULL;
-    }
-
-    return NULL;
-}
-
 static epan_t *
 tshark_epan_new(capture_file *cf)
 {
     static const struct packet_provider_funcs funcs = {
-        tshark_get_frame_ts,
+        cap_file_provider_get_frame_ts,
         cap_file_provider_get_interface_name,
         cap_file_provider_get_interface_description,
         NULL,
@@ -2769,7 +2795,6 @@ static gboolean
 capture(void)
 {
     volatile gboolean ret = TRUE;
-    guint             i;
     GString          *str;
     GMainContext     *ctx;
 #ifndef _WIN32
@@ -2819,13 +2844,6 @@ capture(void)
     global_capture_session.state = CAPTURE_PREPARING;
 
     /* Let the user know which interfaces were chosen. */
-    for (i = 0; i < global_capture_opts.ifaces->len; i++) {
-        interface_options *interface_opts;
-
-        interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
-        g_free(interface_opts->descr);
-        interface_opts->descr = get_interface_descriptive_name(interface_opts->name);
-    }
     str = get_iface_list_string(&global_capture_opts, IFLIST_QUOTE_IF_DESCRIPTION);
     if (really_quiet == FALSE)
         fprintf(stderr, "Capturing on %s\n", str->str);
@@ -2874,10 +2892,15 @@ capture(void)
 static void
 capture_input_error(capture_session *cap_session _U_, char *error_msg, char *secondary_error_msg)
 {
-    cmdarg_err("%s", error_msg);
-    if (secondary_error_msg != NULL && *secondary_error_msg != '\0') {
-        /* We have both primary and secondary messages. */
-        cmdarg_err_cont("%s", secondary_error_msg);
+    /* The primary message might be an empty string, e.g. when the error was
+     * from extcap. (The extcap stderr is gathered when the session closes
+     * and printed in capture_input_closed below.) */
+    if (*error_msg != '\0') {
+        cmdarg_err("%s", error_msg);
+        if (secondary_error_msg != NULL && *secondary_error_msg != '\0') {
+            /* We have both primary and secondary messages. */
+            cmdarg_err_cont("%s", secondary_error_msg);
+        }
     }
 }
 
@@ -3041,11 +3064,13 @@ capture_input_new_packets(capture_session *cap_session, int to_read)
              (tap_flags & TL_REQUIRES_PROTO_TREE) || postdissectors_want_hfids() ||
              have_custom_cols(&cf->cinfo) || dissect_color);
 
-        /* The protocol tree will be "visible", i.e., printed, only if we're
-           printing packet details, which is true if we're printing stuff
+        /* The protocol tree will be "visible", i.e., nothing faked, only if
+           we're printing packet details, which is true if we're printing stuff
            ("print_packet_info" is true) and we're in verbose mode
-           ("packet_details" is true). */
-        edt = epan_dissect_new(cf->epan, create_proto_tree, print_packet_info && print_details);
+           ("packet_details" is true). But if we specified certain fields with
+           "-e", we'll prime those directly later. */
+        bool visible = print_packet_info && print_details && output_fields_num_fields(output_fields) == 0;
+        edt = epan_dissect_new(cf->epan, create_proto_tree, visible);
 
         wtap_rec_init(&rec);
         ws_buffer_init(&buf, 1514);
@@ -3248,6 +3273,24 @@ process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
        from the dissection or running taps on the packet; if we're doing
        any of that, we'll do it in the second pass.) */
     if (edt) {
+        if (gbl_resolv_flags.network_name || gbl_resolv_flags.maxmind_geoip) {
+            /* If we're doing async lookups, send any that are queued and
+             * retrieve results.
+             *
+             * Ideally we'd force any lookups that need to happen on the second pass
+             * to be sent asynchronously on this pass so the results would be ready.
+             * That will happen if they're involved in a filter (because we prime the
+             * tree below), but not currently for taps, if we're printing packet
+             * summaries or details, etc.
+             *
+             * XXX - If we're running a read filter that depends on a resolved
+             * name, we should be doing synchronous lookups in that case. Also
+             * marking the dependent frames below might not work with a display
+             * filter that depends on a resolved name.
+             */
+            host_name_lookup_process();
+        }
+
         column_info *cinfo = NULL;
 
         /* If we're running a read filter, prime the epan_dissect_t with that
@@ -3494,6 +3537,15 @@ process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
 
         col_custom_prime_edt(edt, &cf->cinfo);
 
+        output_fields_prime_edt(edt, output_fields);
+        /* The PDML spec requires a 'geninfo' pseudo-protocol that needs
+         * information from our 'frame' protocol.
+         */
+        if (output_fields_num_fields(output_fields) != 0 &&
+                output_action == WRITE_XML) {
+            epan_dissect_prime_with_hfid(edt, proto_registrar_get_id_byname("frame"));
+        }
+
         /* We only need the columns if either
            1) some tap or filter needs the columns
            or
@@ -3646,11 +3698,13 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
 
         ws_debug("tshark: create_proto_tree = %s", create_proto_tree ? "TRUE" : "FALSE");
 
-        /* The protocol tree will be "visible", i.e., printed, only if we're
-           printing packet details, which is true if we're printing stuff
+        /* The protocol tree will be "visible", i.e., nothing faked, only if
+           we're printing packet details, which is true if we're printing stuff
            ("print_packet_info" is true) and we're in verbose mode
-           ("packet_details" is true). */
-        edt = epan_dissect_new(cf->epan, create_proto_tree, print_packet_info && print_details);
+           ("packet_details" is true). But if we specified certain fields with
+           "-e", we'll prime those directly later. */
+        bool visible = print_packet_info && print_details && output_fields_num_fields(output_fields) == 0;
+        edt = epan_dissect_new(cf->epan, create_proto_tree, visible);
     }
 
     /*
@@ -3761,11 +3815,13 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
 
         ws_debug("tshark: create_proto_tree = %s", create_proto_tree ? "TRUE" : "FALSE");
 
-        /* The protocol tree will be "visible", i.e., printed, only if we're
-           printing packet details, which is true if we're printing stuff
+        /* The protocol tree will be "visible", i.e., nothing faked, only if
+           we're printing packet details, which is true if we're printing stuff
            ("print_packet_info" is true) and we're in verbose mode
-           ("packet_details" is true). */
-        edt = epan_dissect_new(cf->epan, create_proto_tree, print_packet_info && print_details);
+           ("packet_details" is true). But if we specified certain fields with
+           "-e", we'll prime those directly later. */
+        bool visible = print_packet_info && print_details && output_fields_num_fields(output_fields) == 0;
+        edt = epan_dissect_new(cf->epan, create_proto_tree, visible);
     }
 
     /*
@@ -4177,6 +4233,15 @@ process_packet_single_pass(capture_file *cf, epan_dissect_t *edt, gint64 offset,
         prime_epan_dissect_with_postdissector_wanted_hfids(edt);
 
         col_custom_prime_edt(edt, &cf->cinfo);
+
+        output_fields_prime_edt(edt, output_fields);
+        /* The PDML spec requires a 'geninfo' pseudo-protocol that needs
+         * information from our 'frame' protocol.
+         */
+        if (output_fields_num_fields(output_fields) != 0 &&
+                output_action == WRITE_XML) {
+            epan_dissect_prime_with_hfid(edt, proto_registrar_get_id_byname("frame"));
+        }
 
         /* We only need the columns if either
            1) some tap or filter needs the columns

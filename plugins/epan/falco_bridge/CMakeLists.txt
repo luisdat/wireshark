@@ -35,10 +35,11 @@ set_source_files_properties(
 
 register_plugin_files(plugin.c
 	plugin
+	"Implements a bridge between Falco plugins and Wireshark"
 	${DISSECTOR_SRC}
 )
 
-add_logray_plugin_library(falco-bridge epan)
+add_logray_epan_plugin_library(falco-bridge)
 
 # XXX Hacks; need to fix in falcosecurity-libs.
 target_compile_definitions(falco-bridge PRIVATE
@@ -48,6 +49,7 @@ target_compile_definitions(falco-bridge PRIVATE
 
 target_include_directories(falco-bridge SYSTEM PRIVATE
 	${SINSP_INCLUDE_DIRS}
+	${ZLIB_INCLUDE_DIR}
 )
 
 target_link_libraries(falco-bridge

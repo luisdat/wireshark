@@ -1,6 +1,6 @@
 /* packet-lpp.c
  * Routines for 3GPP LTE Positioning Protocol (LPP) packet dissection
- * Copyright 2011-2023 Pascal Quantin <pascal@wireshark.org>
+ * Copyright 2011-2024 Pascal Quantin <pascal@wireshark.org>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -8,7 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Ref 3GPP TS 37.355 version 17.6.0 Release 17
+ * Ref 3GPP TS 37.355 version 17.7.0 Release 17
  * http://www.3gpp.org
  */
 
@@ -32,31 +32,31 @@ void proto_register_lpp(void);
 void proto_reg_handoff_lpp(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_lpp = -1;
+static int proto_lpp;
 
 #include "packet-lpp-hf.c"
-static int hf_lpp_svHealthExt_v1240_e5bhs = -1;
-static int hf_lpp_svHealthExt_v1240_e1_bhs = -1;
-static int hf_lpp_kepSV_StatusINAV_e5bhs = -1;
-static int hf_lpp_kepSV_StatusINAV_e1_bhs = -1;
-static int hf_lpp_kepSV_StatusFNAV_e5ahs = -1;
-static int hf_lpp_bdsSvHealth_r12_sat_clock = -1;
-static int hf_lpp_bdsSvHealth_r12_b1i = -1;
-static int hf_lpp_bdsSvHealth_r12_b2i = -1;
-static int hf_lpp_bdsSvHealth_r12_nav = -1;
-static int hf_lpp_AssistanceDataSIBelement_r15_PDU = -1;
+static int hf_lpp_svHealthExt_v1240_e5bhs;
+static int hf_lpp_svHealthExt_v1240_e1_bhs;
+static int hf_lpp_kepSV_StatusINAV_e5bhs;
+static int hf_lpp_kepSV_StatusINAV_e1_bhs;
+static int hf_lpp_kepSV_StatusFNAV_e5ahs;
+static int hf_lpp_bdsSvHealth_r12_sat_clock;
+static int hf_lpp_bdsSvHealth_r12_b1i;
+static int hf_lpp_bdsSvHealth_r12_b2i;
+static int hf_lpp_bdsSvHealth_r12_nav;
+static int hf_lpp_AssistanceDataSIBelement_r15_PDU;
 
 static dissector_handle_t lppe_handle = NULL;
 
 static guint32 lpp_epdu_id = -1;
 
 /* Initialize the subtree pointers */
-static gint ett_lpp = -1;
-static gint ett_lpp_svHealthExt_v1240 = -1;
-static gint ett_kepSV_StatusINAV = -1;
-static gint ett_kepSV_StatusFNAV = -1;
-static gint ett_lpp_bdsSvHealth_r12 = -1;
-static gint ett_lpp_assistanceDataElement_r15 = -1;
+static gint ett_lpp;
+static gint ett_lpp_svHealthExt_v1240;
+static gint ett_kepSV_StatusINAV;
+static gint ett_kepSV_StatusFNAV;
+static gint ett_lpp_bdsSvHealth_r12;
+static gint ett_lpp_assistanceDataElement_r15;
 #include "packet-lpp-ett.c"
 
 /* Include constants */
@@ -129,6 +129,9 @@ static int dissect_NR_UEB_TRP_RTD_Info_r16_PDU(tvbuff_t *tvb _U_, packet_info *p
 static int dissect_NR_TRP_BeamAntennaInfo_r17_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_NR_DL_PRS_TRP_TEG_Info_r17_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_NR_On_Demand_DL_PRS_Configurations_r17_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
+static int dissect_GNSS_SSR_OrbitCorrectionsSet2_r17_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
+static int dissect_GNSS_SSR_ClockCorrectionsSet2_r17_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
+static int dissect_GNSS_SSR_URA_Set2_r17_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 
 static void
 lpp_degreesLatitude_fmt(gchar *s, guint32 v)
@@ -2046,7 +2049,7 @@ lpp_mbs_beaconMeasElt_codePhase_fmt(gchar *s, guint32 v)
   snprintf(s, ITEM_LABEL_LENGTH, "%gms (%u)", codePhase, v);
 }
 
-const unit_name_string units_pa = { "Pa", NULL };
+static const unit_name_string units_pa = { "Pa", NULL };
 
 #include "packet-lpp-fn.c"
 

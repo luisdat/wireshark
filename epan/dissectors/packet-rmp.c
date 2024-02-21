@@ -18,20 +18,20 @@
 void proto_register_rmp(void);
 void proto_reg_handoff_rmp(void);
 
-static int proto_rmp = -1;
+static int proto_rmp;
 
-static int hf_rmp_type = -1;
-static int hf_rmp_retcode = -1;
-static int hf_rmp_seqnum = -1;
-static int hf_rmp_sessionid = -1;
-static int hf_rmp_version = -1;
-static int hf_rmp_machtype = -1;
-static int hf_rmp_filename = -1;
-static int hf_rmp_offset = -1;
-static int hf_rmp_size = -1;
-static int hf_rmp_reserved = -1;
+static int hf_rmp_type;
+static int hf_rmp_retcode;
+static int hf_rmp_seqnum;
+static int hf_rmp_sessionid;
+static int hf_rmp_version;
+static int hf_rmp_machtype;
+static int hf_rmp_filename;
+static int hf_rmp_offset;
+static int hf_rmp_size;
+static int hf_rmp_reserved;
 
-static gint ett_rmp = -1;
+static gint ett_rmp;
 
 static dissector_handle_t rmp_handle;
 
@@ -227,8 +227,7 @@ proto_register_rmp(void)
 		&ett_rmp,
 	};
 
-	proto_rmp = proto_register_protocol(
-	    "HP Remote Maintenance Protocol", "RMP", "rmp");
+	proto_rmp = proto_register_protocol("HP Remote Maintenance Protocol", "RMP", "rmp");
 	proto_register_field_array(proto_rmp, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 

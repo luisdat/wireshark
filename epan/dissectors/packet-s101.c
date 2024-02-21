@@ -46,22 +46,22 @@
 #define S101_VALID_CRC 0xF0B8
 #define APP_BYTES_LEN 2
 
-static int hf_S101_frame_format = -1;
-static int hf_S101_length_size = -1;
-static int hf_S101_message_length = -1;
-static int hf_S101_slot = -1;
-static int hf_S101_message_type = -1;
-static int hf_S101_cmd_type = -1;
-static int hf_S101_version = -1;
-static int hf_S101_flags = -1;
-static int hf_S101_dtd_type = -1;
-static int hf_S101_app_bytes_len = -1;
-static int hf_S101_dtd_minor_ver = -1;
-static int hf_S101_dtd_major_ver = -1;
-static int hf_S101_crc = -1;
-static int hf_S101_crc_status = -1;
-static int hf_S101_eof = -1;
-static int hf_S101_error = -1;
+static int hf_S101_frame_format;
+static int hf_S101_length_size;
+static int hf_S101_message_length;
+static int hf_S101_slot;
+static int hf_S101_message_type;
+static int hf_S101_cmd_type;
+static int hf_S101_version;
+static int hf_S101_flags;
+static int hf_S101_dtd_type;
+static int hf_S101_app_bytes_len;
+static int hf_S101_dtd_minor_ver;
+static int hf_S101_dtd_major_ver;
+static int hf_S101_crc;
+static int hf_S101_crc_status;
+static int hf_S101_eof;
+static int hf_S101_error;
 
 static dissector_handle_t S101_handle;
 static dissector_handle_t glow_handle = NULL;
@@ -82,35 +82,35 @@ static s101_fragment_t* new_fragment_info(packet_info *pinfo);
 static void display_expert_info(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset, int len);
 
 /* Initialize the protocol and registered fields */
-static int proto_S101 = -1;
+static int proto_S101;
 
 /* Real port preferences should generally default to 0 unless there is an
  * IANA-registered (or equivalent) port for your protocol. */
 #define S101_TCP_PORT 9000 /* Not IANA-registered */
 
 /* Initialize the subtree pointers */
-static gint ett_S101 = -1;
-static gint ett_decoding_error = -1;
+static gint ett_S101;
+static gint ett_decoding_error;
 
 #define S101_MIN_LENGTH 5
 
-static int hf_msg_fragments = -1;
-static int hf_msg_fragment = -1;
-static int hf_msg_fragment_overlap = -1;
-static int hf_msg_fragment_overlap_conflicts = -1;
-static int hf_msg_fragment_multiple_tails = -1;
-static int hf_msg_fragment_too_long_fragment = -1;
-static int hf_msg_fragment_error = -1;
-static int hf_msg_fragment_count = -1;
-static int hf_msg_reassembled_in = -1;
-static int hf_msg_reassembled_length = -1;
-static int hf_msg_reassembled_data = -1;
+static int hf_msg_fragments;
+static int hf_msg_fragment;
+static int hf_msg_fragment_overlap;
+static int hf_msg_fragment_overlap_conflicts;
+static int hf_msg_fragment_multiple_tails;
+static int hf_msg_fragment_too_long_fragment;
+static int hf_msg_fragment_error;
+static int hf_msg_fragment_count;
+static int hf_msg_reassembled_in;
+static int hf_msg_reassembled_length;
+static int hf_msg_reassembled_data;
 
 
-static expert_field ei_s101_failed_reassembly = EI_INIT;
+static expert_field ei_s101_failed_reassembly;
 
-static gint ett_msg_fragment = -1;
-static gint ett_msg_fragments = -1;
+static gint ett_msg_fragment;
+static gint ett_msg_fragments;
 
 static const fragment_items msg_frag_items = {
     /* Fragment subtrees */
@@ -254,7 +254,7 @@ find_s101_packet_header(tvbuff_t *tvb, int* offset, guint8 *start, guint8 *slot,
         }
     }
     else if (*start != S101_BOF) {
-        // IF NOT Begining of Frame - variant 1 - escaped data
+        // IF NOT Beginning of Frame - variant 1 - escaped data
         return 0;
     }
     else {
@@ -558,7 +558,7 @@ proto_register_S101(void)
                 NULL, HFILL }},
 
         { &hf_S101_eof,
-            { "End of Frane", "s101.eof",
+            { "End of Frame", "s101.eof",
               FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
         { &hf_S101_error, {
@@ -576,19 +576,19 @@ proto_register_S101(void)
 
         {&hf_msg_fragment_overlap,
             { "Message fragment overlap", "s101.msg.fragment.overlap",
-              FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL }},
+              FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL }},
 
         {&hf_msg_fragment_overlap_conflicts,
             { "Message fragment overlapping with conflicting data", "s101.msg.fragment.overlap.conflicts",
-              FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL }},
+              FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL }},
 
         {&hf_msg_fragment_multiple_tails,
             { "Message has multiple tail fragments", "s101.msg.fragment.multiple_tails",
-              FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL }},
+              FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL }},
 
         {&hf_msg_fragment_too_long_fragment,
             { "Message fragment too long", "s101.msg.fragment.too_long_fragment",
-              FT_BOOLEAN, 0, NULL, 0x00, NULL, HFILL }},
+              FT_BOOLEAN, BASE_NONE, NULL, 0x00, NULL, HFILL }},
 
         {&hf_msg_fragment_error,
             { "Message defragmentation error", "s101.msg.fragment.error",
@@ -624,8 +624,7 @@ proto_register_S101(void)
     };
 
     /* Register the protocol name and description */
-    proto_S101 = proto_register_protocol("S101",
-            "S101", "s101");
+    proto_S101 = proto_register_protocol("S101", "S101", "s101");
 
     /* Required function calls to register the header fields and subtrees */
     proto_register_field_array(proto_S101, hf, array_length(hf));

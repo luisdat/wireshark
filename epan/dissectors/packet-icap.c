@@ -29,14 +29,14 @@ typedef enum _icap_type {
     ICAP_OTHER
 } icap_type_t;
 
-static int proto_icap = -1;
-static int hf_icap_response = -1;
-static int hf_icap_reqmod = -1;
-static int hf_icap_respmod = -1;
-static int hf_icap_options = -1;
-/* static int hf_icap_other = -1; */
+static int proto_icap;
+static int hf_icap_response;
+static int hf_icap_reqmod;
+static int hf_icap_respmod;
+static int hf_icap_options;
+/* static int hf_icap_other; */
 
-static gint ett_icap = -1;
+static gint ett_icap;
 
 static dissector_handle_t http_handle;
 
@@ -296,9 +296,7 @@ proto_register_icap(void)
         &ett_icap,
     };
 
-    proto_icap = proto_register_protocol(
-            "Internet Content Adaptation Protocol",
-            "ICAP", "icap");
+    proto_icap = proto_register_protocol("Internet Content Adaptation Protocol", "ICAP", "icap");
     proto_register_field_array(proto_icap, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 

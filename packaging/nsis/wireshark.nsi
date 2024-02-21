@@ -226,7 +226,7 @@ DirText "Choose a directory in which to install ${PROGRAM_NAME}."
 InstallDir $PROGRAMFILES64\${PROGRAM_NAME}
 
 ; See if this is an upgrade; if so, use the old InstallDir as default
-InstallDirRegKey HKEY_LOCAL_MACHINE SOFTWARE\${PROGRAM_NAME} "InstallDir"
+InstallDirRegKey HKEY_LOCAL_MACHINE SOFTWARE\${PROGRAM_NAME} InstallDir
 
 
 ; ============================================================================
@@ -282,11 +282,11 @@ Var WIX_DISPLAYVERSION
 Var WIX_UNINSTALLSTRING
 
 ; ============================================================================
-; 64-bit support
+; Platform and OS version checks
 ; ============================================================================
-!include x64.nsh
 
-!include "GetWindowsVersion.nsh"
+!include x64.nsh
+!include WinVer.nsh
 !include WinMessages.nsh
 
 Function .onInit
@@ -309,9 +309,6 @@ Function .onInit
     ${EndIf}
   !endif
 
-  ; Get the Windows version
-  ${GetWindowsVersion} $R0
-
   ; This should match the following:
   ; - The NTDDI_VERSION and _WIN32_WINNT parts of cmakeconfig.h.in
   ; - The <compatibility><application> section in image\wireshark.exe.manifest.in
@@ -320,49 +317,51 @@ Function .onInit
   ; Uncomment to test.
   ; MessageBox MB_OK "You're running Windows $R0."
 
-  ; Check if we're able to run with this version
-  StrCmp $R0 '95' lbl_winversion_unsupported
-  StrCmp $R0 '98' lbl_winversion_unsupported
-  StrCmp $R0 'ME' lbl_winversion_unsupported
-  StrCmp $R0 'NT 4.0' lbl_winversion_unsupported_nt4
-  StrCmp $R0 '2000' lbl_winversion_unsupported_2000
-  StrCmp $R0 'XP' lbl_winversion_unsupported_xp_2003
-  StrCmp $R0 '2003' lbl_winversion_unsupported_xp_2003
-  StrCmp $R0 'Vista' lbl_winversion_unsupported_vista_2008
-  StrCmp $R0 '2008' lbl_winversion_unsupported_vista_2008
-  Goto lbl_winversion_supported
-
-lbl_winversion_unsupported:
+${If} ${AtMostWinME}
   MessageBox MB_OK \
-      "Windows $R0 is no longer supported.$\nPlease install Ethereal 0.99.0 instead." \
-      /SD IDOK
+    "Windows 95, 98, and ME are no longer supported.$\nPlease install Ethereal 0.99.0 instead." \
+    /SD IDOK
   Quit
+${EndIf}
 
-lbl_winversion_unsupported_nt4:
+${If} ${IsWinNT4}
   MessageBox MB_OK \
-          "Windows $R0 is no longer supported.$\nPlease install Wireshark 0.99.4 instead." \
-          /SD IDOK
+    "Windows NT 4.0 is no longer supported.$\nPlease install Wireshark 0.99.4 instead." \
+    /SD IDOK
   Quit
+${EndIf}
 
-lbl_winversion_unsupported_2000:
+${If} ${IsWin2000}
   MessageBox MB_OK \
-      "Windows $R0 is no longer supported.$\nPlease install Wireshark 1.2 or 1.0 instead." \
-      /SD IDOK
+    "Windows 2000 is no longer supported.$\nPlease install Wireshark 1.2 or 1.0 instead." \
+    /SD IDOK
   Quit
+${EndIf}
 
-lbl_winversion_unsupported_xp_2003:
+${If} ${IsWinXP}
+${OrIf} ${IsWin2003}
   MessageBox MB_OK \
-      "Windows $R0 is no longer supported.$\nPlease install ${PROGRAM_NAME} 1.12 or 1.10 instead." \
-      /SD IDOK
+    "Windows XP and Server 2003 are no longer supported.$\nPlease install ${PROGRAM_NAME} 1.12 or 1.10 instead." \
+    /SD IDOK
   Quit
+${EndIf}
 
-lbl_winversion_unsupported_vista_2008:
+${If} ${IsWinVista}
+${OrIf} ${IsWin2008}
   MessageBox MB_OK \
-      "Windows $R0 is no longer supported.$\nPlease install ${PROGRAM_NAME} 2.2 instead." \
-      /SD IDOK
+    "Windows Vista and Server 2008 are no longer supported.$\nPlease install ${PROGRAM_NAME} 2.2 instead." \
+    /SD IDOK
   Quit
+${EndIf}
 
-lbl_winversion_supported:
+${If} ${AtMostWin8.1}
+${OrIf} ${AtMostWin2012R2}
+  MessageBox MB_OK \
+    "Windows 7, 8, 8.1, Server 2008R2, and Server 2012 are no longer supported.$\nPlease install ${PROGRAM_NAME} 4.0 instead." \
+    /SD IDOK
+  Quit
+${EndIf}
+
 !insertmacro IsWiresharkRunning
 
   ; Default control values.
@@ -503,7 +502,7 @@ Function DisplayDonatePage
 FunctionEnd
 
 Function DisplayNpcapPage
-  !insertmacro MUI_HEADER_TEXT "Packet Capture" "Wireshark requires either Npcap or WinPcap to capture live network data."
+  !insertmacro MUI_HEADER_TEXT "Packet Capture" "Wireshark requires Npcap to capture live network data."
   !insertmacro INSTALLOPTIONS_DISPLAY "NpcapPage.ini"
 FunctionEnd
 
@@ -540,7 +539,6 @@ File "${STAGING_DIR}\libwsutil.dll"
 File "${STAGING_DIR}\COPYING.txt"
 File "${STAGING_DIR}\NEWS.txt"
 File "${STAGING_DIR}\README.txt"
-File "${STAGING_DIR}\README.windows.txt"
 File "${STAGING_DIR}\wka"
 File "${STAGING_DIR}\pdml2html.xsl"
 File "${STAGING_DIR}\ws.css"
@@ -637,6 +635,7 @@ File "${STAGING_DIR}\diameter\sunping.xml"
 File "${STAGING_DIR}\diameter\Telefonica.xml"
 File "${STAGING_DIR}\diameter\TGPP.xml"
 File "${STAGING_DIR}\diameter\TGPP2.xml"
+File "${STAGING_DIR}\diameter\Travelping.xml"
 File "${STAGING_DIR}\diameter\Vodafone.xml"
 File "${STAGING_DIR}\diameter\VerizonWireless.xml"
 !include "custom_diameter_xmls.txt"
@@ -900,6 +899,9 @@ File "${STAGING_DIR}\wimaxasncp\dictionary.xml"
 File "${STAGING_DIR}\wimaxasncp\dictionary.dtd"
 SetOutPath $INSTDIR
 
+; Write the installation path into the registry for InstallDirRegKey
+WriteRegStr HKEY_LOCAL_MACHINE SOFTWARE\${PROGRAM_NAME} InstallDir "$INSTDIR"
+
 ; Write the uninstall keys for Windows
 ; https://nsis.sourceforge.io/Add_uninstall_information_to_Add/Remove_Programs
 ; https://docs.microsoft.com/en-us/previous-versions/ms954376(v=msdn.10)
@@ -1035,33 +1037,28 @@ File "${STAGING_DIR}\tshark.exe"
 File "${STAGING_DIR}\tshark.html"
 SectionEnd
 
-SectionGroup "Plugins & Extensions" SecPluginsGroup
+Section "-Plugins & Extensions"
 
-Section "Codec Plugins" SecCodec
-;-------------------------------------------
-SetOutPath '$INSTDIR\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs'
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\g711.dll"
+SetOutPath '$INSTDIR\plugins\codecs'
+File "${STAGING_DIR}\plugins\codecs\g711.dll.${ABI_VERSION_CODEC}"
 !ifdef SPANDSP_FOUND
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\g722.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\g726.dll"
+File "${STAGING_DIR}\plugins\codecs\g722.dll.${ABI_VERSION_CODEC}"
+File "${STAGING_DIR}\plugins\codecs\g726.dll.${ABI_VERSION_CODEC}"
 !endif
 !ifdef BCG729_FOUND
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\g729.dll"
+File "${STAGING_DIR}\plugins\codecs\g729.dll.${ABI_VERSION_CODEC}"
 !endif
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\l16mono.dll"
+File "${STAGING_DIR}\plugins\codecs\l16mono.dll.${ABI_VERSION_CODEC}"
 !ifdef SBC_FOUND
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\sbc.dll"
+File "${STAGING_DIR}\plugins\codecs\sbc.dll.${ABI_VERSION_CODEC}"
 !endif
 !ifdef ILBC_FOUND
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\ilbc.dll"
+File "${STAGING_DIR}\plugins\codecs\ilbc.dll.${ABI_VERSION_CODEC}"
 !endif
 !ifdef OPUS_FOUND
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\codecs\opus_dec.dll"
+File "${STAGING_DIR}\plugins\codecs\opus_dec.dll.${ABI_VERSION_CODEC}"
 !endif
-SectionEnd
 
-Section "Configuration Profiles" SecProfiles
-;-------------------------------------------
 ; This should be a function or macro
 SetOutPath '$INSTDIR\profiles\Bluetooth'
 File "${STAGING_DIR}\profiles\Bluetooth\colorfilters"
@@ -1070,38 +1067,26 @@ SetOutPath '$INSTDIR\profiles\Classic'
 File "${STAGING_DIR}\profiles\Classic\colorfilters"
 SetOutPath '$INSTDIR\profiles\No Reassembly'
 File "${STAGING_DIR}\profiles\No Reassembly\preferences"
-SectionEnd
 
-Section "Dissector Plugins" SecPlugins
-;-------------------------------------------
-SetOutPath '$INSTDIR\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan'
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\ethercat.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\gryphon.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\irda.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\opcua.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\profinet.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\unistim.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\wimax.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\wimaxasncp.dll"
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\wimaxmacphy.dll"
+SetOutPath '$INSTDIR\plugins\epan'
+File "${STAGING_DIR}\plugins\epan\ethercat.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\gryphon.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\irda.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\opcua.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\profinet.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\unistim.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\wimax.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\wimaxasncp.dll.${ABI_VERSION_EPAN}"
+File "${STAGING_DIR}\plugins\epan\wimaxmacphy.dll.${ABI_VERSION_EPAN}"
 !include "custom_plugins.txt"
-SectionEnd
 
-Section "File Type Plugins - capture file support" SecWiretap
-;-------------------------------------------
-SetOutPath '$INSTDIR\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\wiretap'
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\wiretap\usbdump.dll"
-SectionEnd
+SetOutPath '$INSTDIR\plugins\wiretap'
+File "${STAGING_DIR}\plugins\wiretap\usbdump.dll.${ABI_VERSION_WIRETAP}"
 
-Section "Mate - Meta Analysis and Tracing Engine" SecMate
-;-------------------------------------------
-SetOutPath '$INSTDIR\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan'
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\mate.dll"
-SectionEnd
+SetOutPath '$INSTDIR\plugins\epan'
+File "${STAGING_DIR}\plugins\epan\mate.dll.${ABI_VERSION_EPAN}"
 
 !ifdef SMI_DIR
-Section "SNMP MIBs" SecMIBs
-;-------------------------------------------
 SetOutPath '$INSTDIR\snmp\mibs'
 File "${SMI_DIR}\share\mibs\iana\*"
 File "${SMI_DIR}\share\mibs\ietf\*"
@@ -1110,94 +1095,54 @@ File "${SMI_DIR}\share\mibs\tubs\*"
 File "${SMI_DIR}\share\pibs\*"
 File "${SMI_DIR}\share\yang\*.yang"
 !include "custom_mibs.txt"
-SectionEnd
 !endif
 
-Section "TRANSUM - performance analysis" SecTransum
-;-------------------------------------------
-SetOutPath '$INSTDIR\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan'
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\transum.dll"
-SectionEnd
+SetOutPath '$INSTDIR\plugins\epan'
+File "${STAGING_DIR}\plugins\epan\transum.dll.${ABI_VERSION_EPAN}"
 
-Section "Tree Statistics Plugin" SecStatsTree
-;-------------------------------------------
-SetOutPath '$INSTDIR\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan'
-File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\stats_tree.dll"
-SectionEnd
+SetOutPath '$INSTDIR\plugins\epan'
+File "${STAGING_DIR}\plugins\epan\stats_tree.dll.${ABI_VERSION_EPAN}"
 
-SectionGroupEnd ; "Plugins / Extensions"
+SectionEnd ; "Plugins / Extensions"
 
-SectionGroup "Tools" SecToolsGroup
+Section "-Additional command line tools"
 
-Section "Capinfos" SecCapinfos
-;-------------------------------------------
 SetOutPath $INSTDIR
 File "${STAGING_DIR}\capinfos.exe"
 File "${STAGING_DIR}\capinfos.html"
-SectionEnd
 
-Section "Captype" SecCaptype
-;-------------------------------------------
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\captype.exe"
 File "${STAGING_DIR}\captype.html"
-SectionEnd
 
-Section "Editcap" SecEditcap
-;-------------------------------------------
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\editcap.exe"
 File "${STAGING_DIR}\editcap.html"
-SectionEnd
 
-Section "Mergecap" SecMergecap
-;-------------------------------------------
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\mergecap.exe"
 File "${STAGING_DIR}\mergecap.html"
-SectionEnd
 
 !ifdef MMDBRESOLVE_EXE
-Section "MMDBResolve" SecMMDBResolve
-;-------------------------------------------
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\mmdbresolve.html"
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\mmdbresolve.exe"
-SectionEnd
 !endif
 
-Section /o "Randpkt" SecRandpkt
-;-------------------------------------------
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\randpkt.exe"
 File "${STAGING_DIR}\randpkt.html"
-SectionEnd
 
-Section "Rawshark" SecRawshark
-;-------------------------------------------
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\rawshark.exe"
 File "${STAGING_DIR}\rawshark.html"
-SectionEnd
 
-Section "Reordercap" SecReordercap
-;-------------------------------------------
-SetOutPath $INSTDIR
 File "${STAGING_DIR}\reordercap.exe"
 File "${STAGING_DIR}\reordercap.html"
-SectionEnd
 
-Section "Text2Pcap" SecText2Pcap
-;-------------------------------------------
-SetOutPath $INSTDIR
+File "${STAGING_DIR}\sharkd.exe"
+;File "${STAGING_DIR}\sharkd.html"
+
 File "${STAGING_DIR}\text2pcap.exe"
 File "${STAGING_DIR}\text2pcap.html"
-SectionEnd
 
-SectionGroupEnd ; "Tools"
+SectionEnd ; "Tools"
 
-SectionGroup "External Capture (extcap)" SecExtcapGroup
+SectionGroup /e "External capture tools (extcap)" SecExtcapGroup
 
 Section /o "Androiddump" SecAndroiddump
 ;-------------------------------------------
@@ -1244,14 +1189,16 @@ Section "-Clear Partial Selected"
 SectionEnd
 
 !ifdef DOCBOOK_DIR
-Section "Documentation" SecDocumentation
-;-------------------------------------------
+!ifdef DOC_DIR
+Section "-Documentation"
+
 SetOutPath "$INSTDIR\Wireshark User's Guide"
 File /r "${DOCBOOK_DIR}\wsug_html_chunked\*.*"
 
 SetOutPath $INSTDIR
-File "${DOCBOOK_DIR}\faq.html"
+File "${DOC_DIR}\faq.html"
 SectionEnd
+!endif
 !endif
 
 Section "-Finally"
@@ -1352,6 +1299,7 @@ Push "mergecap"
 Push "randpkt"
 Push "rawshark"
 Push "reordercap"
+Push "sharkd"
 Push "text2pcap"
 Push "tshark"
 
@@ -1560,32 +1508,6 @@ SectionEnd
 !endif
   !insertmacro MUI_DESCRIPTION_TEXT ${SecTShark} "Text based network protocol analyzer."
 
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecPluginsGroup} "Plugins and extensions for both ${PROGRAM_NAME} and TShark."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecCodec} "Additional codec support."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecProfiles} "Additional configuration profiles."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecPlugins} "Additional protocol dissectors."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecWiretap} "Extend wiretap support for capture file types. (e.g. usbdump)"
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecMate} "Plugin that allows the user to specify how different frames are related to each other."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecStatsTree} "Extended statistics. (see stats_tree in WSDG; Packet Lengths in WSUG)"
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecTransum} "Plugin to calculate Response Time Element (RTE) statistics."
-
-!ifdef SMI_DIR
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecMIBs} "SNMP MIBs for better SNMP dissection."
-!endif
-
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecToolsGroup} "Additional command line based tools."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecCapinfos} "Print information about capture files."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecCaptype} "Print the type(format) of capture files."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecEditCap} "Copy packets to a new file, optionally trimming packets, omitting them, or saving to a different format."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecMergecap} "Combine multiple saved capture files into a single output file."
-  !ifdef MMDBRESOLVE_EXE
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecMMDBResolve} "MaxMind Database resolution tool - read IPv4 and IPv6 addresses and print their IP geolocation information."
-  !endif
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecRandpkt} "Create a pcap trace file full of random packets. (randpkt produces very bad packets)"
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecRawshark} "Dump and analyze raw pcap data."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecReordercap} "Copy packets to a new file, sorted by time."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecText2Pcap} "Generate a capture file from an ASCII hexdump of packets."
-
   !insertmacro MUI_DESCRIPTION_TEXT ${SecExtcapGroup} "External Capture Interfaces"
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAndroiddump} "Provide capture interfaces from Android devices."
   !ifdef BUILD_etwdump
@@ -1597,9 +1519,6 @@ SectionEnd
   !endif
   !insertmacro MUI_DESCRIPTION_TEXT ${SecUDPdump} "Provide capture interface to receive UDP packets streamed from network devices."
 
-!ifdef DOCBOOK_DIR
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecDocumentation} "Install an offline copy of the User's Guide and FAQ."
-!endif
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 !insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN

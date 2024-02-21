@@ -101,6 +101,7 @@
 #include <epan/conversation_table.h>
 #include <epan/tap.h>
 #include <epan/addr_resolv.h>
+#include <wsutil/utf8_entities.h>
 #include "packet-rsvp.h"
 #include "packet-ip.h"
 #include "packet-diffserv-mpls-common.h"
@@ -113,525 +114,535 @@ void proto_register_rsvp(void);
 void proto_reg_handoff_rsvp(void);
 static dissector_handle_t rsvp_handle, rsvpe2ei_handle;
 
-static int proto_rsvp = -1;
-static int proto_rsvp_e2e1 = -1;
+static int proto_rsvp;
+static int proto_rsvp_e2e1;
 
-static int hf_rsvp_error_flags = -1;
-static int hf_rsvp_error_flags_path_state_removed = -1;
-static int hf_rsvp_error_flags_not_guilty = -1;
-static int hf_rsvp_error_flags_in_place = -1;
-static int hf_rsvp_eth_tspec_tlv_color_mode = -1;
-static int hf_rsvp_eth_tspec_tlv_coupling_flag = -1;
-static int hf_rsvp_sender_tspec_standard_contiguous_concatenation = -1;
-static int hf_rsvp_sender_tspec_arbitrary_contiguous_concatenation = -1;
-static int hf_rsvp_sender_tspec_regenerator_section = -1;
-static int hf_rsvp_sender_tspec_multiplex_section = -1;
-static int hf_rsvp_sender_tspec_J0_transparency = -1;
-static int hf_rsvp_sender_tspec_SOH_RSOH_DCC_transparency = -1;
-static int hf_rsvp_sender_tspec_LOH_MSOH_DCC_transparency = -1;
-static int hf_rsvp_sender_tspec_LOH_MSOH_extended_DCC_transparency = -1;
-static int hf_rsvp_sender_tspec_K1_K2_transparency = -1;
-static int hf_rsvp_sender_tspec_E1_transparency = -1;
-static int hf_rsvp_sender_tspec_F1_transparency = -1;
-static int hf_rsvp_sender_tspec_E2_transparency = -1;
-static int hf_rsvp_sender_tspec_B1_transparency = -1;
-static int hf_rsvp_sender_tspec_B2_transparency = -1;
-static int hf_rsvp_sender_tspec_M0_transparency = -1;
-static int hf_rsvp_sender_tspec_M1_transparency = -1;
-static int hf_rsvp_flowspec_standard_contiguous_concatenation = -1;
-static int hf_rsvp_flowspec_arbitrary_contiguous_concatenation = -1;
-static int hf_rsvp_flowspec_regenerator_section = -1;
-static int hf_rsvp_flowspec_multiplex_section = -1;
-static int hf_rsvp_flowspec_J0_transparency = -1;
-static int hf_rsvp_flowspec_SOH_RSOH_DCC_transparency = -1;
-static int hf_rsvp_flowspec_LOH_MSOH_DCC_transparency = -1;
-static int hf_rsvp_flowspec_LOH_MSOH_extended_DCC_transparency = -1;
-static int hf_rsvp_flowspec_K1_K2_transparency = -1;
-static int hf_rsvp_flowspec_E1_transparency = -1;
-static int hf_rsvp_flowspec_F1_transparency = -1;
-static int hf_rsvp_flowspec_E2_transparency = -1;
-static int hf_rsvp_flowspec_B1_transparency = -1;
-static int hf_rsvp_flowspec_B2_transparency = -1;
-static int hf_rsvp_flowspec_M0_transparency = -1;
-static int hf_rsvp_flowspec_M1_transparency = -1;
-static int hf_rsvp_integrity_flags_handshake = -1;
-static int hf_rsvp_sa_flags_local = -1;
-static int hf_rsvp_sa_flags_label = -1;
-static int hf_rsvp_sa_flags_se_style = -1;
-static int hf_rsvp_sa_flags_bandwidth = -1;
-static int hf_rsvp_sa_flags_node = -1;
-static int hf_rsvp_rro_flags_local_avail = -1;
-static int hf_rsvp_rro_flags_local_in_use = -1;
-static int hf_rsvp_rro_flags_bandwidth = -1;
-static int hf_rsvp_rro_flags_node = -1;
-static int hf_rsvp_rro_flags_node_address = -1;
-static int hf_rsvp_rro_flags_backup_tunnel_bandwidth = -1;
-static int hf_rsvp_rro_flags_backup_tunnel_hop = -1;
-static int hf_rsvp_rro_flags_global_label = -1;
-static int hf_rsvp_lsp_attr = -1;
-static int hf_rsvp_lsp_attr_e2e = -1;
-static int hf_rsvp_lsp_attr_boundary = -1;
-static int hf_rsvp_lsp_attr_segment = -1;
-static int hf_rsvp_lsp_attr_integrity = -1;
-static int hf_rsvp_lsp_attr_contiguous = -1;
-static int hf_rsvp_lsp_attr_stitching = -1;
-static int hf_rsvp_lsp_attr_preplanned = -1;
-static int hf_rsvp_lsp_attr_nophp = -1;
-static int hf_rsvp_lsp_attr_oobmap = -1;
-static int hf_rsvp_lsp_attr_entropy = -1;
-static int hf_rsvp_lsp_attr_oammep = -1;
-static int hf_rsvp_lsp_attr_oammip = -1;
-static int hf_rsvp_lsp_attr_loopback = -1;
-static int hf_rsvp_lsp_attr_p2mp = -1;
-static int hf_rsvp_lsp_attr_rtm = -1;
-static int hf_rsvp_lsp_attr_lsi = -1;
-static int hf_rsvp_lsp_attr_lsids2e = -1;
-static int hf_rsvp_lsp_attr_telinklabel = -1;
-static int hf_rsvp_lsp_attr_srlgcollect = -1;
-static int hf_rsvp_gen_uni_direction = -1;
-static int hf_rsvp_protection_info_flags_secondary_lsp = -1;
-static int hf_rsvp_pi_link_flags_extra_traffic = -1;
-static int hf_rsvp_pi_link_flags_unprotected = -1;
-static int hf_rsvp_pi_link_flags_shared = -1;
-static int hf_rsvp_pi_link_flags_dedicated1_1 = -1;
-static int hf_rsvp_pi_link_flags_dedicated1plus1 = -1;
-static int hf_rsvp_pi_link_flags_enhanced = -1;
-static int hf_rsvp_pi_link_flags_extra = -1;
-static int hf_rsvp_pi_link_flags_dedicated_1_1 = -1;
-static int hf_rsvp_pi_link_flags_dedicated_1plus1 = -1;
-static int hf_rsvp_rfc4872_secondary = -1;
-static int hf_rsvp_rfc4872_protecting = -1;
-static int hf_rsvp_rfc4872_notification_msg = -1;
-static int hf_rsvp_rfc4872_operational = -1;
-static int hf_rsvp_pi_lsp_flags_full_rerouting = -1;
-static int hf_rsvp_pi_lsp_flags_rerouting_extra = -1;
-static int hf_rsvp_pi_lsp_flags_1_n_protection = -1;
-static int hf_rsvp_pi_lsp_flags_1plus1_unidirectional = -1;
-static int hf_rsvp_pi_lsp_flags_1plus1_bidirectional = -1;
-static int hf_rsvp_protection_info_in_place = -1;
-static int hf_rsvp_protection_info_required = -1;
-static int hf_rsvp_pi_seg_flags_full_rerouting = -1;
-static int hf_rsvp_pi_seg_flags_rerouting_extra = -1;
-static int hf_rsvp_pi_seg_flags_1_n_protection = -1;
-static int hf_rsvp_pi_seg_flags_1plus1_unidirectional = -1;
-static int hf_rsvp_pi_seg_flags_1plus1_bidirectional = -1;
-static int hf_rsvp_frr_flags_one2one_backup = -1;
-static int hf_rsvp_frr_flags_facility_backup = -1;
-static int hf_rsvp_type = -1;
-static int hf_rsvp_3gpp_obj_tid = -1;
-static int hf_rsvp_3gpp_obj_ie_len = -1;
-static int hf_rsvp_3gpp_obj_ie_type = -1;
-static int hf_rsvp_3gpp_obj_ue_ipv4_addr = -1;
-static int hf_rsvp_3gpp_obj_ue_ipv6_addr = -1;
-static int hf_rsvp_3gpp_obj_tft_d = -1;
-static int hf_rsvp_3gpp_obj_tft_ns = -1;
-static int hf_rsvp_3gpp_obj_tft_sr_id = -1;
-static int hf_rsvp_3gpp_obj_tft_p = -1;
-static int hf_rsvp_3gpp_obj_tft_opcode = -1;
-static int hf_rsvp_3gpp_obj_tft_n_pkt_flt = -1;
-static int hf_rsvp_3gpp_obj_flow_id = -1;
-static int hf_rsvp_3gpp_obj_pf_ev_prec = -1;
-static int hf_rsvp_3gpp_obj_pf_len = -1;
-static int hf_rsvp_3gpp_obj_pf_type = -1;
-static int hf_rsvp_3gpp_obj_pf_cont_len = -1;
-static int hf_rsvp_3gpp_obj_pf_comp_type_id = -1;
-static int hf_rsvp_3gpp_obj_pf_src_ipv4 = -1;
-static int hf_rsvp_3gpp_obj_pf_dst_ipv4 = -1;
-static int hf_rsvp_3gpp_obj_pf_ipv4_mask = -1;
-static int hf_rsvp_3gpp_obj_pf_src_ipv6 = -1;
-static int hf_rsvp_3gpp_obj_pf_dst_ipv6 = -1;
-static int hf_rsvp_3gpp_obj_pf_ipv6_prefix_length = -1;
-static int hf_rsvp_3gpp_obj_pf_prot_next = -1;
-static int hf_rsvp_3gpp_obj_pf_dst_port = -1;
-static int hf_rsvp_3gpp_obj_pf_src_port = -1;
-static int hf_rsvp_3gpp_obj_pf_ipsec_spi = -1;
-static int hf_rsvp_3gpp_obj_pf_tos_tc = -1;
-static int hf_rsvp_3gpp_obj_pf_flow_lbl = -1;
-static int hf_rsvp_3gpp_obj_pf_ipv6 = -1;
-static int hf_rsvp_3gpp_obj_pf_treatment = -1;
-static int hf_rsvp_3gpp_obj_pf_hint = -1;
-static int hf_rsvp_3gpp_obj_tft_qos_list_len = -1;
-static int hf_rsvp_3gpp_r_qos_blob_len = -1;
-static int hf_rsvp_3gpp_r_qos_blob_flow_pri = -1;
-static int hf_rsvp_3gpp_r_qos_blob_num_qos_att_set = -1;
-static int hf_rsvp_3gpp_qos_att_set_len = -1;
-static int hf_rsvp_3gpp_qos_attribute_set_id = -1;
-static int hf_rsvp_3gpp_qos_attribute_verbose = -1;
-static int hf_rsvp_3gpp_qos_attribute_prof_id = -1;
-static int hf_rsvp_3gpp_qos_attribute_traff_cls = -1;
-static int hf_rsvp_3gpp_qos_attribute_peak_rate = -1;
-static int hf_rsvp_3gpp_qos_attribute_bucket_size = -1;
-static int hf_rsvp_3gpp_qos_attribute_token_rate = -1;
-static int hf_rsvp_3gpp_qos_attribute_max_latency = -1;
-static int hf_rsvp_3gpp_qos_attribute_max_loss_rte = -1;
-static int hf_rsvp_3gpp_qos_attribute_delay_var_sensitive = -1;
-static int hf_rsvp_3gpp_qos_attribute_reserved = -1;
-static int hf_rsvp_3gpp_r_qos_blob = -1;
-static int hf_rsvp_3gpp_qos_result = -1;
-static int hf_rsvp_xro_sobj_lbit = -1;
-static int hf_rsvp_rro_sobj_dbit = -1;
-static int hf_rsvp_xro_sobj_len = -1;
-static int hf_rsvp_xro_sobj_ipv4_addr = -1;
-static int hf_rsvp_xro_sobj_ipv4_prefix = -1;
-static int hf_rsvp_xro_sobj_ipv4_attr = -1;
-static int hf_rsvp_xro_sobj_ipv6_attr = -1;
-static int hf_rsvp_xro_sobj_srlg_id = -1;
-static int hf_rsvp_xro_sobj_srlg_res = -1;
-static int hf_rsvp_private_data = -1;
-static int hf_rsvp_juniper_numtlvs = -1;
-static int hf_rsvp_juniper_padlength = -1;
-static int hf_rsvp_juniper_type = -1;
-static int hf_rsvp_juniper_length = -1;
-static int hf_rsvp_juniper_attrib_cos = -1;
-static int hf_rsvp_juniper_attrib_metric1 = -1;
-static int hf_rsvp_juniper_attrib_metric2 = -1;
-static int hf_rsvp_juniper_attrib_ccc_status = -1;
-static int hf_rsvp_juniper_attrib_path = -1;
-static int hf_rsvp_juniper_attrib_unknown = -1;
-static int hf_rsvp_juniper_unknown = -1;
-static int hf_rsvp_juniper_pad = -1;
-static int hf_rsvp_unknown_data = -1;
-static int hf_rsvp_ctype = -1;
-static int hf_rsvp_ctype_session = -1;
-static int hf_rsvp_ctype_scope = -1;
-static int hf_rsvp_ctype_label_request = -1;
-static int hf_rsvp_ctype_integrity = -1;
-static int hf_rsvp_ctype_adspec = -1;
-static int hf_rsvp_ctype_tspec = -1;
-static int hf_rsvp_ctype_call_id = -1;
-static int hf_rsvp_ctype_template = -1;
-static int hf_rsvp_ctype_style = -1;
-static int hf_rsvp_ctype_policy = -1;
-static int hf_rsvp_ctype_error = -1;
-static int hf_rsvp_ctype_attribute = -1;
-static int hf_rsvp_ctype_explicit_route = -1;
-static int hf_rsvp_ctype_secondary_explicit_route = -1;
-static int hf_rsvp_ctype_flowspec = -1;
-static int hf_rsvp_ctype_hop = -1;
-static int hf_rsvp_ctype_confirm = -1;
-static int hf_rsvp_ctype_time_values = -1;
-static int hf_rsvp_ctype_record_route = -1;
-static int hf_rsvp_ctype_secondary_record_route = -1;
-static int hf_rsvp_ctype_exclude_route = -1;
-static int hf_rsvp_ctype_message_id = -1;
-static int hf_rsvp_ctype_message_id_ack = -1;
-static int hf_rsvp_ctype_message_id_list = -1;
-static int hf_rsvp_ctype_hello = -1;
-static int hf_rsvp_ctype_dclass = -1;
-static int hf_rsvp_ctype_admin_status = -1;
-static int hf_rsvp_ctype_lsp_attributes = -1;
-static int hf_rsvp_ctype_label_set = -1;
-static int hf_rsvp_ctype_association = -1;
-static int hf_rsvp_ctype_tunnel_if_id = -1;
-static int hf_rsvp_ctype_3gpp_object = -1;
-static int hf_rsvp_ctype_restart_cap = -1;
-static int hf_rsvp_ctype_link_cap = -1;
-static int hf_rsvp_ctype_protection_info = -1;
-static int hf_rsvp_ctype_fast_reroute = -1;
-static int hf_rsvp_ctype_detour = -1;
-static int hf_rsvp_ctype_diffserv = -1;
-static int hf_rsvp_ctype_diffserv_aware_te = -1;
-static int hf_rsvp_ctype_vendor = -1;
-static int hf_rsvp_ctype_juniper = -1;
-static int hf_rsvp_ctype_unknown = -1;
-static int hf_rsvp_ctype_label = -1;
-static int hf_rsvp_ctype_notify_request = -1;
-static int hf_rsvp_ctype_generalized_uni = -1;
-static int hf_rsvp_parameter = -1;
-static int hf_rsvp_parameter_flags = -1;
-static int hf_rsvp_parameter_length = -1;
-static int hf_rsvp_error_value = -1;
-static int hf_rsvp_class = -1;
-static int hf_rsvp_class_length = -1;
-static int hf_rsvp_reserved = -1;
-static int hf_rsvp_switching_granularity = -1;
-static int hf_rsvp_callid_srcaddr_ether = -1;
-static int hf_rsvp_callid_srcaddr_bytes = -1;
-static int hf_rsvp_loose_hop = -1;
-static int hf_rsvp_data_length = -1;
+static int hf_rsvp_error_flags;
+static int hf_rsvp_error_flags_path_state_removed;
+static int hf_rsvp_error_flags_not_guilty;
+static int hf_rsvp_error_flags_in_place;
+static int hf_rsvp_eth_tspec_tlv_color_mode;
+static int hf_rsvp_eth_tspec_tlv_coupling_flag;
+static int hf_rsvp_sender_tspec_standard_contiguous_concatenation;
+static int hf_rsvp_sender_tspec_arbitrary_contiguous_concatenation;
+static int hf_rsvp_sender_tspec_regenerator_section;
+static int hf_rsvp_sender_tspec_multiplex_section;
+static int hf_rsvp_sender_tspec_J0_transparency;
+static int hf_rsvp_sender_tspec_SOH_RSOH_DCC_transparency;
+static int hf_rsvp_sender_tspec_LOH_MSOH_DCC_transparency;
+static int hf_rsvp_sender_tspec_LOH_MSOH_extended_DCC_transparency;
+static int hf_rsvp_sender_tspec_K1_K2_transparency;
+static int hf_rsvp_sender_tspec_E1_transparency;
+static int hf_rsvp_sender_tspec_F1_transparency;
+static int hf_rsvp_sender_tspec_E2_transparency;
+static int hf_rsvp_sender_tspec_B1_transparency;
+static int hf_rsvp_sender_tspec_B2_transparency;
+static int hf_rsvp_sender_tspec_M0_transparency;
+static int hf_rsvp_sender_tspec_M1_transparency;
+static int hf_rsvp_flowspec_standard_contiguous_concatenation;
+static int hf_rsvp_flowspec_arbitrary_contiguous_concatenation;
+static int hf_rsvp_flowspec_regenerator_section;
+static int hf_rsvp_flowspec_multiplex_section;
+static int hf_rsvp_flowspec_J0_transparency;
+static int hf_rsvp_flowspec_SOH_RSOH_DCC_transparency;
+static int hf_rsvp_flowspec_LOH_MSOH_DCC_transparency;
+static int hf_rsvp_flowspec_LOH_MSOH_extended_DCC_transparency;
+static int hf_rsvp_flowspec_K1_K2_transparency;
+static int hf_rsvp_flowspec_E1_transparency;
+static int hf_rsvp_flowspec_F1_transparency;
+static int hf_rsvp_flowspec_E2_transparency;
+static int hf_rsvp_flowspec_B1_transparency;
+static int hf_rsvp_flowspec_B2_transparency;
+static int hf_rsvp_flowspec_M0_transparency;
+static int hf_rsvp_flowspec_M1_transparency;
+static int hf_rsvp_integrity_flags_handshake;
+static int hf_rsvp_sa_flags_local;
+static int hf_rsvp_sa_flags_label;
+static int hf_rsvp_sa_flags_se_style;
+static int hf_rsvp_sa_flags_bandwidth;
+static int hf_rsvp_sa_flags_node;
+static int hf_rsvp_rro_flags_local_avail;
+static int hf_rsvp_rro_flags_local_in_use;
+static int hf_rsvp_rro_flags_bandwidth;
+static int hf_rsvp_rro_flags_node;
+static int hf_rsvp_rro_flags_node_address;
+static int hf_rsvp_rro_flags_backup_tunnel_bandwidth;
+static int hf_rsvp_rro_flags_backup_tunnel_hop;
+static int hf_rsvp_rro_flags_global_label;
+static int hf_rsvp_lsp_attr;
+static int hf_rsvp_lsp_attr_e2e;
+static int hf_rsvp_lsp_attr_boundary;
+static int hf_rsvp_lsp_attr_segment;
+static int hf_rsvp_lsp_attr_integrity;
+static int hf_rsvp_lsp_attr_contiguous;
+static int hf_rsvp_lsp_attr_stitching;
+static int hf_rsvp_lsp_attr_preplanned;
+static int hf_rsvp_lsp_attr_nophp;
+static int hf_rsvp_lsp_attr_oobmap;
+static int hf_rsvp_lsp_attr_entropy;
+static int hf_rsvp_lsp_attr_oammep;
+static int hf_rsvp_lsp_attr_oammip;
+static int hf_rsvp_lsp_attr_loopback;
+static int hf_rsvp_lsp_attr_p2mp;
+static int hf_rsvp_lsp_attr_rtm;
+static int hf_rsvp_lsp_attr_lsi;
+static int hf_rsvp_lsp_attr_lsids2e;
+static int hf_rsvp_lsp_attr_telinklabel;
+static int hf_rsvp_lsp_attr_srlgcollect;
+static int hf_rsvp_gen_uni_direction;
+static int hf_rsvp_protection_info_flags_secondary_lsp;
+static int hf_rsvp_pi_link_flags_extra_traffic;
+static int hf_rsvp_pi_link_flags_unprotected;
+static int hf_rsvp_pi_link_flags_shared;
+static int hf_rsvp_pi_link_flags_dedicated1_1;
+static int hf_rsvp_pi_link_flags_dedicated1plus1;
+static int hf_rsvp_pi_link_flags_enhanced;
+static int hf_rsvp_pi_link_flags_extra;
+static int hf_rsvp_pi_link_flags_dedicated_1_1;
+static int hf_rsvp_pi_link_flags_dedicated_1plus1;
+static int hf_rsvp_rfc4872_secondary;
+static int hf_rsvp_rfc4872_protecting;
+static int hf_rsvp_rfc4872_notification_msg;
+static int hf_rsvp_rfc4872_operational;
+static int hf_rsvp_pi_lsp_flags_full_rerouting;
+static int hf_rsvp_pi_lsp_flags_rerouting_extra;
+static int hf_rsvp_pi_lsp_flags_1_n_protection;
+static int hf_rsvp_pi_lsp_flags_1plus1_unidirectional;
+static int hf_rsvp_pi_lsp_flags_1plus1_bidirectional;
+static int hf_rsvp_protection_info_in_place;
+static int hf_rsvp_protection_info_required;
+static int hf_rsvp_pi_seg_flags_full_rerouting;
+static int hf_rsvp_pi_seg_flags_rerouting_extra;
+static int hf_rsvp_pi_seg_flags_1_n_protection;
+static int hf_rsvp_pi_seg_flags_1plus1_unidirectional;
+static int hf_rsvp_pi_seg_flags_1plus1_bidirectional;
+static int hf_rsvp_frr_flags_one2one_backup;
+static int hf_rsvp_frr_flags_facility_backup;
+static int hf_rsvp_type;
+static int hf_rsvp_3gpp_obj_tid;
+static int hf_rsvp_3gpp_obj_ie_len;
+static int hf_rsvp_3gpp_obj_ie_type;
+static int hf_rsvp_3gpp_obj_ue_ipv4_addr;
+static int hf_rsvp_3gpp_obj_ue_ipv6_addr;
+static int hf_rsvp_3gpp_obj_tft_d;
+static int hf_rsvp_3gpp_obj_tft_ns;
+static int hf_rsvp_3gpp_obj_tft_sr_id;
+static int hf_rsvp_3gpp_obj_tft_p;
+static int hf_rsvp_3gpp_obj_tft_opcode;
+static int hf_rsvp_3gpp_obj_tft_n_pkt_flt;
+static int hf_rsvp_3gpp_obj_flow_id;
+static int hf_rsvp_3gpp_obj_pf_ev_prec;
+static int hf_rsvp_3gpp_obj_pf_len;
+static int hf_rsvp_3gpp_obj_pf_type;
+static int hf_rsvp_3gpp_obj_pf_cont_len;
+static int hf_rsvp_3gpp_obj_pf_comp_type_id;
+static int hf_rsvp_3gpp_obj_pf_src_ipv4;
+static int hf_rsvp_3gpp_obj_pf_dst_ipv4;
+static int hf_rsvp_3gpp_obj_pf_ipv4_mask;
+static int hf_rsvp_3gpp_obj_pf_src_ipv6;
+static int hf_rsvp_3gpp_obj_pf_dst_ipv6;
+static int hf_rsvp_3gpp_obj_pf_ipv6_prefix_length;
+static int hf_rsvp_3gpp_obj_pf_prot_next;
+static int hf_rsvp_3gpp_obj_pf_dst_port;
+static int hf_rsvp_3gpp_obj_pf_src_port;
+static int hf_rsvp_3gpp_obj_pf_ipsec_spi;
+static int hf_rsvp_3gpp_obj_pf_tos_tc;
+static int hf_rsvp_3gpp_obj_pf_flow_lbl;
+static int hf_rsvp_3gpp_obj_pf_ipv6;
+static int hf_rsvp_3gpp_obj_pf_treatment;
+static int hf_rsvp_3gpp_obj_pf_hint;
+static int hf_rsvp_3gpp_obj_tft_qos_list_len;
+static int hf_rsvp_3gpp_r_qos_blob_len;
+static int hf_rsvp_3gpp_r_qos_blob_flow_pri;
+static int hf_rsvp_3gpp_r_qos_blob_num_qos_att_set;
+static int hf_rsvp_3gpp_qos_att_set_len;
+static int hf_rsvp_3gpp_qos_attribute_set_id;
+static int hf_rsvp_3gpp_qos_attribute_verbose;
+static int hf_rsvp_3gpp_qos_attribute_prof_id;
+static int hf_rsvp_3gpp_qos_attribute_traff_cls;
+static int hf_rsvp_3gpp_qos_attribute_peak_rate;
+static int hf_rsvp_3gpp_qos_attribute_bucket_size;
+static int hf_rsvp_3gpp_qos_attribute_token_rate;
+static int hf_rsvp_3gpp_qos_attribute_max_latency;
+static int hf_rsvp_3gpp_qos_attribute_max_loss_rte;
+static int hf_rsvp_3gpp_qos_attribute_delay_var_sensitive;
+static int hf_rsvp_3gpp_qos_attribute_reserved;
+static int hf_rsvp_3gpp_r_qos_blob;
+static int hf_rsvp_3gpp_qos_result;
+static int hf_rsvp_xro_sobj_lbit;
+static int hf_rsvp_rro_sobj_dbit;
+static int hf_rsvp_xro_sobj_len;
+static int hf_rsvp_xro_sobj_ipv4_addr;
+static int hf_rsvp_xro_sobj_ipv4_prefix;
+static int hf_rsvp_xro_sobj_ipv4_attr;
+static int hf_rsvp_xro_sobj_ipv6_attr;
+static int hf_rsvp_xro_sobj_srlg_id;
+static int hf_rsvp_xro_sobj_srlg_res;
+static int hf_rsvp_private_data;
+static int hf_rsvp_juniper_numtlvs;
+static int hf_rsvp_juniper_padlength;
+static int hf_rsvp_juniper_type;
+static int hf_rsvp_juniper_length;
+static int hf_rsvp_juniper_attrib_cos;
+static int hf_rsvp_juniper_attrib_metric1;
+static int hf_rsvp_juniper_attrib_metric2;
+static int hf_rsvp_juniper_attrib_ccc_status;
+static int hf_rsvp_juniper_attrib_path;
+static int hf_rsvp_juniper_attrib_unknown;
+static int hf_rsvp_juniper_unknown;
+static int hf_rsvp_juniper_pad;
+static int hf_rsvp_unknown_data;
+static int hf_rsvp_ctype;
+static int hf_rsvp_ctype_session;
+static int hf_rsvp_ctype_scope;
+static int hf_rsvp_ctype_label_request;
+static int hf_rsvp_ctype_integrity;
+static int hf_rsvp_ctype_adspec;
+static int hf_rsvp_ctype_tspec;
+static int hf_rsvp_ctype_call_id;
+static int hf_rsvp_ctype_template;
+static int hf_rsvp_ctype_style;
+static int hf_rsvp_ctype_policy;
+static int hf_rsvp_ctype_error;
+static int hf_rsvp_ctype_attribute;
+static int hf_rsvp_ctype_explicit_route;
+static int hf_rsvp_ctype_secondary_explicit_route;
+static int hf_rsvp_ctype_flowspec;
+static int hf_rsvp_ctype_hop;
+static int hf_rsvp_ctype_confirm;
+static int hf_rsvp_ctype_time_values;
+static int hf_rsvp_ctype_record_route;
+static int hf_rsvp_ctype_secondary_record_route;
+static int hf_rsvp_ctype_exclude_route;
+static int hf_rsvp_ctype_message_id;
+static int hf_rsvp_ctype_message_id_ack;
+static int hf_rsvp_ctype_message_id_list;
+static int hf_rsvp_ctype_hello;
+static int hf_rsvp_ctype_dclass;
+static int hf_rsvp_ctype_admin_status;
+static int hf_rsvp_ctype_lsp_attributes;
+static int hf_rsvp_ctype_label_set;
+static int hf_rsvp_ctype_association;
+static int hf_rsvp_ctype_tunnel_if_id;
+static int hf_rsvp_ctype_3gpp_object;
+static int hf_rsvp_ctype_restart_cap;
+static int hf_rsvp_ctype_link_cap;
+static int hf_rsvp_ctype_capability;
+static int hf_rsvp_ctype_protection_info;
+static int hf_rsvp_ctype_fast_reroute;
+static int hf_rsvp_ctype_detour;
+static int hf_rsvp_ctype_diffserv;
+static int hf_rsvp_ctype_diffserv_aware_te;
+static int hf_rsvp_ctype_vendor;
+static int hf_rsvp_ctype_juniper;
+static int hf_rsvp_ctype_unknown;
+static int hf_rsvp_ctype_label;
+static int hf_rsvp_ctype_notify_request;
+static int hf_rsvp_ctype_generalized_uni;
+static int hf_rsvp_parameter;
+static int hf_rsvp_parameter_flags;
+static int hf_rsvp_parameter_length;
+static int hf_rsvp_error_value;
+static int hf_rsvp_class;
+static int hf_rsvp_class_length;
+static int hf_rsvp_reserved;
+static int hf_rsvp_switching_granularity;
+static int hf_rsvp_callid_srcaddr_ether;
+static int hf_rsvp_callid_srcaddr_bytes;
+static int hf_rsvp_loose_hop;
+static int hf_rsvp_data_length;
 
-static int hf_rsvp_ctype_s2l_sub_lsp = -1;
-static int hf_rsvp_s2l_sub_lsp_destination_ipv4_address = -1;
-static int hf_rsvp_s2l_sub_lsp_destination_ipv6_address = -1;
-static int hf_rsvp_s2l_sub_lsp_data = -1;
+static int hf_rsvp_ctype_s2l_sub_lsp;
+static int hf_rsvp_s2l_sub_lsp_destination_ipv4_address;
+static int hf_rsvp_s2l_sub_lsp_destination_ipv6_address;
+static int hf_rsvp_s2l_sub_lsp_data;
 
 /* Generated from convert_proto_tree_add_text.pl */
-static int hf_rsvp_message_id_data = -1;
-static int hf_rsvp_ero_rro_subobjects_length = -1;
-static int hf_rsvp_fast_reroute_hop_limit = -1;
-static int hf_rsvp_lsp_tunnel_if_id_router_id = -1;
-static int hf_rsvp_ero_rro_subobjects_path_key = -1;
-static int hf_rsvp_ifid_tlv_area = -1;
-static int hf_rsvp_session_attribute_include_any = -1;
-static int hf_rsvp_lsp_tunnel_if_id_sc_pc_scn_address = -1;
-static int hf_rsvp_ero_rro_subobjects_ipv6_hop = -1;
-static int hf_rsvp_lsp_tunnel_if_id_ipv6_interface_address = -1;
-static int hf_rsvp_lsp_tunnel_if_id_component_link_identifier_ipv4 = -1;
-static int hf_rsvp_ifid_tlvinterface_id = -1;
-static int hf_rsvp_eth_tspec_cir = -1;
-static int hf_rsvp_confirm_receiver_address_ipv6 = -1;
-static int hf_rsvp_error_error_node_ipv6 = -1;
-static int hf_rsvp_time_values_data = -1;
-static int hf_rsvp_flowspec_rate = -1;
-static int hf_rsvp_session_attribute_hold_priority = -1;
-static int hf_rsvp_notify_request_notify_node_address_ipv4 = -1;
-static int hf_rsvp_lsp_tunnel_if_id_action = -1;
-static int hf_rsvp_scope_data = -1;
-static int hf_rsvp_label_request_l3pid = -1;
-static int hf_rsvp_eth_tspec_index = -1;
-static int hf_rsvp_integrity_sequence_number = -1;
-static int hf_rsvp_adspec_message_format_version = -1;
-static int hf_rsvp_fast_reroute_setup_priority = -1;
-static int hf_rsvp_eth_tspec_reserved = -1;
-static int hf_rsvp_eth_tspec_el2cp = -1;
-static int hf_rsvp_eth_tspec_il2cp = -1;
-static int hf_rsvp_fast_reroute_include_all = -1;
-static int hf_rsvp_association_routing_area_id = -1;
-static int hf_rsvp_label_label = -1;
-static int hf_rsvp_session_attribute_include_all = -1;
-static int hf_rsvp_flowspec_token_bucket_rate = -1;
-static int hf_rsvp_call_id_address_type = -1;
-static int hf_rsvp_session_attribute_name_length = -1;
-static int hf_rsvp_detour_data = -1;
-static int hf_rsvp_association_node_id = -1;
-static int hf_rsvp_ifid_tlv_length = -1;
-static int hf_rsvp_flags = -1;
-static int hf_rsvp_tspec_message_format_version = -1;
-static int hf_rsvp_ifid_tlv_ipv4_address = -1;
-static int hf_rsvp_hop_data = -1;
-static int hf_rsvp_ifid_tlv_data = -1;
-static int hf_rsvp_length = -1;
-static int hf_rsvp_ero_rro_subobjects_pce_id_ipv6 = -1;
-static int hf_rsvp_association_data = -1;
-static int hf_rsvp_tspec_number_of_multiplexed_components = -1;
-static int hf_rsvp_session_attribute_setup_priority = -1;
-static int hf_rsvp_message_id_flags = -1;
-static int hf_rsvp_hop_logical_interface = -1;
-static int hf_rsvp_compression_factor = -1;
-static int hf_rsvp_ero_rro_subobjects_private_data = -1;
-static int hf_rsvp_lsp_attributes_tlv_data = -1;
-static int hf_rsvp_flowspec_token_bucket_size = -1;
-static int hf_rsvp_call_id_data = -1;
-static int hf_rsvp_template_filter_source_address_ipv6 = -1;
-static int hf_rsvp_message_id_ack_flags = -1;
-static int hf_rsvp_flowspec_multiplier = -1;
-static int hf_rsvp_tspec_token_bucket_size = -1;
-static int hf_rsvp_admin_status_bits = -1;
-static int hf_rsvp_admin_status_data = -1;
-static int hf_rsvp_tspec_peak_data_rate = -1;
-static int hf_rsvp_flowspec_number_of_virtual_components = -1;
-static int hf_rsvp_hop_neighbor_address_ipv6 = -1;
-static int hf_rsvp_flowspec_signal_type_sonet = -1;
-static int hf_rsvp_ifid_tlv_autonomous_system = -1;
-static int hf_rsvp_scope_ipv6_address = -1;
-static int hf_rsvp_flowspec_service_header = -1;
-static int hf_rsvp_tspec_hint = -1;
-static int hf_rsvp_label_set_action = -1;
-static int hf_rsvp_error_data = -1;
-static int hf_rsvp_style_flags = -1;
-static int hf_rsvp_g_pid = -1;
-static int hf_rsvp_integrity_key_identifier = -1;
-static int hf_rsvp_adspec_service_header = -1;
-static int hf_rsvp_ifid_tlv_error_string = -1;
-static int hf_rsvp_session_destination_address = -1;
-static int hf_rsvp_ifid_tlv_node_id = -1;
-static int hf_rsvp_lsp_tunnel_if_id_component_link_identifier = -1;
-static int hf_rsvp_call_id_international_segment = -1;
-static int hf_rsvp_fast_reroute_include_any = -1;
-static int hf_rsvp_label_request_min_vci = -1;
-static int hf_rsvp_tspec_profile = -1;
-static int hf_rsvp_eth_tspec_length = -1;
-static int hf_rsvp_exclude_route_data = -1;
-static int hf_rsvp_record_route_data = -1;
-static int hf_rsvp_secondary_record_route_data = -1;
-static int hf_rsvp_confirm_receiver_address_ipv4 = -1;
-static int hf_rsvp_message_id_list_message_id = -1;
-static int hf_rsvp_template_filter_ipv4_tunnel_sender_address = -1;
-static int hf_rsvp_template_filter_ipv6_tunnel_sender_address = -1;
-static int hf_rsvp_template_filter_sub_group_originator_id = -1;
-static int hf_rsvp_template_filter_sub_group_id = -1;
-static int hf_rsvp_template_filter_data = -1;
-static int hf_rsvp_notify_request_notify_node_address_ipv6 = -1;
-static int hf_rsvp_message_id_ack_data = -1;
-static int hf_rsvp_eth_tspec_profile = -1;
-static int hf_rsvp_label_request_max_vpi = -1;
-static int hf_rsvp_ero_rro_subobjects_private_length = -1;
-static int hf_rsvp_fast_reroute_exclude_any = -1;
-static int hf_rsvp_lsp_tunnel_if_id_data = -1;
-static int hf_rsvp_hello_destination_instance = -1;
-static int hf_rsvp_tspec_signal_type_g709 = -1;
-static int hf_rsvp_call_id_reserved = -1;
-static int hf_rsvp_version = -1;
-static int hf_rsvp_association_source_ipv6 = -1;
-static int hf_rsvp_ero_rro_subobjects_flags = -1;
-static int hf_rsvp_lsp_tunnel_if_id_lsp_encoding_type = -1;
-static int hf_rsvp_association_type = -1;
-static int hf_rsvp_tspec_data = -1;
-static int hf_rsvp_session_destination_port = -1;
-static int hf_rsvp_association_id = -1;
-static int hf_rsvp_integrity_hash = -1;
-static int hf_rsvp_flowspec_number_of_contiguous_components = -1;
-static int hf_rsvp_policy_data = -1;
-static int hf_rsvp_tspec_token_bucket_rate = -1;
-static int hf_rsvp_tspec_multiplier = -1;
-static int hf_rsvp_dclass_dscp = -1;
-static int hf_rsvp_tspec_number_of_contiguous_components = -1;
-static int hf_rsvp_session_p2mp_id = -1;
-static int hf_rsvp_session_data = -1;
-static int hf_rsvp_lsp_tunnel_if_id_target_igp_instance = -1;
-static int hf_rsvp_flowspec_profile = -1;
-static int hf_rsvp_message_id_ack_epoch = -1;
-static int hf_rsvp_hello_source_instance = -1;
-static int hf_rsvp_scope_ipv4_address = -1;
-static int hf_rsvp_label_request_lsp_encoding_type = -1;
-static int hf_rsvp_fast_reroute_hold_priority = -1;
-static int hf_rsvp_label_request_max_vci = -1;
-static int hf_rsvp_fast_reroute_flags = -1;
-static int hf_rsvp_flowspec_peak_data_rate = -1;
-static int hf_rsvp_ero_rro_subobjects_label = -1;
-static int hf_rsvp_notify_request_data = -1;
-static int hf_rsvp_lsp_tunnel_if_id_connection_id = -1;
-static int hf_rsvp_eth_tspec_ebs = -1;
-static int hf_rsvp_fast_reroute_data = -1;
-static int hf_rsvp_label_request_min_vpi = -1;
-static int hf_rsvp_session_attribute_data = -1;
-static int hf_rsvp_protection_info_data = -1;
-static int hf_rsvp_tspec_transparency = -1;
-static int hf_rsvp_ifid_tlv_label = -1;
-static int hf_rsvp_session_extended_ipv4_address = -1;
-static int hf_rsvp_diffserv_aware_te_data = -1;
-static int hf_rsvp_lsp_tunnel_if_id_signal_type = -1;
-static int hf_rsvp_ero_rro_subobjects_pce_id_ipv4 = -1;
-static int hf_rsvp_error_error_node_ipv4 = -1;
-static int hf_rsvp_session_protocol = -1;
-static int hf_rsvp_tspec_signal_type_sonet = -1;
-static int hf_rsvp_session_attribute_flags = -1;
-static int hf_rsvp_ero_rro_subobjects_router_id = -1;
-static int hf_rsvp_message_id_list_data = -1;
-static int hf_rsvp_style_style = -1;
-static int hf_rsvp_tspec_number_of_virtual_components = -1;
-static int hf_rsvp_tspec_mtu = -1;
-static int hf_rsvp_lsp_tunnel_if_id_length = -1;
-static int hf_rsvp_ifid_tlv_ipv6_address = -1;
-static int hf_rsvp_diffserv_data = -1;
-static int hf_rsvp_session_flags = -1;
-static int hf_rsvp_flowspec_transparency = -1;
-static int hf_rsvp_dclass_data = -1;
-static int hf_rsvp_lsp_tunnel_if_id_interface_id = -1;
-static int hf_rsvp_lsp_tunnel_if_id_sc_pc_id = -1;
-static int hf_rsvp_error_error_code = -1;
-static int hf_rsvp_lsp_tunnel_if_id_ipv4_interface_address = -1;
-static int hf_rsvp_session_attribute_exclude_any = -1;
-static int hf_rsvp_sending_ttl = -1;
-static int hf_rsvp_integrity_flags = -1;
-static int hf_rsvp_message_id_ack_message_id = -1;
-static int hf_rsvp_message_id_message_id = -1;
-static int hf_rsvp_ero_rro_subobjects_interface_id = -1;
-static int hf_rsvp_message_length = -1;
-static int hf_rsvp_message_id_epoch = -1;
-static int hf_rsvp_flowspec_signal_type_g709 = -1;
-static int hf_rsvp_label_request_data = -1;
-static int hf_rsvp_restart_cap_data = -1;
-static int hf_rsvp_lsp_attributes_tlv = -1;
-static int hf_rsvp_flowspec_mtu = -1;
-static int hf_rsvp_flowspec_m = -1;
-static int hf_rsvp_tspec_service_header = -1;
-static int hf_rsvp_eth_tspec_cbs = -1;
-static int hf_rsvp_call_id_national_segment = -1;
-static int hf_rsvp_template_filter_source_port = -1;
-static int hf_rsvp_eth_tspec_eir = -1;
-static int hf_rsvp_ero_rro_subobjects_ipv4_hop = -1;
-static int hf_rsvp_lsp_tunnel_if_id_switching_type = -1;
-static int hf_rsvp_flowspec_number_of_multiplexed_components = -1;
-static int hf_rsvp_label_request_switching_type = -1;
-static int hf_rsvp_ero_rro_subobjects_prefix_length = -1;
-static int hf_rsvp_explicit_route_data = -1;
-static int hf_rsvp_secondary_explicit_route_data = -1;
-static int hf_rsvp_association_source_ipv4 = -1;
-static int hf_rsvp_call_id_local_identifier = -1;
-static int hf_rsvp_flowspec_message_format_version = -1;
-static int hf_rsvp_tspec_requested_concatenation = -1;
-static int hf_rsvp_association_padding = -1;
-static int hf_rsvp_hop_neighbor_address_ipv4 = -1;
-static int hf_rsvp_flowspec_requested_concatenation = -1;
-static int hf_rsvp_fast_reroute_bandwidth = -1;
-static int hf_rsvp_message_id_list_epoch = -1;
-static int hf_rsvp_style_data = -1;
-static int hf_rsvp_session_dscp = -1;
-static int hf_rsvp_confirm_data = -1;
-static int hf_rsvp_protection_info_link_flags = -1;
-static int hf_rsvp_message_id_list_flags = -1;
-static int hf_rsvp_label_data = -1;
-static int hf_rsvp_flowspec_slack_term = -1;
-static int hf_rsvp_label_generalized_label = -1;
-static int hf_rsvp_label_generalized_label_evpl_vlad_id = -1;
-static int hf_rsvp_session_attribute_name = -1;
-static int hf_rsvp_ifid_tlv_padding = -1;
-static int hf_rsvp_max_dlci = -1;
-static int hf_rsvp_minimum_policed_unit = -1;
-static int hf_rsvp_dlci_length = -1;
-static int hf_rsvp_label_request_m = -1;
-static int hf_rsvp_detour_avoid_node_id = -1;
-static int hf_rsvp_restart_cap_restart_time = -1;
-static int hf_rsvp_nsap_length = -1;
-static int hf_rsvp_message_checksum = -1;
-static int hf_rsvp_ero_rro_autonomous_system = -1;
-static int hf_rsvp_gen_uni_service_level = -1;
-static int hf_rsvp_hf_rsvp_adspec_break_bit = -1;
-static int hf_rsvp_extended_tunnel_id = -1;
-static int hf_rsvp_extended_tunnel_ipv6 = -1;
-static int hf_rsvp_maximum_packet_size = -1;
-static int hf_rsvp_min_dlci = -1;
-static int hf_rsvp_gen_uni_data = -1;
-static int hf_rsvp_gen_uni_logical_port_id = -1;
-static int hf_rsvp_refresh_interval = -1;
-static int hf_rsvp_detour_plr_id = -1;
-static int hf_rsvp_restart_cap_recovery_time = -1;
-static int hf_rsvp_extended_tunnel = -1;
-static int hf_rsvp_call_attributes_endpont_id = -1;
-static int hf_rsvp_isis_area_id = -1;
-static int hf_rsvp_adspec_type = -1;
-static int hf_rsvp_adspec_len = -1;
-static int hf_rsvp_adspec_uint = -1;
-static int hf_rsvp_adspec_float = -1;
-static int hf_rsvp_adspec_bytes = -1;
-static int hf_rsvp_wavelength_grid = -1;
-static int hf_rsvp_wavelength_cs1 = -1;
-static int hf_rsvp_wavelength_cs2 = -1;
-static int hf_rsvp_wavelength_cs3 = -1;
-static int hf_rsvp_wavelength_channel_spacing = -1;
-static int hf_rsvp_wavelength_n = -1;
-static int hf_rsvp_wavelength_m = -1;
-static int hf_rsvp_wavelength_freq = -1;
-static int hf_rsvp_wavelength_wavelength = -1;
-static int hf_rsvp_sonet_s = -1;
-static int hf_rsvp_sonet_u = -1;
-static int hf_rsvp_sonet_k = -1;
-static int hf_rsvp_sonet_l = -1;
-static int hf_rsvp_sonet_m = -1;
-static int hf_rsvp_g709_t3 = -1;
-static int hf_rsvp_g709_t2 = -1;
-static int hf_rsvp_g709_t1 = -1;
-static int hf_rsvp_label_set_type = -1;
-static int hf_rsvp_label_set_subchannel = -1;
-static int hf_rsvp_nsap_address = -1;
-static int hf_rsvp_class_diversity = -1;
-static int hf_rsvp_egress_label_type = -1;
-static int hf_rsvp_egress_label = -1;
-static int hf_rsvp_source_transport_network_addr = -1;
-static int hf_rsvp_ie_data = -1;
-static int hf_rsvp_3gpp_obj_pf_dst_port_range = -1;
-static int hf_rsvp_3gpp_obj_pf_src_port_range = -1;
+static int hf_rsvp_message_id_data;
+static int hf_rsvp_ero_rro_subobjects_length;
+static int hf_rsvp_fast_reroute_hop_limit;
+static int hf_rsvp_lsp_tunnel_if_id_router_id;
+static int hf_rsvp_ero_rro_subobjects_path_key;
+static int hf_rsvp_ifid_tlv_area;
+static int hf_rsvp_session_attribute_include_any;
+static int hf_rsvp_lsp_tunnel_if_id_sc_pc_scn_address;
+static int hf_rsvp_ero_rro_subobjects_ipv6_hop;
+static int hf_rsvp_lsp_tunnel_if_id_ipv6_interface_address;
+static int hf_rsvp_lsp_tunnel_if_id_component_link_identifier_ipv4;
+static int hf_rsvp_ifid_tlvinterface_id;
+static int hf_rsvp_eth_tspec_cir;
+static int hf_rsvp_confirm_receiver_address_ipv6;
+static int hf_rsvp_error_error_node_ipv6;
+static int hf_rsvp_time_values_data;
+static int hf_rsvp_flowspec_rate;
+static int hf_rsvp_session_attribute_hold_priority;
+static int hf_rsvp_notify_request_notify_node_address_ipv4;
+static int hf_rsvp_lsp_tunnel_if_id_action;
+static int hf_rsvp_scope_data;
+static int hf_rsvp_label_request_l3pid;
+static int hf_rsvp_eth_tspec_index;
+static int hf_rsvp_integrity_sequence_number;
+static int hf_rsvp_adspec_message_format_version;
+static int hf_rsvp_fast_reroute_setup_priority;
+static int hf_rsvp_eth_tspec_reserved;
+static int hf_rsvp_eth_tspec_el2cp;
+static int hf_rsvp_eth_tspec_il2cp;
+static int hf_rsvp_fast_reroute_include_all;
+static int hf_rsvp_association_routing_area_id;
+static int hf_rsvp_label_label;
+static int hf_rsvp_session_attribute_include_all;
+static int hf_rsvp_flowspec_token_bucket_rate;
+static int hf_rsvp_call_id_address_type;
+static int hf_rsvp_session_attribute_name_length;
+static int hf_rsvp_detour_data;
+static int hf_rsvp_association_node_id;
+static int hf_rsvp_ifid_tlv_length;
+static int hf_rsvp_flags;
+static int hf_rsvp_tspec_message_format_version;
+static int hf_rsvp_ifid_tlv_ipv4_address;
+static int hf_rsvp_hop_data;
+static int hf_rsvp_ifid_tlv_data;
+static int hf_rsvp_length;
+static int hf_rsvp_ero_rro_subobjects_pce_id_ipv6;
+static int hf_rsvp_association_data;
+static int hf_rsvp_tspec_number_of_multiplexed_components;
+static int hf_rsvp_session_attribute_setup_priority;
+static int hf_rsvp_message_id_flags;
+static int hf_rsvp_hop_logical_interface;
+static int hf_rsvp_compression_factor;
+static int hf_rsvp_ero_rro_subobjects_private_data;
+static int hf_rsvp_lsp_attributes_tlv_data;
+static int hf_rsvp_flowspec_token_bucket_size;
+static int hf_rsvp_call_id_data;
+static int hf_rsvp_template_filter_source_address_ipv6;
+static int hf_rsvp_message_id_ack_flags;
+static int hf_rsvp_flowspec_multiplier;
+static int hf_rsvp_tspec_token_bucket_size;
+static int hf_rsvp_admin_status_bits;
+static int hf_rsvp_admin_status_data;
+static int hf_rsvp_tspec_peak_data_rate;
+static int hf_rsvp_flowspec_number_of_virtual_components;
+static int hf_rsvp_hop_neighbor_address_ipv6;
+static int hf_rsvp_flowspec_signal_type_sonet;
+static int hf_rsvp_ifid_tlv_autonomous_system;
+static int hf_rsvp_scope_ipv6_address;
+static int hf_rsvp_flowspec_service_header;
+static int hf_rsvp_tspec_hint;
+static int hf_rsvp_label_set_action;
+static int hf_rsvp_error_data;
+static int hf_rsvp_style_flags;
+static int hf_rsvp_g_pid;
+static int hf_rsvp_integrity_key_identifier;
+static int hf_rsvp_adspec_service_header;
+static int hf_rsvp_ifid_tlv_error_string;
+static int hf_rsvp_session_destination_address;
+static int hf_rsvp_ifid_tlv_node_id;
+static int hf_rsvp_lsp_tunnel_if_id_component_link_identifier;
+static int hf_rsvp_call_id_international_segment;
+static int hf_rsvp_fast_reroute_include_any;
+static int hf_rsvp_label_request_min_vci;
+static int hf_rsvp_tspec_profile;
+static int hf_rsvp_eth_tspec_length;
+static int hf_rsvp_exclude_route_data;
+static int hf_rsvp_record_route_data;
+static int hf_rsvp_secondary_record_route_data;
+static int hf_rsvp_confirm_receiver_address_ipv4;
+static int hf_rsvp_message_id_list_message_id;
+static int hf_rsvp_template_filter_ipv4_tunnel_sender_address;
+static int hf_rsvp_template_filter_ipv6_tunnel_sender_address;
+static int hf_rsvp_template_filter_sub_group_originator_id;
+static int hf_rsvp_template_filter_sub_group_id;
+static int hf_rsvp_template_filter_data;
+static int hf_rsvp_notify_request_notify_node_address_ipv6;
+static int hf_rsvp_message_id_ack_data;
+static int hf_rsvp_eth_tspec_profile;
+static int hf_rsvp_label_request_max_vpi;
+static int hf_rsvp_ero_rro_subobjects_private_length;
+static int hf_rsvp_fast_reroute_exclude_any;
+static int hf_rsvp_lsp_tunnel_if_id_data;
+static int hf_rsvp_hello_destination_instance;
+static int hf_rsvp_tspec_signal_type_g709;
+static int hf_rsvp_call_id_reserved;
+static int hf_rsvp_version;
+static int hf_rsvp_association_source_ipv6;
+static int hf_rsvp_ero_rro_subobjects_flags;
+static int hf_rsvp_lsp_tunnel_if_id_lsp_encoding_type;
+static int hf_rsvp_association_type;
+static int hf_rsvp_tspec_data;
+static int hf_rsvp_session_destination_port;
+static int hf_rsvp_association_id;
+static int hf_rsvp_integrity_hash;
+static int hf_rsvp_flowspec_number_of_contiguous_components;
+static int hf_rsvp_policy_data;
+static int hf_rsvp_tspec_token_bucket_rate;
+static int hf_rsvp_tspec_multiplier;
+static int hf_rsvp_dclass_dscp;
+static int hf_rsvp_tspec_number_of_contiguous_components;
+static int hf_rsvp_session_p2mp_id;
+static int hf_rsvp_session_data;
+static int hf_rsvp_lsp_tunnel_if_id_target_igp_instance;
+static int hf_rsvp_flowspec_profile;
+static int hf_rsvp_message_id_ack_epoch;
+static int hf_rsvp_hello_source_instance;
+static int hf_rsvp_scope_ipv4_address;
+static int hf_rsvp_label_request_lsp_encoding_type;
+static int hf_rsvp_fast_reroute_hold_priority;
+static int hf_rsvp_label_request_max_vci;
+static int hf_rsvp_fast_reroute_flags;
+static int hf_rsvp_flowspec_peak_data_rate;
+static int hf_rsvp_ero_rro_subobjects_label;
+static int hf_rsvp_notify_request_data;
+static int hf_rsvp_lsp_tunnel_if_id_connection_id;
+static int hf_rsvp_eth_tspec_ebs;
+static int hf_rsvp_fast_reroute_data;
+static int hf_rsvp_label_request_min_vpi;
+static int hf_rsvp_session_attribute_data;
+static int hf_rsvp_protection_info_data;
+static int hf_rsvp_tspec_transparency;
+static int hf_rsvp_ifid_tlv_label;
+static int hf_rsvp_session_extended_ipv4_address;
+static int hf_rsvp_diffserv_aware_te_data;
+static int hf_rsvp_lsp_tunnel_if_id_signal_type;
+static int hf_rsvp_ero_rro_subobjects_pce_id_ipv4;
+static int hf_rsvp_error_error_node_ipv4;
+static int hf_rsvp_session_protocol;
+static int hf_rsvp_tspec_signal_type_sonet;
+static int hf_rsvp_session_attribute_flags;
+static int hf_rsvp_ero_rro_subobjects_router_id;
+static int hf_rsvp_message_id_list_data;
+static int hf_rsvp_style_style;
+static int hf_rsvp_tspec_number_of_virtual_components;
+static int hf_rsvp_tspec_mtu;
+static int hf_rsvp_lsp_tunnel_if_id_length;
+static int hf_rsvp_ifid_tlv_ipv6_address;
+static int hf_rsvp_diffserv_data;
+static int hf_rsvp_session_flags;
+static int hf_rsvp_flowspec_transparency;
+static int hf_rsvp_dclass_data;
+static int hf_rsvp_lsp_tunnel_if_id_interface_id;
+static int hf_rsvp_lsp_tunnel_if_id_sc_pc_id;
+static int hf_rsvp_error_error_code;
+static int hf_rsvp_lsp_tunnel_if_id_ipv4_interface_address;
+static int hf_rsvp_session_attribute_exclude_any;
+static int hf_rsvp_sending_ttl;
+static int hf_rsvp_integrity_flags;
+static int hf_rsvp_message_id_ack_message_id;
+static int hf_rsvp_message_id_message_id;
+static int hf_rsvp_ero_rro_subobjects_interface_id;
+static int hf_rsvp_message_length;
+static int hf_rsvp_message_id_epoch;
+static int hf_rsvp_flowspec_signal_type_g709;
+static int hf_rsvp_label_request_data;
+static int hf_rsvp_restart_cap_data;
+static int hf_rsvp_link_cap_data;
+static int hf_rsvp_capability_flags;
+static int hf_rsvp_capability_flags_reserved;
+static int hf_rsvp_capability_flags_i;
+static int hf_rsvp_capability_flags_f;
+static int hf_rsvp_capability_flags_t;
+static int hf_rsvp_capability_flags_r;
+static int hf_rsvp_capability_flags_s;
+static int hf_rsvp_capability_data;
+static int hf_rsvp_lsp_attributes_tlv;
+static int hf_rsvp_flowspec_mtu;
+static int hf_rsvp_flowspec_m;
+static int hf_rsvp_tspec_service_header;
+static int hf_rsvp_eth_tspec_cbs;
+static int hf_rsvp_call_id_national_segment;
+static int hf_rsvp_template_filter_source_port;
+static int hf_rsvp_eth_tspec_eir;
+static int hf_rsvp_ero_rro_subobjects_ipv4_hop;
+static int hf_rsvp_lsp_tunnel_if_id_switching_type;
+static int hf_rsvp_flowspec_number_of_multiplexed_components;
+static int hf_rsvp_label_request_switching_type;
+static int hf_rsvp_ero_rro_subobjects_prefix_length;
+static int hf_rsvp_explicit_route_data;
+static int hf_rsvp_secondary_explicit_route_data;
+static int hf_rsvp_association_source_ipv4;
+static int hf_rsvp_call_id_local_identifier;
+static int hf_rsvp_flowspec_message_format_version;
+static int hf_rsvp_tspec_requested_concatenation;
+static int hf_rsvp_association_padding;
+static int hf_rsvp_hop_neighbor_address_ipv4;
+static int hf_rsvp_flowspec_requested_concatenation;
+static int hf_rsvp_fast_reroute_bandwidth;
+static int hf_rsvp_message_id_list_epoch;
+static int hf_rsvp_style_data;
+static int hf_rsvp_session_dscp;
+static int hf_rsvp_confirm_data;
+static int hf_rsvp_protection_info_link_flags;
+static int hf_rsvp_message_id_list_flags;
+static int hf_rsvp_label_data;
+static int hf_rsvp_flowspec_slack_term;
+static int hf_rsvp_label_generalized_label;
+static int hf_rsvp_label_generalized_label_evpl_vlad_id;
+static int hf_rsvp_session_attribute_name;
+static int hf_rsvp_ifid_tlv_padding;
+static int hf_rsvp_max_dlci;
+static int hf_rsvp_minimum_policed_unit;
+static int hf_rsvp_dlci_length;
+static int hf_rsvp_label_request_m;
+static int hf_rsvp_detour_avoid_node_id;
+static int hf_rsvp_restart_cap_restart_time;
+static int hf_rsvp_nsap_length;
+static int hf_rsvp_message_checksum;
+static int hf_rsvp_ero_rro_autonomous_system;
+static int hf_rsvp_gen_uni_service_level;
+static int hf_rsvp_hf_rsvp_adspec_break_bit;
+static int hf_rsvp_extended_tunnel_id;
+static int hf_rsvp_extended_tunnel_ipv6;
+static int hf_rsvp_maximum_packet_size;
+static int hf_rsvp_min_dlci;
+static int hf_rsvp_gen_uni_data;
+static int hf_rsvp_gen_uni_logical_port_id;
+static int hf_rsvp_refresh_interval;
+static int hf_rsvp_detour_plr_id;
+static int hf_rsvp_restart_cap_recovery_time;
+static int hf_rsvp_extended_tunnel;
+static int hf_rsvp_call_attributes_endpont_id;
+static int hf_rsvp_isis_area_id;
+static int hf_rsvp_adspec_type;
+static int hf_rsvp_adspec_len;
+static int hf_rsvp_adspec_uint;
+static int hf_rsvp_adspec_float;
+static int hf_rsvp_adspec_bytes;
+static int hf_rsvp_wavelength_grid;
+static int hf_rsvp_wavelength_cs1;
+static int hf_rsvp_wavelength_cs2;
+static int hf_rsvp_wavelength_cs3;
+static int hf_rsvp_wavelength_channel_spacing;
+static int hf_rsvp_wavelength_n;
+static int hf_rsvp_wavelength_m;
+static int hf_rsvp_wavelength_freq;
+static int hf_rsvp_wavelength_wavelength;
+static int hf_rsvp_sonet_s;
+static int hf_rsvp_sonet_u;
+static int hf_rsvp_sonet_k;
+static int hf_rsvp_sonet_l;
+static int hf_rsvp_sonet_m;
+static int hf_rsvp_g709_t3;
+static int hf_rsvp_g709_t2;
+static int hf_rsvp_g709_t1;
+static int hf_rsvp_label_set_type;
+static int hf_rsvp_label_set_subchannel;
+static int hf_rsvp_nsap_address;
+static int hf_rsvp_class_diversity;
+static int hf_rsvp_egress_label_type;
+static int hf_rsvp_egress_label;
+static int hf_rsvp_source_transport_network_addr;
+static int hf_rsvp_ie_data;
+static int hf_rsvp_3gpp_obj_pf_dst_port_range;
+static int hf_rsvp_3gpp_obj_pf_src_port_range;
 
-static expert_field ei_rsvp_invalid_length = EI_INIT;
-static expert_field ei_rsvp_packet_filter_component = EI_INIT;
-static expert_field ei_rsvp_bundle_component_msg = EI_INIT;
-static expert_field ei_rsvp_parameter = EI_INIT;
-static expert_field ei_rsvp_adspec_type = EI_INIT;
-static expert_field ei_rsvp_call_id_address_type = EI_INIT;
-static expert_field ei_rsvp_session_type = EI_INIT;
+static expert_field ei_rsvp_invalid_length;
+static expert_field ei_rsvp_packet_filter_component;
+static expert_field ei_rsvp_bundle_component_msg;
+static expert_field ei_rsvp_parameter;
+static expert_field ei_rsvp_adspec_type;
+static expert_field ei_rsvp_call_id_address_type;
+static expert_field ei_rsvp_session_type;
 
-static int rsvp_tap = -1;
+static int rsvp_tap;
 
 /*
  * All RSVP packets belonging to a particular flow  belong to the same
@@ -806,6 +817,8 @@ enum {
     TT_BUNDLE_COMPMSG,
     TT_RESTART_CAP,
     TT_LINK_CAP,
+    TT_CAPABILITY,
+    TT_CAPABILITY_FLAGS,
     TT_PROTECTION_INFO,
     TT_PROTECTION_INFO_LINK,
     TT_PROTECTION_INFO_LSP,
@@ -979,8 +992,9 @@ enum rsvp_classes {
     RSVP_CLASS_ACCEPTABLE_LABEL_SET,
     RSVP_CLASS_RESTART_CAP,
     RSVP_CLASS_LINK_CAP          = 133,
+    RSVP_CLASS_CAPABILITY,
 
-    /* 132-160 Unassigned */
+    /* 135-160 Unassigned */
 
     /* 166-187 Unassigned */
 
@@ -1110,6 +1124,7 @@ static const value_string rsvp_class_vals[] = {
     { RSVP_CLASS_ACCEPTABLE_LABEL_SET,  "ACCEPTABLE-LABEL-SET object"},
     { RSVP_CLASS_RESTART_CAP,           "RESTART-CAPABILITY object"},
     { RSVP_CLASS_LINK_CAP,              "LINK-CAPABILITY object"},
+    { RSVP_CLASS_CAPABILITY,            "Capability object"},
 
     { RSVP_CLASS_VENDOR_PRIVATE_5,      "VENDOR PRIVATE object (10bbbbbb: "
                                          "ignore if unknown)"},
@@ -1860,6 +1875,7 @@ enum hf_rsvp_filter_keys {
     RSVPF_RESTART_CAP,
 
     RSVPF_LINK_CAP,
+    RSVPF_CAPABILITY,
 
     RSVPF_SESSION_ATTRIBUTE,
     RSVPF_DCLASS,
@@ -1947,7 +1963,7 @@ static const true_false_string tfs_gen_uni_direction = { "U: 1 - Upstream label/
 
 static const unit_name_string units_word_not_including_header = { " word, not including header", " words, not including header" };
 
-static int hf_rsvp_filter[RSVPF_MAX] = { -1 };
+static int hf_rsvp_filter[RSVPF_MAX];
 
 /* RSVP Conversation related Hash functions */
 
@@ -2212,6 +2228,9 @@ rsvp_class_to_filter_num(int classnum)
     case RSVP_CLASS_LINK_CAP :
         return RSVPF_LINK_CAP;
 
+    case RSVP_CLASS_CAPABILITY :
+        return RSVPF_CAPABILITY;
+
     case RSVP_CLASS_DIFFSERV :
         return RSVPF_DIFFSERV;
 
@@ -2245,7 +2264,7 @@ rsvp_class_to_filter_num(int classnum)
         return RSVPF_EXCLUDE_ROUTE;
 
     case RSVP_CLASS_S2L_SUB_LSP:
-	return RSVPF_S2L_SUB_LSP;
+        return RSVPF_S2L_SUB_LSP;
 
     case RSVP_CLASS_SECONDARY_EXPLICIT_ROUTE:
         return RSVPF_SECONDARY_EXPLICIT_ROUTE;
@@ -2334,6 +2353,8 @@ rsvp_class_to_tree_type(int classnum)
         return TT_RESTART_CAP;
     case RSVP_CLASS_LINK_CAP :
         return TT_LINK_CAP;
+    case RSVP_CLASS_CAPABILITY :
+        return TT_CAPABILITY;
     case RSVP_CLASS_DIFFSERV :
         return TT_DIFFSERV;
     case RSVP_CLASS_CLASSTYPE:
@@ -2743,7 +2764,7 @@ dissect_rsvp_session(packet_info *pinfo, proto_item *ti, proto_tree *rsvp_object
         break;
 
     case RSVP_SESSION_TYPE_IPV4_LSP:
-        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_session, tvb, offset+3, 1, ENC_BIG_ENDIAN);;
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_session, tvb, offset+3, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(rsvp_object_tree,
                             hf_rsvp_filter[RSVPF_SESSION_IP],
                             tvb, offset2, 4, ENC_BIG_ENDIAN);
@@ -2813,7 +2834,7 @@ dissect_rsvp_session(packet_info *pinfo, proto_item *ti, proto_tree *rsvp_object
 
 
     case RSVP_SESSION_TYPE_AGGREGATE_IPV4:
-        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_session, tvb, offset+3, 1, ENC_BIG_ENDIAN);;
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_session, tvb, offset+3, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(rsvp_object_tree,
                             hf_rsvp_filter[RSVPF_SESSION_IP],
                             tvb, offset2, 4, ENC_BIG_ENDIAN);
@@ -6927,7 +6948,7 @@ dissect_rsvp_link_cap(proto_item *ti, packet_info* pinfo, proto_tree *rsvp_objec
     proto_item_set_text(ti, "LINK CAPABILITY: ");
     switch(type) {
     case 1:
-        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_link_cap, tvb, offset+3, 1, type);
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_link_cap, tvb, offset+3, 1, ENC_BIG_ENDIAN);
 
         dissect_rsvp_ro_subobjects(ti, pinfo, rsvp_object_tree, tvb,
                                         offset + 4, obj_length, rsvp_class);
@@ -6935,7 +6956,55 @@ dissect_rsvp_link_cap(proto_item *ti, packet_info* pinfo, proto_tree *rsvp_objec
 
     default:
         proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_link_cap, tvb, offset+3, 1, ENC_BIG_ENDIAN);
-        proto_tree_add_item(rsvp_object_tree, hf_rsvp_record_route_data, tvb, offset+4, obj_length - 4, ENC_NA);
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_link_cap_data, tvb, offset+4, obj_length - 4, ENC_NA);
+        break;
+    }
+
+}
+
+/*------------------------------------------------------------------------------
+ * Capability Object
+ *------------------------------------------------------------------------------*/
+static void
+dissect_rsvp_capability(proto_item *ti, packet_info* pinfo _U_, proto_tree *rsvp_object_tree,
+                          tvbuff_t *tvb,
+                          int offset, int obj_length,
+                          int rsvp_class _U_, int type)
+{
+    proto_tree *hidden_item;
+
+    hidden_item = proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype, tvb, offset+3, 1, ENC_BIG_ENDIAN);
+    proto_item_set_hidden(hidden_item);
+
+    proto_item_set_text(ti, "Capability: ");
+
+    static int * const flags[] = {
+        &hf_rsvp_capability_flags_reserved,
+        &hf_rsvp_capability_flags_f,
+        &hf_rsvp_capability_flags_i,
+        &hf_rsvp_capability_flags_t,
+        &hf_rsvp_capability_flags_r,
+        &hf_rsvp_capability_flags_s,
+        NULL
+    };
+    uint64_t cap_flags;
+
+    switch(type) {
+    case 1:
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_capability, tvb, offset+3, 1, ENC_BIG_ENDIAN);
+
+        proto_tree_add_bitmask_ret_uint64(rsvp_object_tree, tvb, offset+4, hf_rsvp_capability_flags, TREE(TT_CAPABILITY_FLAGS), flags, ENC_BIG_ENDIAN, &cap_flags);
+        proto_item_append_text(ti, "%s%s%s%s%s",
+                               cap_flags&0x10 ? "F":UTF8_MIDDLE_DOT,
+                               cap_flags&0x08 ? "I":UTF8_MIDDLE_DOT,
+                               cap_flags&0x04 ? "T":UTF8_MIDDLE_DOT,
+                               cap_flags&0x02 ? "R":UTF8_MIDDLE_DOT,
+                               cap_flags&0x01 ? "S":UTF8_MIDDLE_DOT);
+        break;
+
+    default:
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_ctype_capability, tvb, offset+3, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_capability_data, tvb, offset+4, obj_length - 4, ENC_NA);
         break;
     }
 
@@ -7848,6 +7917,10 @@ dissect_rsvp_msg_tree(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             dissect_rsvp_link_cap(ti, pinfo, rsvp_object_tree, tvb, offset, obj_length, rsvp_class, type);
             break;
 
+        case RSVP_CLASS_CAPABILITY:
+            dissect_rsvp_capability(ti, pinfo, rsvp_object_tree, tvb, offset, obj_length, rsvp_class, type);
+            break;
+
         case RSVP_CLASS_PROTECTION:
             dissect_rsvp_protection_info(ti, rsvp_object_tree, tvb, offset, obj_length, rsvp_class, type);
             break;
@@ -8295,6 +8368,12 @@ proto_register_rsvp(void)
            NULL, HFILL }
         },
 
+        {&hf_rsvp_ctype_capability,
+         { "C-type", "rsvp.ctype.capability",
+           FT_UINT32, BASE_DEC, NULL, 0x0,
+           NULL, HFILL }
+        },
+
         {&hf_rsvp_ctype_protection_info,
          { "C-type", "rsvp.ctype.protection_info",
            FT_UINT32, BASE_DEC, NULL, 0x0,
@@ -8568,6 +8647,12 @@ proto_register_rsvp(void)
 
         {&hf_rsvp_filter[RSVPF_LINK_CAP],
          { "LINK CAPABILITY", "rsvp.link",
+           FT_NONE, BASE_NONE, NULL, 0x0,
+           NULL, HFILL }
+        },
+
+        {&hf_rsvp_filter[RSVPF_CAPABILITY],
+         { "Capability", "rsvp.capability",
            FT_NONE, BASE_NONE, NULL, 0x0,
            NULL, HFILL }
         },
@@ -8925,7 +9010,13 @@ proto_register_rsvp(void)
            NULL, HFILL }
         },
 
-	/* S2L_SUB_LSP object */
+        {&hf_rsvp_filter[RSVPF_EXCLUDE_ROUTE],
+         { "Exclude Route", "rsvp.exclude_route",
+           FT_NONE, BASE_NONE, NULL, 0x0,
+           NULL, HFILL }
+        },
+
+        /* S2L_SUB_LSP object */
         {&hf_rsvp_filter[RSVPF_S2L_SUB_LSP],
          { "S2L_SUB_LSP", "rsvp.s2l_sub_lsp",
            FT_NONE, BASE_NONE, NULL, 0x0,
@@ -9744,7 +9835,7 @@ proto_register_rsvp(void)
         },
         { &hf_rsvp_3gpp_qos_attribute_verbose,
          { "VERBOSE", "rsvp.3gpp_obj.r_qos_blob.verbose",
-           FT_BOOLEAN, 8, NULL, 0x0,
+           FT_BOOLEAN, BASE_NONE, NULL, 0x0,
            NULL, HFILL }
         },
         { &hf_rsvp_3gpp_qos_attribute_prof_id,
@@ -10224,6 +10315,15 @@ proto_register_rsvp(void)
       { &hf_rsvp_call_id_national_segment, { "National Segment", "rsvp.call_id.national_segment", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_rsvp_call_id_local_identifier, { "Local Identifier", "rsvp.call_id.local_identifier", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_rsvp_restart_cap_data, { "Data", "rsvp.restart_cap.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+      { &hf_rsvp_link_cap_data, { "Data", "rsvp.link_cap.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+      { &hf_rsvp_capability_flags, { "Flags", "rsvp.capability.flags", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+      { &hf_rsvp_capability_flags_reserved, { "Reserved", "rsvp.capability.flags.reserved", FT_UINT32, BASE_HEX, NULL, 0xFFFFFFE0, NULL, HFILL }},
+      { &hf_rsvp_capability_flags_f, { "Per-Peer Flow-Control (F)", "rsvp.capability.flags.f", FT_BOOLEAN, 32, TFS(&tfs_capable_not_capable), 0x0010, NULL, HFILL }},
+      { &hf_rsvp_capability_flags_i, { "RI-RSVP (I)", "rsvp.capability.flags.i", FT_BOOLEAN, 32, TFS(&tfs_capable_not_capable), 0x0008, NULL, HFILL }},
+      { &hf_rsvp_capability_flags_t, { "RecoveryPath Transmit (T)", "rsvp.capability.flags.t", FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x0004, NULL, HFILL }},
+      { &hf_rsvp_capability_flags_r, { "RecoveryPath (R)", "rsvp.capability.flags.r", FT_BOOLEAN, 32, TFS(&tfs_desired_not_desired), 0x0002, NULL, HFILL }},
+      { &hf_rsvp_capability_flags_s, { "RecoveryPath Srefresh (S)", "rsvp.capability.flags.s", FT_BOOLEAN, 32, TFS(&tfs_capable_not_capable), 0x0001, NULL, HFILL }},
+      { &hf_rsvp_capability_data, { "Data", "rsvp.capability.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_rsvp_protection_info_link_flags, { "Link Flags", "rsvp.protection_info.link_flags", FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }},
       { &hf_rsvp_protection_info_data, { "Data", "rsvp.protection_info.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_rsvp_fast_reroute_setup_priority, { "Setup Priority", "rsvp.fast_reroute.setup_priority", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
@@ -10317,7 +10417,6 @@ proto_register_rsvp(void)
 
     /* Build the tree array */
     for (i=0; i<TT_MAX; i++) {
-        ett_treelist[i] = -1;
         ett_tree[i] = &(ett_treelist[i]);
     }
     proto_rsvp = proto_register_protocol("Resource ReserVation Protocol (RSVP)", "RSVP", "rsvp");

@@ -34,93 +34,93 @@ void proto_reg_handoff_cotp(void);
 
 static int  proto_clnp;
 
-static int  proto_cotp         = -1;
-static gint ett_cotp           = -1;
-static gint ett_cotp_segments  = -1;
-static gint ett_cotp_segment   = -1;
+static int  proto_cotp;
+static gint ett_cotp;
+static gint ett_cotp_segments;
+static gint ett_cotp_segment;
 
-static int hf_cotp_li          = -1;
-static int hf_cotp_type        = -1;
-static int hf_cotp_srcref      = -1;
-static int hf_cotp_destref     = -1;
-static int hf_cotp_class       = -1;
-static int hf_cotp_opts_extended_formats = -1;
-static int hf_cotp_opts_no_explicit_flow_control = -1;
-static int hf_cotp_tpdu_number = -1;
-static int hf_cotp_tpdu_number_extended = -1;
-static int hf_cotp_next_tpdu_number = -1;
-static int hf_cotp_next_tpdu_number_extended = -1;
-static int hf_cotp_eot          = -1;
-static int hf_cotp_eot_extended = -1;
+static int hf_cotp_li;
+static int hf_cotp_type;
+static int hf_cotp_srcref;
+static int hf_cotp_destref;
+static int hf_cotp_class;
+static int hf_cotp_opts_extended_formats;
+static int hf_cotp_opts_no_explicit_flow_control;
+static int hf_cotp_tpdu_number;
+static int hf_cotp_tpdu_number_extended;
+static int hf_cotp_next_tpdu_number;
+static int hf_cotp_next_tpdu_number_extended;
+static int hf_cotp_eot;
+static int hf_cotp_eot_extended;
 /* Generated from convert_proto_tree_add_text.pl */
-static int hf_cotp_parameter_code = -1;
-static int hf_cotp_parameter_length = -1;
-static int hf_cotp_parameter_value = -1;
-static int hf_cotp_atn_extended_checksum16 = -1;
-static int hf_cotp_atn_extended_checksum32 = -1;
-static int hf_cotp_atn_extended_checksum_status = -1;
-static int hf_cotp_ack_time = -1;
-static int hf_cotp_res_error_rate_target_value = -1;
-static int hf_cotp_res_error_rate_min_accept = -1;
-static int hf_cotp_res_error_rate_tdsu = -1;
-static int hf_cotp_vp_priority = -1;
-static int hf_cotp_transit_delay_targ_calling_called = -1;
-static int hf_cotp_transit_delay_max_accept_calling_called = -1;
-static int hf_cotp_transit_delay_targ_called_calling = -1;
-static int hf_cotp_transit_delay_max_accept_called_calling = -1;
-static int hf_cotp_max_throughput_targ_calling_called = -1;
-static int hf_cotp_max_throughput_min_accept_calling_called = -1;
-static int hf_cotp_max_throughput_targ_called_calling = -1;
-static int hf_cotp_max_throughput_min_accept_called_calling = -1;
-static int hf_cotp_avg_throughput_targ_calling_called = -1;
-static int hf_cotp_avg_throughput_min_accept_calling_called = -1;
-static int hf_cotp_avg_throughput_targ_called_calling = -1;
-static int hf_cotp_avg_throughput_min_accept_called_calling = -1;
-static int hf_cotp_sequence_number = -1;
-static int hf_cotp_reassignment_time = -1;
-static int hf_cotp_lower_window_edge = -1;
-static int hf_cotp_credit = -1;
-static int hf_cotp_tpdu_size = -1;
-static int hf_cotp_checksum = -1;
-static int hf_cotp_checksum_status = -1;
-static int hf_cotp_vp_version_nr = -1;
-static int hf_cotp_network_expedited_data = -1;
-static int hf_cotp_vp_opt_sel_class1_use = -1;
-static int hf_cotp_use_16_bit_checksum = -1;
-static int hf_cotp_transport_expedited_data_transfer = -1;
-static int hf_cotp_preferred_maximum_tpdu_size = -1;
-static int hf_cotp_inactivity_timer = -1;
-static int hf_cotp_cause = -1;
-static int hf_cotp_segment_data = -1;
-static int hf_cotp_credit_cdt = -1;
-static int hf_cotp_reject_cause = -1;
+static int hf_cotp_parameter_code;
+static int hf_cotp_parameter_length;
+static int hf_cotp_parameter_value;
+static int hf_cotp_atn_extended_checksum16;
+static int hf_cotp_atn_extended_checksum32;
+static int hf_cotp_atn_extended_checksum_status;
+static int hf_cotp_ack_time;
+static int hf_cotp_res_error_rate_target_value;
+static int hf_cotp_res_error_rate_min_accept;
+static int hf_cotp_res_error_rate_tdsu;
+static int hf_cotp_vp_priority;
+static int hf_cotp_transit_delay_targ_calling_called;
+static int hf_cotp_transit_delay_max_accept_calling_called;
+static int hf_cotp_transit_delay_targ_called_calling;
+static int hf_cotp_transit_delay_max_accept_called_calling;
+static int hf_cotp_max_throughput_targ_calling_called;
+static int hf_cotp_max_throughput_min_accept_calling_called;
+static int hf_cotp_max_throughput_targ_called_calling;
+static int hf_cotp_max_throughput_min_accept_called_calling;
+static int hf_cotp_avg_throughput_targ_calling_called;
+static int hf_cotp_avg_throughput_min_accept_calling_called;
+static int hf_cotp_avg_throughput_targ_called_calling;
+static int hf_cotp_avg_throughput_min_accept_called_calling;
+static int hf_cotp_sequence_number;
+static int hf_cotp_reassignment_time;
+static int hf_cotp_lower_window_edge;
+static int hf_cotp_credit;
+static int hf_cotp_tpdu_size;
+static int hf_cotp_checksum;
+static int hf_cotp_checksum_status;
+static int hf_cotp_vp_version_nr;
+static int hf_cotp_network_expedited_data;
+static int hf_cotp_vp_opt_sel_class1_use;
+static int hf_cotp_use_16_bit_checksum;
+static int hf_cotp_transport_expedited_data_transfer;
+static int hf_cotp_preferred_maximum_tpdu_size;
+static int hf_cotp_inactivity_timer;
+static int hf_cotp_cause;
+static int hf_cotp_segment_data;
+static int hf_cotp_credit_cdt;
+static int hf_cotp_reject_cause;
 
-static int hf_cotp_segments    = -1;
-static int hf_cotp_segment     = -1;
-static int hf_cotp_segment_overlap = -1;
-static int hf_cotp_segment_overlap_conflict = -1;
-static int hf_cotp_segment_multiple_tails = -1;
-static int hf_cotp_segment_too_long_segment = -1;
-static int hf_cotp_segment_error = -1;
-static int hf_cotp_segment_count = -1;
-static int hf_cotp_reassembled_in = -1;
-static int hf_cotp_reassembled_length = -1;
+static int hf_cotp_segments;
+static int hf_cotp_segment;
+static int hf_cotp_segment_overlap;
+static int hf_cotp_segment_overlap_conflict;
+static int hf_cotp_segment_multiple_tails;
+static int hf_cotp_segment_too_long_segment;
+static int hf_cotp_segment_error;
+static int hf_cotp_segment_count;
+static int hf_cotp_reassembled_in;
+static int hf_cotp_reassembled_length;
 
-static expert_field ei_cotp_disconnect_confirm = EI_INIT;
-static expert_field ei_cotp_multiple_tpdus = EI_INIT;
-static expert_field ei_cotp_reject = EI_INIT;
-static expert_field ei_cotp_connection = EI_INIT;
-static expert_field ei_cotp_disconnect_request = EI_INIT;
-static expert_field ei_cotp_preferred_maximum_tpdu_size = EI_INIT;
-static expert_field ei_cotp_atn_extended_checksum = EI_INIT;
-static expert_field ei_cotp_checksum = EI_INIT;
+static expert_field ei_cotp_disconnect_confirm;
+static expert_field ei_cotp_multiple_tpdus;
+static expert_field ei_cotp_reject;
+static expert_field ei_cotp_connection;
+static expert_field ei_cotp_disconnect_request;
+static expert_field ei_cotp_preferred_maximum_tpdu_size;
+static expert_field ei_cotp_atn_extended_checksum;
+static expert_field ei_cotp_checksum;
 
 
-static int  proto_cltp         = -1;
-static gint ett_cltp           = -1;
+static int  proto_cltp;
+static gint ett_cltp;
 
-static int hf_cltp_li = -1;
-static int hf_cltp_type = -1;
+static int hf_cltp_li;
+static int hf_cltp_type;
 
 static const fragment_items cotp_frag_items = {
   &ett_cotp_segment,
@@ -315,10 +315,10 @@ static const value_string tp_vpart_type_vals[] = {
   { 0,                      NULL }
 };
 
-static int hf_cotp_vp_src_tsap = -1;
-static int hf_cotp_vp_dst_tsap = -1;
-static int hf_cotp_vp_src_tsap_bytes = -1;
-static int hf_cotp_vp_dst_tsap_bytes = -1;
+static int hf_cotp_vp_src_tsap;
+static int hf_cotp_vp_dst_tsap;
+static int hf_cotp_vp_src_tsap_bytes;
+static int hf_cotp_vp_dst_tsap_bytes;
 
 /* global variables */
 
@@ -2175,6 +2175,94 @@ static gint dissect_ositp_inactive(tvbuff_t *tvb, packet_info *pinfo,
   return dissect_ositp_internal(tvb, pinfo, tree, TRUE);
 }
 
+static gboolean
+test_cltp_var_part(tvbuff_t *tvb)
+{
+  int offset = 0;
+  guint8 li;
+  while (tvb_captured_length_remaining(tvb, offset)) {
+    if (tvb_captured_length_remaining(tvb, offset) < 2) {
+      return FALSE;
+    }
+    switch (tvb_get_guint8(tvb, offset++)) {
+    /* These are the only 3 legal parameters for CLTP per RFC 1240 and X.234 */
+    case VP_SRC_TSAP:
+    case VP_DST_TSAP:
+    case VP_CHECKSUM: // Not required as redundant with UDP checksum, per RFC 1240
+      break;
+    default:
+      return FALSE;
+    }
+    li = tvb_get_guint8(tvb, offset++);
+    if (li == 255) {
+      return FALSE;
+    }
+    if (tvb_captured_length_remaining(tvb, offset) < li) {
+      return FALSE;
+    }
+    offset += li;
+  }
+  return TRUE;
+}
+
+static gboolean
+dissect_cltp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
+				  void *data)
+{
+  guint8 li, tpdu, spdu;
+  int offset = 0;
+
+  /* RFC 1240: OSI Connectionless Transport Services on top of UDP
+   * was made Historic by RFC 2556, which noted that "at this time
+   * there do not seem to be any implementations" and recommended
+   * TPKT (RFC 2126, ISO Transport Service on top of TCP) instead.
+   */
+
+  /* First, check do we have at least 2 bytes (length + tpdu) */
+  if (tvb_captured_length(tvb) < 2) {
+    return FALSE;
+  }
+
+  li = tvb_get_guint8(tvb, offset++);
+
+  /* LI must include TPDU, and 255 is reserved */
+  if (li == 0 || li == 255) {
+    return FALSE;
+  }
+
+  /* Is it OSI on top of the UDP? */
+  tpdu = (tvb_get_guint8(tvb, offset++) & 0xF0) >> 4;
+  if (tpdu != UD_TPDU) {
+    return FALSE;
+  }
+
+  /* LI includes TPDU */
+  li--;
+
+  if (!test_cltp_var_part(tvb_new_subset_length(tvb, offset, li))) {
+    return FALSE;
+  }
+  offset += li;
+
+  /* Since R-GOOSE is the only known user of CLTP over UDP, just
+   * check for that.
+   */
+
+  /* Check do we have SPDU ID byte, too */
+  if (tvb_captured_length_remaining(tvb, offset) < 1) {
+    return FALSE;
+  }
+
+  /* And let's see if it is GOOSE SPDU */
+  spdu = tvb_get_guint8(tvb, offset);
+  if (spdu != 0xA1) {
+    return FALSE;
+  }
+
+  dissect_ositp(tvb, pinfo, parent_tree, data);
+  return TRUE;
+}
+
 static void
 cotp_reassemble_init(void)
 {
@@ -2373,14 +2461,14 @@ void proto_register_cotp(void)
                                  "settings.", &cotp_decode_atn);
 
   /* For handling protocols hijacking the variable part of CR or CC PDUs */
-  cotp_cr_heur_subdissector_list = register_heur_dissector_list("cotp_cr", proto_cotp);
-  cotp_cc_heur_subdissector_list = register_heur_dissector_list("cotp_cc", proto_cotp);
+  cotp_cr_heur_subdissector_list = register_heur_dissector_list_with_description("cotp_cr", "COTP CR (Connect Request) payload", proto_cotp);
+  cotp_cc_heur_subdissector_list = register_heur_dissector_list_with_description("cotp_cc", "COTP CC (Connect Confirm) payload", proto_cotp);
 
   /* subdissector code in inactive subset */
-  cotp_is_heur_subdissector_list = register_heur_dissector_list("cotp_is", proto_cotp);
+  cotp_is_heur_subdissector_list = register_heur_dissector_list_with_description("cotp_is", "COTP IS (Inactive Subset) payload", proto_cotp);
 
   /* other COTP/ISO 8473 subdissectors */
-  cotp_heur_subdissector_list = register_heur_dissector_list("cotp", proto_cotp);
+  cotp_heur_subdissector_list = register_heur_dissector_list_with_description("cotp", "COTP DT (Data) payload", proto_cotp);
 
   /* XXX - what about CLTP and proto_cltp? */
   ositp_handle = register_dissector("ositp", dissect_ositp, proto_cotp);
@@ -2417,7 +2505,7 @@ void proto_register_cltp(void)
   proto_register_field_array(proto_cltp, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
 
-  cltp_heur_subdissector_list = register_heur_dissector_list("cltp", proto_cltp);
+  cltp_heur_subdissector_list = register_heur_dissector_list_with_description("cltp", "CLTP data atop CLNP", proto_cltp);
 }
 
 void
@@ -2429,6 +2517,13 @@ proto_reg_handoff_cotp(void)
   rdp_cc_handle = find_dissector("rdp_cc");
 
   proto_clnp = proto_get_id_by_filter_name("clnp");
+
+  /* Actual implementations of R-GOOSE seem to use UDP port 102, registered
+   * for ISO-TSAP, cf. TPKT. Perhaps we should just register ositp_handle
+   * to UDP port 102 instead of having a heuristic dissector?
+   */
+  heur_dissector_add("udp", dissect_cltp_heur, "CLTP over UDP",
+        "cltp_udp", proto_cltp, HEURISTIC_ENABLE);
 }
 
 /*

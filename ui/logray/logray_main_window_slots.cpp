@@ -40,7 +40,6 @@ DIAG_ON(frame-larger-than=)
 #include "ui/urls.h"
 
 #include "epan/color_filters.h"
-#include "epan/export_object.h"
 
 #include "wsutil/file_util.h"
 #include "wsutil/filesystem.h"
@@ -105,20 +104,18 @@ DIAG_ON(frame-larger-than=)
 #include "dissector_tables_dialog.h"
 #include "endpoint_dialog.h"
 #include "expert_info_dialog.h"
-#include "export_object_action.h"
-#include "export_object_dialog.h"
-#include "export_pdu_dialog.h"
 #include "extcap_options_dialog.h"
 #include "file_set_dialog.h"
 #include "filter_action.h"
 #include "filter_dialog.h"
+#include "follow_stream_action.h"
+#include "follow_stream_dialog.h"
 #include "funnel_statistics.h"
 #include "interface_toolbar.h"
 #include "io_graph_dialog.h"
 #include <ui/qt/widgets/additional_toolbar.h>
 #include "main_application.h"
 #include "packet_comment_dialog.h"
-#include "packet_diagram.h"
 #include "packet_dialog.h"
 #include "packet_list.h"
 #include "preferences_dialog.h"
@@ -252,7 +249,9 @@ bool LograyMainWindow::openCaptureFile(QString cf_path, QString read_filter, uns
         break;
     }
 
-    mainApp->setLastOpenDirFromFilename(cf_path);
+    if (!is_tempfile) {
+        mainApp->setLastOpenDirFromFilename(cf_path);
+    }
 
     main_ui_->statusBar->showExpert();
 
@@ -336,7 +335,6 @@ void LograyMainWindow::updatePreferenceActions()
     main_ui_->actionViewPacketList->setEnabled(prefs_has_layout_pane_content(layout_pane_content_plist));
     main_ui_->actionViewPacketDetails->setEnabled(prefs_has_layout_pane_content(layout_pane_content_pdetails));
     main_ui_->actionViewPacketBytes->setEnabled(prefs_has_layout_pane_content(layout_pane_content_pbytes));
-    main_ui_->actionViewPacketDiagram->setEnabled(prefs_has_layout_pane_content(layout_pane_content_pdiagram));
 
     main_ui_->actionViewNameResolutionPhysical->setChecked(gbl_resolv_flags.mac_name);
     main_ui_->actionViewNameResolutionNetwork->setChecked(gbl_resolv_flags.network_name);
@@ -351,7 +349,6 @@ void LograyMainWindow::updateRecentActions()
     main_ui_->actionViewPacketList->setChecked(recent.packet_list_show && prefs_has_layout_pane_content(layout_pane_content_plist));
     main_ui_->actionViewPacketDetails->setChecked(recent.tree_view_show && prefs_has_layout_pane_content(layout_pane_content_pdetails));
     main_ui_->actionViewPacketBytes->setChecked(recent.byte_view_show && prefs_has_layout_pane_content(layout_pane_content_pbytes));
-    main_ui_->actionViewPacketDiagram->setChecked(recent.packet_diagram_show && prefs_has_layout_pane_content(layout_pane_content_pdiagram));
 
     foreach(QAction *action, main_ui_->menuInterfaceToolbars->actions()) {
         if (g_list_find_custom(recent.interface_toolbars, action->text().toUtf8(), (GCompareFunc)strcmp)) {
@@ -737,7 +734,7 @@ void LograyMainWindow::captureFileReadStarted(const QString &action) {
 void LograyMainWindow::captureFileReadFinished() {
     if (!capture_file_.capFile()->is_tempfile && capture_file_.capFile()->filename) {
         /* Add this filename to the list of recent files in the "Recent Files" submenu */
-        add_menu_recent_capture_file(capture_file_.capFile()->filename);
+        add_menu_recent_capture_file(capture_file_.capFile()->filename, false);
 
         /* Remember folder for next Open dialog and save it in recent */
         mainApp->setLastOpenDirFromFilename(capture_file_.capFile()->filename);
@@ -1024,6 +1021,13 @@ void LograyMainWindow::updateRecentCaptures() {
         dock_menu_->insertAction(NULL, rda);
         connect(rda, SIGNAL(triggered()), ra, SLOT(trigger()));
 #endif
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        if (recentMenu->actions().count() == static_cast<int>(prefs.gui_recent_files_count_max)) {
+#else
+        if (recentMenu->actions().count() == static_cast<qsizetype>(prefs.gui_recent_files_count_max)) {
+#endif
+            break;
+        }
     }
 
     if (recentMenu->actions().count() > 0) {
@@ -1084,7 +1088,7 @@ void LograyMainWindow::setEditCommentsMenu()
             for (guint i = 0; i < nComments; i++) {
                 QString comment = packet_list_->getPacketComment(i);
                 comment = this->commentToMenuText(comment);
-                action = main_ui_->menuPacketComment->addAction(tr("Edit \"%1\"", "edit packet comment").arg(comment));
+                action = main_ui_->menuPacketComment->addAction(tr("Edit \"%1\"", "edit event comment").arg(comment));
                 connect(action, &QAction::triggered, this, &LograyMainWindow::editPacketComment);
                 action->setData(i);
             }
@@ -1093,19 +1097,19 @@ void LograyMainWindow::setEditCommentsMenu()
             for (guint i = 0; i < nComments; i++) {
                 QString comment = packet_list_->getPacketComment(i);
                 comment = this->commentToMenuText(comment);
-                action = main_ui_->menuPacketComment->addAction(tr("Delete \"%1\"", "delete packet comment").arg(comment));
+                action = main_ui_->menuPacketComment->addAction(tr("Delete \"%1\"", "delete event comment").arg(comment));
                 connect(action, &QAction::triggered, this, &LograyMainWindow::deletePacketComment);
                 action->setData(i);
             }
             main_ui_->menuPacketComment->addSeparator();
-            action = main_ui_->menuPacketComment->addAction(tr("Delete packet comments"));
+            action = main_ui_->menuPacketComment->addAction(tr("Delete event comments"));
             connect(action, &QAction::triggered, this, &LograyMainWindow::deleteCommentsFromPackets);
         }
         wtap_block_unref(pkt_block);
     }
     if (selectedRows().count() > 1) {
         main_ui_->menuPacketComment->addSeparator();
-        action = main_ui_->menuPacketComment->addAction(tr("Delete comments from %n packet(s)", nullptr, static_cast<int>(selectedRows().count())));
+        action = main_ui_->menuPacketComment->addAction(tr("Delete comments from %n event(s)", nullptr, static_cast<int>(selectedRows().count())));
         connect(action, &QAction::triggered, this, &LograyMainWindow::deleteCommentsFromPackets);
     }
 }
@@ -1173,16 +1177,21 @@ void LograyMainWindow::setMenusForSelectedPacket()
         have_time_ref = capture_file_.capFile()->ref_time_count > 0;
         another_is_time_ref = have_time_ref && rows.count() <= 1 &&
                 !(capture_file_.capFile()->ref_time_count == 1 && frame_selected && current_frame->ref_time);
-    }
 
-    main_ui_->actionEditMarkPacket->setText(tr("&Mark/Unmark Packet(s)", "", static_cast<int>(selectedRows().count())));
-    main_ui_->actionEditIgnorePacket->setText(tr("&Ignore/Unignore Packet(s)", "", static_cast<int>(selectedRows().count())));
+        if (capture_file_.capFile()->edt && ! multi_selection)
+        {
+            foreach (FollowStreamAction *follow_action, main_ui_->menuFollow->findChildren<FollowStreamAction *>()) {
+                gboolean is_frame = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, follow_action->filterName());
+                follow_action->setEnabled(is_frame);
+            }
+        }
+    }
 
     main_ui_->actionCopyListAsText->setEnabled(selectedRows().count() > 0);
     main_ui_->actionCopyListAsCSV->setEnabled(selectedRows().count() > 0);
     main_ui_->actionCopyListAsYAML->setEnabled(selectedRows().count() > 0);
 
-    main_ui_->actionEditMarkPacket->setEnabled(frame_selected || multi_selection);
+    main_ui_->actionEditMarkSelected->setEnabled(frame_selected || multi_selection);
     main_ui_->actionEditMarkAllDisplayed->setEnabled(have_frames);
     /* Unlike un-ignore, do not allow unmark of all frames when no frames are displayed  */
     main_ui_->actionEditUnmarkAllDisplayed->setEnabled(have_marked);
@@ -1197,7 +1206,7 @@ void LograyMainWindow::setMenusForSelectedPacket()
     main_ui_->menuPacketComment->setEnabled(enableEditComments && selectedRows().count() > 0);
     main_ui_->actionDeleteAllPacketComments->setEnabled(enableEditComments);
 
-    main_ui_->actionEditIgnorePacket->setEnabled(frame_selected || multi_selection);
+    main_ui_->actionEditIgnoreSelected->setEnabled(frame_selected || multi_selection);
     main_ui_->actionEditIgnoreAllDisplayed->setEnabled(have_filtered);
     /* Allow un-ignore of all frames even with no frames currently displayed */
     main_ui_->actionEditUnignoreAllDisplayed->setEnabled(have_ignored);
@@ -1253,6 +1262,22 @@ void LograyMainWindow::setMenusForSelectedTreeRow(FieldInformation *finfo) {
         if (fi && fi->ds_tvb && (fi->length > 0)) {
             have_packet_bytes = true;
         }
+
+        if (!(capture_file_.capFile()->search_in_progress && (capture_file_.capFile()->hex || (capture_file_.capFile()->string && capture_file_.capFile()->packet_data)))) {
+            // If we're not in the middle of a packet bytes search, then set
+            // search_pos and search_len so that we can start a new search
+            // from this point. (If we are, then we already set it.)
+            if (fi && capture_file_.capFile()->edt && (fi->ds_tvb == capture_file_.capFile()->edt->tvb)) {
+                // We can only do a Packet Bytes search in the main bytes from
+                // the frame, not from any secondary data sources. (XXX: This
+                // might be surprising to users, though.)
+                capture_file_.capFile()->search_pos = (uint32_t)(finfo->position().start + finfo->position().length - 1);
+                capture_file_.capFile()->search_len = (uint32_t)finfo->position().length;
+            } else {
+                capture_file_.capFile()->search_pos = 0;
+                capture_file_.capFile()->search_len = 0;
+            }
+        }
     }
 
     if (capture_file_.capFile() != NULL && fi != NULL) {
@@ -1301,7 +1326,6 @@ void LograyMainWindow::setMenusForSelectedTreeRow(FieldInformation *finfo) {
     main_ui_->actionEditCopyAsFilter->setEnabled(can_match_selected);
 
     main_ui_->actionAnalyzeShowPacketBytes->setEnabled(have_packet_bytes);
-    main_ui_->actionFileExportPacketBytes->setEnabled(have_packet_bytes);
 
     main_ui_->actionViewExpandSubtrees->setEnabled(have_subtree);
     main_ui_->actionViewCollapseSubtrees->setEnabled(have_subtree);
@@ -1505,8 +1529,7 @@ void LograyMainWindow::showAccordionFrame(AccordionFrame *show_frame, bool toggl
 
 void LograyMainWindow::showColumnEditor(int column)
 {
-    previous_focus_ = mainApp->focusWidget();
-    connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+    setPreviousFocus();
     main_ui_->columnEditorFrame->editColumn(column);
     showAccordionFrame(main_ui_->columnEditorFrame);
 }
@@ -1566,15 +1589,15 @@ void LograyMainWindow::addStatsPluginsToMenu() {
             parent_menu = main_ui_->menuStatistics;
             // gtk/main_menubar.c compresses double slashes, hence SkipEmptyParts
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-            QStringList cfg_name_parts = QString(cfg->name).split("/", Qt::SkipEmptyParts);
+            QStringList cfg_name_parts = QString(cfg->path).split(STATS_TREE_MENU_SEPARATOR, Qt::SkipEmptyParts);
 #else
-            QStringList cfg_name_parts = QString(cfg->name).split("/", QString::SkipEmptyParts);
+            QStringList cfg_name_parts = QString(cfg->path).split(STATS_TREE_MENU_SEPARATOR, QString::SkipEmptyParts);
 #endif
             if (cfg_name_parts.isEmpty()) continue;
 
-            QString stat_name = cfg_name_parts.takeLast();
+            QString stat_name = cfg_name_parts.takeLast().trimmed();
             if (!cfg_name_parts.isEmpty()) {
-                QString menu_name = cfg_name_parts.join("/");
+                QString menu_name = cfg_name_parts.join("/").trimmed();
                 parent_menu = findOrAddMenu(parent_menu, menu_name);
             }
 
@@ -1606,7 +1629,7 @@ void LograyMainWindow::setFeaturesEnabled(bool enabled)
     }
     else
     {
-        main_ui_->statusBar->showMessage(tr("Please wait while Wireshark is initializing…"));
+        main_ui_->statusBar->showMessage(tr("Please wait while Logray is initializing…"));
     }
 }
 
@@ -1744,55 +1767,8 @@ void LograyMainWindow::connectFileMenuActions()
     connect(main_ui_->actionFileExportAsJSON, &QAction::triggered, this,
         [this]() { exportDissections(export_type_json); });
 
-    connect(main_ui_->actionFileExportPacketBytes, &QAction::triggered, this,
-        [this]() { exportPacketBytes(); }, Qt::QueuedConnection);
-
-    connect(main_ui_->actionFileExportPDU, &QAction::triggered, this,
-        [this]() { exportPDU(); });
-
     connect(main_ui_->actionFilePrint, &QAction::triggered, this,
         [this]() { printFile(); });
-}
-
-void LograyMainWindow::exportPacketBytes()
-{
-    QString file_name;
-
-    if (!capture_file_.capFile() || !capture_file_.capFile()->finfo_selected) return;
-
-    file_name = WiresharkFileDialog::getSaveFileName(this,
-                                            mainApp->windowTitleString(tr("Export Selected Packet Bytes")),
-                                            mainApp->lastOpenDir().canonicalPath(),
-                                            tr("Raw data (*.bin *.dat *.raw);;All Files (" ALL_FILES_WILDCARD ")")
-                                            );
-
-    if (file_name.length() > 0) {
-        const guint8 *data_p;
-
-        data_p = tvb_get_ptr(capture_file_.capFile()->finfo_selected->ds_tvb, 0, -1) +
-                capture_file_.capFile()->finfo_selected->start;
-        write_file_binary_mode(qUtf8Printable(file_name), data_p, capture_file_.capFile()->finfo_selected->length);
-
-        /* Save the directory name for future file dialogs. */
-        mainApp->setLastOpenDirFromFilename(file_name);
-    }
-}
-
-void LograyMainWindow::exportPDU()
-{
-    ExportPDUDialog *exportpdu_dialog = new ExportPDUDialog(this);
-
-    if (exportpdu_dialog->isMinimized() == true)
-    {
-        exportpdu_dialog->showNormal();
-    }
-    else
-    {
-        exportpdu_dialog->show();
-    }
-
-    exportpdu_dialog->raise();
-    exportpdu_dialog->activateWindow();
 }
 
 void LograyMainWindow::printFile()
@@ -1855,7 +1831,7 @@ void LograyMainWindow::connectEditMenuActions()
     // The items below are used in the packet list and detail context menus.
     // Use QueuedConnections so that the context menus aren't destroyed
     // prematurely.
-    connect(main_ui_->actionEditMarkPacket, &QAction::triggered, this, [this]() {
+    connect(main_ui_->actionEditMarkSelected, &QAction::triggered, this, [this]() {
         freeze();
         packet_list_->markFrame();
         thaw();
@@ -1888,7 +1864,7 @@ void LograyMainWindow::connectEditMenuActions()
         }
     }, Qt::QueuedConnection);
 
-    connect(main_ui_->actionEditIgnorePacket, &QAction::triggered, this, [this]() {
+    connect(main_ui_->actionEditIgnoreSelected, &QAction::triggered, this, [this]() {
         freeze();
         packet_list_->ignoreFrame();
         thaw();
@@ -2045,8 +2021,7 @@ void LograyMainWindow::findPacket()
     if (! packet_list_->model() || packet_list_->model()->rowCount() < 1) {
         return;
     }
-    previous_focus_ = mainApp->focusWidget();
-    connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+    setPreviousFocus();
     if (!main_ui_->searchFrame->isVisible()) {
         showAccordionFrame(main_ui_->searchFrame, true);
     } else {
@@ -2270,6 +2245,10 @@ void LograyMainWindow::connectViewMenuActions()
     connect(main_ui_->actionViewResetLayout, &QAction::triggered, this, [this]() {
         recent.gui_geometry_main_upper_pane = 0;
         recent.gui_geometry_main_lower_pane = 0;
+        g_free(recent.gui_geometry_main_master_split);
+        g_free(recent.gui_geometry_main_extra_split);
+        recent.gui_geometry_main_master_split = NULL;
+        recent.gui_geometry_main_extra_split = NULL;
         applyRecentPaneGeometry();
     });
 
@@ -2339,9 +2318,6 @@ void LograyMainWindow::showHideMainWidgets(QAction *action)
     } else if (widget == byte_view_tab_) {
         recent.byte_view_show = show;
         main_ui_->actionViewPacketBytes->setChecked(show);
-    } else if (widget == packet_diagram_) {
-        recent.packet_diagram_show = show;
-        main_ui_->actionViewPacketDiagram->setChecked(show);
     } else {
         foreach(QAction *action, main_ui_->menuInterfaceToolbars->actions()) {
             QToolBar *toolbar = action->data().value<QToolBar *>();
@@ -2627,8 +2603,7 @@ void LograyMainWindow::connectGoMenuActions()
         if (! packet_list_->model() || packet_list_->model()->rowCount() < 1) {
             return;
         }
-        previous_focus_ = mainApp->focusWidget();
-        connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+        setPreviousFocus();
 
         showAccordionFrame(main_ui_->goToFrame, true);
         if (main_ui_->goToFrame->isVisible()) {
@@ -2865,14 +2840,10 @@ void LograyMainWindow::connectAnalyzeMenuActions()
     });
 
     connect(main_ui_->actionAnalyzeDisplayFilterMacros, &QAction::triggered, this, [=]() {
-        struct epan_uat* dfm_uat;
-        dfilter_macro_get_uat(&dfm_uat);
-        UatDialog *uat_dlg = new UatDialog(parentWidget(), dfm_uat);
-        connect(uat_dlg, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
-
-        uat_dlg->setWindowModality(Qt::ApplicationModal);
-        uat_dlg->setAttribute(Qt::WA_DeleteOnClose);
-        uat_dlg->show();
+        FilterDialog *display_filter_dlg = new FilterDialog(window(), FilterDialog::DisplayMacro);
+        display_filter_dlg->setWindowModality(Qt::ApplicationModal);
+        display_filter_dlg->setAttribute(Qt::WA_DeleteOnClose);
+        display_filter_dlg->show();
     });
 
     connect(main_ui_->actionDisplayFilterExpression, &QAction::triggered, this, [=]() {
@@ -2893,18 +2864,6 @@ void LograyMainWindow::connectAnalyzeMenuActions()
         enable_proto_dialog->setWindowModality(Qt::ApplicationModal);
         enable_proto_dialog->setAttribute(Qt::WA_DeleteOnClose);
         enable_proto_dialog->show();
-    });
-
-    connect(main_ui_->actionAnalyzeDecodeAs, &QAction::triggered, this, [=]() {
-        QAction *da_action = qobject_cast<QAction*>(sender());
-        bool create_new = da_action && da_action->property("create_new").toBool();
-
-        DecodeAsDialog *da_dialog = new DecodeAsDialog(this, capture_file_.capFile(), create_new);
-        connect(da_dialog, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
-
-        da_dialog->setWindowModality(Qt::ApplicationModal);
-        da_dialog->setAttribute(Qt::WA_DeleteOnClose);
-        da_dialog->show();
     });
 
     connect(main_ui_->actionAnalyzeReloadLuaPlugins, &QAction::triggered, this, &LograyMainWindow::reloadLuaPlugins);
@@ -3005,16 +2964,23 @@ void LograyMainWindow::applyConversationFilter()
     }
 }
 
-void LograyMainWindow::applyExportObject()
-{
-    ExportObjectAction *export_action = qobject_cast<ExportObjectAction*>(sender());
-    if (!export_action)
-        return;
+void LograyMainWindow::openFollowStreamDialog(int proto_id, guint stream_num, guint sub_stream_num, bool use_stream_index) {
+    FollowStreamDialog *fsd = new FollowStreamDialog(*this, capture_file_, proto_id);
+    connect(fsd, SIGNAL(updateFilter(QString, bool)), this, SLOT(filterPackets(QString, bool)));
+    connect(fsd, SIGNAL(goToPacket(int)), packet_list_, SLOT(goToPacket(int)));
+    fsd->addCodecs(text_codec_map_);
+    fsd->show();
+    if (use_stream_index) {
+        // If a specific conversation was requested, then ignore any previous
+        // display filters and display all related packets.
+        fsd->follow("", true, stream_num, sub_stream_num);
+    } else {
+        fsd->follow(getFilter());
+    }
+}
 
-    ExportObjectDialog* export_dialog = new ExportObjectDialog(*this, capture_file_, export_action->exportObject());
-    export_dialog->setWindowModality(Qt::ApplicationModal);
-    export_dialog->setAttribute(Qt::WA_DeleteOnClose);
-    export_dialog->show();
+void LograyMainWindow::openFollowStreamDialog(int proto_id) {
+    openFollowStreamDialog(proto_id, 0, 0, false);
 }
 
 // -z expert
@@ -3139,8 +3105,15 @@ void LograyMainWindow::checkForUpdates()
 }
 #endif
 
+void LograyMainWindow::setPreviousFocus() {
+    previous_focus_ = mainApp->focusWidget();
+    if (previous_focus_ != nullptr) {
+        connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+    }
+}
+
 void LograyMainWindow::resetPreviousFocus() {
-    previous_focus_ = NULL;
+    previous_focus_ = nullptr;
 }
 
 void LograyMainWindow::goToCancelClicked()

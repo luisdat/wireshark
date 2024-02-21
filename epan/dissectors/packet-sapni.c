@@ -41,18 +41,18 @@
  */
 #define SAP_PROTOCOL_HEADER_LEN 4
 
-static int proto_sap_protocol = -1;
+static int proto_sap_protocol;
 
-static int hf_sap_protocol_length = -1;
-static int hf_sap_protocol_payload = -1;
+static int hf_sap_protocol_length;
+static int hf_sap_protocol_payload;
 
-static int hf_sap_protocol_ping = -1;
-static int hf_sap_protocol_pong = -1;
+static int hf_sap_protocol_ping;
+static int hf_sap_protocol_pong;
 
-static gint ett_sap_protocol = -1;
+static gint ett_sap_protocol;
 
 /* Expert info */
-static expert_field ei_sap_invalid_length = EI_INIT;
+static expert_field ei_sap_invalid_length;
 
 /* Global port preference */
 static range_t *global_sap_protocol_port_range;
@@ -263,7 +263,7 @@ proto_register_sap_protocol(void)
 
 	/* Sub dissector code */
 	sub_dissectors_table = register_dissector_table("sapni.port", "SAP Protocol Port", proto_sap_protocol, FT_UINT16, BASE_DEC);
-	heur_subdissector_list = register_heur_dissector_list("sapni", proto_sap_protocol);
+	heur_subdissector_list = register_heur_dissector_list_with_description("sapni", "SAP NI payload", proto_sap_protocol);
 
 	/* Register the preferences */
 	sap_protocol_module = prefs_register_protocol(proto_sap_protocol, proto_reg_handoff_sap_protocol);

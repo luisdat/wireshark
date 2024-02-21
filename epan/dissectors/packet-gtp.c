@@ -70,6 +70,7 @@
 #include "packet-pdcp-nr.h"
 #include "packet-pdcp-lte.h"
 #include "packet-rohc.h"
+#include "packet-s1ap.h"
 
 void proto_register_gtp(void);
 void proto_reg_handoff_gtp(void);
@@ -110,414 +111,442 @@ static guint g_gtpv0_port  = GTPv0_PORT;
 static guint g_gtpv1c_port = GTPv1C_PORT;
 static guint g_gtpv1u_port = GTPv1U_PORT;
 
-static int proto_gtp = -1;
-static int proto_gtpprime = -1;
+static int proto_gtp;
+static int proto_gtpprime;
 
 /*KTi*/
-static int hf_gtp_ie_id = -1;
-static int hf_gtp_response_in = -1;
-static int hf_gtp_response_to = -1;
-static int hf_gtp_time = -1;
-static int hf_gtp_apn = -1;
-static int hf_gtp_cause = -1;
-static int hf_gtp_chrg_char = -1;
-static int hf_gtp_chrg_char_s = -1;
-static int hf_gtp_chrg_char_n = -1;
-static int hf_gtp_chrg_char_p = -1;
-static int hf_gtp_chrg_char_f = -1;
-static int hf_gtp_chrg_char_h = -1;
-static int hf_gtp_chrg_char_r = -1;
-static int hf_gtp_chrg_id = -1;
-static int hf_gtp_chrg_ipv4 = -1;
-static int hf_gtp_chrg_ipv6 = -1;
-static int hf_gtp_ext_flow_label = -1;
-static int hf_gtp_ext_id = -1;
-static int hf_gtp_ext_val = -1;
-static int hf_gtp_ext_hdr = -1;
-static int hf_gtp_ext_hdr_next = -1;
-static int hf_gtp_ext_hdr_length = -1;
-static int hf_gtp_ext_hdr_ran_cont = -1;
-static int hf_gtp_ext_hdr_spare_bits = -1;
-static int hf_gtp_ext_hdr_spare_bytes = -1;
-static int hf_gtp_ext_hdr_long_pdcp_sn = -1;
-static int hf_gtp_ext_hdr_xw_ran_cont = -1;
-static int hf_gtp_ext_hdr_pdcpsn = -1;
-static int hf_gtp_ext_hdr_udp_port = -1;
-static int hf_gtp_flags = -1;
-static int hf_gtp_flags_ver = -1;
-static int hf_gtp_prime_flags_ver = -1;
-static int hf_gtp_flags_pt = -1;
-static int hf_gtp_flags_spare1 = -1;
-static int hf_gtp_flags_hdr_length = -1;
-static int hf_gtp_flags_snn = -1;
-static int hf_gtp_flags_spare2 = -1;
-static int hf_gtp_flags_e = -1;
-static int hf_gtp_flags_s = -1;
-static int hf_gtp_flags_pn = -1;
-static int hf_gtp_flow_ii = -1;
-static int hf_gtp_flow_label = -1;
-static int hf_gtp_flow_sig = -1;
-static int hf_gtp_gsn_addr_len = -1;
-static int hf_gtp_gsn_addr_type = -1;
-static int hf_gtp_gsn_ipv4 = -1;
-static int hf_gtp_gsn_ipv6 = -1;
-static int hf_gtp_length = -1;
-static int hf_gtp_map_cause = -1;
-static int hf_gtp_message_type = -1;
-static int hf_gtp_ms_reason = -1;
-static int hf_gtp_ms_valid = -1;
-static int hf_gtp_npdu_number = -1;
-static int hf_gtp_node_ipv4 = -1;
-static int hf_gtp_node_ipv6 = -1;
-static int hf_gtp_node_name = -1;
-static int hf_gtp_node_realm = -1;
-static int hf_gtp_nsapi = -1;
-static int hf_gtp_ptmsi = -1;
-static int hf_gtp_ptmsi_sig = -1;
-static int hf_gtp_qos_version = -1;
-static int hf_gtp_qos_spare1 = -1;
-static int hf_gtp_qos_delay = -1;
-static int hf_gtp_qos_mean = -1;
-static int hf_gtp_qos_peak = -1;
-static int hf_gtp_qos_spare2 = -1;
-static int hf_gtp_qos_precedence = -1;
-static int hf_gtp_qos_spare3 = -1;
-static int hf_gtp_qos_reliability = -1;
-static int hf_gtp_qos_al_ret_priority = -1;
-static int hf_gtp_qos_traf_class = -1;
-static int hf_gtp_qos_del_order = -1;
-static int hf_gtp_qos_del_err_sdu = -1;
-static int hf_gtp_qos_max_sdu_size = -1;
-static int hf_gtp_qos_max_ul = -1;
-static int hf_gtp_qos_max_dl = -1;
-static int hf_gtp_qos_res_ber = -1;
-static int hf_gtp_qos_sdu_err_ratio = -1;
-static int hf_gtp_qos_trans_delay = -1;
-static int hf_gtp_qos_traf_handl_prio = -1;
-static int hf_gtp_qos_guar_ul = -1;
-static int hf_gtp_qos_guar_dl = -1;
-static int hf_gtp_qos_spare4 = -1;
-static int hf_gtp_qos_sig_ind = -1;
-static int hf_gtp_qos_src_stat_desc = -1;
-static int hf_gtp_qos_arp = -1;
-static int hf_gtp_qos_arp_pvi = -1;
-static int hf_gtp_qos_arp_pl = -1;
-static int hf_gtp_qos_arp_pci = -1;
-static int hf_gtp_qos_qci = -1;
-static int hf_gtp_qos_ul_mbr = -1;
-static int hf_gtp_qos_dl_mbr = -1;
-static int hf_gtp_qos_ul_gbr = -1;
-static int hf_gtp_qos_dl_gbr = -1;
-static int hf_gtp_qos_ul_apn_ambr = -1;
-static int hf_gtp_qos_dl_apn_ambr = -1;
-static int hf_gtp_pkt_flow_id = -1;
-static int hf_gtp_rab_gtpu_dn = -1;
-static int hf_gtp_rab_gtpu_up = -1;
-static int hf_gtp_rab_pdu_dn = -1;
-static int hf_gtp_rab_pdu_up = -1;
-static int hf_gtp_uli_geo_loc_type = -1;
-static int hf_gtp_cgi_ci = -1;
-static int hf_gtp_sai_sac = -1;
-static int hf_gtp_rai_rac = -1;
-static int hf_gtp_lac = -1;
-static int hf_gtp_tac = -1;
-static int hf_gtp_ranap_cause = -1;
-static int hf_gtp_recovery = -1;
-static int hf_gtp_reorder = -1;
-static int hf_gtp_rnc_ipv4 = -1;
-static int hf_gtp_rnc_ipv6 = -1;
-static int hf_gtp_rp = -1;
-static int hf_gtp_rp_nsapi = -1;
-static int hf_gtp_rp_sms = -1;
-static int hf_gtp_rp_spare = -1;
-static int hf_gtp_sel_mode = -1;
-static int hf_gtp_seq_number = -1;
-static int hf_gtp_session = -1;
-static int hf_gtp_sndcp_number = -1;
-static int hf_gtp_tear_ind = -1;
-static int hf_gtp_teid = -1;
-static int hf_gtp_teid_cp = -1;
-static int hf_gtp_uplink_teid_cp = -1;
-static int hf_gtp_teid_data = -1;
-static int hf_gtp_uplink_teid_data = -1;
-static int hf_gtp_teid_ii = -1;
-static int hf_gtp_tid = -1;
-static int hf_gtp_tlli = -1;
-static int hf_gtp_tr_comm = -1;
-static int hf_gtp_trace_ref = -1;
-static int hf_gtp_trace_type = -1;
-static int hf_gtp_user_addr_pdp_org = -1;
-static int hf_gtp_user_addr_pdp_type = -1;
-static int hf_gtp_user_ipv4 = -1;
-static int hf_gtp_user_ipv6 = -1;
-static int hf_gtp_security_mode = -1;
-static int hf_gtp_no_of_vectors = -1;
-static int hf_gtp_cipher_algorithm = -1;
-static int hf_gtp_cksn_ksi = -1;
-static int hf_gtp_cksn = -1;
-static int hf_gtp_ksi = -1;
-static int hf_gtp_ext_length = -1;
-static int hf_gtp_utran_field = -1;
-static int hf_gtp_ext_apn_res = -1;
-static int hf_gtp_ext_rat_type = -1;
-static int hf_gtp_ext_imeisv = -1;
-static int hf_gtp_target_rnc_id = -1;
-static int hf_gtp_target_ext_rnc_id = -1;
-static int hf_gtp_bssgp_cause = -1;
-static int hf_gtp_bssgp_ra_discriminator = -1;
-static int hf_gtp_sapi = -1;
-static int hf_gtp_xid_par_len = -1;
-static int hf_gtp_rep_act_type = -1;
-static int hf_gtp_correlation_id = -1;
-static int hf_gtp_earp_pci = -1;
-static int hf_gtp_earp_pl = -1;
-static int hf_gtp_earp_pvi = -1;
-static int hf_gtp_ext_comm_flags_uasi = -1;
-static int hf_gtp_ext_comm_flags_bdwi = -1;
-static int hf_gtp_ext_comm_flags_pcri = -1;
-static int hf_gtp_ext_comm_flags_vb = -1;
-static int hf_gtp_ext_comm_flags_retloc = -1;
-static int hf_gtp_ext_comm_flags_cpsr = -1;
-static int hf_gtp_ext_comm_flags_ccrsi = -1;
-static int hf_gtp_ext_comm_flags_unauthenticated_imsi = -1;
-static int hf_gtp_csg_id = -1;
-static int hf_gtp_access_mode = -1;
-static int hf_gtp_cmi = -1;
-static int hf_gtp_csg_inf_rep_act_ucicsg = -1;
-static int hf_gtp_csg_inf_rep_act_ucishc = -1;
-static int hf_gtp_csg_inf_rep_act_uciuhc = -1;
-static int hf_gtp_ext_comm_flags_II_pnsi = -1;
-static int hf_gtp_ext_comm_flags_II_dtci = -1;
-static int hf_gtp_ext_comm_flags_II_pmtsmi = -1;
-static int hf_gtp_ext_comm_flags_II_spare = -1;
-static int hf_gtp_ciot_opt_sup_ind_sgni_pdn = -1;
-static int hf_gtp_ciot_opt_sup_ind_scni_pdn = -1;
-static int hf_gtp_ciot_opt_sup_ind_spare = -1;
-static int hf_gtp_up_fun_sel_ind_flags_dcnr = -1;
-static int hf_gtp_up_fun_sel_ind_flags_spare = -1;
-static int hf_gtp_cdr_app = -1;
-static int hf_gtp_cdr_rel = -1;
-static int hf_gtp_cdr_ver = -1;
-static int hf_gtp_cdr_rel_ext = -1;
-static int hf_gtp_cdr_length = -1;
-static int hf_gtp_cdr_context = -1;
-static int hf_gtp_cmn_flg_ppc = -1;
-static int hf_gtp_cmn_flg_mbs_srv_type = -1;
-static int hf_gtp_cmn_flg_mbs_ran_pcd_rdy = -1;
-static int hf_gtp_cmn_flg_mbs_cnt_inf = -1;
-static int hf_gtp_cmn_flg_nrsn = -1;
-static int hf_gtp_cmn_flg_no_qos_neg = -1;
-static int hf_gtp_cmn_flg_upgrd_qos_sup = -1;
-static int hf_gtp_cmn_flg_dual_addr_bearer_flg = -1;
-static int hf_gtp_linked_nsapi = -1;
-static int hf_gtp_enh_nsapi = -1;
-static int hf_gtp_tmgi = -1;
-static int hf_gtp_mbms_ses_dur_days = -1;
-static int hf_gtp_mbms_ses_dur_s = -1;
-static int hf_gtp_no_of_mbms_sa_codes = -1;
-static int hf_gtp_mbms_sa_code = -1;
-static int hf_gtp_trace_ref2 = -1;
-static int hf_gtp_trace_rec_session_ref = -1;
-static int hf_gtp_trace_triggers_ggsn_pdp = -1;
-static int hf_gtp_trace_triggers_ggsn_mbms = -1;
-static int hf_gtp_trace_triggers_ggsn = -1;
-static int hf_gtp_trace_depth = -1;
-static int hf_gtp_trace_loi_ggsn_gmb = -1;
-static int hf_gtp_trace_loi_ggsn_gi = -1;
-static int hf_gtp_trace_loi_ggsn_gn = -1;
-static int hf_gtp_trace_loi_ggsn = -1;
-static int hf_gtp_trace_activity_control = -1;
-static int hf_gtp_hop_count = -1;
-static int hf_gtp_mbs_2g_3g_ind = -1;
-static int hf_gtp_trace_triggers_bm_sc_mbms = -1;
-static int hf_gtp_trace_triggers_bm_sc = -1;
-static int hf_gtp_trace_loi_bm_sc_gmb = -1;
-static int hf_gtp_trace_loi_bm_sc = -1;
-static int hf_gtp_time_2_dta_tr = -1;
-static int hf_gtp_target_lac = -1;
-static int hf_gtp_target_rac = -1;
-static int hf_gtp_target_ci = -1;
-static int hf_gtp_source_type = -1;
-static int hf_gtp_source_lac = -1;
-static int hf_gtp_source_rac = -1;
-static int hf_gtp_source_ci = -1;
-static int hf_gtp_source_rnc_id = -1;
-static int hf_gtp_ext_ei = -1;
-static int hf_gtp_ext_gcsi = -1;
-static int hf_gtp_ext_dti = -1;
-static int hf_gtp_ra_prio_lcs = -1;
-static int hf_gtp_bcm = -1;
-static int hf_gtp_fqdn = -1;
-static int hf_gtp_rim_routing_addr = -1;
-static int hf_gtp_mbms_flow_id = -1;
-static int hf_gtp_mbms_dist_indic = -1;
-static int hf_gtp_ext_apn_ambr_ul = -1;
-static int hf_gtp_ext_apn_ambr_dl = -1;
-static int hf_gtp_ext_sub_ue_ambr_ul = -1;
-static int hf_gtp_ext_sub_ue_ambr_dl = -1;
-static int hf_gtp_ext_auth_ue_ambr_ul = -1;
-static int hf_gtp_ext_auth_ue_ambr_dl = -1;
-static int hf_gtp_ext_auth_apn_ambr_ul = -1;
-static int hf_gtp_ext_auth_apn_ambr_dl = -1;
-static int hf_gtp_ext_ggsn_back_off_time_units = -1;
-static int hf_gtp_ext_ggsn_back_off_timer = -1;
-static int hf_gtp_lapi = -1;
-static int hf_gtp_higher_br_16mb_flg = -1;
-static int hf_gtp_max_mbr_apn_ambr_ul = -1;
-static int hf_gtp_max_mbr_apn_ambr_dl = -1;
-static int hf_gtp_ext_enb_type = -1;
-static int hf_gtp_macro_enodeb_id = -1;
-static int hf_gtp_home_enodeb_id = -1;
-static int hf_gtp_dummy_octets = -1;
+static int hf_gtp_ie_id;
+static int hf_gtp_response_in;
+static int hf_gtp_response_to;
+static int hf_gtp_time;
+static int hf_gtp_apn;
+static int hf_gtp_cause;
+static int hf_gtp_chrg_char;
+static int hf_gtp_chrg_char_s;
+static int hf_gtp_chrg_char_n;
+static int hf_gtp_chrg_char_p;
+static int hf_gtp_chrg_char_f;
+static int hf_gtp_chrg_char_h;
+static int hf_gtp_chrg_char_r;
+static int hf_gtp_chrg_id;
+static int hf_gtp_chrg_ipv4;
+static int hf_gtp_chrg_ipv6;
+static int hf_gtp_ext_flow_label;
+static int hf_gtp_ext_id;
+static int hf_gtp_ext_val;
+static int hf_gtp_ext_hdr;
+static int hf_gtp_ext_hdr_next;
+static int hf_gtp_ext_hdr_length;
+static int hf_gtp_ext_hdr_ran_cont;
+static int hf_gtp_ext_hdr_spare_bits;
+static int hf_gtp_ext_hdr_spare_bytes;
+static int hf_gtp_ext_hdr_long_pdcp_sn;
+static int hf_gtp_ext_hdr_xw_ran_cont;
+static int hf_gtp_ext_hdr_pdcpsn;
+static int hf_gtp_ext_hdr_udp_port;
+static int hf_gtp_flags;
+static int hf_gtp_flags_ver;
+static int hf_gtp_prime_flags_ver;
+static int hf_gtp_flags_pt;
+static int hf_gtp_flags_spare1;
+static int hf_gtp_flags_hdr_length;
+static int hf_gtp_flags_snn;
+static int hf_gtp_flags_spare2;
+static int hf_gtp_flags_e;
+static int hf_gtp_flags_s;
+static int hf_gtp_flags_pn;
+static int hf_gtp_flow_ii;
+static int hf_gtp_flow_label;
+static int hf_gtp_flow_sig;
+static int hf_gtp_gsn_addr_len;
+static int hf_gtp_gsn_addr_type;
+static int hf_gtp_gsn_ipv4;
+static int hf_gtp_gsn_ipv6;
+static int hf_gtp_length;
+static int hf_gtp_map_cause;
+static int hf_gtp_message_type;
+static int hf_gtp_ms_reason;
+static int hf_gtp_ms_valid;
+static int hf_gtp_npdu_number;
+static int hf_gtp_node_ipv4;
+static int hf_gtp_node_ipv6;
+static int hf_gtp_node_name;
+static int hf_gtp_node_realm;
+static int hf_gtp_nsapi;
+static int hf_gtp_ptmsi;
+static int hf_gtp_ptmsi_sig;
+static int hf_gtp_qos_version;
+static int hf_gtp_qos_spare1;
+static int hf_gtp_qos_delay;
+static int hf_gtp_qos_mean;
+static int hf_gtp_qos_peak;
+static int hf_gtp_qos_spare2;
+static int hf_gtp_qos_precedence;
+static int hf_gtp_qos_spare3;
+static int hf_gtp_qos_reliability;
+static int hf_gtp_qos_al_ret_priority;
+static int hf_gtp_qos_traf_class;
+static int hf_gtp_qos_del_order;
+static int hf_gtp_qos_del_err_sdu;
+static int hf_gtp_qos_max_sdu_size;
+static int hf_gtp_qos_max_ul;
+static int hf_gtp_qos_max_dl;
+static int hf_gtp_qos_res_ber;
+static int hf_gtp_qos_sdu_err_ratio;
+static int hf_gtp_qos_trans_delay;
+static int hf_gtp_qos_traf_handl_prio;
+static int hf_gtp_qos_guar_ul;
+static int hf_gtp_qos_guar_dl;
+static int hf_gtp_qos_spare4;
+static int hf_gtp_qos_sig_ind;
+static int hf_gtp_qos_src_stat_desc;
+static int hf_gtp_qos_arp;
+static int hf_gtp_qos_arp_pvi;
+static int hf_gtp_qos_arp_pl;
+static int hf_gtp_qos_arp_pci;
+static int hf_gtp_qos_qci;
+static int hf_gtp_qos_ul_mbr;
+static int hf_gtp_qos_dl_mbr;
+static int hf_gtp_qos_ul_gbr;
+static int hf_gtp_qos_dl_gbr;
+static int hf_gtp_qos_ul_apn_ambr;
+static int hf_gtp_qos_dl_apn_ambr;
+static int hf_gtp_pkt_flow_id;
+static int hf_gtp_rab_gtpu_dn;
+static int hf_gtp_rab_gtpu_up;
+static int hf_gtp_rab_pdu_dn;
+static int hf_gtp_rab_pdu_up;
+static int hf_gtp_uli_geo_loc_type;
+static int hf_gtp_cgi_ci;
+static int hf_gtp_sai_sac;
+static int hf_gtp_rai_rac;
+static int hf_gtp_lac;
+static int hf_gtp_tac;
+static int hf_gtp_ranap_cause;
+static int hf_gtp_recovery;
+static int hf_gtp_reorder;
+static int hf_gtp_rnc_ipv4;
+static int hf_gtp_rnc_ipv6;
+static int hf_gtp_rp;
+static int hf_gtp_rp_nsapi;
+static int hf_gtp_rp_sms;
+static int hf_gtp_rp_spare;
+static int hf_gtp_sel_mode;
+static int hf_gtp_seq_number;
+static int hf_gtp_session;
+static int hf_gtp_sndcp_number;
+static int hf_gtp_tear_ind;
+static int hf_gtp_teid;
+static int hf_gtp_teid_cp;
+static int hf_gtp_uplink_teid_cp;
+static int hf_gtp_teid_data;
+static int hf_gtp_uplink_teid_data;
+static int hf_gtp_teid_ii;
+static int hf_gtp_tid;
+static int hf_gtp_tlli;
+static int hf_gtp_tr_comm;
+static int hf_gtp_trace_ref;
+static int hf_gtp_trace_type;
+static int hf_gtp_user_addr_pdp_org;
+static int hf_gtp_user_addr_pdp_type;
+static int hf_gtp_user_ipv4;
+static int hf_gtp_user_ipv6;
+static int hf_gtp_security_mode;
+static int hf_gtp_no_of_vectors;
+static int hf_gtp_cipher_algorithm;
+static int hf_gtp_cksn_ksi;
+static int hf_gtp_cksn;
+static int hf_gtp_ksi;
+static int hf_gtp_ext_length;
+static int hf_gtp_utran_field;
+static int hf_gtp_ext_apn_res;
+static int hf_gtp_ext_rat_type;
+static int hf_gtp_ext_imeisv;
+static int hf_gtp_target_rnc_id;
+static int hf_gtp_target_ext_rnc_id;
+static int hf_gtp_bssgp_cause;
+static int hf_gtp_bssgp_ra_discriminator;
+static int hf_gtp_sapi;
+static int hf_gtp_xid_par_len;
+static int hf_gtp_rep_act_type;
+static int hf_gtp_correlation_id;
+static int hf_gtp_earp_pci;
+static int hf_gtp_earp_pl;
+static int hf_gtp_earp_pvi;
+static int hf_gtp_ext_comm_flags_uasi;
+static int hf_gtp_ext_comm_flags_bdwi;
+static int hf_gtp_ext_comm_flags_pcri;
+static int hf_gtp_ext_comm_flags_vb;
+static int hf_gtp_ext_comm_flags_retloc;
+static int hf_gtp_ext_comm_flags_cpsr;
+static int hf_gtp_ext_comm_flags_ccrsi;
+static int hf_gtp_ext_comm_flags_unauthenticated_imsi;
+static int hf_gtp_csg_id;
+static int hf_gtp_access_mode;
+static int hf_gtp_cmi;
+static int hf_gtp_csg_inf_rep_act_ucicsg;
+static int hf_gtp_csg_inf_rep_act_ucishc;
+static int hf_gtp_csg_inf_rep_act_uciuhc;
+static int hf_gtp_ext_comm_flags_II_pnsi;
+static int hf_gtp_ext_comm_flags_II_dtci;
+static int hf_gtp_ext_comm_flags_II_pmtsmi;
+static int hf_gtp_ext_comm_flags_II_spare;
+static int hf_gtp_ciot_opt_sup_ind_sgni_pdn;
+static int hf_gtp_ciot_opt_sup_ind_scni_pdn;
+static int hf_gtp_ciot_opt_sup_ind_spare;
+static int hf_gtp_up_fun_sel_ind_flags_dcnr;
+static int hf_gtp_up_fun_sel_ind_flags_spare;
+static int hf_gtp_cdr_app;
+static int hf_gtp_cdr_rel;
+static int hf_gtp_cdr_ver;
+static int hf_gtp_cdr_rel_ext;
+static int hf_gtp_cdr_length;
+static int hf_gtp_cdr_context;
+static int hf_gtp_cmn_flg_ppc;
+static int hf_gtp_cmn_flg_mbs_srv_type;
+static int hf_gtp_cmn_flg_mbs_ran_pcd_rdy;
+static int hf_gtp_cmn_flg_mbs_cnt_inf;
+static int hf_gtp_cmn_flg_nrsn;
+static int hf_gtp_cmn_flg_no_qos_neg;
+static int hf_gtp_cmn_flg_upgrd_qos_sup;
+static int hf_gtp_cmn_flg_dual_addr_bearer_flg;
+static int hf_gtp_linked_nsapi;
+static int hf_gtp_enh_nsapi;
+static int hf_gtp_tmgi;
+static int hf_gtp_mbms_ses_dur_days;
+static int hf_gtp_mbms_ses_dur_s;
+static int hf_gtp_no_of_mbms_sa_codes;
+static int hf_gtp_mbms_sa_code;
+static int hf_gtp_trace_ref2;
+static int hf_gtp_trace_rec_session_ref;
+static int hf_gtp_trace_triggers_ggsn_pdp;
+static int hf_gtp_trace_triggers_ggsn_mbms;
+static int hf_gtp_trace_triggers_ggsn;
+static int hf_gtp_trace_depth;
+static int hf_gtp_trace_loi_ggsn_gmb;
+static int hf_gtp_trace_loi_ggsn_gi;
+static int hf_gtp_trace_loi_ggsn_gn;
+static int hf_gtp_trace_loi_ggsn;
+static int hf_gtp_trace_activity_control;
+static int hf_gtp_hop_count;
+static int hf_gtp_mbs_2g_3g_ind;
+static int hf_gtp_trace_triggers_bm_sc_mbms;
+static int hf_gtp_trace_triggers_bm_sc;
+static int hf_gtp_trace_loi_bm_sc_gmb;
+static int hf_gtp_trace_loi_bm_sc;
+static int hf_gtp_time_2_dta_tr;
+static int hf_gtp_target_lac;
+static int hf_gtp_target_rac;
+static int hf_gtp_target_ci;
+static int hf_gtp_source_type;
+static int hf_gtp_source_lac;
+static int hf_gtp_source_rac;
+static int hf_gtp_source_ci;
+static int hf_gtp_source_rnc_id;
+static int hf_gtp_ext_ei;
+static int hf_gtp_ext_gcsi;
+static int hf_gtp_ext_dti;
+static int hf_gtp_ra_prio_lcs;
+static int hf_gtp_bcm;
+static int hf_gtp_fqdn;
+static int hf_gtp_rim_routing_addr;
+static int hf_gtp_mbms_flow_id;
+static int hf_gtp_mbms_dist_indic;
+static int hf_gtp_ext_apn_ambr_ul;
+static int hf_gtp_ext_apn_ambr_dl;
+static int hf_gtp_ext_sub_ue_ambr_ul;
+static int hf_gtp_ext_sub_ue_ambr_dl;
+static int hf_gtp_ext_auth_ue_ambr_ul;
+static int hf_gtp_ext_auth_ue_ambr_dl;
+static int hf_gtp_ext_auth_apn_ambr_ul;
+static int hf_gtp_ext_auth_apn_ambr_dl;
+static int hf_gtp_ext_ggsn_back_off_time_units;
+static int hf_gtp_ext_ggsn_back_off_timer;
+static int hf_gtp_lapi;
+static int hf_gtp_higher_br_16mb_flg;
+static int hf_gtp_max_mbr_apn_ambr_ul;
+static int hf_gtp_max_mbr_apn_ambr_dl;
+static int hf_gtp_ext_enb_type;
+static int hf_gtp_macro_enodeb_id;
+static int hf_gtp_home_enodeb_id;
+static int hf_gtp_dummy_octets;
 
-static int hf_pdcp_cont = -1;
+static int hf_pdcp_cont;
 
-static int hf_gtp_ext_hdr_pdu_ses_cont_pdu_type = -1;
-static int hf_gtp_ext_hdr_pdu_ses_cont_ppp = -1;
-static int hf_gtp_ext_hdr_pdu_ses_cont_rqi = -1;
-static int hf_gtp_ext_hdr_pdu_ses_cont_qos_flow_id = -1;
-static int hf_gtp_ext_hdr_pdu_ses_cont_ppi = -1;
+static int hf_gtp_ext_hdr_pdu_ses_cont_pdu_type;
+static int hf_gtp_ext_hdr_pdu_ses_cont_qmp;
+static int hf_gtp_ext_hdr_pdu_ses_cont_snp_dl;
+static int hf_gtp_ext_hdr_pdu_ses_cont_msnp;
+static int hf_gtp_ext_hdr_pdu_ses_cont_ppp;
+static int hf_gtp_ext_hdr_pdu_ses_cont_rqi;
+static int hf_gtp_ext_hdr_pdu_ses_cont_qos_flow_id;
+static int hf_gtp_ext_hdr_pdu_ses_cont_ppi;
+static int hf_gtp_ext_hdr_pdu_ses_cont_dl_send_time_stamp;
+static int hf_gtp_ext_hdr_pdu_ses_cont_dl_qfi_sn;
+static int hf_gtp_ext_hdr_pdu_ses_cont_dl_mbs_qfi_sn;
+static int hf_gtp_ext_hdr_pdu_ses_cont_dl_delay_ind;
+static int hf_gtp_ext_hdr_pdu_ses_cont_ul_delay_ind;
+static int hf_gtp_ext_hdr_pdu_ses_cont_snp_ul;
+static int hf_gtp_ext_hdr_pdu_ses_cont_n3_n9_delay_ind;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag;
+static int hf_gtp_ext_hdr_pdu_ses_cont_dl_send_time_stamp_repeat;
+static int hf_gtp_ext_hdr_pdu_ses_cont_dl_recv_time_stamp;
+static int hf_gtp_ext_hdr_pdu_ses_cont_ul_send_time_stamp;
+static int hf_gtp_ext_hdr_pdu_ses_cont_dl_delay_result;
+static int hf_gtp_ext_hdr_pdu_ses_cont_ul_delay_result;
+static int hf_gtp_ext_hdr_pdu_ses_cont_ul_qfi_sn;
+static int hf_gtp_ext_hdr_pdu_ses_cont_n3_n9_delay_result;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_7;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_6;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_5;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_4;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_3;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_2;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_1;
+static int hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_0;
+static int hf_gtp_ext_hdr_pdu_ses_cont_d1_ul_pdcp_delay_result_ind;
 
-static int hf_gtp_spare_b4b0 = -1;
-static int hf_gtp_spare_b7b6 = -1;
-static int hf_gtp_spare_h1 = -1;
-static int hf_gtp_rnc_ip_addr_v4 = -1;
-static int hf_gtp_rnc_ip_addr_v6 = -1;
-static int hf_gtp_ms_cm_2_len = -1;
-static int hf_gtp_ms_cm_3_len = -1;
-static int hf_gtp_sup_codec_lst_len = -1;
-static int hf_gtp_add_flg_for_srvcc_ics = -1;
-static int hf_gtp_sel_mode_val = -1;
-static int hf_gtp_uli_timestamp = -1;
-static int hf_gtp_lhn_id = -1;
-static int hf_gtp_sel_entity = -1;
-static int hf_gtp_ue_usage_type_value = -1;
-static int hf_gtp_scef_id_length = -1;
-static int hf_gtp_scef_id = -1;
-static int hf_gtp_iov_updates_counter = -1;
-static int hf_gtp_mapped_ue_usage_type = -1;
+static int hf_gtp_spare_b0;
+static int hf_gtp_spare_b4b0;
+static int hf_gtp_spare_b7b1;
+static int hf_gtp_rnc_ip_addr_v4;
+static int hf_gtp_rnc_ip_addr_v6;
+static int hf_gtp_ms_cm_2_len;
+static int hf_gtp_ms_cm_3_len;
+static int hf_gtp_sup_codec_lst_len;
+static int hf_gtp_add_flg_for_srvcc_ics;
+static int hf_gtp_sel_mode_val;
+static int hf_gtp_uli_timestamp;
+static int hf_gtp_lhn_id;
+static int hf_gtp_sel_entity;
+static int hf_gtp_ue_usage_type_value;
+static int hf_gtp_scef_id_length;
+static int hf_gtp_scef_id;
+static int hf_gtp_iov_updates_counter;
+static int hf_gtp_mapped_ue_usage_type;
 
 /* Generated from convert_proto_tree_add_text.pl */
-static int hf_gtp_rfsp_index = -1;
-static int hf_gtp_quintuplet_ciphering_key = -1;
-static int hf_gtp_kc = -1;
-static int hf_gtp_rand = -1;
-static int hf_gtp_pdp_context_identifier = -1;
-static int hf_gtp_receive_n_pdu_number = -1;
-static int hf_gtp_container_length = -1;
-static int hf_gtp_quintuplets_length = -1;
-static int hf_gtp_auth = -1;
-static int hf_gtp_tft_length = -1;
-static int hf_gtp_ggsn_address_for_control_plane_ipv4 = -1;
-static int hf_gtp_ggsn_address_for_control_plane_ipv6 = -1;
-static int hf_gtp_ggsn_address_for_user_traffic_ipv4 = -1;
-static int hf_gtp_ggsn_address_for_user_traffic_ipv6 = -1;
-static int hf_gtp_integrity_key_ik = -1;
-static int hf_gtp_gsn_address_information_element_length = -1;
-static int hf_gtp_reordering_required = -1;
-static int hf_gtp_sres = -1;
-static int hf_gtp_data_record_format = -1;
-static int hf_gtp_timezone = -1;
-static int hf_gtp_timezone_dst = -1;
-static int hf_gtp_authentication_length = -1;
-static int hf_gtp_send_n_pdu_number = -1;
-static int hf_gtp_sequence_number_up = -1;
-static int hf_gtp_pdp_address_length = -1;
-static int hf_gtp_transaction_identifier = -1;
-static int hf_gtp_xres_length = -1;
-static int hf_gtp_ggsn_address_length = -1;
-static int hf_gtp_apn_length = -1;
-static int hf_gtp_sequence_number_down = -1;
-static int hf_gtp_pdp_address_ipv4 = -1;
-static int hf_gtp_activity_status_indicator = -1;
-static int hf_gtp_pdp_type = -1;
-static int hf_gtp_quintuplet_integrity_key = -1;
-static int hf_gtp_pdp_address_ipv6 = -1;
-static int hf_gtp_rab_setup_length = -1;
-static int hf_gtp_number_of_data_records = -1;
-static int hf_gtp_ciphering_key_kc = -1;
-static int hf_gtp_pdp_cntxt_sapi = -1;
-static int hf_gtp_xres = -1;
-static int hf_gtp_pdp_organization = -1;
-static int hf_gtp_node_address_length = -1;
-static int hf_gtp_gsn_address_length = -1;
-static int hf_gtp_vplmn_address_allowed = -1;
-static int hf_gtp_uplink_flow_label_signalling = -1;
-static int hf_gtp_extended_end_user_address = -1;
-static int hf_gtp_ciphering_key_ck = -1;
-static int hf_gtp_fqdn_length = -1;
-static int hf_gtp_seq_num_released = -1;
-static int hf_gtp_seq_num_canceled = -1;
-static int hf_gtp_requests_responded = -1;
-static int hf_gtp_hyphen_separator = -1;
-static int hf_gtp_ms_network_cap_content_len = -1;
-static int hf_gtp_iei = -1;
-static int hf_gtp_iei_mobile_id_len = -1;
-static int hf_gtp_qos_umts_length = -1;
-static int hf_gtp_num_ext_hdr_types = -1;
-static int hf_gtp_ext_hdr_type = -1;
-static int hf_gtp_tpdu_data = -1;
+static int hf_gtp_rfsp_index;
+static int hf_gtp_quintuplet_ciphering_key;
+static int hf_gtp_kc;
+static int hf_gtp_rand;
+static int hf_gtp_pdp_context_identifier;
+static int hf_gtp_receive_n_pdu_number;
+static int hf_gtp_container_length;
+static int hf_gtp_quintuplets_length;
+static int hf_gtp_auth;
+static int hf_gtp_tft_length;
+static int hf_gtp_ggsn_address_for_control_plane_ipv4;
+static int hf_gtp_ggsn_address_for_control_plane_ipv6;
+static int hf_gtp_ggsn_address_for_user_traffic_ipv4;
+static int hf_gtp_ggsn_address_for_user_traffic_ipv6;
+static int hf_gtp_integrity_key_ik;
+static int hf_gtp_gsn_address_information_element_length;
+static int hf_gtp_reordering_required;
+static int hf_gtp_sres;
+static int hf_gtp_data_record_format;
+static int hf_gtp_timezone;
+static int hf_gtp_timezone_dst;
+static int hf_gtp_authentication_length;
+static int hf_gtp_send_n_pdu_number;
+static int hf_gtp_sequence_number_up;
+static int hf_gtp_pdp_address_length;
+static int hf_gtp_transaction_identifier;
+static int hf_gtp_xres_length;
+static int hf_gtp_ggsn_address_length;
+static int hf_gtp_apn_length;
+static int hf_gtp_sequence_number_down;
+static int hf_gtp_pdp_address_ipv4;
+static int hf_gtp_activity_status_indicator;
+static int hf_gtp_pdp_type;
+static int hf_gtp_quintuplet_integrity_key;
+static int hf_gtp_pdp_address_ipv6;
+static int hf_gtp_rab_setup_length;
+static int hf_gtp_number_of_data_records;
+static int hf_gtp_ciphering_key_kc;
+static int hf_gtp_pdp_cntxt_sapi;
+static int hf_gtp_xres;
+static int hf_gtp_pdp_organization;
+static int hf_gtp_node_address_length;
+static int hf_gtp_gsn_address_length;
+static int hf_gtp_vplmn_address_allowed;
+static int hf_gtp_uplink_flow_label_signalling;
+static int hf_gtp_extended_end_user_address;
+static int hf_gtp_ciphering_key_ck;
+static int hf_gtp_fqdn_length;
+static int hf_gtp_seq_num_released;
+static int hf_gtp_seq_num_canceled;
+static int hf_gtp_requests_responded;
+static int hf_gtp_hyphen_separator;
+static int hf_gtp_ms_network_cap_content_len;
+static int hf_gtp_iei;
+static int hf_gtp_iei_mobile_id_len;
+static int hf_gtp_qos_umts_length;
+static int hf_gtp_num_ext_hdr_types;
+static int hf_gtp_ext_hdr_type;
+static int hf_gtp_tpdu_data;
 
-static int hf_gtp_sgsn_address_for_control_plane_ipv4 = -1;
-static int hf_gtp_sgsn_address_for_control_plane_ipv6 = -1;
-static int hf_gtp_sgsn_address_for_user_traffic_ipv4 = -1;
-static int hf_gtp_sgsn_address_for_user_traffic_ipv6 = -1;
+static int hf_gtp_sgsn_address_for_control_plane_ipv4;
+static int hf_gtp_sgsn_address_for_control_plane_ipv6;
+static int hf_gtp_sgsn_address_for_user_traffic_ipv4;
+static int hf_gtp_sgsn_address_for_user_traffic_ipv6;
 
 /* Initialize the subtree pointers */
-static gint ett_gtp = -1;
-static gint ett_gtp_flags = -1;
-static gint ett_gtp_ext = -1;
-static gint ett_gtp_ext_hdr = -1;
-static gint ett_gtp_qos = -1;
-static gint ett_gtp_qos_arp = -1;
-static gint ett_gtp_flow_ii = -1;
-static gint ett_gtp_rp = -1;
-static gint ett_gtp_pkt_flow_id = -1;
-static gint ett_gtp_trip = -1;
-static gint ett_gtp_quint = -1;
-static gint ett_gtp_proto = -1;
-static gint ett_gtp_gsn_addr = -1;
-static gint ett_gtp_tft = -1;
-static gint ett_gtp_rab_setup = -1;
-static gint ett_gtp_hdr_list = -1;
-static gint ett_gtp_node_addr = -1;
-static gint ett_gtp_rel_pack = -1;
-static gint ett_gtp_can_pack = -1;
-static gint ett_gtp_data_resp = -1;
-static gint ett_gtp_drx = -1;
-static gint ett_gtp_net_cap = -1;
-static gint ett_gtp_tmgi = -1;
-static gint ett_gtp_cdr_ver = -1;
-static gint ett_gtp_cdr_dr = -1;
-static gint ett_gtp_mm_cntxt = -1;
-static gint ett_gtp_utran_cont = -1;
-static gint ett_gtp_nr_ran_cont = -1;
-static gint ett_gtp_pdcp_no_conf = -1;
-static gint ett_pdu_session_cont = -1;
-static gint ett_gtp_trace_triggers_ggsn = -1;
-static gint ett_gtp_trace_loi_ggsn = -1;
-static gint ett_gtp_trace_triggers_bm_sc = -1;
-static gint ett_gtp_trace_loi_bm_sc = -1;
-static gint ett_gtp_bss_cont = -1;
-static gint ett_gtp_lst_set_up_pfc = -1;
-static gint ett_gtp_rrc_cont = -1;
+static gint ett_gtp;
+static gint ett_gtp_flags;
+static gint ett_gtp_ext;
+static gint ett_gtp_ext_hdr;
+static gint ett_gtp_qos;
+static gint ett_gtp_qos_arp;
+static gint ett_gtp_flow_ii;
+static gint ett_gtp_rp;
+static gint ett_gtp_pkt_flow_id;
+static gint ett_gtp_trip;
+static gint ett_gtp_quint;
+static gint ett_gtp_proto;
+static gint ett_gtp_gsn_addr;
+static gint ett_gtp_tft;
+static gint ett_gtp_rab_setup;
+static gint ett_gtp_hdr_list;
+static gint ett_gtp_node_addr;
+static gint ett_gtp_rel_pack;
+static gint ett_gtp_can_pack;
+static gint ett_gtp_data_resp;
+static gint ett_gtp_drx;
+static gint ett_gtp_net_cap;
+static gint ett_gtp_tmgi;
+static gint ett_gtp_cdr_ver;
+static gint ett_gtp_cdr_dr;
+static gint ett_gtp_mm_cntxt;
+static gint ett_gtp_utran_cont;
+static gint ett_gtp_nr_ran_cont;
+static gint ett_gtp_pdcp_no_conf;
+static gint ett_pdu_session_cont;
+static gint ett_gtp_trace_triggers_ggsn;
+static gint ett_gtp_trace_loi_ggsn;
+static gint ett_gtp_trace_triggers_bm_sc;
+static gint ett_gtp_trace_loi_bm_sc;
+static gint ett_gtp_bss_cont;
+static gint ett_gtp_lst_set_up_pfc;
+static gint ett_gtp_rrc_cont;
+static gint ett_gtp_rim_routing_adr;
 
-static expert_field ei_gtp_ext_hdr_pdcpsn = EI_INIT;
-static expert_field ei_gtp_ext_length_mal = EI_INIT;
-static expert_field ei_gtp_ext_length_warn = EI_INIT;
-static expert_field ei_gtp_undecoded = EI_INIT;
-static expert_field ei_gtp_message_not_found = EI_INIT;
-static expert_field ei_gtp_field_not_present = EI_INIT;
-static expert_field ei_gtp_wrong_next_field = EI_INIT;
-static expert_field ei_gtp_field_not_support_in_version = EI_INIT;
-static expert_field ei_gtp_guaranteed_bit_rate_value = EI_INIT;
-static expert_field ei_gtp_max_bit_rate_value = EI_INIT;
-static expert_field ei_gtp_ext_geo_loc_type = EI_INIT;
-static expert_field ei_gtp_iei = EI_INIT;
-static expert_field ei_gtp_unknown_extension_header = EI_INIT;
-static expert_field ei_gtp_unknown_pdu_type = EI_INIT;
-static expert_field ei_gtp_source_type_unknown = EI_INIT;
-static expert_field ei_gtp_cdr_rel_ext_invalid = EI_INIT;
+static expert_field ei_gtp_ext_hdr_pdcpsn;
+static expert_field ei_gtp_ext_length_mal;
+static expert_field ei_gtp_ext_length_warn;
+static expert_field ei_gtp_undecoded;
+static expert_field ei_gtp_message_not_found;
+static expert_field ei_gtp_field_not_present;
+static expert_field ei_gtp_wrong_next_field;
+static expert_field ei_gtp_field_not_support_in_version;
+static expert_field ei_gtp_guaranteed_bit_rate_value;
+static expert_field ei_gtp_max_bit_rate_value;
+static expert_field ei_gtp_ext_geo_loc_type;
+static expert_field ei_gtp_iei;
+static expert_field ei_gtp_unknown_extension_header;
+static expert_field ei_gtp_unknown_pdu_type;
+static expert_field ei_gtp_source_type_unknown;
+static expert_field ei_gtp_cdr_rel_ext_invalid;
 
 static const range_string assistance_info_type[] = {
     { 0,   0,   "UNKNOWN" },
@@ -535,59 +564,75 @@ static const range_string assistance_info_type[] = {
 
 /* NRUP - TS 38.425 */
 /* NR-U RAN Container */
-static int proto_nrup = -1;
-static int hf_nrup_pdu_type = -1;
-static int hf_nrup_spr_bit_extnd_flag = -1;
-static int hf_nrup_dl_discrd_blks = -1;
-static int hf_nrup_dl_flush = -1;
-static int hf_nrup_rpt_poll = -1;
-static int hf_nrup_retransmission_flag = -1;
-static int hf_nrup_ass_inf_rep_poll_flag = -1;
-static int hf_nrup_spare = -1;
-static int hf_nrup_request_out_of_seq_report = -1;
-static int hf_nrup_report_delivered = -1;
-static int hf_nrup_user_data_existence_flag = -1;
-static int hf_nrup_nr_u_seq_num = -1;
-static int hf_nrup_dl_disc_nr_pdcp_pdu_sn = -1;
-static int hf_nrup_dl_disc_num_blks = -1;
-static int hf_nrup_dl_disc_nr_pdcp_pdu_sn_start = -1;
-static int hf_nrup_dl_disc_blk_sz = -1;
-static int hf_nrup_dl_report_nr_pdcp_pdu_sn = -1;
-static int hf_nrup_high_tx_nr_pdcp_sn_ind = -1;
-static int hf_nrup_high_delivered_nr_pdcp_sn_ind = -1;
-static int hf_nrup_final_frame_ind = -1;
-static int hf_nrup_lost_pkt_rpt = -1;
-static int hf_nrup_high_retx_nr_pdcp_sn_ind = -1;
-static int hf_nrup_high_delivered_retx_nr_pdcp_sn_ind = -1;
-static int hf_nrup_cause_rpt = -1;
-static int hf_nrup_delivered_nr_pdcp_sn_range_ind = -1;
-static int hf_nrup_data_rate_ind = -1;
-static int hf_nrup_desrd_buff_sz_data_radio_bearer = -1;
-static int hf_nrup_desrd_data_rate = -1;
-static int hf_nrup_num_lost_nru_seq_num = -1;
-static int hf_nrup_start_lost_nru_seq_num = -1;
-static int hf_nrup_end_lost_nru_seq_num = -1;
-static int hf_nrup_high_success_delivered_nr_pdcp_sn = -1;
-static int hf_nrup_high_tx_nr_pdcp_sn = -1;
-static int hf_nrup_cause_val = -1;
-static int hf_nrup_high_success_delivered_retx_nr_pdcp_sn = -1;
-static int hf_nrup_high_retx_nr_pdcp_sn = -1;
-static int hf_nrup_pdcp_duplication_ind = -1;
-static int hf_nrup_assistance_information_ind = -1;
-static int hf_nrup_ul_delay_ind = -1;
-static int hf_nrup_dl_delay_ind = -1;
-static int hf_nrup_spare_2 = -1;
-static int hf_nrup_pdcp_duplication_activation_suggestion = -1;
-static int hf_nrup_num_assistance_info_fields = -1;
-static int hf_nrup_assistance_information_type = -1;
-static int hf_nrup_num_octets_radio_qa_info = -1;
-static int hf_nrup_radio_qa_info = -1;
-static int hf_nrup_ul_delay_du_result = -1;
-static int hf_nrup_dl_delay_du_result = -1;
+static int proto_nrup;
+static int hf_nrup_pdu_type;
+static int hf_nrup_spr_bit_extnd_flag;
+static int hf_nrup_dl_discrd_blks;
+static int hf_nrup_dl_flush;
+static int hf_nrup_rpt_poll;
+static int hf_nrup_retransmission_flag;
+static int hf_nrup_ass_inf_rep_poll_flag;
+static int hf_nrup_spare;
+static int hf_nrup_request_out_of_seq_report;
+static int hf_nrup_report_delivered;
+static int hf_nrup_user_data_existence_flag;
+static int hf_nrup_nr_u_seq_num;
+static int hf_nrup_dl_disc_nr_pdcp_pdu_sn;
+static int hf_nrup_dl_disc_num_blks;
+static int hf_nrup_dl_disc_nr_pdcp_pdu_sn_start;
+static int hf_nrup_dl_disc_blk_sz;
+static int hf_nrup_dl_report_nr_pdcp_pdu_sn;
+static int hf_nrup_high_tx_nr_pdcp_sn_ind;
+static int hf_nrup_high_delivered_nr_pdcp_sn_ind;
+static int hf_nrup_final_frame_ind;
+static int hf_nrup_lost_pkt_rpt;
+static int hf_nrup_high_retx_nr_pdcp_sn_ind;
+static int hf_nrup_high_delivered_retx_nr_pdcp_sn_ind;
+static int hf_nrup_cause_rpt;
+static int hf_nrup_delivered_nr_pdcp_sn_range_ind;
+static int hf_nrup_data_rate_ind;
+static int hf_nrup_desrd_buff_sz_data_radio_bearer;
+static int hf_nrup_desrd_data_rate;
+static int hf_nrup_num_lost_nru_seq_num;
+static int hf_nrup_start_lost_nru_seq_num;
+static int hf_nrup_end_lost_nru_seq_num;
+static int hf_nrup_high_success_delivered_nr_pdcp_sn;
+static int hf_nrup_high_tx_nr_pdcp_sn;
+static int hf_nrup_cause_val;
+static int hf_nrup_high_success_delivered_retx_nr_pdcp_sn;
+static int hf_nrup_high_retx_nr_pdcp_sn;
+static int hf_nrup_pdcp_duplication_ind;
+static int hf_nrup_assistance_information_ind;
+static int hf_nrup_ul_delay_ind;
+static int hf_nrup_dl_delay_ind;
+static int hf_nrup_spare_2;
+static int hf_nrup_pdcp_duplication_activation_suggestion;
+static int hf_nrup_num_assistance_info_fields;
+static int hf_nrup_assistance_information_type;
+static int hf_nrup_num_octets_radio_qa_info;
+static int hf_nrup_radio_qa_info;
+static int hf_nrup_ul_delay_du_result;
+static int hf_nrup_dl_delay_du_result;
 
-static gint ett_nrup = -1;
+static gint ett_nrup;
+
+typedef struct {
+    int8_t rim_routing_addr_disc;
+} gtp_private_data_t;
 
 
+static gtp_private_data_t*
+gtp_get_private_data(packet_info *pinfo)
+{
+    gtp_private_data_t *gtp_data = (gtp_private_data_t*)p_get_proto_data(wmem_file_scope(), pinfo, proto_gtp, 0);
+
+    if (!gtp_data) {
+        gtp_data = wmem_new(wmem_file_scope(), gtp_private_data_t);
+        gtp_data->rim_routing_addr_disc = -1;
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_gtp, 0, gtp_data);
+    }
+    return gtp_data;
+}
 
 /* --- PDCP DECODE ADDITIONS --- */
 static bool
@@ -621,7 +666,7 @@ pdcp_uat_fld_teid_chk_cb(void* r _U_, const char* teid, guint len _U_, const voi
             *err = NULL;
             return TRUE;
         }
-        /* Check if it is a valid 32bits unsinged integer */
+        /* Check if it is a valid 32bits unsigned integer */
         if (ws_basestrtou32(teid, NULL, &val, 0)) {
             *err = NULL;
             return TRUE;
@@ -958,8 +1003,8 @@ static const enum_val_t gtp_decode_tpdu_as[] = {
 };
 
 
-static int gtp_tap = -1;
-static int gtpv1_tap = -1;
+static int gtp_tap;
+static int gtpv1_tap;
 
 /* Definition of flags masks */
 #define GTP_VER_MASK 0xE0
@@ -2452,7 +2497,7 @@ gtpstat_packet(void *pss, packet_info *pinfo, epan_dissect_t *edt _U_, const voi
     if (idx == 0) {
         idx = g_hash_table_size(gtpstat_msg_idx_hash);
         g_hash_table_insert(gtpstat_msg_idx_hash, GUINT_TO_POINTER(gtp->msgtype), GUINT_TO_POINTER(idx + 1));
-        init_srt_table_row(gtp_srt_table, idx, val_to_str_ext(gtp->msgtype, &gtp_message_type_ext, "Unknown (%d)"));
+        init_srt_table_row(gtp_srt_table, idx, val_to_str_ext_const(gtp->msgtype, &gtp_message_type_ext, "Unknown"));
     } else {
         idx -= 1;
     }
@@ -2477,12 +2522,12 @@ static dissector_handle_t pdcp_lte_handle;
 static dissector_handle_t gtp_tpdu_custom_handle;
 static dissector_table_t bssap_pdu_type_table;
 
-static int proto_pdcp_lte = -1;
+static int proto_pdcp_lte;
 
 guint32 gtp_session_count;
 
 /* Relation between frame -> session */
-GHashTable* session_table;
+wmem_map_t* session_table;
 /* Relation between <teid,ip> -> frame */
 wmem_map_t* frame_map;
 
@@ -2546,7 +2591,7 @@ remove_frame_info(guint32 f) {
 void
 add_gtp_session(guint32 frame, guint32 session) {
 
-    g_hash_table_insert(session_table, GUINT_TO_POINTER(frame), GUINT_TO_POINTER(session));
+    wmem_map_insert(session_table, GUINT_TO_POINTER(frame), GUINT_TO_POINTER(session));
 }
 
 gboolean
@@ -2579,12 +2624,24 @@ ip_exists(address ip, wmem_list_t *ip_list) {
     return found;
 }
 
+
+/* wmem_map_foreach() callback used in fill_map() */
+static void
+remove_session_from_table(void *key, void *val, void *userdata) {
+    unsigned fr = GPOINTER_TO_UINT(key);
+    unsigned session = GPOINTER_TO_UINT(val);
+    unsigned remove_session = GPOINTER_TO_UINT(userdata);
+
+    /* If it's the session we are looking for, we remove all the frame information */
+    if (session == remove_session) {
+        remove_frame_info(fr);
+    }
+}
+
 void
 fill_map(wmem_list_t *teid_list, wmem_list_t *ip_list, guint32 frame) {
     wmem_list_frame_t *elem_ip, *elem_teid;
     gtp_info_t *gtp_info;
-    gpointer session_p, fr_p;
-    GHashTableIter iter;
     guint32 teid, session;
     address *ip;
 
@@ -2610,16 +2667,10 @@ fill_map(wmem_list_t *teid_list, wmem_list_t *ip_list, guint32 frame) {
                 /* If the teid and ip already maps to a session, that means
                  * that we need to remove old info about that session */
                 /* We look for its session ID */
-                session = GPOINTER_TO_UINT(g_hash_table_lookup(session_table, GUINT_TO_POINTER(frame)));
+                session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame)));
                 if (session) {
-                    g_hash_table_iter_init(&iter, session_table);
-                    while (g_hash_table_iter_next(&iter, &fr_p, &session_p)) {
-                        /* If the msg has the same session ID and it's not the upd req we have to remove its info */
-                        if (GPOINTER_TO_UINT(session_p) == session) {
-                            /* If it's the session we are looking for, we remove all the frame information */
-                            remove_frame_info(GPOINTER_TO_UINT(fr_p));
-                        }
-                    }
+                    /* If the msg has the same session ID and it's not the upd req we have to remove its info */
+                    wmem_map_foreach(session_table, remove_session_from_table, GUINT_TO_POINTER(session));
                 }
             }
             wmem_map_insert(frame_map, gtp_info, GUINT_TO_POINTER(frame));
@@ -2984,7 +3035,7 @@ typedef struct {
 /* ---------------------
  * GPRS messages
  * ---------------------*/
-static _gtp_mess_items gprs_mess_items[] = {
+static const _gtp_mess_items gprs_mess_items[] = {
 
     {
         GTP_MSG_ECHO_REQ, {
@@ -3316,7 +3367,7 @@ static _gtp_mess_items gprs_mess_items[] = {
 /* -----------------------------
  * UMTS messages
  * -----------------------------*/
-static _gtp_mess_items umts_mess_items[] = {
+static const _gtp_mess_items umts_mess_items[] = {
     /* 7.2 Path Management Messages */
     {
         GTP_MSG_ECHO_REQ, {
@@ -3429,7 +3480,7 @@ static _gtp_mess_items umts_mess_items[] = {
             {GTP_EXT_PROTO_CONF, GTP_OPTIONAL, NULL},
             {GTP_EXT_GSN_ADDR, GTP_CONDITIONAL, decode_gtp_ggsn_addr_for_control_plane},
             {GTP_EXT_GSN_ADDR, GTP_CONDITIONAL, decode_gtp_ggsn_addr_for_user_plane},
-            {GTP_EXT_GSN_ADDR, GTP_CONDITIONAL, NULL}, /* Alternative GGSN Addreses for Control Plane 7.7.32 */
+            {GTP_EXT_GSN_ADDR, GTP_CONDITIONAL, NULL}, /* Alternative GGSN Addresses for Control Plane 7.7.32 */
             {GTP_EXT_GSN_ADDR, GTP_CONDITIONAL, NULL}, /* Alternative GGSN Address for user traffic 7.7.32 */
             {GTP_EXT_QOS_UMTS, GTP_CONDITIONAL, NULL},
             {GTP_EXT_CHRG_ADDR, GTP_OPTIONAL, NULL},
@@ -4178,8 +4229,8 @@ static _gtp_mess_items umts_mess_items[] = {
  */
 typedef struct gtp_conv_info_t {
     struct gtp_conv_info_t *next;
-    GHashTable             *unmatched;
-    GHashTable             *matched;
+    wmem_map_t             *unmatched;
+    wmem_map_t             *matched;
 } gtp_conv_info_t;
 
 static gtp_conv_info_t *gtp_info_items = NULL;
@@ -4279,7 +4330,7 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
         break;
     }
 
-    gcrp = (gtp_msg_hash_t *)g_hash_table_lookup(gtp_info->matched, &gcr);
+    gcrp = (gtp_msg_hash_t *)wmem_map_lookup(gtp_info->matched, &gcr);
 
     if (gcrp) {
 
@@ -4300,9 +4351,9 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
         case GTP_MSG_IDENT_REQ:
             gcr.seq_nr=seq_nr;
 
-            gcrp=(gtp_msg_hash_t *)g_hash_table_lookup(gtp_info->unmatched, &gcr);
+            gcrp=(gtp_msg_hash_t *)wmem_map_lookup(gtp_info->unmatched, &gcr);
             if (gcrp) {
-                g_hash_table_remove(gtp_info->unmatched, gcrp);
+                wmem_map_remove(gtp_info->unmatched, gcrp);
             }
             /* if we can't reuse the old one, grab a new chunk */
             if (!gcrp) {
@@ -4314,7 +4365,7 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
             gcrp->rep_frame = 0;
             gcrp->msgtype = msgtype;
             gcrp->is_request = TRUE;
-            g_hash_table_insert(gtp_info->unmatched, gcrp, gcrp);
+            wmem_map_insert(gtp_info->unmatched, gcrp, gcrp);
             return NULL;
             break;
         case GTP_MSG_ECHO_RESP:
@@ -4327,14 +4378,14 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
         case GTP_MS_INFO_CNG_NOT_RES:
         case GTP_MSG_IDENT_RESP:
             gcr.seq_nr=seq_nr;
-            gcrp=(gtp_msg_hash_t *)g_hash_table_lookup(gtp_info->unmatched, &gcr);
+            gcrp=(gtp_msg_hash_t *)wmem_map_lookup(gtp_info->unmatched, &gcr);
 
             if (gcrp) {
                 if (!gcrp->rep_frame) {
-                    g_hash_table_remove(gtp_info->unmatched, gcrp);
+                    wmem_map_remove(gtp_info->unmatched, gcrp);
                     gcrp->rep_frame=pinfo->num;
                     gcrp->is_request=FALSE;
-                    g_hash_table_insert(gtp_info->matched, gcrp, gcrp);
+                    wmem_map_insert(gtp_info->matched, gcrp, gcrp);
                 }
             }
             break;
@@ -4363,9 +4414,9 @@ gtp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gint 
                 if (!PINFO_FD_VISITED(pinfo) && gtp_version == 1) {
                     /* GTP session */
                     /* If it does not have any session assigned yet */
-                    session = GPOINTER_TO_UINT(g_hash_table_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
+                    session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
                     if (!session) {
-                        session = GPOINTER_TO_UINT(g_hash_table_lookup(session_table, GUINT_TO_POINTER(gcrp->req_frame)));
+                        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(gcrp->req_frame)));
                         if (session) {
                             add_gtp_session(pinfo->num, session);
                         }
@@ -4388,7 +4439,7 @@ check_field_presence_and_decoder(guint8 message, guint8 field, int *position, ie
 {
 
     guint i = 0;
-    _gtp_mess_items *mess_items;
+    const _gtp_mess_items *mess_items;
 
     switch (gtp_version) {
     case 0:
@@ -4434,7 +4485,6 @@ check_field_presence_and_decoder(guint8 message, guint8 field, int *position, ie
 static int
 decode_gtp_cause(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree * tree, session_args_t * args)
 {
-
     guint8 cause;
 
     cause = tvb_get_guint8(tvb, offset + 1);
@@ -5348,8 +5398,10 @@ decode_gtp_mm_cntxt(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree 
 /*
  * GPP TS 24.008 10.5.5.12 ( see packet-gsm_a.c )
  */
-    de_gmm_ms_net_cap(tvb, tf_tree, pinfo, offset, len, NULL, 0);
-    offset = offset + len;
+    if (len > 0) {
+        de_gmm_ms_net_cap(tvb, tf_tree, pinfo, offset, len, NULL, 0);
+        offset = offset + len;
+    }
 
 /* 3GPP TS 29.060 version 9.4.0 Release 9
  *  The two octets Container Length holds the length of the Container, excluding the Container Length octets.
@@ -7270,11 +7322,12 @@ decode_gtp_tmgi(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tr
  * RIM Routing Address
  */
 static int
-decode_gtp_rim_ra(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree * tree, session_args_t * args _U_)
+decode_gtp_rim_ra(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree, session_args_t * args _U_)
 {
 
     guint16     length;
     proto_tree *ext_tree;
+    proto_item *pi;
 
     length = tvb_get_ntohs(tvb, offset + 1);
     ext_tree = proto_tree_add_subtree(tree, tvb, offset, 3 + length, ett_gtp_ies[GTP_EXT_RIM_RA], NULL,
@@ -7287,7 +7340,26 @@ decode_gtp_rim_ra(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tre
     /*
      * Octets 4-n are coded according to 3GPP TS 48.018 [20] 11.3.77 RIM Routing Information IE octets 4-n.
      */
-    proto_tree_add_item(ext_tree, hf_gtp_rim_routing_addr, tvb, offset, length, ENC_NA);
+    pi = proto_tree_add_item(ext_tree, hf_gtp_rim_routing_addr, tvb, offset, length, ENC_NA);
+    if (PINFO_FD_VISITED(pinfo)) {
+        gtp_private_data_t *gtp_data = gtp_get_private_data(pinfo);
+        proto_tree *addr_tree = proto_item_add_subtree(pi, ett_gtp_rim_routing_adr);
+
+        switch (gtp_data->rim_routing_addr_disc) {
+        case 0:
+            de_bssgp_cell_id(tvb, addr_tree, pinfo, offset, length, NULL, 0);
+            break;
+        case -1:
+        case 1:
+            de_bssgp_rnc_identifier(tvb, addr_tree, pinfo, offset, length, NULL, 0);
+            break;
+        case 2:
+            de_bssgp_enb_id(tvb, addr_tree, pinfo, offset, length, NULL, 0);
+            break;
+        default:
+            break;
+        }
+    }
 
     return 3 + length;
 
@@ -7467,10 +7539,6 @@ decode_gtp_src_rnc_pdp_ctx_inf(tvbuff_t * tvb, int offset, packet_info * pinfo _
  * UMTS:        29.060 v6.11.0, chapter 7.7.62
  * Additional Trace Info
  */
-static const true_false_string gtp_trace_tfs = {
-  "Should be traced",
-  "Should not be traced",
-};
 
 static const value_string gtp_trace_depth_vals[] = {
   { 0, "minimum" },
@@ -8069,11 +8137,13 @@ static const value_string gtp_bssgp_ra_discriminator_vals[] = {
 };
 
 static int
-decode_gtp_rim_ra_disc(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree * tree, session_args_t * args _U_)
+decode_gtp_rim_ra_disc(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree, session_args_t * args _U_)
 {
 
     guint16     length;
     proto_tree *ext_tree;
+    guint32 val;
+    gtp_private_data_t *gtp_data = gtp_get_private_data(pinfo);
 
     length = tvb_get_ntohs(tvb, offset + 1);
     ext_tree = proto_tree_add_subtree(tree, tvb, offset, 3 + length, ett_gtp_ies[GTP_EXT_RIM_ROUTING_ADDR_DISC], NULL,
@@ -8086,7 +8156,8 @@ decode_gtp_rim_ra_disc(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, prot
      * RIM Routing Information IE octet 3 bits 4 - 1.
      * Bits 8 - 5 are coded "0000".
      */
-    proto_tree_add_item(ext_tree, hf_gtp_bssgp_ra_discriminator, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(ext_tree, hf_gtp_bssgp_ra_discriminator, tvb, offset, 1, ENC_BIG_ENDIAN, &val);
+    gtp_data->rim_routing_addr_disc = (int8_t)val;
 
     return 3 + length;
 
@@ -8374,7 +8445,7 @@ decode_gtp_reliable_irat_ho_inf(tvbuff_t * tvb, int offset, packet_info * pinfo 
 static int
 decode_gtp_rfsp_index(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree * tree, session_args_t * args _U_)
 {
-    guint16     length, rfsp;
+    guint16     length;
     proto_tree *ext_tree;
 
     length = tvb_get_ntohs(tvb, offset + 1);
@@ -8386,8 +8457,7 @@ decode_gtp_rfsp_index(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset = offset + 2;
 
-    rfsp = tvb_get_ntohs(tvb, offset);
-    proto_tree_add_uint(ext_tree, hf_gtp_rfsp_index, tvb, offset, length, rfsp+1);
+    proto_tree_add_item(ext_tree, hf_gtp_rfsp_index, tvb, offset, 2, ENC_BIG_ENDIAN);
 
     return 3 + length;
 }
@@ -9632,7 +9702,7 @@ decode_gtp_data_req(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree 
                     dissect_gprscdr_GPRSRecord_PDU(next_tvb, pinfo, cdr_dr_tree, NULL);
                 }
             } else {
-                /* Do we have a dissector regestering for this data format? */
+                /* Do we have a dissector registering for this data format? */
                 dissector_try_uint(gtp_cdr_fmt_dissector_table, format, next_tvb, pinfo, cdr_dr_tree);
             }
 
@@ -9772,7 +9842,7 @@ track_gtp_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtp_hd
 
     /* GTP session */
     if (tree) {
-        session = GPOINTER_TO_UINT(g_hash_table_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
+        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
         if (session) {
             it = proto_tree_add_uint(tree, hf_gtp_session, tvb, 0, 0, session);
             proto_item_set_generated(it);
@@ -9782,7 +9852,7 @@ track_gtp_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtp_hd
 
     if (!PINFO_FD_VISITED(pinfo) && gtp_version == 1) {
         /* If the message does not have any session ID */
-        session = GPOINTER_TO_UINT(g_hash_table_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
+        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(pinfo->num)));
         if (!session) {
             /* If the message is not a CPDPCRES, CPDPCREQ, UPDPREQ, UPDPRES
              * then we remove its information from teid and ip lists
@@ -9808,7 +9878,7 @@ track_gtp_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtp_hd
                 /* If this is an error indication then we have to check the session id that belongs to the message with the same data teid and ip */
                 if (gtp_hdr->message == GTP_MSG_ERR_IND) {
                     if (get_frame(last_ip, last_teid, &frame_teid_cp) == 1) {
-                        session = GPOINTER_TO_UINT(g_hash_table_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
+                        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
                         if (session) {
                             /* We add the corresponding session to the session list*/
                             add_gtp_session(pinfo->num, session);
@@ -9820,7 +9890,7 @@ track_gtp_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtp_hd
                     the corresponding session ID */
                     if ((get_frame(pinfo->dst, (guint32)gtp_hdr->teid, &frame_teid_cp) == 1)) {
                         /* Then we have to set its session ID */
-                        session = GPOINTER_TO_UINT(g_hash_table_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
+                        session = GPOINTER_TO_UINT(wmem_map_lookup(session_table, GUINT_TO_POINTER(frame_teid_cp)));
                         if (session) {
                             /* We add the corresponding session to the list so that when a response came we can associate its session ID*/
                             add_gtp_session(pinfo->num, session);
@@ -10257,8 +10327,8 @@ dissect_gtp_common(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
         */
         gtp_info = wmem_new(wmem_file_scope(), gtp_conv_info_t);
         /*Request/response matching tables*/
-        gtp_info->matched = g_hash_table_new(gtp_sn_hash, gtp_sn_equal_matched);
-        gtp_info->unmatched = g_hash_table_new(gtp_sn_hash, gtp_sn_equal_unmatched);
+        gtp_info->matched = wmem_map_new(wmem_file_scope(), gtp_sn_hash, gtp_sn_equal_matched);
+        gtp_info->unmatched = wmem_map_new(wmem_file_scope(), gtp_sn_hash, gtp_sn_equal_unmatched);
 
         conversation_add_proto_data(conversation, proto_gtp, gtp_info);
 
@@ -10558,62 +10628,143 @@ dissect_gtp_common(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
                             break;
 
                         case GTP_EXT_HDR_PDU_SESSION_CONT:
-                        {
-                            /* PDU Session Container
-                             * 3GPP 29.281 v15.2.0, 5.2.2.7 PDU Session Container
-                             * This extension header may be transmitted in a G-PDU
-                             * over the N3 and N9 user plane interfaces, between
-                             * NG-RAN and UPF, or between two UPFs. The PDU Session
-                             * Container has a variable length and its content is
-                             * specified in 3GPP TS 38.415 [31].
-                             */
-                            static int * const flags1[] = {
-                                &hf_gtp_ext_hdr_pdu_ses_cont_ppp,
-                                &hf_gtp_ext_hdr_pdu_ses_cont_rqi,
-                                &hf_gtp_ext_hdr_pdu_ses_cont_qos_flow_id,
-                                NULL
-                            };
-                            static int * const flags2[] = {
-                                &hf_gtp_ext_hdr_pdu_ses_cont_ppi,
-                                &hf_gtp_spare_b4b0,
-                                NULL
-                            };
-                            static int * const flags3[] = {
-                                &hf_gtp_spare_b7b6,
-                                &hf_gtp_ext_hdr_pdu_ses_cont_qos_flow_id,
-                                NULL
-                            };
+                            {
+                                /* PDU Session Container
+                                 * 3GPP 29.281 v15.2.0, 5.2.2.7 PDU Session Container
+                                 * This extension header may be transmitted in a G-PDU
+                                 * over the N3 and N9 user plane interfaces, between
+                                 * NG-RAN and UPF, or between two UPFs. The PDU Session
+                                 * Container has a variable length and its content is
+                                 * specified in 3GPP TS 38.415 [31].
+                                 */
+                                static int * const flags1_dl[] = {
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_qmp,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_snp_dl,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_msnp,
+                                    &hf_gtp_spare_b0,
+                                    NULL
+                                };
+                                static int * const flags1_ul[] = {
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_qmp,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_dl_delay_ind,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_ul_delay_ind,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_snp_ul,
+                                    NULL
+                                };
+                                static int * const flags2[] = {
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_ppp,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_rqi,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_qos_flow_id,
+                                    NULL
+                                };
+                                static int * const flags3[] = {
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_ppi,
+                                    &hf_gtp_spare_b4b0,
+                                    NULL
+                                };
+                                static int * const flags4[] = {
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_n3_n9_delay_ind,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_qos_flow_id,
+                                    NULL
+                                };
+                                static int * const flags5[] = {
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_7,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_6,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_5,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_4,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_3,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_2,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_1,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_0,
+                                    NULL
+                                };
+                                static int * const flags6[] = {
+                                    &hf_gtp_spare_b7b1,
+                                    &hf_gtp_ext_hdr_pdu_ses_cont_d1_ul_pdcp_delay_result_ind,
+                                    NULL
+                                };
 
-                            proto_tree *pdu_ses_cont_tree;
-                            guint32 pdu_type;
-                            guint8 value;
+                                proto_tree *pdu_ses_cont_tree;
+                                guint32 pdu_type;
+                                guint64 flags1_val, flags2_val, flags4_val, flags5_val;
+                                int curr_offset = offset;
 
-                            pdu_ses_cont_tree = proto_tree_add_subtree(ext_tree, tvb, offset, (ext_hdr_length * 4) - 1, ett_pdu_session_cont, NULL, "PDU Session Container");
-                            /* PDU Type    Spare */
-                            proto_tree_add_item_ret_uint(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_pdu_type, tvb, offset, 1, ENC_BIG_ENDIAN, &pdu_type);
-                            proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_spare_h1, tvb, offset, 1, ENC_BIG_ENDIAN);
-                            switch (pdu_type) {
-                            case 0:
-                                /* PDU Type: DL PDU SESSION INFORMATION (0) */
-                                /* Octet 1: PPP    RQI    QoS Flow Identifier  */
-                                value = tvb_get_guint8(tvb, offset + 1);
-                                proto_tree_add_bitmask_list_value(pdu_ses_cont_tree, tvb, offset + 1, 1, flags1, value);
-                                if (value & 0x80)
-                                {
-                                    /* Octet 2 PPI    Spare*/
-                                    proto_tree_add_bitmask_list(pdu_ses_cont_tree, tvb, offset + 2, 1, flags2, ENC_BIG_ENDIAN);
+                                pdu_ses_cont_tree = proto_tree_add_subtree(ext_tree, tvb, curr_offset, (ext_hdr_length * 4) - 1, ett_pdu_session_cont, NULL, "PDU Session Container");
+                                proto_tree_add_item_ret_uint(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_pdu_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &pdu_type);
+                                switch (pdu_type) {
+                                case 0:
+                                    /* PDU Type: DL PDU SESSION INFORMATION (0) */
+                                    /* PDU Type    QMP    SNP    MSNP    Spare */
+                                    proto_tree_add_bitmask_list_ret_uint64(pdu_ses_cont_tree, tvb, curr_offset, 1, flags1_dl, ENC_BIG_ENDIAN, &flags1_val);
+                                    curr_offset++;
+                                    /* PPP    RQI    QoS Flow Identifier */
+                                    proto_tree_add_bitmask_list_ret_uint64(pdu_ses_cont_tree, tvb, curr_offset, 1, flags2, ENC_BIG_ENDIAN, &flags2_val);
+                                    curr_offset++;
+                                    if (flags2_val & 0x80) {
+                                        /* PPI    Spare */
+                                        proto_tree_add_bitmask_list(pdu_ses_cont_tree, tvb, curr_offset, 1, flags3, ENC_BIG_ENDIAN);
+                                        curr_offset++;
+                                    }
+                                    if (flags1_val & 0x08) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_dl_send_time_stamp, tvb, curr_offset, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
+                                        curr_offset += 8;
+                                    }
+                                    if (flags1_val & 0x04) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_dl_qfi_sn, tvb, curr_offset, 3, ENC_BIG_ENDIAN);
+                                        curr_offset += 3;
+                                    }
+                                    if (flags1_val & 0x02) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_dl_mbs_qfi_sn, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+                                        //curr_offset += 4;
+                                    }
+                                    break;
+                                case 1:
+                                    /* PDU Type: UL PDU SESSION INFORMATION (1)*/
+                                    /* PDU Type    QMP    DL Delay Ind    UL Delay Ind    SNP */
+                                    proto_tree_add_bitmask_list_ret_uint64(pdu_ses_cont_tree, tvb, curr_offset, 1, flags1_ul, ENC_BIG_ENDIAN, &flags1_val);
+                                    curr_offset++;
+                                    /* N3/N9 Delay ind    New IE Flag    QoS Flow Identifier */
+                                    proto_tree_add_bitmask_list_ret_uint64(pdu_ses_cont_tree, tvb, curr_offset, 1, flags4, ENC_BIG_ENDIAN, &flags4_val);
+                                    curr_offset++;
+                                    if (flags1_val & 0x08) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_dl_send_time_stamp_repeat, tvb, curr_offset, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
+                                        curr_offset += 8;
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_dl_recv_time_stamp, tvb, curr_offset, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
+                                        curr_offset += 8;
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_ul_send_time_stamp, tvb, curr_offset, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
+                                        curr_offset += 8;
+                                    }
+                                    if (flags1_val & 0x04) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_dl_delay_result, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+                                        curr_offset += 4;
+                                    }
+                                    if (flags1_val & 0x02) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_ul_delay_result, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+                                        curr_offset += 4;
+                                    }
+                                    if (flags1_val & 0x01) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_ul_qfi_sn, tvb, curr_offset, 3, ENC_BIG_ENDIAN);
+                                        curr_offset += 3;
+                                    }
+                                    if (flags4_val & 0x80) {
+                                        proto_tree_add_item(pdu_ses_cont_tree, hf_gtp_ext_hdr_pdu_ses_cont_n3_n9_delay_result, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+                                        curr_offset += 4;
+                                    }
+                                    if (flags4_val & 0x40) {
+                                        proto_tree_add_bitmask_list_ret_uint64(pdu_ses_cont_tree, tvb, curr_offset, 1, flags5, ENC_BIG_ENDIAN, &flags5_val);
+                                        curr_offset++;
+                                        if (flags5_val & 0x01) {
+                                            proto_tree_add_bitmask_list(pdu_ses_cont_tree, tvb, curr_offset, 1, flags6, ENC_BIG_ENDIAN);
+                                            //curr_offset++;
+                                        }
+                                    }
+                                    break;
+                                default:
+                                    proto_tree_add_expert(pdu_ses_cont_tree, pinfo, &ei_gtp_unknown_pdu_type, tvb, offset, (ext_hdr_length * 4) - 1);
+                                    break;
                                 }
-                                break;
-                            case 1:
-                                /* PDU Type: UL PDU SESSION INFORMATION (1)*/
-                                /* Spare    QoS Flow Identifier */
-                                proto_tree_add_bitmask_list(pdu_ses_cont_tree, tvb, offset + 1, 1, flags3, ENC_BIG_ENDIAN);
-                                break;
-                            default:
-                                proto_tree_add_expert(pdu_ses_cont_tree, pinfo, &ei_gtp_unknown_pdu_type, tvb, offset, 1);
-                                break;
                             }
-                        }
                             break;
 
                         case GTP_EXT_HDR_PDCP_SN:
@@ -10664,7 +10815,7 @@ dissect_gtp_common(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
                                 gtp_hdr_ext_info_t gtp_hdr_ext_info;
 
                                 gtp_hdr_ext_info.hdr_ext_item = hdr_ext_item;
-                                /* NOTE Type and lenght included in the call*/
+                                /* NOTE Type and length included in the call */
                                 ext_hdr_tvb = tvb_new_subset_remaining(tvb, offset - 2);
                                 dissector_try_uint_new(gtp_hdr_ext_dissector_table, next_hdr, ext_hdr_tvb, pinfo, ext_tree, FALSE, &gtp_hdr_ext_info);
                                 break;
@@ -10867,35 +11018,27 @@ static void
 gtp_init(void)
 {
     gtp_session_count = 1;
-    session_table = g_hash_table_new(g_direct_hash, g_direct_equal);
+    session_table = wmem_map_new(wmem_file_scope(), g_direct_hash, g_direct_equal);
     frame_map = wmem_map_new(wmem_file_scope(), gtp_info_hash, gtp_info_equal);
 }
 
 static void
 gtp_cleanup(void)
 {
+    /* our structures are in file-scoped wmem_map_t's which will be
+     * automatically freed when the capture file is closed; here we just null
+     * out our pointers to prevent potential references to freed memory.
+     */
     gtp_conv_info_t *gtp_info;
 
-    /* Free up state attached to the gtp_info structures */
-    for (gtp_info = gtp_info_items; gtp_info != NULL; ) {
-        gtp_conv_info_t *next;
-
-        g_hash_table_destroy(gtp_info->matched);
+    for (gtp_info = gtp_info_items; gtp_info != NULL; gtp_info = gtp_info->next) {
         gtp_info->matched=NULL;
-        g_hash_table_destroy(gtp_info->unmatched);
         gtp_info->unmatched=NULL;
-
-        next = gtp_info->next;
-        gtp_info = next;
     }
 
-    /* Free up state attached to the gtp session structures */
     gtp_info_items = NULL;
-
-    if (session_table != NULL) {
-        g_hash_table_destroy(session_table);
-    }
     session_table = NULL;
+    frame_map = NULL;
 }
 
 void
@@ -11049,6 +11192,21 @@ proto_register_gtp(void)
            FT_UINT8, BASE_DEC, VALS(gtp_ext_hdr_pdu_ses_cont_pdu_type_vals), 0xf0,
            NULL, HFILL}
         },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_qmp,
+         { "QoS Monitoring Packet", "gtp.ext_hdr.pdu_ses_con.qmp",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x08,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_snp_dl,
+         { "Sequence Number Presence", "gtp.ext_hdr.pdu_ses_con.snp",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x04,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_msnp,
+         { "MBS Sequence Number Presence", "gtp.ext_hdr.pdu_ses_con.msnp",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x02,
+           NULL, HFILL}
+        },
         { &hf_gtp_ext_hdr_pdu_ses_cont_ppp,
          { "Paging Policy Presence (PPP)", "gtp.ext_hdr.pdu_ses_cont.ppp",
            FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x80,
@@ -11067,6 +11225,126 @@ proto_register_gtp(void)
         { &hf_gtp_ext_hdr_pdu_ses_cont_ppi,
          { "Paging Policy Indicator (PPI)", "gtp.ext_hdr.pdu_ses_cont.ppi",
            FT_UINT8, BASE_DEC, NULL, 0xe0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_dl_send_time_stamp,
+         { "DL Sending Time Stamp", "gtp.ext_hdr.pdu_ses_cont.dl_send_time_stamp",
+           FT_ABSOLUTE_TIME, ABSOLUTE_TIME_NTP_UTC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_dl_qfi_sn,
+         { "DL QFI Sequence Number", "gtp.ext_hdr.pdu_ses_cont.dl_qfi_sn",
+           FT_UINT24, BASE_DEC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_dl_mbs_qfi_sn,
+         { "DL MBS QFI Sequence Number", "gtp.ext_hdr.pdu_ses_cont.dl_mbs_qfi_sn",
+           FT_UINT32, BASE_DEC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_dl_delay_ind,
+         { "DL Delay Ind", "gtp.ext_hdr.pdu_ses_con.dl_delay_ind",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x04,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_ul_delay_ind,
+         { "UL Delay Ind", "gtp.ext_hdr.pdu_ses_con.ul_delay_ind",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x02,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_snp_ul,
+         { "Sequence Number Presence", "gtp.ext_hdr.pdu_ses_con.snp",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x01,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_n3_n9_delay_ind,
+         { "N3/N9 Delay Ind", "gtp.ext_hdr.pdu_ses_con.n3_n9_delay_ind",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x80,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag,
+         { "New IE Flag", "gtp.ext_hdr.pdu_ses_con.new_ie_flag",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x40,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_dl_send_time_stamp_repeat,
+         { "DL Sending Time Stamp Repeated", "gtp.ext_hdr.pdu_ses_cont.dl_send_time_stamp_repeat",
+           FT_ABSOLUTE_TIME, ABSOLUTE_TIME_NTP_UTC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_dl_recv_time_stamp,
+         { "DL Received Time Stamp", "gtp.ext_hdr.pdu_ses_cont.dl_recv_time_stamp",
+           FT_ABSOLUTE_TIME, ABSOLUTE_TIME_NTP_UTC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_ul_send_time_stamp,
+         { "UL Sending Time Stamp", "gtp.ext_hdr.pdu_ses_cont.ul_send_time_stamp",
+           FT_ABSOLUTE_TIME, ABSOLUTE_TIME_NTP_UTC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_dl_delay_result,
+         { "DL Delay Result", "gtp.ext_hdr.pdu_ses_cont.dl_delay_result",
+           FT_UINT32, BASE_DEC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_ul_delay_result,
+         { "UL Delay Result", "gtp.ext_hdr.pdu_ses_cont.ul_delay_result",
+           FT_UINT32, BASE_DEC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_ul_qfi_sn,
+         { "UL QFI Sequence Number", "gtp.ext_hdr.pdu_ses_cont.ul_qfi_sn",
+           FT_UINT24, BASE_DEC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_n3_n9_delay_result,
+         { "N3/N9 Delay Result", "gtp.ext_hdr.pdu_ses_cont.n3_n9_delay_result",
+           FT_UINT32, BASE_DEC, NULL, 0,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_7,
+         { "New IE Flag 7", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_7",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x80,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_6,
+         { "New IE Flag 6", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_6",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x40,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_5,
+         { "New IE Flag 5", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_5",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x20,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_4,
+         { "New IE Flag 4", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_4",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x10,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_3,
+         { "New IE Flag 3", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_3",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x08,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_2,
+         { "New IE Flag 2", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_2",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x04,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_1,
+         { "New IE Flag 1", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_1",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x02,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_new_ie_flag_0,
+         { "New IE Flag 0", "gtp.ext_hdr.pdu_ses_cont.new_ie_flag_0",
+           FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x01,
+           NULL, HFILL}
+        },
+        { &hf_gtp_ext_hdr_pdu_ses_cont_d1_ul_pdcp_delay_result_ind,
+         { "D1 UL PDCP Delay Result Ind", "gtp.ext_hdr.pdu_ses_cont.d1_ul_pdcp_delay_result_ind",
+           FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x01,
            NULL, HFILL}
         },
 
@@ -11967,12 +12245,12 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_triggers_ggsn_mbms,
          { "MBMS Context", "gtp.trace_triggers.ggsn.mbms",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x2,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x2,
            NULL, HFILL}
         },
         {&hf_gtp_trace_triggers_ggsn_pdp,
          { "PDP Context", "gtp.trace_triggers.ggsn.pdp",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_triggers_ggsn,
@@ -11987,17 +12265,17 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_loi_ggsn_gmb,
          { "Gmb", "gtp.trace_loi.ggsn.gmb",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x4,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x4,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_ggsn_gi,
          { "Gi", "gtp.trace_loi.ggsn.gi",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x2,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x2,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_ggsn_gn,
          { "Gn", "gtp.trace_loi.ggsn.gn",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_ggsn,
@@ -12022,7 +12300,7 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_triggers_bm_sc_mbms,
          { "MBMS Multicast service activation", "gtp.trace_triggers.bm_sc.mbms",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_triggers_bm_sc,
@@ -12032,7 +12310,7 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_loi_bm_sc_gmb,
          { "Gmb", "gtp.trace_loi.bm_sc.gmb",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_bm_sc,
@@ -12320,19 +12598,19 @@ proto_register_gtp(void)
             FT_BYTES, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
       },
+      { &hf_gtp_spare_b0,
+      { "Spare", "gtp.spare",
+      FT_UINT8, BASE_HEX, NULL, 0x01,
+      NULL, HFILL }
+      },
       { &hf_gtp_spare_b4b0,
-      { "Spare", "gtp.spare.b4b0",
+      { "Spare", "gtp.spare",
       FT_UINT8, BASE_HEX, NULL, 0x1f,
       NULL, HFILL }
       },
-      { &hf_gtp_spare_b7b6,
-      { "Spare", "gtp.spare.b7b6",
-      FT_UINT8, BASE_HEX, NULL, 0xc0,
-      NULL, HFILL }
-      },
-      { &hf_gtp_spare_h1,
-      { "Spare", "gtp.spare.h1",
-      FT_UINT8, BASE_HEX, NULL, 0xf,
+      { &hf_gtp_spare_b7b1,
+      { "Spare", "gtp.spare",
+      FT_UINT8, BASE_HEX, NULL, 0xfe,
       NULL, HFILL }
       },
       { &hf_gtp_rnc_ip_addr_v4,
@@ -12641,7 +12919,7 @@ proto_register_gtp(void)
     };
 
     /* Setup protocol subtree array */
-#define GTP_NUM_INDIVIDUAL_ELEMS    38
+#define GTP_NUM_INDIVIDUAL_ELEMS    39
     static gint *ett_gtp_array[GTP_NUM_INDIVIDUAL_ELEMS + NUM_GTP_IES];
 
     ett_gtp_array[0] = &ett_gtp;
@@ -12681,13 +12959,13 @@ proto_register_gtp(void)
     ett_gtp_array[34] = &ett_gtp_bss_cont;
     ett_gtp_array[35] = &ett_gtp_lst_set_up_pfc;
     ett_gtp_array[36] = &ett_gtp_rrc_cont;
-    ett_gtp_array[37] = &ett_nrup;
+    ett_gtp_array[37] = &ett_gtp_rim_routing_adr;
+    ett_gtp_array[38] = &ett_nrup;
 
     last_offset = GTP_NUM_INDIVIDUAL_ELEMS;
 
     for (i=0; i < NUM_GTP_IES; i++, last_offset++)
     {
-        ett_gtp_ies[i] = -1;
         ett_gtp_array[last_offset] = &ett_gtp_ies[i];
     }
 

@@ -65,102 +65,102 @@ void proto_reg_handoff_mbtcp(void);
 void proto_reg_handoff_mbrtu(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_mbtcp = -1;
-static int proto_mbudp = -1;
-static int proto_mbrtu = -1;
-static int proto_modbus = -1;
-static int hf_mbtcp_transid = -1;
-static int hf_mbtcp_protid = -1;
-static int hf_mbtcp_len = -1;
-static int hf_mbtcp_unitid = -1;
-static int hf_modbus_request_frame = -1;
-static int hf_modbus_response_time = -1;
-static int hf_modbus_functioncode = -1;
-static int hf_modbus_reference = -1;
-static int hf_modbus_padding = -1;
-static int hf_modbus_lreference = -1;
-static int hf_modbus_reftype = -1;
-static int hf_modbus_readref = -1;
-static int hf_modbus_writeref = -1;
-static int hf_modbus_wordcnt = -1;
-static int hf_modbus_readwordcnt = -1;
-static int hf_modbus_writewordcnt = -1;
-static int hf_modbus_bytecnt = -1;
-static int hf_modbus_lbytecnt = -1;
-static int hf_modbus_bitcnt = -1;
-static int hf_modbus_exceptioncode = -1;
-static int hf_modbus_diag_sf = -1;
-static int hf_modbus_diag_return_query_data_request = -1;
-static int hf_modbus_diag_return_query_data_echo = -1;
-static int hf_modbus_diag_restart_communication_option = -1;
-static int hf_modbus_diag_return_diag_register = -1;
-static int hf_modbus_diag_ascii_input_delimiter = -1;
-static int hf_modbus_diag_clear_ctr_diag_reg = -1;
-static int hf_modbus_diag_return_bus_message_count = -1;
-static int hf_modbus_diag_return_bus_comm_error_count = -1;
-static int hf_modbus_diag_return_bus_exception_error_count = -1;
-static int hf_modbus_diag_return_slave_message_count = -1;
-static int hf_modbus_diag_return_no_slave_response_count = -1;
-static int hf_modbus_diag_return_slave_nak_count = -1;
-static int hf_modbus_diag_return_slave_busy_count = -1;
-static int hf_modbus_diag_return_bus_char_overrun_count = -1;
-static int hf_modbus_status = -1;
-static int hf_modbus_event = -1;
-static int hf_modbus_event_count = -1;
-static int hf_modbus_message_count = -1;
-static int hf_modbus_event_recv_comm_err = -1;
-static int hf_modbus_event_recv_char_over = -1;
-static int hf_modbus_event_recv_lo_mode = -1;
-static int hf_modbus_event_recv_broadcast = -1;
-static int hf_modbus_event_send_read_ex = -1;
-static int hf_modbus_event_send_slave_abort_ex = -1;
-static int hf_modbus_event_send_slave_busy_ex = -1;
-static int hf_modbus_event_send_slave_nak_ex = -1;
-static int hf_modbus_event_send_write_timeout = -1;
-static int hf_modbus_event_send_lo_mode = -1;
-static int hf_modbus_andmask = -1;
-static int hf_modbus_ormask = -1;
-static int hf_modbus_data = -1;
-static int hf_modbus_mei = -1;
-static int hf_modbus_read_device_id = -1;
-static int hf_modbus_object_id = -1;
-static int hf_modbus_num_objects = -1;
-static int hf_modbus_list_object_len = -1;
-static int hf_modbus_conformity_level = -1;
-static int hf_modbus_more_follows = -1;
-static int hf_modbus_next_object_id = -1;
-static int hf_modbus_object_str_value = -1;
-static int hf_modbus_object_value = -1;
-static int hf_modbus_bitnum = -1;
-static int hf_modbus_bitval = -1;
-static int hf_modbus_regnum16 = -1;
-static int hf_modbus_regnum32 = -1;
-static int hf_modbus_regval_uint16 = -1;
-static int hf_modbus_regval_int16 = -1;
-static int hf_modbus_regval_uint32 = -1;
-static int hf_modbus_regval_int32 = -1;
-static int hf_modbus_regval_ieee_float = -1;
-static int hf_modbus_regval_modicon_float = -1;
-static int hf_mbrtu_unitid = -1;
-static int hf_mbrtu_crc16 = -1;
-static int hf_mbrtu_crc16_status = -1;
+static int proto_mbtcp;
+static int proto_mbudp;
+static int proto_mbrtu;
+static int proto_modbus;
+static int hf_mbtcp_transid;
+static int hf_mbtcp_protid;
+static int hf_mbtcp_len;
+static int hf_mbtcp_unitid;
+static int hf_modbus_request_frame;
+static int hf_modbus_response_time;
+static int hf_modbus_functioncode;
+static int hf_modbus_reference;
+static int hf_modbus_padding;
+static int hf_modbus_lreference;
+static int hf_modbus_reftype;
+static int hf_modbus_readref;
+static int hf_modbus_writeref;
+static int hf_modbus_wordcnt;
+static int hf_modbus_readwordcnt;
+static int hf_modbus_writewordcnt;
+static int hf_modbus_bytecnt;
+static int hf_modbus_lbytecnt;
+static int hf_modbus_bitcnt;
+static int hf_modbus_exceptioncode;
+static int hf_modbus_diag_sf;
+static int hf_modbus_diag_return_query_data_request;
+static int hf_modbus_diag_return_query_data_echo;
+static int hf_modbus_diag_restart_communication_option;
+static int hf_modbus_diag_return_diag_register;
+static int hf_modbus_diag_ascii_input_delimiter;
+static int hf_modbus_diag_clear_ctr_diag_reg;
+static int hf_modbus_diag_return_bus_message_count;
+static int hf_modbus_diag_return_bus_comm_error_count;
+static int hf_modbus_diag_return_bus_exception_error_count;
+static int hf_modbus_diag_return_slave_message_count;
+static int hf_modbus_diag_return_no_slave_response_count;
+static int hf_modbus_diag_return_slave_nak_count;
+static int hf_modbus_diag_return_slave_busy_count;
+static int hf_modbus_diag_return_bus_char_overrun_count;
+static int hf_modbus_status;
+static int hf_modbus_event;
+static int hf_modbus_event_count;
+static int hf_modbus_message_count;
+static int hf_modbus_event_recv_comm_err;
+static int hf_modbus_event_recv_char_over;
+static int hf_modbus_event_recv_lo_mode;
+static int hf_modbus_event_recv_broadcast;
+static int hf_modbus_event_send_read_ex;
+static int hf_modbus_event_send_slave_abort_ex;
+static int hf_modbus_event_send_slave_busy_ex;
+static int hf_modbus_event_send_slave_nak_ex;
+static int hf_modbus_event_send_write_timeout;
+static int hf_modbus_event_send_lo_mode;
+static int hf_modbus_andmask;
+static int hf_modbus_ormask;
+static int hf_modbus_data;
+static int hf_modbus_mei;
+static int hf_modbus_read_device_id;
+static int hf_modbus_object_id;
+static int hf_modbus_num_objects;
+static int hf_modbus_list_object_len;
+static int hf_modbus_conformity_level;
+static int hf_modbus_more_follows;
+static int hf_modbus_next_object_id;
+static int hf_modbus_object_str_value;
+static int hf_modbus_object_value;
+static int hf_modbus_bitnum;
+static int hf_modbus_bitval;
+static int hf_modbus_regnum16;
+static int hf_modbus_regnum32;
+static int hf_modbus_regval_uint16;
+static int hf_modbus_regval_int16;
+static int hf_modbus_regval_uint32;
+static int hf_modbus_regval_int32;
+static int hf_modbus_regval_ieee_float;
+static int hf_modbus_regval_modicon_float;
+static int hf_mbrtu_unitid;
+static int hf_mbrtu_crc16;
+static int hf_mbrtu_crc16_status;
 
 /* Initialize the subtree pointers */
-static gint ett_mbtcp = -1;
-static gint ett_mbrtu = -1;
-static gint ett_modbus_hdr = -1;
-static gint ett_group_hdr = -1;
-static gint ett_events = -1;
-static gint ett_events_recv = -1;
-static gint ett_events_send = -1;
-static gint ett_device_id_objects = -1;
-static gint ett_device_id_object_items = -1;
-static gint ett_bit = -1;
-static gint ett_register = -1;
+static gint ett_mbtcp;
+static gint ett_mbrtu;
+static gint ett_modbus_hdr;
+static gint ett_group_hdr;
+static gint ett_events;
+static gint ett_events_recv;
+static gint ett_events_send;
+static gint ett_device_id_objects;
+static gint ett_device_id_object_items;
+static gint ett_bit;
+static gint ett_register;
 
-static expert_field ei_mbrtu_crc16_incorrect = EI_INIT;
-static expert_field ei_modbus_data_decode = EI_INIT;
-static expert_field ei_mbtcp_cannot_classify = EI_INIT;
+static expert_field ei_mbrtu_crc16_incorrect;
+static expert_field ei_modbus_data_decode;
+static expert_field ei_mbtcp_cannot_classify;
 
 static dissector_handle_t modbus_handle;
 static dissector_handle_t mbtcp_handle;
@@ -416,7 +416,7 @@ dissect_mbtcp_pdu_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
     proto_tree    *mbtcp_tree;
     int           offset;
     tvbuff_t      *next_tvb;
-    const char    *func_string = "";
+    const char    *func_string;
     const char    *pkt_type_str = "";
     const char    *err_str = "";
     guint16       transaction_id, protocol_id, len;
@@ -559,7 +559,7 @@ dissect_mbrtu_pdu_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, ra
     proto_tree    *mbrtu_tree;
     int           offset;
     tvbuff_t      *next_tvb;
-    const char    *func_string = "";
+    const char    *func_string;
     const char    *pkt_type_str = "";
     const char    *err_str = "";
     guint16       len, calc_crc16;
@@ -852,7 +852,7 @@ dissect_mbrtu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         return 0;
 
     /* For Modbus RTU mode, confirm that the first byte is a valid address (non-zero), */
-    /* so we can eliminate false-posititves on Modbus TCP messages loaded as RTU       */
+    /* so we can eliminate false-positives on Modbus TCP messages loaded as RTU       */
     if(tvb_get_guint8(tvb, 0) == 0 )
         return 0;
 
@@ -892,6 +892,7 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
     gfloat data_float, modfloat;
     proto_tree    *bit_tree = NULL;
     proto_item    *bitnum_ti = NULL;
+    proto_item    *regnum_ti = NULL;
     proto_item    *register_item = NULL;
     proto_tree    *register_tree = NULL;
     tvbuff_t *next_tvb;
@@ -927,6 +928,7 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
     switch ( function_code ) {
         case READ_COILS:
         case READ_DISCRETE_INPUTS:
+        case WRITE_MULT_COILS:
             /* The bit data is packed, 8 bits per byte of data, loop over each bit */
             while (data_offset < payload_len) {
                 data8 = tvb_get_guint8(next_tvb, data_offset);
@@ -934,9 +936,9 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
                     data_bool = (data8 & (1 << ii)) > 0;
                     bit_tree = proto_tree_add_subtree_format(tree, next_tvb, data_offset, 1,
                         ett_bit, NULL, "Bit %u : %u", reg_num, data_bool);
-                    bitnum_ti = proto_tree_add_uint(bit_tree, hf_modbus_bitnum, next_tvb, data_offset, 1, reg_num);
+                    bitnum_ti = proto_tree_add_uint(bit_tree, hf_modbus_bitnum, next_tvb, 0, 0, reg_num);
                     proto_item_set_generated(bitnum_ti);
-                    proto_tree_add_boolean(bit_tree, hf_modbus_bitval, next_tvb, data_offset, 1, data_bool);
+                    proto_tree_add_boolean_bits_format_value(bit_tree, hf_modbus_bitval, next_tvb, 7 - ii, 1, data8, ENC_NA, "%s", tfs_get_true_false(data_bool));
                     reg_num++;
 
                     /* If all the requested bits have been read, stop now */
@@ -950,6 +952,7 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
 
         case READ_HOLDING_REGS:
         case READ_INPUT_REGS:
+        case WRITE_SINGLE_REG:
         case WRITE_MULT_REGS:
             while (data_offset < payload_len) {
                 /* Use "Preferences" options to determine decoding format of register data, as no format is implied by the protocol itself. */
@@ -961,7 +964,8 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
                         register_tree = proto_tree_add_subtree_format( tree, next_tvb, data_offset, 2,
                             ett_register, NULL, "Register %u (UINT16): %u", reg_num, data16);
 
-                        proto_tree_add_uint(register_tree, hf_modbus_regnum16, next_tvb, data_offset, 2, reg_num);
+                        regnum_ti = proto_tree_add_uint(register_tree, hf_modbus_regnum16, next_tvb, 0, 0, reg_num);
+                        proto_item_set_generated(regnum_ti);
                         proto_tree_add_uint(register_tree, hf_modbus_regval_uint16, next_tvb, data_offset, 2, data16);
 
                         data_offset += 2;
@@ -972,7 +976,8 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
                         register_tree = proto_tree_add_subtree_format( tree, next_tvb, data_offset, 2,
                             ett_register, NULL, "Register %u (INT16): %d", reg_num, data16s);
 
-                        proto_tree_add_uint(register_tree, hf_modbus_regnum16, next_tvb, data_offset, 2, reg_num);
+                        regnum_ti = proto_tree_add_uint(register_tree, hf_modbus_regnum16, next_tvb, 0, 0, reg_num);
+                        proto_item_set_generated(regnum_ti);
                         proto_tree_add_int(register_tree, hf_modbus_regval_int16, next_tvb, data_offset, 2, data16s);
 
                         data_offset += 2;
@@ -983,7 +988,8 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
                         register_tree = proto_tree_add_subtree_format( tree, next_tvb, data_offset, 4,
                             ett_register, NULL, "Register %u (UINT32): %u", reg_num, data32);
 
-                        proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, data_offset, 4, reg_num);
+                        regnum_ti = proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, 0, 0, reg_num);
+                        proto_item_set_generated(regnum_ti);
                         proto_tree_add_uint(register_tree, hf_modbus_regval_uint32, next_tvb, data_offset, 4, data32);
 
                         data_offset += 4;
@@ -994,7 +1000,8 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
                         register_tree = proto_tree_add_subtree_format( tree, next_tvb, data_offset, 4,
                             ett_register, NULL, "Register %u (INT32): %d", reg_num, data32s);
 
-                        proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, data_offset, 4, reg_num);
+                        regnum_ti = proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, 0, 0, reg_num);
+                        proto_item_set_generated(regnum_ti);
                         proto_tree_add_int(register_tree, hf_modbus_regval_int32, next_tvb, data_offset, 4, data32s);
 
                         data_offset += 4;
@@ -1006,7 +1013,8 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
                         register_tree = proto_tree_add_subtree_format( tree, next_tvb, data_offset, 4,
                             ett_register, NULL, "Register %u (IEEE Float): %f", reg_num, data_float);
 
-                        proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, data_offset, 4, reg_num);
+                        regnum_ti = proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, 0, 0, reg_num);
+                        proto_item_set_generated(regnum_ti);
                         proto_tree_add_float(register_tree, hf_modbus_regval_ieee_float, next_tvb, data_offset, 4, data_float);
 
                         data_offset += 4;
@@ -1030,7 +1038,8 @@ dissect_modbus_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 
                         register_tree = proto_tree_add_subtree_format( tree, next_tvb, data_offset, 4,
                             ett_register, NULL, "Register %u (Modicon Float): %f", reg_num, modfloat);
 
-                        proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, data_offset, 4, reg_num);
+                        regnum_ti = proto_tree_add_uint(register_tree, hf_modbus_regnum32, next_tvb, 0, 0, reg_num);
+                        proto_item_set_generated(regnum_ti);
                         proto_tree_add_float(register_tree, hf_modbus_regval_modicon_float, next_tvb, data_offset, 4, modfloat);
 
                         data_offset += 4;
@@ -1058,7 +1067,7 @@ static int
 dissect_modbus_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *modbus_tree, guint8 function_code, gint payload_start, gint payload_len, modbus_pkt_info_t *pkt_info)
 {
     proto_tree    *group_tree;
-    gint          byte_cnt, group_offset, ii;
+    gint          byte_cnt, num_reg, group_offset, ii;
     guint8        mei_code;
     guint16       reg_base=0, diagnostic_code;
     guint32       group_byte_cnt, group_word_cnt;
@@ -1088,6 +1097,7 @@ dissect_modbus_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *modbus_tre
             break;
 
         case WRITE_SINGLE_REG:
+            reg_base = tvb_get_ntohs(tvb, payload_start);
             proto_tree_add_item(modbus_tree, hf_modbus_reference, tvb, payload_start, 2, ENC_BIG_ENDIAN);
             dissect_modbus_data(tvb, pinfo, modbus_tree, function_code, payload_start + 2, 2, pkt_info->register_format, reg_base, 0);
             break;
@@ -1130,11 +1140,13 @@ dissect_modbus_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *modbus_tre
             }
             break;
         case WRITE_MULT_COILS:
+            reg_base = tvb_get_ntohs(tvb, payload_start);
+            num_reg = tvb_get_ntohs(tvb, payload_start + 2);
             proto_tree_add_item(modbus_tree, hf_modbus_reference, tvb, payload_start, 2, ENC_BIG_ENDIAN);
             proto_tree_add_item(modbus_tree, hf_modbus_bitcnt, tvb, payload_start + 2, 2, ENC_BIG_ENDIAN);
             byte_cnt = (guint32)tvb_get_guint8(tvb, payload_start + 4);
             proto_tree_add_uint(modbus_tree, hf_modbus_bytecnt, tvb, payload_start + 4, 1, byte_cnt);
-            dissect_modbus_data(tvb, pinfo, modbus_tree, function_code, payload_start + 5, byte_cnt, pkt_info->register_format, reg_base, 0);
+            dissect_modbus_data(tvb, pinfo, modbus_tree, function_code, payload_start + 5, byte_cnt, pkt_info->register_format, reg_base, num_reg);
             break;
 
         case WRITE_MULT_REGS:
@@ -1859,7 +1871,7 @@ proto_register_modbus(void)
         },
         { &hf_modbus_lbytecnt,
             { "Byte Count (16-bit)", "modbus.byte_cnt_16",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
+            FT_UINT16, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_modbus_exceptioncode,
@@ -2083,7 +2095,7 @@ proto_register_modbus(void)
         },
         { &hf_modbus_bitval,
             { "Bit Value", "modbus.bitval",
-            FT_BOOLEAN, 8, NULL, 0x01,
+            FT_BOOLEAN, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_modbus_regnum16,

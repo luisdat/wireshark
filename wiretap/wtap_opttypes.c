@@ -8,6 +8,8 @@
  */
 #include "config.h"
 
+#define WS_LOG_DOMAIN LOG_DOMAIN_WIRETAP
+
 #include <glib.h>
 #include <string.h>
 
@@ -18,7 +20,6 @@
 #include <wsutil/ws_assert.h>
 
 #include <wsutil/glib-compat.h>
-#include <wsutil/inet_ipv6.h>
 #include <wsutil/unicode-utils.h>
 
 #if 0
@@ -502,6 +503,18 @@ wtap_block_copy(wtap_block_t dest_block, wtap_block_t src_block)
             wtap_block_add_uint64_option(dest_block, src_opt->option_id, src_opt->value.uint64val);
             break;
 
+        case WTAP_OPTTYPE_INT8:
+            wtap_block_add_int8_option(dest_block, src_opt->option_id, src_opt->value.int8val);
+            break;
+
+        case WTAP_OPTTYPE_INT32:
+            wtap_block_add_int32_option(dest_block, src_opt->option_id, src_opt->value.int32val);
+            break;
+
+        case WTAP_OPTTYPE_INT64:
+            wtap_block_add_int64_option(dest_block, src_opt->option_id, src_opt->value.int64val);
+            break;
+
         case WTAP_OPTTYPE_IPv4:
             wtap_block_add_ipv4_option(dest_block, src_opt->option_id, src_opt->value.ipv4val);
             break;
@@ -852,6 +865,123 @@ wtap_block_get_uint64_option_value(wtap_block_t block, guint option_id, guint64 
     if (ret != WTAP_OPTTYPE_SUCCESS)
         return ret;
     *value = optval->uint64val;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_add_int8_option(wtap_block_t block, guint option_id, gint8 value)
+{
+    wtap_opttype_return_val ret;
+    wtap_option_t *opt;
+
+    ret = wtap_block_add_option_common(block, option_id, WTAP_OPTTYPE_INT8, &opt);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    opt->value.int8val = value;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_set_int8_option_value(wtap_block_t block, guint option_id, gint8 value)
+{
+    wtap_opttype_return_val ret;
+    wtap_optval_t *optval;
+
+    ret = wtap_block_get_option_common(block, option_id, WTAP_OPTTYPE_INT8, &optval);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    optval->int8val = value;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_get_int8_option_value(wtap_block_t block, guint option_id, gint8* value)
+{
+    wtap_opttype_return_val ret;
+    wtap_optval_t *optval;
+
+    ret = wtap_block_get_option_common(block, option_id, WTAP_OPTTYPE_INT8, &optval);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    *value = optval->int8val;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_add_int32_option(wtap_block_t block, guint option_id, gint32 value)
+{
+    wtap_opttype_return_val ret;
+    wtap_option_t *opt;
+
+    ret = wtap_block_add_option_common(block, option_id, WTAP_OPTTYPE_INT32, &opt);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    opt->value.int32val = value;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_set_int32_option_value(wtap_block_t block, guint option_id, gint32 value)
+{
+    wtap_opttype_return_val ret;
+    wtap_optval_t *optval;
+
+    ret = wtap_block_get_option_common(block, option_id, WTAP_OPTTYPE_INT32, &optval);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    optval->int32val = value;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_get_int32_option_value(wtap_block_t block, guint option_id, gint32* value)
+{
+    wtap_opttype_return_val ret;
+    wtap_optval_t *optval;
+
+    ret = wtap_block_get_option_common(block, option_id, WTAP_OPTTYPE_INT32, &optval);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    *value = optval->int32val;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_add_int64_option(wtap_block_t block, guint option_id, gint64 value)
+{
+    wtap_opttype_return_val ret;
+    wtap_option_t *opt;
+
+    ret = wtap_block_add_option_common(block, option_id, WTAP_OPTTYPE_INT64, &opt);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    opt->value.int64val = value;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_set_int64_option_value(wtap_block_t block, guint option_id, gint64 value)
+{
+    wtap_opttype_return_val ret;
+    wtap_optval_t *optval;
+
+    ret = wtap_block_get_option_common(block, option_id, WTAP_OPTTYPE_INT64, &optval);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    optval->int64val = value;
+    return WTAP_OPTTYPE_SUCCESS;
+}
+
+wtap_opttype_return_val
+wtap_block_get_int64_option_value(wtap_block_t block, guint option_id, gint64 *value)
+{
+    wtap_opttype_return_val ret;
+    wtap_optval_t *optval;
+
+    ret = wtap_block_get_option_common(block, option_id, WTAP_OPTTYPE_INT64, &optval);
+    if (ret != WTAP_OPTTYPE_SUCCESS)
+        return ret;
+    *value = optval->int64val;
     return WTAP_OPTTYPE_SUCCESS;
 }
 
@@ -1710,22 +1840,22 @@ static void dsb_copy_mand(wtap_block_t dest_block, wtap_block_t src_block)
     dst->secrets_data = (guint8 *)g_memdup2(src->secrets_data, src->secrets_len);
 }
 
-static void sysdig_mev_create(wtap_block_t block)
+static void mev_create(wtap_block_t block)
 {
-    block->mandatory_data = g_new0(wtapng_sysdig_mev_mandatory_t, 1);
+    block->mandatory_data = g_new0(wtapng_meta_event_mandatory_t, 1);
 }
 
-static void sysdig_mev_free_mand(wtap_block_t block)
+static void mev_free_mand(wtap_block_t block)
 {
-    wtapng_sysdig_mev_mandatory_t *mand = (wtapng_sysdig_mev_mandatory_t *)block->mandatory_data;
+    wtapng_meta_event_mandatory_t *mand = (wtapng_meta_event_mandatory_t *)block->mandatory_data;
     g_free(mand->mev_data);
 }
 
-static void sysdig_mev_copy_mand(wtap_block_t dest_block, wtap_block_t src_block)
+static void mev_copy_mand(wtap_block_t dest_block, wtap_block_t src_block)
 {
-    wtapng_sysdig_mev_mandatory_t *src = (wtapng_sysdig_mev_mandatory_t *)src_block->mandatory_data;
-    wtapng_sysdig_mev_mandatory_t *dst = (wtapng_sysdig_mev_mandatory_t *)dest_block->mandatory_data;
-    dst->mev_type = src->mev_type;
+    wtapng_meta_event_mandatory_t *src = (wtapng_meta_event_mandatory_t *)src_block->mandatory_data;
+    wtapng_meta_event_mandatory_t *dst = (wtapng_meta_event_mandatory_t *)dest_block->mandatory_data;
+    dst->mev_block_type = src->mev_block_type;
     dst->mev_data_len = src->mev_data_len;
     g_free(dst->mev_data);
     dst->mev_data = (guint8 *)g_memdup2(src->mev_data, src->mev_data_len);
@@ -1835,6 +1965,12 @@ void wtap_opttypes_initialize(void)
         WTAP_OPTTYPE_UINT8,
         0
     };
+    static const wtap_opttype_t if_tsoffset = {
+        "tsoffset",
+        "IDB Time Stamp Offset",
+        WTAP_OPTTYPE_INT64,
+        0
+    };
     static const wtap_opttype_t if_hardware = {
         "hardware",
         "IDB Hardware",
@@ -1942,13 +2078,13 @@ void wtap_opttypes_initialize(void)
         0
     };
 
-    static wtap_blocktype_t sysdig_mev_block = {
-        WTAP_BLOCK_SYSDIG_META_EVENT,
-        "Sysdig MEV",
-        "Sysdig Meta Event Block",
-        sysdig_mev_create,
-        sysdig_mev_free_mand,
-        sysdig_mev_copy_mand,
+    static wtap_blocktype_t mev_block = {
+        WTAP_BLOCK_META_EVENT,
+        "MEV",
+        "Meta Event Block",
+        mev_create,
+        mev_free_mand,
+        mev_copy_mand,
         NULL
     };
 
@@ -2037,6 +2173,7 @@ void wtap_opttypes_initialize(void)
     wtap_opttype_option_register(&idb_block, OPT_IDB_FILTER, &if_filter);
     wtap_opttype_option_register(&idb_block, OPT_IDB_OS, &if_os);
     wtap_opttype_option_register(&idb_block, OPT_IDB_FCSLEN, &if_fcslen);
+    wtap_opttype_option_register(&idb_block, OPT_IDB_TSOFFSET, &if_tsoffset);
     wtap_opttype_option_register(&idb_block, OPT_IDB_HARDWARE, &if_hardware);
 
     /*
@@ -2067,7 +2204,7 @@ void wtap_opttypes_initialize(void)
     /*
      * Register the Sysdig MEV, currently no options are defined.
      */
-    wtap_opttype_block_register(&sysdig_mev_block);
+    wtap_opttype_block_register(&mev_block);
 
     /*
      * Register EPB/SPB/PB and the options that can appear in it/them.

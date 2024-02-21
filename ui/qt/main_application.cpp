@@ -31,7 +31,9 @@
 #include "epan/tap.h"
 #include "epan/timestamp.h"
 #include "epan/decode_as.h"
+#include "epan/dfilter/dfilter-macro.h"
 
+#include "ui/commandline.h"
 #include "ui/decode_as_utils.h"
 #include "ui/preference_utils.h"
 #include "ui/iface_lists.h"
@@ -55,7 +57,7 @@
 #include "wsutil/filter_files.h"
 #include "ui/capture_globals.h"
 #include "ui/software_update.h"
-#include "ui/last_open_dir.h"
+#include "ui/file_dialog.h"
 #include "ui/recent_utils.h"
 
 #ifdef HAVE_LIBPCAP
@@ -114,8 +116,6 @@ MainApplication *mainApp = NULL;
 
 // XXX - Copied from ui/gtk/file_dlg.c
 
-// MUST be UTF-8
-static char *last_open_dir = NULL;
 static QList<recent_item_status *> recent_captures_;
 static QHash<int, QList<QAction *> > dynamic_menu_groups_;
 static QHash<int, QList<QAction *> > added_menu_groups_;
@@ -154,18 +154,6 @@ topic_action(topic_action_e action)
     if (mainApp) mainApp->helpTopicAction(action);
 }
 
-extern "C" char *
-get_last_open_dir(void)
-{
-    return last_open_dir;
-}
-
-void
-set_last_open_dir(const char *dirname)
-{
-    if (mainApp) mainApp->setLastOpenDir(dirname);
-}
-
 /*
  * Add the capture filename to the application-wide "Recent Files" list.
  * Contrary to the name this isn't limited to the "recent" menu.
@@ -175,7 +163,7 @@ set_last_open_dir(const char *dirname)
  * https://stackoverflow.com/questions/437212/how-do-you-register-a-most-recently-used-list-with-windows-in-preparation-for-win
  */
 extern "C" void
-add_menu_recent_capture_file(const gchar *cf_name) {
+add_menu_recent_capture_file(const gchar *cf_name, bool force) {
     QString normalized_cf_name = QString::fromUtf8(cf_name);
     QDir cf_path;
 
@@ -210,7 +198,7 @@ add_menu_recent_capture_file(const gchar *cf_name) {
              */
             ri->filename.compare(normalized_cf_name) == 0 ||
 #endif
-            cnt >= prefs.gui_recent_files_count_max) {
+            (!force && cnt >= prefs.gui_recent_files_count_max)) {
             rii.remove();
             delete(ri);
             cnt--;
@@ -226,12 +214,15 @@ extern "C" void menu_recent_file_write_all(FILE *rf) {
     /* we have to iterate backwards through the children's list,
      * so we get the latest item last in the file.
      */
-    QListIterator<recent_item_status *> rii(recent_captures_);
-    rii.toBack();
-    while (rii.hasPrevious()) {
-        QString cf_name;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    int i = qMin(recent_captures_.size(), (int)(prefs.gui_recent_files_count_max)) - 1;
+#else
+    qsizetype i = qMin(recent_captures_.size(), (qsizetype)prefs.gui_recent_files_count_max) - 1;
+#endif
+    for (; i >= 0; i--) {
+        recent_item_status *ri = recent_captures_.at(i);
         /* get capture filename from the menu item label */
-        cf_name = rii.previous()->filename;
+        QString cf_name = ri->filename;
         if (!cf_name.isNull()) {
             fprintf (rf, RECENT_KEY_CAPTURE_FILE ": %s\n", qUtf8Printable(cf_name));
         }
@@ -296,14 +287,15 @@ void MainApplication::updateTaps()
     draw_tap_listeners(FALSE);
 }
 
-QDir MainApplication::lastOpenDir() {
-    return QDir(last_open_dir);
+QDir MainApplication::openDialogInitialDir() {
+    return QDir(get_open_dialog_initial_dir());
 }
 
 void MainApplication::setLastOpenDirFromFilename(const QString file_name)
 {
     QString directory = QFileInfo(file_name).absolutePath();
-    setLastOpenDir(qUtf8Printable(directory));
+    /* XXX - printable? */
+    set_last_open_dir(qUtf8Printable(directory));
 }
 
 void MainApplication::helpTopicAction(topic_action_e action)
@@ -409,11 +401,7 @@ void MainApplication::setMonospaceFont(const char *font_string) {
 
 int MainApplication::monospaceTextSize(const char *str)
 {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     return QFontMetrics(mono_font_).horizontalAdvance(str);
-#else
-    return QFontMetrics(mono_font_).width(str);
-#endif
 }
 
 void MainApplication::setConfigurationProfile(const gchar *profile_name, bool write_recent_file)
@@ -477,6 +465,15 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
 
     /* Apply new preferences */
     readConfigurationFiles(true);
+
+    /* Should we reapply command line options now or drop them (so that
+     * they don't get reapplied later, e.g. when reloading Lua plugins)?
+     */
+    commandline_options_free();
+    extcap_register_preferences();
+
+    /* Switching profile requires reloading the macro list. */
+    reloadDisplayFilterMacros();
 
     if (!recent_read_profile_static(&rf_path, &rf_open_errno)) {
         simple_dialog(ESD_TYPE_WARN, ESD_BTN_OK,
@@ -601,28 +598,6 @@ void MainApplication::storeCustomColorsInRecent()
     }
 }
 
-void MainApplication::setLastOpenDir(const char *dir_name)
-{
-    qint64 len;
-    gchar *new_last_open_dir;
-
-    if (dir_name && dir_name[0]) {
-        len = strlen(dir_name);
-        if (dir_name[len-1] == G_DIR_SEPARATOR) {
-            new_last_open_dir = g_strconcat(dir_name, (char *)NULL);
-        }
-        else {
-            new_last_open_dir = g_strconcat(dir_name,
-                                            G_DIR_SEPARATOR_S, (char *)NULL);
-        }
-    } else {
-        new_last_open_dir = NULL;
-    }
-
-    g_free(last_open_dir);
-    last_open_dir = new_last_open_dir;
-}
-
 bool MainApplication::event(QEvent *event)
 {
     QString display_filter = NULL;
@@ -681,6 +656,9 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     is_reloading_lua_(false),
     if_notifier_(NULL),
     active_captures_(0)
+#ifdef HAVE_LIBPCAP
+    , cached_if_list_(NULL)
+#endif
 {
     mainApp = this;
 
@@ -710,15 +688,13 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 #endif
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
 
     // Throw various settings at the wall with the hope that one of them will
     // enable context menu shortcuts QTBUG-69452, QTBUG-109590
-#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
     setAttribute(Qt::AA_DontShowShortcutsInContextMenus, false);
-#endif
 #if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
     styleHints()->setShowShortcutsInContextMenus(true);
 #endif
@@ -844,8 +820,10 @@ MainApplication::MainApplication(int &argc,  char **argv) :
 MainApplication::~MainApplication()
 {
     mainApp = NULL;
+#ifdef HAVE_LIBPCAP
+    free_interface_list(cached_if_list_);
+#endif
     clearDynamicMenuGroupItems();
-    free_filter_lists();
 }
 
 void MainApplication::registerUpdate(register_action_e action, const char *message)
@@ -1049,6 +1027,27 @@ iface_mon_event_cb(const char *iface, int added, int up)
         /*
          * We've been told that there's a new interface or that an old
          * interface is gone; reload the local interface list.
+         *
+         * XXX: We also want to reload the local interface list if [what
+         * we can retrieve about] the capabilities of the device have changed.
+         * Ideally we'd update the capabilities of just the one device in
+         * the cache and signal that the list has been updated, instead of
+         * freeing the entire cache and scanning again - but some extcaps
+         * depend on other interfaces being up; e.g. by default androiddump
+         * tries to connect to the loopback interface to look for adb running,
+         * so if the loopback interface changes so does the status of
+         * androiddump.
+         *
+         * On Linux, at least, you can't get the capabilities from a down
+         * interface, but it's still present in all_ifaces - dumpcap returns
+         * it in the list, and we show it so the user can get a status / error
+         * message when trying to capture on it instead of it vanishing.
+         * So if both present and up are true, then we still want to refresh
+         * to update the capabilities and restart the stats.
+         *
+         * We also store the address in all_ifaces and show them to the user,
+         * so we probably should monitor those events as well and update
+         * the interface list appropriately when those change.
          */
         mainApp->refreshLocalInterfaces();
     }
@@ -1080,20 +1079,22 @@ void MainApplication::refreshLocalInterfaces()
     extcap_clear_interfaces();
 
 #ifdef HAVE_LIBPCAP
-    /*
-     * Reload the local interface list.
-     */
-    scan_local_interfaces(main_window_update);
-
-    /*
-     * Now emit a signal to indicate that the list changed, so that all
-     * places displaying the list will get updated.
-     *
-     * XXX - only if it *did* change.
-     */
-    emit localInterfaceListChanged();
+    emit scanLocalInterfaces(nullptr);
 #endif
 }
+
+#ifdef HAVE_LIBPCAP
+GList* MainApplication::getInterfaceList() const
+{
+     return interface_list_copy(cached_if_list_);
+}
+
+void MainApplication::setInterfaceList(GList *if_list)
+{
+     free_interface_list(cached_if_list_);
+     cached_if_list_ = interface_list_copy(if_list);
+}
+#endif
 
 void MainApplication::allSystemsGo()
 {
@@ -1133,9 +1134,6 @@ _e_prefs *MainApplication::readConfigurationFiles(bool reset)
 
     /* Load libwireshark settings from the current profile. */
     prefs_p = epan_load_settings();
-
-    /* Read the capture filter file. */
-    read_filter_list(CFILTER_LIST);
 
     return prefs_p;
 }
@@ -1269,15 +1267,17 @@ bool MainApplication::softwareUpdateCanShutdown() {
     software_update_ok_ = true;
     // At this point the update is ready to install, but WinSparkle has
     // not yet run the installer. We need to close our "Wireshark is
-    // running" mutexes along with those of our child processes, e.g.
-    // dumpcap.
+    // running" mutexes since the IsWiresharkRunning NSIS macro checks
+    // for them.
+    //
+    // We must not exit the Qt main event loop here, which means we must
+    // not close the main window.
 
     // Step 1: See if we have any open files.
     emit softwareUpdateRequested();
     if (software_update_ok_ == true) {
 
         // Step 2: Close the "running" mutexes.
-        emit softwareUpdateClose();
         close_app_running_mutex();
     }
     return software_update_ok_;
@@ -1286,7 +1286,9 @@ bool MainApplication::softwareUpdateCanShutdown() {
 void MainApplication::softwareUpdateShutdownRequest() {
     // At this point the installer has been launched. Neither Wireshark nor
     // its children should have any "Wireshark is running" mutexes open.
-    // The main window should be closed.
+    // The main window should still be open as noted above in
+    // softwareUpdateCanShutdown and it's safe to exit the Qt main
+    // event loop.
 
     // Step 3: Quit.
     emit softwareUpdateQuit();
@@ -1411,4 +1413,12 @@ void MainApplication::gotoFrame(int frame)
 
     MainWindow * mw = qobject_cast<MainWindow *>(mainWindow());
     mw->gotoFrame(frame);
+}
+
+void MainApplication::reloadDisplayFilterMacros()
+{
+    dfilter_macro_reload();
+    // The signal is needed when the display filter grammar changes for
+    // any reason (not just "fields".)
+    mainApp->emitAppSignal(MainApplication::FieldsChanged);
 }

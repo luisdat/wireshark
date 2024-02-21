@@ -16,13 +16,20 @@
 /*
  * See
  *
- *    http://www.irdajp.info/specifications.php
+ *    https://web.archive.org/web/20040405053146/http://www.irda.org/standards/specifications.asp
  *
  * or
  *
- *    https://web.archive.org/web/20040405053146/http://www.irda.org/standards/specifications.asp
+ *    https://archive.org/search?query=creator%3A%22Infrared+Data+Association%22
  *
- * for various IrDA specifications.
+ * for various IrDA specifications, including the IrCOMM 1.0 specification
+ * at
+ *
+ *    https://web.archive.org/web/20040229015523/http://www.irda.org/standards/pubs/IrCOMM10.PDF
+ *
+ * or
+ *
+ *    https://archive.org/details/ir-comm-10
  */
 
 #include "irda-appl.h"
@@ -109,8 +116,8 @@
 void proto_reg_handoff_ircomm(void);
 
 /* Initialize the subtree pointers */
-static gint ett_ircomm = -1;
-static gint ett_ircomm_ctrl = -1;
+static gint ett_ircomm;
+static gint ett_ircomm_ctrl;
 
 #define MAX_PARAMETERS          32
 static gint ett_param[MAX_IAP_ENTRIES * MAX_PARAMETERS];
@@ -118,13 +125,13 @@ static gint ett_param[MAX_IAP_ENTRIES * MAX_PARAMETERS];
 static dissector_handle_t ircomm_raw_handle;
 static dissector_handle_t ircomm_cooked_handle;
 
-static int proto_ircomm = -1;
-static int hf_ircomm_param = -1;
-/* static int hf_param_pi = -1; */
-/* static int hf_param_pl = -1; */
-/* static int hf_param_pv = -1; */
-static int hf_control = -1;
-static int hf_control_len = -1;
+static int proto_ircomm;
+static int hf_ircomm_param;
+/* static int hf_param_pi; */
+/* static int hf_param_pl; */
+/* static int hf_param_pv; */
+static int hf_control;
+static int hf_control_len;
 
 static gboolean dissect_ircomm_parameters(tvbuff_t* tvb, guint offset, packet_info* pinfo,
                                           proto_tree* tree, guint list_index, guint8 attr_type, guint8 circuit_id);
@@ -408,7 +415,6 @@ void proto_register_ircomm(void)
     proto_register_subtree_array(ett, array_length(ett));
     for (i = 0; i < MAX_IAP_ENTRIES * MAX_PARAMETERS; i++)
     {
-        ett_param[i] = -1;
         ett_p[i]     = &ett_param[i];
     }
     proto_register_subtree_array(ett_p, MAX_IAP_ENTRIES * MAX_PARAMETERS);

@@ -38,70 +38,70 @@ void proto_reg_handoff_enrp(void);
 static dissector_handle_t enrp_handle;
 
 /* Initialize the protocol and registered fields */
-static int enrp_tap = -1;
-static int proto_enrp = -1;
-static int hf_cause_code = -1;
-static int hf_cause_length = -1;
-static int hf_cause_info = -1;
-static int hf_cause_padding = -1;
-static int hf_message_type = -1;
-static int hf_message_flags = -1;
-static int hf_message_length = -1;
-static int hf_message_value = -1;
-static int hf_parameter_type = -1;
-static int hf_parameter_length = -1;
-static int hf_parameter_value = -1;
-static int hf_parameter_padding = -1;
-static int hf_parameter_ipv4_address = -1;
-static int hf_parameter_ipv6_address = -1;
-static int hf_dccp_port = -1;
-static int hf_dccp_reserved = -1;
-static int hf_dccp_service_code = -1;
-static int hf_sctp_port = -1;
-static int hf_transport_use = -1;
-static int hf_tcp_port = -1;
-static int hf_udp_port = -1;
-static int hf_udp_reserved = -1;
-static int hf_udp_lite_port = -1;
-static int hf_udp_lite_reserved = -1;
-static int hf_policy_type = -1;
-static int hf_policy_value = -1;
-static int hf_policy_weight = -1;
-static int hf_policy_priority = -1;
-static int hf_policy_load = -1;
-static int hf_policy_degradation = -1;
-static int hf_policy_loaddpf = -1;
-static int hf_policy_weightdpf = -1;
-static int hf_policy_distance = -1;
-static int hf_pool_handle = -1;
-static int hf_pe_pe_identifier = -1;
-static int hf_home_enrp_id = -1;
-static int hf_reg_life = -1;
-static int hf_server_identifier = -1;
-static int hf_cookie = -1;
-static int hf_pe_identifier = -1;
-static int hf_pe_checksum = -1;
-static int hf_sender_servers_id = -1;
-static int hf_receiver_servers_id = -1;
-static int hf_target_servers_id = -1;
-static int hf_update_action = -1;
-static int hf_pmu_reserved = -1;
-static int hf_reply_required_bit = -1;
-static int hf_own_children_only_bit = -1;
-static int hf_more_to_send_bit = -1;
-static int hf_reject_bit = -1;
-static int hf_tos_bit = -1;
+static int enrp_tap;
+static int proto_enrp;
+static int hf_cause_code;
+static int hf_cause_length;
+static int hf_cause_info;
+static int hf_cause_padding;
+static int hf_message_type;
+static int hf_message_flags;
+static int hf_message_length;
+static int hf_message_value;
+static int hf_parameter_type;
+static int hf_parameter_length;
+static int hf_parameter_value;
+static int hf_parameter_padding;
+static int hf_parameter_ipv4_address;
+static int hf_parameter_ipv6_address;
+static int hf_dccp_port;
+static int hf_dccp_reserved;
+static int hf_dccp_service_code;
+static int hf_sctp_port;
+static int hf_transport_use;
+static int hf_tcp_port;
+static int hf_udp_port;
+static int hf_udp_reserved;
+static int hf_udp_lite_port;
+static int hf_udp_lite_reserved;
+static int hf_policy_type;
+static int hf_policy_value;
+static int hf_policy_weight;
+static int hf_policy_priority;
+static int hf_policy_load;
+static int hf_policy_degradation;
+static int hf_policy_loaddpf;
+static int hf_policy_weightdpf;
+static int hf_policy_distance;
+static int hf_pool_handle;
+static int hf_pe_pe_identifier;
+static int hf_home_enrp_id;
+static int hf_reg_life;
+static int hf_server_identifier;
+static int hf_cookie;
+static int hf_pe_identifier;
+static int hf_pe_checksum;
+static int hf_sender_servers_id;
+static int hf_receiver_servers_id;
+static int hf_target_servers_id;
+static int hf_update_action;
+static int hf_pmu_reserved;
+static int hf_reply_required_bit;
+static int hf_own_children_only_bit;
+static int hf_more_to_send_bit;
+static int hf_reject_bit;
+static int hf_tos_bit;
 
 /* Initialize the subtree pointers */
-static gint ett_enrp = -1;
-static gint ett_enrp_parameter = -1;
-static gint ett_enrp_cause = -1;
-static gint ett_enrp_flags = -1;
+static gint ett_enrp;
+static gint ett_enrp_parameter;
+static gint ett_enrp_cause;
+static gint ett_enrp_flags;
 
 static guint64 enrp_total_msgs = 0;
 static guint64 enrp_total_bytes = 0;
 
-static expert_field ei_enrp_max_recursion_depth_reached = EI_INIT;
+static expert_field ei_enrp_max_recursion_depth_reached;
 
 static void
 dissect_parameters(tvbuff_t *, packet_info *, proto_tree *);
@@ -114,6 +114,7 @@ dissect_enrp(tvbuff_t *, packet_info *, proto_tree *, void*);
 
 #define ENRP_UDP_PORT  9901
 #define ENRP_SCTP_PORT 9901
+#define ENRP_MAX_RECURSION_DEPTH 10
 
 typedef struct _enrp_tap_rec_t {
   guint8      type;
@@ -137,6 +138,7 @@ dissect_unknown_cause(tvbuff_t *cause_tvb, proto_tree *cause_tree, proto_item *c
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_error_cause(tvbuff_t *cause_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   guint16 code, length, padding_length;
@@ -194,6 +196,7 @@ dissect_error_cause(tvbuff_t *cause_tvb, packet_info *pinfo, proto_tree *paramet
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_error_causes(tvbuff_t *error_causes_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   guint16 length, total_length;
@@ -227,6 +230,7 @@ dissect_ipv6_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_dccp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -240,6 +244,7 @@ dissect_dccp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, pr
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_sctp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -252,6 +257,7 @@ dissect_sctp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, pr
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_tcp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -264,6 +270,7 @@ dissect_tcp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, pro
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_udp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -276,6 +283,7 @@ dissect_udp_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, pro
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_udp_lite_transport_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -360,6 +368,7 @@ dissect_pool_handle_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_pool_element_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t*   parameters_tvb;
@@ -373,6 +382,7 @@ dissect_pool_element_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, prot
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_server_information_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -384,6 +394,7 @@ dissect_server_information_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_operation_error_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree)
 {
   tvbuff_t *error_causes_tvb;
@@ -432,11 +443,21 @@ dissect_unknown_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, p
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *enrp_tree)
 {
   guint16 type, length, padding_length;
   proto_tree *parameter_item;
   proto_tree *parameter_tree;
+
+  unsigned recursion_depth = p_get_proto_depth(pinfo, proto_enrp);
+
+  if (recursion_depth > ENRP_MAX_RECURSION_DEPTH) {
+    proto_tree_add_expert(enrp_tree, pinfo, &ei_enrp_max_recursion_depth_reached,
+                          parameter_tvb, 0, 0);
+    return;
+  }
+  p_set_proto_depth(pinfo, proto_enrp, recursion_depth + 1);
 
   /* extract tag and length from the parameter */
   type           = tvb_get_ntohs(parameter_tvb, PARAMETER_TYPE_OFFSET);
@@ -504,9 +525,12 @@ dissect_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *enrp_
 
   if (padding_length > 0)
     proto_tree_add_item(parameter_tree, hf_parameter_padding, parameter_tvb, PARAMETER_HEADER_OFFSET + length, padding_length, ENC_NA);
+
+  p_set_proto_depth(pinfo, proto_enrp, recursion_depth);
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_parameters(tvbuff_t *parameters_tvb, packet_info *pinfo, proto_tree *tree)
 {
   gint offset, length, total_length, remaining_length;
@@ -543,6 +567,7 @@ static const true_false_string reply_required_bit_value = {
 };
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_enrp_presence_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *message_tree, proto_tree *flags_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -585,6 +610,7 @@ static const true_false_string more_to_send_bit_value = {
 };
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_enrp_handle_table_response_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *message_tree, proto_tree *flags_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -617,6 +643,7 @@ static const true_false_string tos_bit_value = {
 };
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_enrp_handle_update_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *message_tree, proto_tree *flags_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -639,6 +666,7 @@ dissect_enrp_list_request_message(tvbuff_t *message_tvb, packet_info *pinfo _U_,
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_enrp_list_response_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *message_tree, proto_tree *flags_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -681,6 +709,7 @@ dissect_enrp_init_takeover_server_message(tvbuff_t *message_tvb, packet_info *pi
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_enrp_error_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *message_tree, proto_tree *flags_tree _U_)
 {
   tvbuff_t *parameters_tvb;
@@ -722,6 +751,7 @@ static const value_string message_type_values[] = {
   { 0,                                       NULL } };
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_enrp_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *enrp_tree)
 {
   enrp_tap_rec_t *tap_rec;
@@ -783,21 +813,20 @@ dissect_enrp_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *enrp
   }
 }
 
-#define ENRP_MAX_RECURSION_DEPTH 10
-
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_enrp_main(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree)
 {
   proto_item *enrp_item;
   proto_tree *enrp_tree;
   unsigned recursion_depth = p_get_proto_depth(pinfo, proto_enrp);
 
-  if (++recursion_depth >= ENRP_MAX_RECURSION_DEPTH) {
+  if (recursion_depth > ENRP_MAX_RECURSION_DEPTH) {
     proto_tree_add_expert(tree, pinfo, &ei_enrp_max_recursion_depth_reached,
                           message_tvb, 0, 0);
     return;
   }
-  p_set_proto_depth(pinfo, proto_enrp, recursion_depth);
+  p_set_proto_depth(pinfo, proto_enrp, recursion_depth + 1);
 
   /* create the enrp protocol tree */
   enrp_item = proto_tree_add_item(tree, proto_enrp, message_tvb, 0, -1, ENC_NA);

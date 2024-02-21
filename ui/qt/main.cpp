@@ -31,9 +31,7 @@
 #include <wsutil/privileges.h>
 #include <wsutil/socket.h>
 #include <wsutil/wslog.h>
-#ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
-#endif
 #include <wsutil/report_message.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/unicode-utils.h>
@@ -53,7 +51,7 @@
 #include <epan/dissectors/packet-kerberos.h>
 #endif
 
-#include <wsutil/codecs.h>
+#include <wsutil/codecs_priv.h>
 
 #include <extcap.h>
 
@@ -214,6 +212,13 @@ gather_wireshark_qt_compiled_info(feature_list l)
 #else
     without_feature(l, "QtMultimedia");
 #endif
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC)
+#ifdef QT_DBUS_LIB
+    with_feature(l, "QtDBus");
+#else
+    without_feature(l, "QtDBus");
+#endif
+#endif /* !Q_OS_WIN && !Q_OS_MAC */
 
     const char *update_info = software_update_info();
     if (update_info) {
@@ -447,16 +452,15 @@ macos_enable_layer_backing(void)
 static GList *
 capture_opts_get_interface_list(int *err, char **err_str)
 {
-    /*
-     * XXX - should this pass an update callback?
-     * We already have a window up by the time we start parsing
-     * the majority of the command-line arguments, because
-     * we need to do a bunch of initialization work before
-     * parsing those arguments, and we want to let the user
-     * know that we're doing that initialization, given that
-     * it can take a while.
-     */
-    return capture_interface_list(err, err_str, NULL);
+    if (mainApp) {
+        GList *if_list = mainApp->getInterfaceList();
+        if (if_list == NULL) {
+            if_list = capture_interface_list(err, err_str, main_window_update);
+            mainApp->setInterfaceList(if_list);
+        }
+        return if_list;
+    }
+    return capture_interface_list(err, err_str, main_window_update);
 }
 #endif
 
@@ -551,7 +555,7 @@ int main(int argc, char *qt_argv[])
 #endif
 
 #ifdef DEBUG_STARTUP_TIME
-    prefs.gui_console_open = console_open_always;
+    ws_log_console_open = LOG_CONSOLE_OPEN_ALWAYS;
 #endif /* DEBUG_STARTUP_TIME */
 
 #if defined(Q_OS_MAC)
@@ -767,13 +771,15 @@ int main(int argc, char *qt_argv[])
     main_w->connect(&ws_app, &WiresharkApplication::openCaptureOptions,
             main_w, &WiresharkMainWindow::showCaptureOptionsDialog);
 
-    /* Init the "Open file" dialog directory */
-    /* (do this after the path settings are processed) */
+    /*
+     * If we have a saved "last directory in which a file was opened"
+     * in the recent file, set it as the one for the app.
+     *
+     * (do this after the path settings are processed)
+     */
     if (recent.gui_fileopen_remembered_dir &&
         test_for_directory(recent.gui_fileopen_remembered_dir) == EISDIR) {
-      wsApp->setLastOpenDir(recent.gui_fileopen_remembered_dir);
-    } else {
-      wsApp->setLastOpenDir(get_persdatafile_dir());
+      set_last_open_dir(recent.gui_fileopen_remembered_dir);
     }
 
 #ifdef DEBUG_STARTUP_TIME
@@ -808,7 +814,7 @@ int main(int argc, char *qt_argv[])
     }
 #ifdef DEBUG_STARTUP_TIME
     /* epan_init resets the preferences */
-    prefs.gui_console_open = console_open_always;
+    ws_log_console_open = LOG_CONSOLE_OPEN_ALWAYS;
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "epan done, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
 
@@ -845,19 +851,53 @@ int main(int argc, char *qt_argv[])
         in_file_type = open_info_name_to_type(ex_opt_get_next("read_format"));
     }
 
-#ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
-#endif
-    splash_update(RA_EXTCAP, NULL, NULL);
-    extcap_register_preferences();
     splash_update(RA_PREFERENCES, NULL, NULL);
 #ifdef DEBUG_STARTUP_TIME
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling module preferences, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
 
+    /* Read the preferences, but don't apply them yet. */
     global_commandline_info.prefs_p = ws_app.readConfigurationFiles(false);
 
-    /* Now get our args */
+    /* Now let's see if any of preferences were overridden at the command
+     * line, and store them. We have to do this before applying the
+     * preferences to the capture options.
+     */
+    commandline_override_prefs(argc, argv, TRUE);
+
+    /* Register the extcap preferences. We do this after seeing if the
+     * capture_no_extcap preference is set in the configuration file
+     * or command line. This will re-read the extcap specific preferences.
+     */
+#ifdef DEBUG_STARTUP_TIME
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
+#endif
+    splash_update(RA_EXTCAP, NULL, NULL);
+    extcap_register_preferences();
+
+    /* Some of the preferences affect the capture options. Apply those
+     * before getting the other command line arguments, which can also
+     * affect the capture options. The command line arguments should be
+     * applied last to take precedence (at least until the user saves
+     * preferences, or switches profiles.)
+     */
+    prefs_to_capture_opts();
+
+    /* Now get our remaining args */
+
+    /* XXX: Processing interface options on the command line might retrieve
+     * interface list. We don't yet know if we will need to retrieve the
+     * interface capabilities as well (e.g. are we printing capabilities,
+     * or loading the interface list?) until we parse other options, like
+     * whether we have a capture file.
+     *
+     * We'd prefer to avoid firing up dumpcap twice (once for the list
+     * without the capabilities and once for capabilities), especially
+     * on Windows where that could mean two UAC prompts. However, getting
+     * the interface capabilities is a bit time-consuming so we don't want
+     * to do it if we don't need to.
+     */
+
     commandline_other_options(argc, argv, TRUE);
 
     /* Convert some command-line parameters to QStrings */
@@ -873,17 +913,9 @@ int main(int argc, char *qt_argv[])
     timestamp_set_seconds_type (recent.gui_seconds_format);
 
 #ifdef HAVE_LIBPCAP
-#ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
-#endif
-    splash_update(RA_INTERFACES, NULL, NULL);
-
-    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load)
-        fill_in_local_interfaces(main_window_update);
-
-    if  (global_commandline_info.list_link_layer_types)
+    if (global_commandline_info.list_link_layer_types)
         caps_queries |= CAPS_QUERY_LINK_TYPES;
-     if (global_commandline_info.list_timestamp_types)
+    if (global_commandline_info.list_timestamp_types)
         caps_queries |= CAPS_QUERY_TIMESTAMP_TYPES;
 
     if (global_commandline_info.start_capture || caps_queries) {
@@ -909,20 +941,34 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
         /* Get the list of link-layer types for the capture devices. */
         ret_val = EXIT_SUCCESS;
+        GList *if_cap_queries = NULL;
+        if_cap_query_t *if_cap_query;
+        GHashTable *capability_hash;
+        for (i = 0; i < global_capture_opts.ifaces->len; i++) {
+            interface_options *interface_opts;
+
+            interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
+            if_cap_query = g_new(if_cap_query_t, 1);
+            if_cap_query->name = interface_opts->name;
+            if_cap_query->monitor_mode = interface_opts->monitor_mode;
+            if_cap_query->auth_username = NULL;
+            if_cap_query->auth_password = NULL;
+#ifdef HAVE_PCAP_REMOTE
+            if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
+                if_cap_query->auth_username = interface_opts->auth_username;
+                if_cap_query->auth_password = interface_opts->auth_password;
+            }
+#endif
+            if_cap_queries = g_list_prepend(if_cap_queries, if_cap_query);
+        }
+        if_cap_queries = g_list_reverse(if_cap_queries);
+        capability_hash = capture_get_if_list_capabilities(if_cap_queries, &err_str, &err_str_secondary, NULL);
+        g_list_free_full(if_cap_queries, g_free);
         for (i = 0; i < global_capture_opts.ifaces->len; i++) {
             interface_options *interface_opts;
             if_capabilities_t *caps;
-            char *auth_str = NULL;
-
             interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
-#ifdef HAVE_PCAP_REMOTE
-            if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
-                auth_str = ws_strdup_printf("%s:%s", interface_opts->auth_username, interface_opts->auth_password);
-            }
-#endif
-            caps = capture_get_if_capabilities(interface_opts->name, interface_opts->monitor_mode,
-                                               auth_str, &err_str, &err_str_secondary, NULL);
-            g_free(auth_str);
+            caps = static_cast<if_capabilities_t*>(g_hash_table_lookup(capability_hash, interface_opts->name));
             if (caps == NULL) {
                 cmdarg_err("%s%s%s", err_str, err_str_secondary ? "\n" : "", err_str_secondary ? err_str_secondary : "");
                 g_free(err_str);
@@ -932,7 +978,6 @@ int main(int argc, char *qt_argv[])
             }
             ret_val = capture_opts_print_if_capabilities(caps, interface_opts,
                                                          caps_queries);
-            free_if_capabilities(caps);
             if (ret_val != EXIT_SUCCESS) {
                 break;
             }
@@ -940,7 +985,17 @@ int main(int argc, char *qt_argv[])
 #ifdef _WIN32
         destroy_console();
 #endif /* _WIN32 */
+        g_hash_table_destroy(capability_hash);
         goto clean_exit;
+    }
+
+#ifdef DEBUG_STARTUP_TIME
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
+#endif
+    splash_update(RA_INTERFACES, NULL, NULL);
+
+    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load) {
+        wsApp->scanLocalInterfaces(nullptr);
     }
 
     capture_opts_trim_snaplen(&global_capture_opts, MIN_PACKET_SIZE);
@@ -955,7 +1010,6 @@ int main(int argc, char *qt_argv[])
 #endif
     splash_update(RA_PREFERENCES_APPLY, NULL, NULL);
     prefs_apply_all();
-    prefs_to_capture_opts();
     wsApp->emitAppSignal(WiresharkApplication::PreferencesChanged);
 
 #ifdef HAVE_LIBPCAP
@@ -1006,7 +1060,7 @@ int main(int argc, char *qt_argv[])
      * processEvents() here.
      */
     wsApp->allSystemsGo();
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Wireshark is up and ready to go, elapsed time %.3fs", (float) (g_get_monotonic_time() - start_time) / 1000000);
+    ws_info("Wireshark is up and ready to go, elapsed time %.3fs", (float) (g_get_monotonic_time() - start_time) / 1000000);
     SimpleDialog::displayQueuedMessages(main_w);
 
     /* User could specify filename, or display filter, or both */
@@ -1063,6 +1117,9 @@ int main(int argc, char *qt_argv[])
             /* If no user interfaces were specified on the command line,
                copy the list of selected interfaces to the set of interfaces
                to use for this capture. */
+            /* XXX: I don't think this can happen, because if start_capture is
+             * true then capture_opts_default_iface_if_necessary() was called
+             */
             if (global_capture_opts.ifaces->len == 0)
                 collect_ifaces(&global_capture_opts);
             CaptureFile::globalCapFile()->window = main_w;
@@ -1090,6 +1147,7 @@ int main(int argc, char *qt_argv[])
     // loaded when the dialog is shown.  Register them here.
     profile_register_persconffile("io_graphs");
     profile_register_persconffile("import_hexdump.json");
+    profile_register_persconffile("remote_hosts.json");
 
     profile_store_persconffiles(FALSE);
 

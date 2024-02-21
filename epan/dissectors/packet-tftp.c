@@ -81,46 +81,46 @@ typedef struct _tftp_conv_info_t {
 } tftp_conv_info_t;
 
 
-static int proto_tftp = -1;
-static int hf_tftp_opcode = -1;
-static int hf_tftp_source_file = -1;
-static int hf_tftp_destination_file = -1;
-static int hf_tftp_request_frame = -1;
-static int hf_tftp_transfer_type = -1;
-static int hf_tftp_blocknum = -1;
-static int hf_tftp_full_blocknum = -1;
-static int hf_tftp_nextwindowsize = -1;
-static int hf_tftp_error_code = -1;
-static int hf_tftp_error_string = -1;
-static int hf_tftp_option_name = -1;
-static int hf_tftp_option_value = -1;
-static int hf_tftp_data = -1;
+static int proto_tftp;
+static int hf_tftp_opcode;
+static int hf_tftp_source_file;
+static int hf_tftp_destination_file;
+static int hf_tftp_request_frame;
+static int hf_tftp_transfer_type;
+static int hf_tftp_blocknum;
+static int hf_tftp_full_blocknum;
+static int hf_tftp_nextwindowsize;
+static int hf_tftp_error_code;
+static int hf_tftp_error_string;
+static int hf_tftp_option_name;
+static int hf_tftp_option_value;
+static int hf_tftp_data;
 
-static int hf_tftp_fragments = -1;
-static int hf_tftp_fragment = -1;
-static int hf_tftp_fragment_overlap = -1;
-static int hf_tftp_fragment_overlap_conflicts = -1;
-static int hf_tftp_fragment_multiple_tails = -1;
-static int hf_tftp_fragment_too_long_fragment = -1;
-static int hf_tftp_fragment_error = -1;
-static int hf_tftp_fragment_count = -1;
-static int hf_tftp_reassembled_in = -1;
-static int hf_tftp_reassembled_length = -1;
-static int hf_tftp_reassembled_data = -1;
+static int hf_tftp_fragments;
+static int hf_tftp_fragment;
+static int hf_tftp_fragment_overlap;
+static int hf_tftp_fragment_overlap_conflicts;
+static int hf_tftp_fragment_multiple_tails;
+static int hf_tftp_fragment_too_long_fragment;
+static int hf_tftp_fragment_error;
+static int hf_tftp_fragment_count;
+static int hf_tftp_reassembled_in;
+static int hf_tftp_reassembled_length;
+static int hf_tftp_reassembled_data;
 
-static gint ett_tftp = -1;
-static gint ett_tftp_option = -1;
+static gint ett_tftp;
+static gint ett_tftp_option;
 
-static gint ett_tftp_fragment = -1;
-static gint ett_tftp_fragments = -1;
+static gint ett_tftp_fragment;
+static gint ett_tftp_fragments;
 
-static expert_field ei_tftp_error = EI_INIT;
-static expert_field ei_tftp_likely_tsize_probe = EI_INIT;
-static expert_field ei_tftp_blocksize_range = EI_INIT;
-static expert_field ei_tftp_blocknum_will_wrap = EI_INIT;
-static expert_field ei_tftp_windowsize_range = EI_INIT;
-static expert_field ei_tftp_msftwindow_unrecognized = EI_INIT;
-static expert_field ei_tftp_windowsize_change = EI_INIT;
+static expert_field ei_tftp_error;
+static expert_field ei_tftp_likely_tsize_probe;
+static expert_field ei_tftp_blocksize_range;
+static expert_field ei_tftp_blocknum_will_wrap;
+static expert_field ei_tftp_windowsize_range;
+static expert_field ei_tftp_msftwindow_unrecognized;
+static expert_field ei_tftp_windowsize_change;
 
 #define LIKELY_TSIZE_PROBE_KEY 0
 #define FULL_BLOCKNUM_KEY 1
@@ -205,7 +205,7 @@ static const value_string tftp_error_code_vals[] = {
   { 0, NULL }
 };
 
-static int tftp_eo_tap = -1;
+static int tftp_eo_tap;
 
 /* Preference setting - defragment fragmented TFTP files */
 static gboolean tftp_defragment = FALSE;
@@ -759,7 +759,7 @@ tftp_info_for_conversation(conversation_t *conversation)
 }
 
 static gboolean
-is_valid_request_body(tvbuff_t *tvb)
+is_valid_request_body(tvbuff_t *tvb, packet_info *pinfo)
 {
   gint offset = 2;
   guint zeros_counter = 0;
@@ -777,9 +777,9 @@ is_valid_request_body(tvbuff_t *tvb)
 
   offset += tvb_strsize(tvb, offset);
   guint len = tvb_strsize(tvb, offset);
-  const gchar* mode = tvb_format_stringzpad(wmem_packet_scope(), tvb, offset, len);
+  const gchar* mode = tvb_format_stringzpad(pinfo->pool, tvb, offset, len);
 
-  const gchar* modes[] = {"netscii", "octet", "mail"};
+  const gchar* modes[] = {"netascii", "octet", "mail"};
   for(guint i = 0; i < array_length(modes); ++i) {
     if (g_ascii_strcasecmp(mode, modes[i]) == 0) return TRUE;
   }
@@ -788,14 +788,14 @@ is_valid_request_body(tvbuff_t *tvb)
 }
 
 static gboolean
-is_valid_request(tvbuff_t *tvb)
+is_valid_request(tvbuff_t *tvb, packet_info *pinfo)
 {
   if (tvb_captured_length(tvb) < MIN_HDR_LEN)
     return FALSE;
   guint16 opcode = tvb_get_ntohs(tvb, 0);
   if ((opcode != TFTP_RRQ) && (opcode != TFTP_WRQ))
     return FALSE;
-  return is_valid_request_body(tvb);
+  return is_valid_request_body(tvb, pinfo);
 }
 
 static conversation_t* create_tftp_conversation(packet_info *pinfo)
@@ -820,7 +820,7 @@ static conversation_t* create_tftp_conversation(packet_info *pinfo)
 static gboolean
 dissect_tftp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  if (is_valid_request_body(tvb)) {
+  if (is_valid_request_body(tvb, pinfo)) {
     conversation_t* conversation = create_tftp_conversation(pinfo);
     dissect_tftp_message(tftp_info_for_conversation(conversation), tvb, pinfo, tree);
     return TRUE;
@@ -850,7 +850,7 @@ dissect_embeddedtftp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     case TFTP_RRQ:
     case TFTP_WRQ:
       /* These 2 opcodes have a NULL-terminated source file name after opcode. Verify */
-      if (!is_valid_request_body(tvb))
+      if (!is_valid_request_body(tvb, pinfo))
         return FALSE;
      /* Intentionally dropping through here... */
     case TFTP_DATA:
@@ -910,7 +910,7 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
    */
   if ((value_is_in_range(global_tftp_port_range, pinfo->destport) ||
        (pinfo->match_uint == pinfo->destport)) &&
-      is_valid_request(tvb))
+      is_valid_request(tvb, pinfo))
   {
     conversation = create_tftp_conversation(pinfo);
   }
@@ -1044,23 +1044,23 @@ proto_register_tftp(void)
 
     { &hf_tftp_fragment_overlap,
       { "Fragment overlap",        "tftp.fragment.overlap",
-        FT_BOOLEAN, 0, NULL, 0x00,
+        FT_BOOLEAN, BASE_NONE, NULL, 0x00,
         "Fragment overlaps with other fragments", HFILL }},
 
     { &hf_tftp_fragment_overlap_conflicts,
       { "Conflicting data in fragment overlap",
         "tftp.fragment.overlap.conflicts",
-        FT_BOOLEAN, 0, NULL, 0x00,
+        FT_BOOLEAN, BASE_NONE, NULL, 0x00,
         "Overlapping fragments contained conflicting data", HFILL }},
 
     { &hf_tftp_fragment_multiple_tails,
       { "Multiple tail fragments found",        "tftp.fragment.multipletails",
-        FT_BOOLEAN, 0, NULL, 0x00,
+        FT_BOOLEAN, BASE_NONE, NULL, 0x00,
         "Several tails were found when defragmenting the packet", HFILL }},
 
     { &hf_tftp_fragment_too_long_fragment,
       { "Fragment too long",        "tftp.fragment.toolongfragment",
-        FT_BOOLEAN, 0, NULL, 0x00,
+        FT_BOOLEAN, BASE_NONE, NULL, 0x00,
         "Fragment contained data past end of packet", HFILL }},
 
     { &hf_tftp_fragment_error,
@@ -1114,7 +1114,7 @@ proto_register_tftp(void)
   expert_tftp = expert_register_protocol(proto_tftp);
   expert_register_field_array(expert_tftp, ei, array_length(ei));
 
-  heur_subdissector_list = register_heur_dissector_list("tftp", proto_tftp);
+  heur_subdissector_list = register_heur_dissector_list_with_description("tftp", "TFTP payload", proto_tftp);
   reassembly_table_register(&tftp_reassembly_table, &addresses_ports_reassembly_table_functions);
 
   tftp_handle = register_dissector("tftp", dissect_tftp, proto_tftp);

@@ -353,7 +353,6 @@ TCPStreamDialog::TCPStreamDialog(QWidget *parent, capture_file *cf, tcp_graph_ty
     connect(sp, SIGNAL(axisClick(QCPAxis*,QCPAxis::SelectablePart,QMouseEvent*)),
             this, SLOT(axisClicked(QCPAxis*,QCPAxis::SelectablePart,QMouseEvent*)));
     connect(sp->yAxis, SIGNAL(rangeChanged(QCPRange)), this, SLOT(transformYRange(QCPRange)));
-    disconnect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(accept()));
     this->setResult(QDialog::Accepted);
 }
 
@@ -760,7 +759,8 @@ void TCPStreamDialog::resetAxes()
 //    }
 
     double axis_pixels = sp->xAxis->axisRect()->width();
-    sp->xAxis->scaleRange((axis_pixels + (pixel_pad * 2)) / axis_pixels, sp->xAxis->range().center());
+    sp->xAxis->scaleRange((axis_pixels + (pixel_pad * 2)) / axis_pixels,
+                          sp->xAxis->range().center());
 
     if (sp->yAxis2->visible()) {
         double ratio = sp->yAxis2->range().size() / sp->yAxis->range().size();
@@ -769,7 +769,8 @@ void TCPStreamDialog::resetAxes()
     }
 
     axis_pixels = sp->yAxis->axisRect()->height();
-    sp->yAxis->scaleRange((axis_pixels + (pixel_pad * 2)) / axis_pixels, sp->yAxis->range().center());
+    sp->yAxis->scaleRange((axis_pixels + (pixel_pad * 2)) / axis_pixels,
+                          sp->yAxis->range().center());
 
     sp->replot();
 }
@@ -1845,7 +1846,7 @@ void TCPStreamDialog::transformYRange(const QCPRange &y_range1)
 void TCPStreamDialog::on_buttonBox_accepted()
 {
     QString file_name, extension;
-    QDir path(mainApp->lastOpenDir());
+    QDir path(mainApp->openDialogInitialDir());
     QString pdf_filter = tr("Portable Document Format (*.pdf)");
     QString png_filter = tr("Portable Network Graphics (*.png)");
     QString bmp_filter = tr("Windows Bitmap (*.bmp)");

@@ -23,22 +23,23 @@
 #include "packet-windows-common.h"
 
 
-int hf_nt_cs_len = -1;
+int hf_nt_cs_len;
 int hf_nt_error;
-int hf_nt_cs_size = -1;
-static int hf_lsa_String_name_len = -1;
-static int hf_lsa_String_name_size = -1;
-static int hf_nt_data_blob_len = -1;
-static int hf_nt_data_blob_data = -1;
-static int hf_nt_midl_blob_len = -1;
-static int hf_nt_midl_fill_bytes = -1;
-static int hf_nt_midl_version = -1;
-static int hf_nt_midl_hdr_len = -1;
+int hf_nt_cs_size;
+static int hf_lsa_String_name_len;
+static int hf_lsa_String_name_size;
+static int hf_nt_data_blob_len;
+static int hf_nt_data_blob_data;
+static int hf_nt_midl_blob_len;
+static int hf_nt_midl_fill_bytes;
+static int hf_nt_midl_version;
+static int hf_nt_midl_hdr_len;
 
-static gint ett_nt_MIDL_BLOB = -1;
-static gint ett_lsa_String = -1;
-static gint ett_nt_data_blob = -1;
-static expert_field ei_dcerpc_nt_badsid = EI_INIT;
+static gint ett_nt_MIDL_BLOB;
+static gint ett_lsa_String;
+static gint ett_nt_data_blob;
+static gint ett_nt_counted_string;
+static expert_field ei_dcerpc_nt_badsid;
 
 
 
@@ -161,8 +162,6 @@ dissect_ndr_counted_string_cb(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static gint ett_nt_counted_string = -1;
-
 static int
 dissect_ndr_counted_string_helper(tvbuff_t *tvb, int offset,
 				  packet_info *pinfo, proto_tree *tree,
@@ -215,7 +214,7 @@ dissect_ndr_counted_string_ptr(tvbuff_t *tvb, int offset,
 
 /* Dissect a counted byte_array as a callback to dissect_ndr_pointer_cb() */
 
-static gint ett_nt_counted_byte_array = -1;
+static gint ett_nt_counted_byte_array;
 
 /* Dissect a counted byte array in-line. */
 
@@ -322,7 +321,7 @@ dissect_ndr_counted_byte_array(tvbuff_t *tvb, int offset,
 }
 
 /* Dissect a counted ascii string in-line. */
-static gint ett_nt_counted_ascii_string = -1;
+static gint ett_nt_counted_ascii_string;
 
 int
 dissect_ndr_counted_ascii_string_cb(tvbuff_t *tvb, int offset,
@@ -380,7 +379,7 @@ dissect_ndr_counted_ascii_string(tvbuff_t *tvb, int offset,
 		tvb, offset, pinfo, tree, di, drep, hf_index, cb_str_postprocess, GINT_TO_POINTER(2 + levels));
 }
 
-static int hf_nt_guid = -1;
+static int hf_nt_guid;
 
 int
 dissect_nt_GUID(tvbuff_t *tvb, int offset,
@@ -920,10 +919,10 @@ dissect_hresult(tvbuff_t *tvb, gint offset, packet_info *pinfo,
 
 /* Dissect a NT policy handle */
 
-static int hf_nt_policy_open_frame = -1;
-static int hf_nt_policy_close_frame = -1;
+static int hf_nt_policy_open_frame;
+static int hf_nt_policy_close_frame;
 
-static gint ett_nt_policy_hnd = -1;
+static gint ett_nt_policy_hnd;
 
 /* this function is used to dissect a "handle".
  * it will keep track of which frame a handle is opened from and in which
@@ -1314,8 +1313,8 @@ int dissect_ndr_str_pointer_item(tvbuff_t *tvb, gint offset,
 
 /* SID dissection routines */
 
-static int hf_nt_count = -1;
-static int hf_nt_domain_sid = -1;
+static int hf_nt_count;
+static int hf_nt_domain_sid;
 
 /* That's a SID that is always 28 bytes long */
 int
@@ -1328,7 +1327,7 @@ dissect_ndr_nt_SID28(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	const char *name;
 	int newoffset;
 
-	if(hf_index!=-1){
+	if(hf_index > 0){
 		name=proto_registrar_get_name(hf_index);
 	} else {
 		name="Domain";
@@ -1379,7 +1378,7 @@ dissect_ndr_nt_SID(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	char *sid_str=NULL;
 	const char *name;
 
-	if(di->hf_index!=-1){
+	if(di->hf_index > 0){
 		name=proto_registrar_get_name(di->hf_index);
 	} else {
 		name="Domain";
@@ -1475,7 +1474,7 @@ dissect_ndr_nt_SID_hf_through_ptr(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static gint ett_nt_sid_pointer = -1;
+static gint ett_nt_sid_pointer;
 
 int
 dissect_ndr_nt_PSID(tvbuff_t *tvb, int offset,
@@ -1542,20 +1541,20 @@ static const true_false_string tfs_nt_acb_autolock = {
 	"This account has NOT been auto locked"
 };
 
-static gint ett_nt_acct_ctrl = -1;
+static gint ett_nt_acct_ctrl;
 
-static int hf_nt_acct_ctrl = -1;
-static int hf_nt_acb_disabled = -1;
-static int hf_nt_acb_homedirreq = -1;
-static int hf_nt_acb_pwnotreq = -1;
-static int hf_nt_acb_tempdup = -1;
-static int hf_nt_acb_normal = -1;
-static int hf_nt_acb_mns = -1;
-static int hf_nt_acb_domtrust = -1;
-static int hf_nt_acb_wstrust = -1;
-static int hf_nt_acb_svrtrust = -1;
-static int hf_nt_acb_pwnoexp = -1;
-static int hf_nt_acb_autolock = -1;
+static int hf_nt_acct_ctrl;
+static int hf_nt_acb_disabled;
+static int hf_nt_acb_homedirreq;
+static int hf_nt_acb_pwnotreq;
+static int hf_nt_acb_tempdup;
+static int hf_nt_acb_normal;
+static int hf_nt_acb_mns;
+static int hf_nt_acb_domtrust;
+static int hf_nt_acb_wstrust;
+static int hf_nt_acb_svrtrust;
+static int hf_nt_acb_pwnoexp;
+static int hf_nt_acb_autolock;
 
 int
 dissect_ndr_nt_acct_ctrl(tvbuff_t *tvb, int offset, packet_info *pinfo,
@@ -1585,7 +1584,7 @@ dissect_ndr_nt_acct_ctrl(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int hf_logonhours_unknown_char = -1;
+static int hf_logonhours_unknown_char;
 
 static int
 dissect_LOGON_HOURS_entry(tvbuff_t *tvb, int offset,
@@ -1597,7 +1596,7 @@ dissect_LOGON_HOURS_entry(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static gint ett_nt_logon_hours_hours = -1;
+static gint ett_nt_logon_hours_hours;
 
 static int
 dissect_LOGON_HOURS_hours(tvbuff_t *tvb, int offset,
@@ -1618,8 +1617,8 @@ dissect_LOGON_HOURS_hours(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static gint ett_nt_logon_hours = -1;
-static int hf_logonhours_divisions = -1;
+static gint ett_nt_logon_hours;
+static int hf_logonhours_divisions;
 
 int
 dissect_ndr_nt_LOGON_HOURS(tvbuff_t *tvb, int offset,
@@ -1668,7 +1667,7 @@ dissect_ndr_nt_PSID_ARRAY_sids (tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static gint ett_nt_sid_array = -1;
+static gint ett_nt_sid_array;
 
 int
 dissect_ndr_nt_PSID_ARRAY(tvbuff_t *tvb, int offset,
@@ -1700,8 +1699,64 @@ dissect_ndr_nt_PSID_ARRAY(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static gint ett_nt_sid_and_attributes = -1;
-static int hf_nt_attrib = -1;
+static gint ett_nt_sid_and_attributes;
+static gint ett_nt_se_group_attrs;
+static int hf_nt_se_group_attrs;
+static int hf_nt_se_group_attrs_mandatory;
+static int hf_nt_se_group_attrs_enabled_by_default;
+static int hf_nt_se_group_attrs_enabled;
+static int hf_nt_se_group_attrs_owner;
+static int hf_nt_se_group_attrs_resource_group;
+
+static const true_false_string group_attrs_mandatory = {
+    "The MANDATORY bit is SET",
+    "The mandatory bit is NOT set",
+};
+static const true_false_string group_attrs_enabled_by_default = {
+    "The ENABLED_BY_DEFAULT bit is SET",
+    "The enabled_by_default bit is NOT set",
+};
+static const true_false_string group_attrs_enabled = {
+    "The ENABLED bit is SET",
+    "The enabled bit is NOT set",
+};
+static const true_false_string group_attrs_owner = {
+    "The OWNER bit is SET",
+    "The owner bit is NOT set",
+};
+static const true_false_string group_attrs_resource_group = {
+    "The RESOURCE GROUP bit is SET",
+    "The resource group bit is NOT set",
+};
+
+int
+dissect_ndr_nt_SE_GROUP_ATTRIBUTES(tvbuff_t *tvb, int offset,
+			packet_info *pinfo, proto_tree *parent_tree,
+			dcerpc_info *di, guint8 *drep)
+{
+    guint32 mask;
+    static int * const attr[] = {
+        &hf_nt_se_group_attrs_mandatory,
+        &hf_nt_se_group_attrs_enabled_by_default,
+        &hf_nt_se_group_attrs_enabled,
+        &hf_nt_se_group_attrs_owner,
+        &hf_nt_se_group_attrs_resource_group,
+        NULL
+    };
+
+    if(di->conformant_run){
+        /*just a run to handle conformant arrays, nothing to dissect */
+        return offset;
+    }
+
+    offset=dissect_ndr_uint32(tvb, offset, pinfo, NULL, di, drep,
+                              -1, &mask);
+
+    proto_tree_add_bitmask_value_with_flags(parent_tree, tvb, offset-4,
+					    hf_nt_se_group_attrs, ett_nt_se_group_attrs,
+					    attr, mask, BMT_NO_APPEND);
+    return offset;
+}
 
 int
 dissect_ndr_nt_SID_AND_ATTRIBUTES(tvbuff_t *tvb, int offset,
@@ -1716,13 +1771,12 @@ dissect_ndr_nt_SID_AND_ATTRIBUTES(tvbuff_t *tvb, int offset,
 
 	offset = dissect_ndr_nt_PSID(tvb, offset, pinfo, tree, di, drep);
 
-	offset = dissect_ndr_uint32 (tvb, offset, pinfo, tree, di, drep,
-				     hf_nt_attrib, NULL);
+	offset = dissect_ndr_nt_SE_GROUP_ATTRIBUTES(tvb, offset, pinfo, tree, di, drep);
 
 	return offset;
 }
 
-static gint ett_nt_sid_and_attributes_array = -1;
+static gint ett_nt_sid_and_attributes_array;
 
 int
 dissect_ndr_nt_SID_AND_ATTRIBUTES_ARRAY(tvbuff_t *tvb, int offset,
@@ -1916,10 +1970,6 @@ void dcerpc_smb_init(int proto_dcerpc)
 
 		/* Misc */
 
-		{ &hf_nt_attrib,
-		  { "Attributes", "dcerpc.nt.attr",
-		    FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
-
 		{ &hf_lsa_String_name_len,
 		  { "Name Len", "dcerpc.lsa_String.name_len",
 		    FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},
@@ -1952,6 +2002,35 @@ void dcerpc_smb_init(int proto_dcerpc)
 		  "HDR Length", "nt.midl.hdr_len", FT_UINT16, BASE_DEC,
 		  NULL, 0, "Length of header", HFILL }},
 
+		{ &hf_nt_se_group_attrs,
+		  { "Group Attributes", "dcerpc.nt.groups.attrs",
+		    FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+
+		{ &hf_nt_se_group_attrs_mandatory,
+		   { "Mandatory", "dcerpc.nt.groups.attrs.mandatory",
+		     FT_BOOLEAN, 32, TFS(&group_attrs_mandatory), 0x00000001,
+		     "The group attributes MANDATORY flag", HFILL }},
+
+		{ &hf_nt_se_group_attrs_enabled_by_default, {
+		  "Enabled By Default", "dcerpc.nt.groups.attrs.enabled_by_default",
+		  FT_BOOLEAN, 32, TFS(&group_attrs_enabled_by_default), 0x00000002,
+		  "The group attributes ENABLED_BY_DEFAULT flag", HFILL }},
+
+		{ &hf_nt_se_group_attrs_enabled, {
+		  "Enabled", "dcerpc.nt.groups.attrs.enabled",
+		  FT_BOOLEAN, 32, TFS(&group_attrs_enabled), 0x00000004,
+		  "The group attributes ENABLED flag", HFILL }},
+
+		{ &hf_nt_se_group_attrs_owner, {
+		  "Owner", "dcerpc.nt.groups.attrs.owner",
+		  FT_BOOLEAN, 32, TFS(&group_attrs_owner), 0x00000008,
+		  "The group attributes OWNER flag", HFILL }},
+
+		{ &hf_nt_se_group_attrs_resource_group, {
+		  "Resource Group", "dcerpc.nt.groups.attrs.resource_group",
+		  FT_BOOLEAN, 32, TFS(&group_attrs_resource_group), 0x20000000,
+		  "The group attributes RESOURCE GROUP flag", HFILL }},
+
 	};
 
 	static gint *ett[] = {
@@ -1966,6 +2045,7 @@ void dcerpc_smb_init(int proto_dcerpc)
 		&ett_nt_sid_array,
 		&ett_nt_sid_and_attributes_array,
 		&ett_nt_sid_and_attributes,
+		&ett_nt_se_group_attrs,
 		&ett_nt_counted_ascii_string,
 		&ett_lsa_String,
 		&ett_nt_MIDL_BLOB,

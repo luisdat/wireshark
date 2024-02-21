@@ -35,11 +35,12 @@ set_source_files_properties(
 
 register_plugin_files(plugin.c
 	plugin
+	"Response time information based on the RTE model"
 	${DISSECTOR_SRC}
 	${DISSECTOR_SUPPORT_SRC}
 )
 
-add_wireshark_plugin_library(transum epan)
+add_wireshark_epan_plugin_library(transum)
 
 target_link_libraries(transum epan)
 

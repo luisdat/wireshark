@@ -55,6 +55,7 @@
 #include "wsutil/strtoi.h"
 #include "wsutil/str_util.h"
 #include <wsutil/unicode-utils.h>
+#include <wsutil/wsjson.h>
 
 #ifdef HAVE_NGHTTP2
 #define http2_header_repr_type_VALUE_STRING_LIST(XXX)                   \
@@ -83,7 +84,7 @@ static gboolean http2_decompress_body = FALSE;
 /* Try to dissect reassembled http2.data.data according to content-type later */
 static dissector_table_t media_type_dissector_table;
 
-static int http_eo_tap = -1;
+static int http_eo_tap;
 #endif
 
 /* Some protocols on top of http2 require http2 streams to remain open. For example, the stream
@@ -308,8 +309,8 @@ struct HTTP2Tap {
     guint8 type;
 };
 
-static int http2_tap = -1;
-static int http2_follow_tap = -1;
+static int http2_tap;
+static int http2_follow_tap;
 
 static const guint8* st_str_http2 = "HTTP2";
 static const guint8* st_str_http2_type = "Type";
@@ -322,178 +323,178 @@ static int st_node_http2_type = -1;
 #define PROTO_DATA_KEY_WINDOW_SIZE_STREAM_BEFORE 2
 
 /* Packet Header */
-static int proto_http2 = -1;
-static int hf_http2_stream = -1;
-static int hf_http2_length = -1;
-static int hf_http2_type = -1;
-static int hf_http2_r = -1;
-static int hf_http2_streamid = -1;
-static int hf_http2_magic    = -1;
-static int hf_http2_unknown = -1;
+static int proto_http2;
+static int hf_http2_stream;
+static int hf_http2_length;
+static int hf_http2_type;
+static int hf_http2_r;
+static int hf_http2_streamid;
+static int hf_http2_magic;
+static int hf_http2_unknown;
 /* Flags */
-static int hf_http2_flags = -1;
-static int hf_http2_flags_end_stream = -1;
-static int hf_http2_flags_end_headers = -1;
-static int hf_http2_flags_padded = -1;
-static int hf_http2_flags_priority = -1;
-static int hf_http2_flags_settings_ack = -1;
-static int hf_http2_flags_ping_ack = -1;
-static int hf_http2_flags_unused = -1;
-static int hf_http2_flags_unused_settings = -1;
-static int hf_http2_flags_unused_ping = -1;
-static int hf_http2_flags_unused_continuation = -1;
-static int hf_http2_flags_unused_push_promise = -1;
-static int hf_http2_flags_unused_data = -1;
-static int hf_http2_flags_unused_headers = -1;
+static int hf_http2_flags;
+static int hf_http2_flags_end_stream;
+static int hf_http2_flags_end_headers;
+static int hf_http2_flags_padded;
+static int hf_http2_flags_priority;
+static int hf_http2_flags_settings_ack;
+static int hf_http2_flags_ping_ack;
+static int hf_http2_flags_unused;
+static int hf_http2_flags_unused_settings;
+static int hf_http2_flags_unused_ping;
+static int hf_http2_flags_unused_continuation;
+static int hf_http2_flags_unused_push_promise;
+static int hf_http2_flags_unused_data;
+static int hf_http2_flags_unused_headers;
 
 /* generic */
-static int hf_http2_padding = -1;
-static int hf_http2_pad_length = -1;
+static int hf_http2_padding;
+static int hf_http2_pad_length;
 
-static int hf_http2_weight = -1;
-static int hf_http2_weight_real = -1;
-static int hf_http2_stream_dependency = -1;
-static int hf_http2_excl_dependency = -1;
+static int hf_http2_weight;
+static int hf_http2_weight_real;
+static int hf_http2_stream_dependency;
+static int hf_http2_excl_dependency;
 /* Data */
-static int hf_http2_data_segment = -1;
-static int hf_http2_data_data = -1;
-static int hf_http2_data_padding = -1;
-static int hf_http2_body_fragments = -1;
-static int hf_http2_body_fragment = -1;
-static int hf_http2_body_fragment_overlap = -1;
-static int hf_http2_body_fragment_overlap_conflicts = -1;
-static int hf_http2_body_fragment_multiple_tails = -1;
-static int hf_http2_body_fragment_too_long_fragment = -1;
-static int hf_http2_body_fragment_error = -1;
-static int hf_http2_body_fragment_count = -1;
-static int hf_http2_body_reassembled_in = -1;
-static int hf_http2_body_reassembled_length = -1;
-static int hf_http2_body_reassembled_data = -1;
+static int hf_http2_data_segment;
+static int hf_http2_data_data;
+static int hf_http2_data_padding;
+static int hf_http2_body_fragments;
+static int hf_http2_body_fragment;
+static int hf_http2_body_fragment_overlap;
+static int hf_http2_body_fragment_overlap_conflicts;
+static int hf_http2_body_fragment_multiple_tails;
+static int hf_http2_body_fragment_too_long_fragment;
+static int hf_http2_body_fragment_error;
+static int hf_http2_body_fragment_count;
+static int hf_http2_body_reassembled_in;
+static int hf_http2_body_reassembled_length;
+static int hf_http2_body_reassembled_data;
 /* Headers */
-static int hf_http2_headers = -1;
-static int hf_http2_headers_padding = -1;
-static int hf_http2_header = -1;
-static int hf_http2_header_length = -1;
-static int hf_http2_header_count = -1;
-static int hf_http2_header_name_length = -1;
-static int hf_http2_header_name = -1;
-static int hf_http2_header_value_length = -1;
-static int hf_http2_header_value = -1;
-static int hf_http2_header_unescaped = -1;
-static int hf_http2_header_repr = -1;
-static int hf_http2_header_index = -1;
-static int hf_http2_header_table_size_update = -1;
-static int hf_http2_header_table_size = -1;
-static int hf_http2_fake_header_count = -1;
-static int hf_http2_fake_header = -1;
-static int hf_http2_header_request_full_uri = -1;
+static int hf_http2_headers;
+static int hf_http2_headers_padding;
+static int hf_http2_header;
+static int hf_http2_header_length;
+static int hf_http2_header_count;
+static int hf_http2_header_name_length;
+static int hf_http2_header_name;
+static int hf_http2_header_value_length;
+static int hf_http2_header_value;
+static int hf_http2_header_unescaped;
+static int hf_http2_header_repr;
+static int hf_http2_header_index;
+static int hf_http2_header_table_size_update;
+static int hf_http2_header_table_size;
+static int hf_http2_fake_header_count;
+static int hf_http2_fake_header;
+static int hf_http2_header_request_full_uri;
 /* RST Stream */
-static int hf_http2_rst_stream_error = -1;
+static int hf_http2_rst_stream_error;
 /* Settings */
-static int hf_http2_settings = -1;
-static int hf_http2_settings_identifier = -1;
-static int hf_http2_settings_header_table_size = -1;
-static int hf_http2_settings_enable_push = -1;
-static int hf_http2_settings_max_concurrent_streams = -1;
-static int hf_http2_settings_initial_window_size = -1;
-static int hf_http2_settings_max_frame_size = -1;
-static int hf_http2_settings_max_header_list_size = -1;
-static int hf_http2_settings_extended_connect = -1;
-static int hf_http2_settings_no_rfc7540_priorities = -1;
-static int hf_http2_settings_unknown = -1;
+static int hf_http2_settings;
+static int hf_http2_settings_identifier;
+static int hf_http2_settings_header_table_size;
+static int hf_http2_settings_enable_push;
+static int hf_http2_settings_max_concurrent_streams;
+static int hf_http2_settings_initial_window_size;
+static int hf_http2_settings_max_frame_size;
+static int hf_http2_settings_max_header_list_size;
+static int hf_http2_settings_extended_connect;
+static int hf_http2_settings_no_rfc7540_priorities;
+static int hf_http2_settings_unknown;
 /* Push Promise */
-static int hf_http2_push_promise_r = -1;
-static int hf_http2_push_promise_promised_stream_id = -1;
-static int hf_http2_push_promise_header = -1;
-static int hf_http2_push_promise_padding = -1;
+static int hf_http2_push_promise_r;
+static int hf_http2_push_promise_promised_stream_id;
+static int hf_http2_push_promise_header;
+static int hf_http2_push_promise_padding;
 /* Ping */
-static int hf_http2_ping = -1;
-static int hf_http2_pong = -1;
+static int hf_http2_ping;
+static int hf_http2_pong;
 /* Goaway */
-static int hf_http2_goaway_r = -1;
-static int hf_http2_goaway_last_stream_id = -1;
-static int hf_http2_goaway_error = -1;
-static int hf_http2_goaway_addata = -1;
+static int hf_http2_goaway_r;
+static int hf_http2_goaway_last_stream_id;
+static int hf_http2_goaway_error;
+static int hf_http2_goaway_addata;
 /* Window Update */
-static int hf_http2_window_update_r = -1;
-static int hf_http2_window_update_window_size_increment = -1;
+static int hf_http2_window_update_r;
+static int hf_http2_window_update_window_size_increment;
 /* Continuation */
-static int hf_http2_continuation_header = -1;
-static int hf_http2_continuation_padding = -1;
+static int hf_http2_continuation_header;
+static int hf_http2_continuation_padding;
 /* Altsvc */
-static int hf_http2_altsvc_origin_len = -1;
-static int hf_http2_altsvc_origin = -1;
-static int hf_http2_altsvc_field_value = -1;
+static int hf_http2_altsvc_origin_len;
+static int hf_http2_altsvc_origin;
+static int hf_http2_altsvc_field_value;
 /* Calculated */
-static int hf_http2_calculated_window_size_connection_before = -1;
-static int hf_http2_calculated_window_size_connection_after = -1;
-static int hf_http2_calculated_window_size_stream_before = -1;
-static int hf_http2_calculated_window_size_stream_after = -1;
+static int hf_http2_calculated_window_size_connection_before;
+static int hf_http2_calculated_window_size_connection_after;
+static int hf_http2_calculated_window_size_stream_before;
+static int hf_http2_calculated_window_size_stream_after;
 #if HAVE_NGHTTP2
 /* HTTP2 header static fields */
-static int hf_http2_headers_status = -1;
-static int hf_http2_headers_path = -1;
-static int hf_http2_headers_method = -1;
-static int hf_http2_headers_scheme = -1;
-static int hf_http2_headers_accept = -1;
-static int hf_http2_headers_accept_charset = -1;
-static int hf_http2_headers_accept_encoding = -1;
-static int hf_http2_headers_accept_language = -1;
-static int hf_http2_headers_accept_ranges = -1;
-static int hf_http2_headers_access_control_allow_origin = -1;
-static int hf_http2_headers_age = -1;
-static int hf_http2_headers_allow = -1;
-static int hf_http2_headers_authorization = -1;
-static int hf_http2_headers_authority = -1;
-static int hf_http2_headers_cache_control = -1;
-static int hf_http2_headers_content_disposition = -1;
-static int hf_http2_headers_content_encoding = -1;
-static int hf_http2_headers_content_language = -1;
-static int hf_http2_headers_content_length = -1;
-static int hf_http2_headers_content_location = -1;
-static int hf_http2_headers_content_range = -1;
-static int hf_http2_headers_content_type = -1;
-static int hf_http2_headers_cookie = -1;
-static int hf_http2_headers_date = -1;
-static int hf_http2_headers_etag = -1;
-static int hf_http2_headers_expect = -1;
-static int hf_http2_headers_expires = -1;
-static int hf_http2_headers_from = -1;
-static int hf_http2_headers_if_match = -1;
-static int hf_http2_headers_if_modified_since = -1;
-static int hf_http2_headers_if_none_match = -1;
-static int hf_http2_headers_if_range = -1;
-static int hf_http2_headers_if_unmodified_since = -1;
-static int hf_http2_headers_last_modified = -1;
-static int hf_http2_headers_link = -1;
-static int hf_http2_headers_location = -1;
-static int hf_http2_headers_max_forwards = -1;
-static int hf_http2_headers_proxy_authenticate = -1;
-static int hf_http2_headers_proxy_authorization = -1;
-static int hf_http2_headers_range = -1;
-static int hf_http2_headers_referer = -1;
-static int hf_http2_headers_refresh = -1;
-static int hf_http2_headers_retry_after = -1;
-static int hf_http2_headers_server = -1;
-static int hf_http2_headers_set_cookie = -1;
-static int hf_http2_headers_strict_transport_security = -1;
-static int hf_http2_headers_user_agent = -1;
-static int hf_http2_headers_vary = -1;
-static int hf_http2_headers_via = -1;
-static int hf_http2_headers_www_authenticate = -1;
+static int hf_http2_headers_status;
+static int hf_http2_headers_path;
+static int hf_http2_headers_method;
+static int hf_http2_headers_scheme;
+static int hf_http2_headers_accept;
+static int hf_http2_headers_accept_charset;
+static int hf_http2_headers_accept_encoding;
+static int hf_http2_headers_accept_language;
+static int hf_http2_headers_accept_ranges;
+static int hf_http2_headers_access_control_allow_origin;
+static int hf_http2_headers_age;
+static int hf_http2_headers_allow;
+static int hf_http2_headers_authorization;
+static int hf_http2_headers_authority;
+static int hf_http2_headers_cache_control;
+static int hf_http2_headers_content_disposition;
+static int hf_http2_headers_content_encoding;
+static int hf_http2_headers_content_language;
+static int hf_http2_headers_content_length;
+static int hf_http2_headers_content_location;
+static int hf_http2_headers_content_range;
+static int hf_http2_headers_content_type;
+static int hf_http2_headers_cookie;
+static int hf_http2_headers_date;
+static int hf_http2_headers_etag;
+static int hf_http2_headers_expect;
+static int hf_http2_headers_expires;
+static int hf_http2_headers_from;
+static int hf_http2_headers_if_match;
+static int hf_http2_headers_if_modified_since;
+static int hf_http2_headers_if_none_match;
+static int hf_http2_headers_if_range;
+static int hf_http2_headers_if_unmodified_since;
+static int hf_http2_headers_last_modified;
+static int hf_http2_headers_link;
+static int hf_http2_headers_location;
+static int hf_http2_headers_max_forwards;
+static int hf_http2_headers_proxy_authenticate;
+static int hf_http2_headers_proxy_authorization;
+static int hf_http2_headers_range;
+static int hf_http2_headers_referer;
+static int hf_http2_headers_refresh;
+static int hf_http2_headers_retry_after;
+static int hf_http2_headers_server;
+static int hf_http2_headers_set_cookie;
+static int hf_http2_headers_strict_transport_security;
+static int hf_http2_headers_user_agent;
+static int hf_http2_headers_vary;
+static int hf_http2_headers_via;
+static int hf_http2_headers_www_authenticate;
 #endif
 /* Blocked */
 /* Origin */
-static int hf_http2_origin = -1;
-static int hf_http2_origin_origin_len = -1;
-static int hf_http2_origin_origin = -1;
+static int hf_http2_origin;
+static int hf_http2_origin_origin_len;
+static int hf_http2_origin_origin;
 /* Priority Update */
-static int hf_http2_priority_update_stream_id = -1;
-static int hf_http2_priority_update_field_value = -1;
+static int hf_http2_priority_update_stream_id;
+static int hf_http2_priority_update_field_value;
 /* Generated fields */
-static int hf_http2_time = -1;
-static int hf_http2_request_in = -1;
-static int hf_http2_response_in = -1;
+static int hf_http2_time;
+static int hf_http2_request_in;
+static int hf_http2_response_in;
 
 /*
  * These values *should* be large enough to handle most use cases while
@@ -511,20 +512,20 @@ static int hf_http2_response_in = -1;
  */
 #define MAX_HTTP2_HEADER_SIZE (256 * 1024)
 #define MAX_HTTP2_HEADER_LINES 200
-static expert_field ei_http2_header_size = EI_INIT;
-static expert_field ei_http2_header_lines = EI_INIT;
-static expert_field ei_http2_body_decompression_failed = EI_INIT;
-static expert_field ei_http2_reassembly_error = EI_INIT;
+static expert_field ei_http2_header_size;
+static expert_field ei_http2_header_lines;
+static expert_field ei_http2_body_decompression_failed;
+static expert_field ei_http2_reassembly_error;
 
-static gint ett_http2 = -1;
-static gint ett_http2_header = -1;
-static gint ett_http2_headers = -1;
-static gint ett_http2_flags = -1;
-static gint ett_http2_settings = -1;
-static gint ett_http2_encoded_entity = -1;
-static gint ett_http2_body_fragment = -1;
-static gint ett_http2_body_fragments = -1;
-static gint ett_http2_origin = -1;
+static gint ett_http2;
+static gint ett_http2_header;
+static gint ett_http2_headers;
+static gint ett_http2_flags;
+static gint ett_http2_settings;
+static gint ett_http2_encoded_entity;
+static gint ett_http2_body_fragment;
+static gint ett_http2_body_fragments;
+static gint ett_http2_origin;
 
 #ifdef HAVE_NGHTTP2
 static const fragment_items http2_body_fragment_items = {
@@ -2361,7 +2362,7 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, guint offset, prot
     }
 
     if (have_tap_listener(http2_follow_tap)) {
-        http2_follow_tap_data_t* follow_data = wmem_new0(wmem_packet_scope(), http2_follow_tap_data_t);
+        http2_follow_tap_data_t* follow_data = wmem_new0(pinfo->pool, http2_follow_tap_data_t);
 
         wmem_strbuf_append(headers_buf, "\n");
         follow_data->tvb = tvb_new_child_real_data(header_tvb,
@@ -2384,9 +2385,9 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, guint offset, prot
         */
         if (method_header_value &&
             strcmp(method_header_value, HTTP2_HEADER_METHOD_CONNECT) == 0) {
-            uri = wmem_strdup(wmem_packet_scope(), authority_header_value);
+            uri = wmem_strdup(pinfo->pool, authority_header_value);
         } else {
-            uri = wmem_strdup_printf(wmem_packet_scope(), "%s://%s%s", scheme_header_value, authority_header_value, path_header_value);
+            uri = wmem_strdup_printf(pinfo->pool, "%s://%s%s", scheme_header_value, authority_header_value, path_header_value);
         }
         e_ti = proto_tree_add_string(tree, hf_http2_header_request_full_uri, tvb, 0, 0, uri);
         proto_item_set_url(e_ti);
@@ -2834,7 +2835,7 @@ dissect_body_data(proto_tree *tree, packet_info *pinfo, http2_session_t* h2sessi
         proto_tree_add_item(tree, hf_http2_data_data, tvb, start, length, encoding);
 
     if (have_tap_listener(http2_follow_tap)) {
-        http2_follow_tap_data_t *follow_data = wmem_new0(wmem_packet_scope(), http2_follow_tap_data_t);
+        http2_follow_tap_data_t *follow_data = wmem_new0(pinfo->pool, http2_follow_tap_data_t);
 
         follow_data->tvb = tvb_new_subset_length(tvb, start, length);
         follow_data->stream_id = stream_id;
@@ -2853,15 +2854,78 @@ dissect_body_data(proto_tree *tree, packet_info *pinfo, http2_session_t* h2sessi
         tap_queue_packet(http_eo_tap, pinfo, eo_info);
     }
 
+    tvbuff_t *data_tvb = tvb_new_subset_length(tvb, start, length);
     if (content_type != NULL) {
         /* add it to STREAM level */
         proto_tree* ptree = proto_tree_get_parent_tree(tree);
         dissector_try_string((streaming_mode ? streaming_content_type_dissector_table : media_type_dissector_table),
-            content_type, tvb_new_subset_length(tvb, start, length), pinfo,
+            content_type, data_tvb, pinfo,
             ptree, &metadata_used_for_media_type_handle);
     } else {
-        dissector_try_uint_new(stream_id_content_type_dissector_table, stream_id,
-            tvb_new_subset_length(tvb, start, length), pinfo, proto_tree_get_parent_tree(tree), TRUE, &metadata_used_for_media_type_handle);
+        if (!dissector_try_uint_new(stream_id_content_type_dissector_table, stream_id,
+            data_tvb, pinfo, proto_tree_get_parent_tree(tree), TRUE, &metadata_used_for_media_type_handle))
+        {
+            /* Try heuristics */
+            /* Check for possible boundary string */
+            if (tvb_strneql(data_tvb, 0, "--", 2) == 0) {
+                int next_offset;
+                int boundary_len = tvb_find_line_end(data_tvb, 0, -1, &next_offset, TRUE);
+                if ((boundary_len > 4) && (boundary_len < 70)){
+                    boundary_len = boundary_len - 2; /* ignore ending CRLF*/
+                    /* We have a potential boundary string */
+                    guint8 *boundary = tvb_get_string_enc(wmem_packet_scope(), data_tvb, 2, boundary_len, ENC_ASCII | ENC_NA);
+                    if (tvb_strneql(data_tvb, (length - 4) - boundary_len, boundary, boundary_len) == 0) {
+                        /* We have multipart/mixed */
+                        /* Populate the content type so we can dissect the body later */
+                        body_info->content_type = wmem_strndup(wmem_file_scope(), "multipart/mixed", 15);
+                        body_info->content_type_parameters = wmem_strdup_printf(wmem_file_scope(), "boundary=\"%s\"", boundary);
+                        dissector_handle_t handle = dissector_get_string_handle(media_type_dissector_table, body_info->content_type);
+                        metadata_used_for_media_type_handle.media_str = body_info->content_type_parameters;
+                        if (handle) {
+                            dissector_add_uint("http2.streamid", stream_info->stream_id, handle);
+                        }
+                        dissector_try_uint_new(stream_id_content_type_dissector_table, stream_id,
+                            data_tvb, pinfo, proto_tree_get_parent_tree(tree), TRUE, &metadata_used_for_media_type_handle);
+                    }
+                }
+                return;
+            } /* Not multipart/mixed*/
+            /* check for json, from RFC 4627
+             * A JSON text is a serialized object or array.
+             * JSON-text = object / array
+             * These are the six structural characters:
+             * begin-array     = ws %x5B ws  ; [ left square bracket
+             * begin-object    = ws %x7B ws  ; { left curly bracket
+             * :
+             * Insignificant whitespace is allowed before or after any of the six
+             * structural characters.
+             * ws = *(
+             *  %x20 /              ; Space
+             *  %x09 /              ; Horizontal tab
+             *  %x0A /              ; Line feed or New line
+             *  %x0D                ; Carriage return
+             * )
+             */
+            int offset = 0;
+            offset = tvb_skip_wsp(data_tvb, 0, length);
+            guint8 oct = tvb_get_guint8(data_tvb, offset);
+            if ((oct == 0x5b) || (oct == 0x7b)) {
+                /* Potential json */
+                const guint8* buf = tvb_get_string_enc(pinfo->pool, tvb, 0, length, ENC_ASCII);
+
+                if (json_validate(buf, length) == TRUE) {
+                    body_info->content_type = wmem_strndup(wmem_file_scope(), "application/json", 16);
+                    dissector_handle_t handle = dissector_get_string_handle(media_type_dissector_table, body_info->content_type);
+                    metadata_used_for_media_type_handle.media_str = body_info->content_type_parameters;
+                    if (handle) {
+                        dissector_add_uint("http2.streamid", stream_info->stream_id, handle);
+                    }
+                    dissector_try_uint_new(stream_id_content_type_dissector_table, stream_id,
+                        data_tvb, pinfo, proto_tree_get_parent_tree(tree), TRUE, &metadata_used_for_media_type_handle);
+                }
+                return;
+            }
+        }
     }
 }
 
@@ -2947,6 +3011,78 @@ get_reassembly_id_from_stream(packet_info *pinfo, http2_session_t* session)
     return stream_info->stream_id | (flow_index << 31);
 }
 
+/*
+ * Like process_reassembled_data() in reassemble.[ch], but ignores the layer
+ * number, which is not always stable in HTTP/2, if multiple TLS records are
+ * in the same frame.
+ */
+static tvbuff_t*
+http2_process_reassembled_data(tvbuff_t *tvb, const int offset, packet_info *pinfo,
+	const char *name, fragment_head *fd_head, const fragment_items *fit,
+	gboolean *update_col_infop, proto_tree *tree)
+{
+    tvbuff_t* next_tvb;
+    gboolean update_col_info;
+    proto_item* frag_tree_item;
+
+    if (fd_head != NULL) {
+        /*
+         * OK, we've reassembled this.
+         * Is this something that's been reassembled from more
+         * than one fragment?
+         */
+        if (fd_head->next != NULL) {
+            /*
+             * Yes.
+             * Allocate a new tvbuff, referring to the
+             * reassembled payload, and set
+             * the tvbuff to the list of tvbuffs to which
+             * the tvbuff we were handed refers, so it'll get
+             * cleaned up when that tvbuff is cleaned up.
+             */
+            next_tvb = tvb_new_chain(tvb, fd_head->tvb_data);
+
+            /* Add the defragmented data to the data source list. */
+            add_new_data_source(pinfo, next_tvb, name);
+
+            /* show all fragments */
+            if (fd_head->flags & FD_BLOCKSEQUENCE) {
+                update_col_info = !show_fragment_seq_tree(
+                    fd_head, fit, tree, pinfo, next_tvb, &frag_tree_item);
+            }
+            else {
+                update_col_info = !show_fragment_tree(fd_head,
+                    fit, tree, pinfo, next_tvb, &frag_tree_item);
+            }
+        }
+        else {
+            /*
+             * No.
+             * Return a tvbuff with the payload. next_tvb ist from offset until end
+             */
+            next_tvb = tvb_new_subset_remaining(tvb, offset);
+            pinfo->fragmented = FALSE;	/* one-fragment packet */
+            update_col_info = TRUE;
+        }
+        if (update_col_infop != NULL)
+            *update_col_infop = update_col_info;
+    } else {
+        /*
+         * We don't have the complete reassembled payload, or this
+         * isn't the final frame of that payload.
+         */
+        next_tvb = NULL;
+        /* process_reassembled_data() in reassemble.[ch] adds reassembled_in
+         * here, but the reas_in_layer_num is often unstable in HTTP/2 now so
+         * we rely on the stream end flag (that's why we have this function).
+         *
+         * Perhaps we could DISSECTOR_ASSERT() in this path, we shouldn't
+         * get here.
+         */
+    }
+    return next_tvb;
+}
+
 static tvbuff_t*
 reassemble_http2_data_into_full_frame(tvbuff_t *tvb, packet_info *pinfo, http2_session_t* http2_session, proto_tree *http2_tree, guint offset,
                                       guint8 flags, guint datalen)
@@ -2973,8 +3109,8 @@ reassemble_http2_data_into_full_frame(tvbuff_t *tvb, packet_info *pinfo, http2_s
      * incorrectly match for frames that exist in the same packet as the final DATA frame and incorrectly add
      * reassembly information to those dissection trees */
     if (head && IS_HTTP2_END_STREAM(flags)) {
-        return process_reassembled_data(tvb, offset, pinfo, "Reassembled body", head,
-                                        &http2_body_fragment_items, NULL, http2_tree);
+        return http2_process_reassembled_data(tvb, offset, pinfo, "Reassembled body", head,
+                                              &http2_body_fragment_items, NULL, http2_tree);
     }
 
     /* Add frame where reassembly happened. process_reassembled_data() does this automatically if the reassembled
@@ -4000,7 +4136,7 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
      * and sent to the follow tap inside inflate_http2_header_block.
      */
     if (have_tap_listener(http2_follow_tap) && use_follow_tap) {
-        http2_follow_tap_data_t *follow_data = wmem_new0(wmem_packet_scope(), http2_follow_tap_data_t);
+        http2_follow_tap_data_t *follow_data = wmem_new0(pinfo->pool, http2_follow_tap_data_t);
 
         follow_data->tvb = tvb;
         follow_data->stream_id = streamid;

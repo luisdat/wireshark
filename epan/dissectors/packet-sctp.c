@@ -39,6 +39,8 @@
 
 #include "config.h"
 
+#define WS_LOG_DOMAIN "sctp"
+
 #include "ws_symbol_export.h"
 
 #include <epan/packet.h>
@@ -76,240 +78,241 @@ void proto_register_sctp(void);
 void proto_reg_handoff_sctp(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_sctp = -1;
-static int hf_port = -1;
-static int hf_source_port      = -1;
-static int hf_destination_port = -1;
-static int hf_verification_tag = -1;
-static int hf_checksum         = -1;
-static int hf_checksum_adler   = -1;
-static int hf_checksum_crc32c  = -1;
-static int hf_checksum_status  = -1;
+static int proto_sctp;
+static int hf_port;
+static int hf_source_port;
+static int hf_destination_port;
+static int hf_verification_tag;
+static int hf_checksum;
+static int hf_checksum_adler;
+static int hf_checksum_crc32c;
+static int hf_checksum_status;
 
-static int hf_chunk_type       = -1;
-static int hf_chunk_flags      = -1;
-static int hf_chunk_bit_1      = -1;
-static int hf_chunk_bit_2      = -1;
-static int hf_chunk_length     = -1;
-static int hf_chunk_padding    = -1;
-static int hf_chunk_value    = -1;
+static int hf_chunk;
+static int hf_chunk_type;
+static int hf_chunk_flags;
+static int hf_chunk_bit_1;
+static int hf_chunk_bit_2;
+static int hf_chunk_length;
+static int hf_chunk_padding;
+static int hf_chunk_value;
 
-static int hf_initiate_tag   = -1;
-static int hf_init_chunk_initiate_tag   = -1;
-static int hf_init_chunk_adv_rec_window_credit = -1;
-static int hf_init_chunk_number_of_outbound_streams = -1;
-static int hf_init_chunk_number_of_inbound_streams  = -1;
-static int hf_init_chunk_initial_tsn    = -1;
+static int hf_initiate_tag;
+static int hf_init_chunk_initiate_tag;
+static int hf_init_chunk_adv_rec_window_credit;
+static int hf_init_chunk_number_of_outbound_streams;
+static int hf_init_chunk_number_of_inbound_streams;
+static int hf_init_chunk_initial_tsn;
 
-static int hf_initack_chunk_initiate_tag   = -1;
-static int hf_initack_chunk_adv_rec_window_credit = -1;
-static int hf_initack_chunk_number_of_outbound_streams = -1;
-static int hf_initack_chunk_number_of_inbound_streams  = -1;
-static int hf_initack_chunk_initial_tsn    = -1;
+static int hf_initack_chunk_initiate_tag;
+static int hf_initack_chunk_adv_rec_window_credit;
+static int hf_initack_chunk_number_of_outbound_streams;
+static int hf_initack_chunk_number_of_inbound_streams;
+static int hf_initack_chunk_initial_tsn;
 
-static int hf_data_chunk_tsn = -1;
-static int hf_data_chunk_tsn_raw = -1;
-static int hf_data_chunk_stream_id = -1;
-static int hf_data_chunk_stream_seq_number = -1;
-static int hf_data_chunk_payload_proto_id = -1;
-static int hf_idata_chunk_reserved = -1;
-static int hf_idata_chunk_mid = -1;
-static int hf_idata_chunk_fsn = -1;
+static int hf_data_chunk_tsn;
+static int hf_data_chunk_tsn_raw;
+static int hf_data_chunk_stream_id;
+static int hf_data_chunk_stream_seq_number;
+static int hf_data_chunk_payload_proto_id;
+static int hf_idata_chunk_reserved;
+static int hf_idata_chunk_mid;
+static int hf_idata_chunk_fsn;
 
-static int hf_data_chunk_e_bit = -1;
-static int hf_data_chunk_b_bit = -1;
-static int hf_data_chunk_u_bit = -1;
-static int hf_data_chunk_i_bit = -1;
+static int hf_data_chunk_e_bit;
+static int hf_data_chunk_b_bit;
+static int hf_data_chunk_u_bit;
+static int hf_data_chunk_i_bit;
 
-static int hf_sack_chunk_ns = -1;
-static int hf_sack_chunk_cumulative_tsn_ack = -1;
-static int hf_sack_chunk_cumulative_tsn_ack_raw = -1;
-static int hf_sack_chunk_adv_rec_window_credit = -1;
-static int hf_sack_chunk_number_of_gap_blocks = -1;
-static int hf_sack_chunk_number_of_dup_tsns = -1;
-static int hf_sack_chunk_gap_block_start = -1;
-static int hf_sack_chunk_gap_block_end = -1;
-static int hf_sack_chunk_gap_block_start_tsn = -1;
-static int hf_sack_chunk_gap_block_end_tsn = -1;
-static int hf_sack_chunk_number_tsns_gap_acked = -1;
-static int hf_sack_chunk_duplicate_tsn = -1;
+static int hf_sack_chunk_ns;
+static int hf_sack_chunk_cumulative_tsn_ack;
+static int hf_sack_chunk_cumulative_tsn_ack_raw;
+static int hf_sack_chunk_adv_rec_window_credit;
+static int hf_sack_chunk_number_of_gap_blocks;
+static int hf_sack_chunk_number_of_dup_tsns;
+static int hf_sack_chunk_gap_block_start;
+static int hf_sack_chunk_gap_block_end;
+static int hf_sack_chunk_gap_block_start_tsn;
+static int hf_sack_chunk_gap_block_end_tsn;
+static int hf_sack_chunk_number_tsns_gap_acked;
+static int hf_sack_chunk_duplicate_tsn;
 
-static int hf_nr_sack_chunk_ns = -1;
-static int hf_nr_sack_chunk_cumulative_tsn_ack = -1;
-static int hf_nr_sack_chunk_adv_rec_window_credit = -1;
-static int hf_nr_sack_chunk_number_of_gap_blocks = -1;
-static int hf_nr_sack_chunk_number_of_nr_gap_blocks = -1;
-static int hf_nr_sack_chunk_number_of_dup_tsns = -1;
-static int hf_nr_sack_chunk_reserved = -1;
-static int hf_nr_sack_chunk_gap_block_start = -1;
-static int hf_nr_sack_chunk_gap_block_end = -1;
-static int hf_nr_sack_chunk_gap_block_start_tsn = -1;
-static int hf_nr_sack_chunk_gap_block_end_tsn = -1;
-static int hf_nr_sack_chunk_number_tsns_gap_acked = -1;
-static int hf_nr_sack_chunk_nr_gap_block_start = -1;
-static int hf_nr_sack_chunk_nr_gap_block_end = -1;
-static int hf_nr_sack_chunk_nr_gap_block_start_tsn = -1;
-static int hf_nr_sack_chunk_nr_gap_block_end_tsn = -1;
-static int hf_nr_sack_chunk_number_tsns_nr_gap_acked = -1;
-static int hf_nr_sack_chunk_duplicate_tsn = -1;
+static int hf_nr_sack_chunk_ns;
+static int hf_nr_sack_chunk_cumulative_tsn_ack;
+static int hf_nr_sack_chunk_adv_rec_window_credit;
+static int hf_nr_sack_chunk_number_of_gap_blocks;
+static int hf_nr_sack_chunk_number_of_nr_gap_blocks;
+static int hf_nr_sack_chunk_number_of_dup_tsns;
+static int hf_nr_sack_chunk_reserved;
+static int hf_nr_sack_chunk_gap_block_start;
+static int hf_nr_sack_chunk_gap_block_end;
+static int hf_nr_sack_chunk_gap_block_start_tsn;
+static int hf_nr_sack_chunk_gap_block_end_tsn;
+static int hf_nr_sack_chunk_number_tsns_gap_acked;
+static int hf_nr_sack_chunk_nr_gap_block_start;
+static int hf_nr_sack_chunk_nr_gap_block_end;
+static int hf_nr_sack_chunk_nr_gap_block_start_tsn;
+static int hf_nr_sack_chunk_nr_gap_block_end_tsn;
+static int hf_nr_sack_chunk_number_tsns_nr_gap_acked;
+static int hf_nr_sack_chunk_duplicate_tsn;
 
-static int hf_shutdown_chunk_cumulative_tsn_ack = -1;
-static int hf_cookie = -1;
-static int hf_cwr_chunk_lowest_tsn = -1;
+static int hf_shutdown_chunk_cumulative_tsn_ack;
+static int hf_cookie;
+static int hf_cwr_chunk_lowest_tsn;
 
-static int hf_ecne_chunk_lowest_tsn = -1;
-static int hf_abort_chunk_t_bit = -1;
-static int hf_shutdown_complete_chunk_t_bit = -1;
+static int hf_ecne_chunk_lowest_tsn;
+static int hf_abort_chunk_t_bit;
+static int hf_shutdown_complete_chunk_t_bit;
 
-static int hf_parameter_type = -1;
-static int hf_parameter_length = -1;
-static int hf_parameter_value = -1;
-static int hf_parameter_padding = -1;
-static int hf_parameter_bit_1      = -1;
-static int hf_parameter_bit_2      = -1;
-static int hf_ipv4_address = -1;
-static int hf_ipv6_address = -1;
-static int hf_heartbeat_info = -1;
-static int hf_state_cookie = -1;
-static int hf_cookie_preservative_increment = -1;
-static int hf_hostname = -1;
-static int hf_supported_address_type = -1;
-static int hf_stream_reset_req_seq_nr = -1;
-static int hf_stream_reset_rsp_seq_nr = -1;
-static int hf_senders_last_assigned_tsn = -1;
-static int hf_senders_next_tsn = -1;
-static int hf_receivers_next_tsn = -1;
-static int hf_stream_reset_rsp_result = -1;
-static int hf_stream_reset_sid = -1;
-static int hf_add_outgoing_streams_number_streams = -1;
-static int hf_add_outgoing_streams_reserved = -1;
-static int hf_add_incoming_streams_number_streams = -1;
-static int hf_add_incoming_streams_reserved = -1;
+static int hf_parameter_type;
+static int hf_parameter_length;
+static int hf_parameter_value;
+static int hf_parameter_padding;
+static int hf_parameter_bit_1;
+static int hf_parameter_bit_2;
+static int hf_ipv4_address;
+static int hf_ipv6_address;
+static int hf_heartbeat_info;
+static int hf_state_cookie;
+static int hf_cookie_preservative_increment;
+static int hf_hostname;
+static int hf_supported_address_type;
+static int hf_stream_reset_req_seq_nr;
+static int hf_stream_reset_rsp_seq_nr;
+static int hf_senders_last_assigned_tsn;
+static int hf_senders_next_tsn;
+static int hf_receivers_next_tsn;
+static int hf_stream_reset_rsp_result;
+static int hf_stream_reset_sid;
+static int hf_add_outgoing_streams_number_streams;
+static int hf_add_outgoing_streams_reserved;
+static int hf_add_incoming_streams_number_streams;
+static int hf_add_incoming_streams_reserved;
 
-static int hf_zero_checksum_edmid = -1;
+static int hf_zero_checksum_edmid;
 
-static int hf_random_number = -1;
-static int hf_chunks_to_auth = -1;
-static int hf_hmac_id = -1;
-static int hf_hmac = -1;
-static int hf_shared_key_id = -1;
-static int hf_supported_chunk_type = -1;
+static int hf_random_number;
+static int hf_chunks_to_auth;
+static int hf_hmac_id;
+static int hf_hmac;
+static int hf_shared_key_id;
+static int hf_supported_chunk_type;
 
-static int hf_cause_code = -1;
-static int hf_cause_length = -1;
-static int hf_cause_padding = -1;
-static int hf_cause_info = -1;
+static int hf_cause_code;
+static int hf_cause_length;
+static int hf_cause_padding;
+static int hf_cause_info;
 
-static int hf_cause_stream_identifier = -1;
-static int hf_cause_reserved = -1;
+static int hf_cause_stream_identifier;
+static int hf_cause_reserved;
 
-static int hf_cause_number_of_missing_parameters = -1;
-static int hf_cause_missing_parameter_type = -1;
+static int hf_cause_number_of_missing_parameters;
+static int hf_cause_missing_parameter_type;
 
-static int hf_cause_measure_of_staleness = -1;
+static int hf_cause_measure_of_staleness;
 
-static int hf_cause_tsn = -1;
+static int hf_cause_tsn;
 
-static int hf_forward_tsn_chunk_tsn = -1;
-static int hf_forward_tsn_chunk_sid = -1;
-static int hf_forward_tsn_chunk_ssn = -1;
+static int hf_forward_tsn_chunk_tsn;
+static int hf_forward_tsn_chunk_sid;
+static int hf_forward_tsn_chunk_ssn;
 
-static int hf_i_forward_tsn_chunk_tsn = -1;
-static int hf_i_forward_tsn_chunk_sid = -1;
-static int hf_i_forward_tsn_chunk_flags = -1;
-static int hf_i_forward_tsn_chunk_res = -1;
-static int hf_i_forward_tsn_chunk_u_bit = -1;
-static int hf_i_forward_tsn_chunk_mid = -1;
+static int hf_i_forward_tsn_chunk_tsn;
+static int hf_i_forward_tsn_chunk_sid;
+static int hf_i_forward_tsn_chunk_flags;
+static int hf_i_forward_tsn_chunk_res;
+static int hf_i_forward_tsn_chunk_u_bit;
+static int hf_i_forward_tsn_chunk_mid;
 
-static int hf_asconf_ack_seq_nr = -1;
-static int hf_asconf_seq_nr = -1;
-static int hf_correlation_id = -1;
+static int hf_asconf_ack_seq_nr;
+static int hf_asconf_seq_nr;
+static int hf_correlation_id;
 
-static int hf_adap_indication = -1;
+static int hf_adap_indication;
 
-static int hf_pktdrop_chunk_m_bit = -1;
-static int hf_pktdrop_chunk_b_bit = -1;
-static int hf_pktdrop_chunk_t_bit = -1;
-static int hf_pktdrop_chunk_bandwidth = -1;
-static int hf_pktdrop_chunk_queuesize = -1;
-static int hf_pktdrop_chunk_truncated_length = -1;
-static int hf_pktdrop_chunk_reserved = -1;
-static int hf_pktdrop_chunk_data_field = -1;
+static int hf_pktdrop_chunk_m_bit;
+static int hf_pktdrop_chunk_b_bit;
+static int hf_pktdrop_chunk_t_bit;
+static int hf_pktdrop_chunk_bandwidth;
+static int hf_pktdrop_chunk_queuesize;
+static int hf_pktdrop_chunk_truncated_length;
+static int hf_pktdrop_chunk_reserved;
+static int hf_pktdrop_chunk_data_field;
 
-static int hf_pad_chunk_padding_data = -1;
+static int hf_pad_chunk_padding_data;
 
-static int hf_sctp_reassembled_in = -1;
-static int hf_sctp_duplicate = -1;
-static int hf_sctp_fragments = -1;
-static int hf_sctp_fragment = -1;
+static int hf_sctp_reassembled_in;
+static int hf_sctp_duplicate;
+static int hf_sctp_fragments;
+static int hf_sctp_fragment;
 
-static int hf_sctp_retransmission = -1;
-static int hf_sctp_retransmitted = -1;
-static int hf_sctp_retransmitted_count = -1;
-static int hf_sctp_data_rtt = -1;
-static int hf_sctp_sack_rtt = -1;
-static int hf_sctp_rto = -1;
-static int hf_sctp_ack_tsn = -1;
-static int hf_sctp_ack_frame = -1;
-static int hf_sctp_acked = -1;
-static int hf_sctp_retransmitted_after_ack = -1;
+static int hf_sctp_retransmission;
+static int hf_sctp_retransmitted;
+static int hf_sctp_retransmitted_count;
+static int hf_sctp_data_rtt;
+static int hf_sctp_sack_rtt;
+static int hf_sctp_rto;
+static int hf_sctp_ack_tsn;
+static int hf_sctp_ack_frame;
+static int hf_sctp_acked;
+static int hf_sctp_retransmitted_after_ack;
 
-static int hf_sctp_assoc_index = -1;
+static int hf_sctp_assoc_index;
 
 static dissector_table_t sctp_port_dissector_table;
 static dissector_table_t sctp_ppi_dissector_table;
 static heur_dissector_list_t sctp_heur_subdissector_list;
-static int sctp_tap = -1;
-static int exported_pdu_tap = -1;
+static int sctp_tap;
+static int exported_pdu_tap;
 
 /* Initialize the subtree pointers */
-static gint ett_sctp = -1;
-static gint ett_sctp_chunk = -1;
-static gint ett_sctp_chunk_parameter = -1;
-static gint ett_sctp_chunk_cause = -1;
-static gint ett_sctp_chunk_type = -1;
-static gint ett_sctp_data_chunk_flags = -1;
-static gint ett_sctp_sack_chunk_flags = -1;
-static gint ett_sctp_nr_sack_chunk_flags = -1;
-static gint ett_sctp_abort_chunk_flags = -1;
-static gint ett_sctp_shutdown_complete_chunk_flags = -1;
-static gint ett_sctp_pktdrop_chunk_flags = -1;
-static gint ett_sctp_parameter_type= -1;
-static gint ett_sctp_sack_chunk_gap_block = -1;
-static gint ett_sctp_sack_chunk_gap_block_start = -1;
-static gint ett_sctp_sack_chunk_gap_block_end = -1;
-static gint ett_sctp_nr_sack_chunk_gap_block = -1;
-static gint ett_sctp_nr_sack_chunk_gap_block_start = -1;
-static gint ett_sctp_nr_sack_chunk_gap_block_end = -1;
-static gint ett_sctp_nr_sack_chunk_nr_gap_block = -1;
-static gint ett_sctp_nr_sack_chunk_nr_gap_block_start = -1;
-static gint ett_sctp_nr_sack_chunk_nr_gap_block_end = -1;
-static gint ett_sctp_unrecognized_parameter_parameter = -1;
-static gint ett_sctp_i_forward_tsn_chunk_flags = -1;
+static gint ett_sctp;
+static gint ett_sctp_chunk;
+static gint ett_sctp_chunk_parameter;
+static gint ett_sctp_chunk_cause;
+static gint ett_sctp_chunk_type;
+static gint ett_sctp_data_chunk_flags;
+static gint ett_sctp_sack_chunk_flags;
+static gint ett_sctp_nr_sack_chunk_flags;
+static gint ett_sctp_abort_chunk_flags;
+static gint ett_sctp_shutdown_complete_chunk_flags;
+static gint ett_sctp_pktdrop_chunk_flags;
+static gint ett_sctp_parameter_type;
+static gint ett_sctp_sack_chunk_gap_block;
+static gint ett_sctp_sack_chunk_gap_block_start;
+static gint ett_sctp_sack_chunk_gap_block_end;
+static gint ett_sctp_nr_sack_chunk_gap_block;
+static gint ett_sctp_nr_sack_chunk_gap_block_start;
+static gint ett_sctp_nr_sack_chunk_gap_block_end;
+static gint ett_sctp_nr_sack_chunk_nr_gap_block;
+static gint ett_sctp_nr_sack_chunk_nr_gap_block_start;
+static gint ett_sctp_nr_sack_chunk_nr_gap_block_end;
+static gint ett_sctp_unrecognized_parameter_parameter;
+static gint ett_sctp_i_forward_tsn_chunk_flags;
 
-static gint ett_sctp_fragments = -1;
-static gint ett_sctp_fragment  = -1;
+static gint ett_sctp_fragments;
+static gint ett_sctp_fragment;
 
-static gint ett_sctp_tsn = -1;
-static gint ett_sctp_ack = -1;
-static gint ett_sctp_acked = -1;
-static gint ett_sctp_tsn_retransmission = -1;
-static gint ett_sctp_tsn_retransmitted_count = -1;
-static gint ett_sctp_tsn_retransmitted = -1;
+static gint ett_sctp_tsn;
+static gint ett_sctp_ack;
+static gint ett_sctp_acked;
+static gint ett_sctp_tsn_retransmission;
+static gint ett_sctp_tsn_retransmitted_count;
+static gint ett_sctp_tsn_retransmitted;
 
-static expert_field ei_sctp_sack_chunk_adv_rec_window_credit = EI_INIT;
-static expert_field ei_sctp_nr_sack_chunk_number_tsns_gap_acked_100 = EI_INIT;
-static expert_field ei_sctp_parameter_length = EI_INIT;
-static expert_field ei_sctp_bad_sctp_checksum = EI_INIT;
-static expert_field ei_sctp_tsn_retransmitted_more_than_twice = EI_INIT;
-static expert_field ei_sctp_parameter_padding = EI_INIT;
-static expert_field ei_sctp_retransmitted_after_ack = EI_INIT;
-static expert_field ei_sctp_nr_sack_chunk_number_tsns_nr_gap_acked_100 = EI_INIT;
-static expert_field ei_sctp_sack_chunk_gap_block_out_of_order = EI_INIT;
-static expert_field ei_sctp_chunk_length_bad = EI_INIT;
-static expert_field ei_sctp_tsn_retransmitted = EI_INIT;
-static expert_field ei_sctp_sack_chunk_gap_block_malformed = EI_INIT;
-static expert_field ei_sctp_sack_chunk_number_tsns_gap_acked_100 = EI_INIT;
+static expert_field ei_sctp_sack_chunk_adv_rec_window_credit;
+static expert_field ei_sctp_nr_sack_chunk_number_tsns_gap_acked_100;
+static expert_field ei_sctp_parameter_length;
+static expert_field ei_sctp_bad_sctp_checksum;
+static expert_field ei_sctp_tsn_retransmitted_more_than_twice;
+static expert_field ei_sctp_parameter_padding;
+static expert_field ei_sctp_retransmitted_after_ack;
+static expert_field ei_sctp_nr_sack_chunk_number_tsns_nr_gap_acked_100;
+static expert_field ei_sctp_sack_chunk_gap_block_out_of_order;
+static expert_field ei_sctp_chunk_length_bad;
+static expert_field ei_sctp_tsn_retransmitted;
+static expert_field ei_sctp_sack_chunk_gap_block_malformed;
+static expert_field ei_sctp_sack_chunk_number_tsns_gap_acked_100;
 
 WS_DLL_PUBLIC_DEF const value_string chunk_type_values[] = {
   { SCTP_DATA_CHUNK_ID,              "DATA" },
@@ -416,12 +419,12 @@ static guint num_type_fields = 0;
 typedef struct _assoc_info_t {
   guint16 assoc_index;
   guint16 direction;
-  gboolean vtag_reflected;
+  address saddr;
+  address daddr;
   guint16 sport;
   guint16 dport;
   guint32 verification_tag1;
   guint32 verification_tag2;
-  guint32 initiate_tag;
 } assoc_info_t;
 
 typedef struct _infodata_t {
@@ -429,7 +432,8 @@ typedef struct _infodata_t {
   guint16 direction;
 } infodata_t;
 
-static wmem_list_t *assoc_info_list = NULL;
+static wmem_map_t *assoc_info_half_map = NULL;
+static wmem_map_t *assoc_info_map = NULL;
 static guint num_assocs = 0;
 
 UAT_CSTRING_CB_DEF(type_fields, type_name, type_field_t)
@@ -485,183 +489,235 @@ static dissector_handle_t sctp_handle;
 
 static struct _sctp_info sctp_info;
 
-#define RETURN_DIRECTION(direction) \
-  do { \
-    /*ws_warning("Returning %d at %d: a-itag=0x%x, a-vtag1=0x%x, a-vtag2=0x%x, b-itag=0x%x, b-vtag1=0x%x, b-vtag2=0x%x", \
-              direction, __LINE__, a->initiate_tag, a->verification_tag1, a->verification_tag2, b->initiate_tag, b->verification_tag1, b->verification_tag2);*/ \
-    return direction; \
-  } while (0)
-static gint sctp_assoc_vtag_cmp(const assoc_info_t *a, const assoc_info_t *b)
+static bool
+sctp_vtag_match(uint32_t vtag1, uint32_t vtag2)
 {
-  if (a == NULL || b == NULL)
-    RETURN_DIRECTION(ASSOC_NOT_FOUND);
-
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (b->verification_tag2 != 0) &&
-      (a->initiate_tag == b->verification_tag2) &&
-      (a->initiate_tag == b->initiate_tag))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 == b->verification_tag1) &&
-      (a->initiate_tag ==  b->initiate_tag))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 == b->verification_tag1) &&
-      (a->verification_tag1 == 0 && a->initiate_tag != 0) &&
-      (a->initiate_tag != b->initiate_tag ))
-    RETURN_DIRECTION(ASSOC_NOT_FOUND);   /* two INITs that belong to different assocs */
-
-  /* assoc known*/
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 == b->verification_tag1) &&
-      ((a->verification_tag1 != 0 ||
-       (b->verification_tag2 != 0))))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  /* ABORT, vtag reflected */
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag2 == b->verification_tag2) &&
-      (a->verification_tag1 == 0 && b->verification_tag1 != 0))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 == b->verification_tag2) &&
-      (a->verification_tag1 != 0))
-    RETURN_DIRECTION(BACKWARD_STREAM);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag2 == b->verification_tag1) &&
-      (a->verification_tag2 != 0))
-    RETURN_DIRECTION(BACKWARD_STREAM);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 == b->initiate_tag) &&
-      (a->verification_tag2 == 0))
-    RETURN_DIRECTION(BACKWARD_ADD_BACKWARD_VTAG);
-
-  /* ABORT, vtag reflected */
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag2 == b->verification_tag1) &&
-      (a->verification_tag1 == 0 && b->verification_tag2 != 0))
-    RETURN_DIRECTION(BACKWARD_STREAM);
-
-  /*forward stream verification tag can be added*/
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 != 0) &&
-      (b->verification_tag1 == 0) &&
-      (b->verification_tag2 !=0))
-    RETURN_DIRECTION(FORWARD_ADD_FORWARD_VTAG);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 == b->verification_tag2) &&
-      (b->verification_tag1 == 0))
-    RETURN_DIRECTION(BACKWARD_ADD_FORWARD_VTAG);
-
-  /*backward stream verification tag can be added */
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 != 0) &&
-      (b->verification_tag1 != 0) &&
-      (b->verification_tag2 == 0))
-    RETURN_DIRECTION(BACKWARD_ADD_BACKWARD_VTAG);
-
-  RETURN_DIRECTION(ASSOC_NOT_FOUND);
+  /* If zero (unknown) tags match anything. Nonzero tags must be the same. */
+  if (vtag1 != 0) {
+    return (vtag1 == vtag2 || vtag2 == 0);
+  }
+  return true;
 }
-#undef RETURN_DIRECTION
+
+static assoc_info_t*
+sctp_assoc_reverse(wmem_allocator_t *scope, const assoc_info_t *assoc)
+{
+  assoc_info_t *new_assoc;
+
+  new_assoc = wmem_new(scope, assoc_info_t);
+  new_assoc->assoc_index = assoc->assoc_index;
+  new_assoc->direction = (assoc->direction == 1) ? 2 : 1;
+  copy_address_shallow(&new_assoc->saddr, &assoc->daddr);
+  copy_address_shallow(&new_assoc->daddr, &assoc->saddr);
+  new_assoc->sport = assoc->dport;
+  new_assoc->dport = assoc->sport;
+  new_assoc->verification_tag1 = assoc->verification_tag2;
+  new_assoc->verification_tag2 = assoc->verification_tag1;
+
+  return new_assoc;
+}
+
+static guint
+sctp_assoc_half_hash(gconstpointer key)
+{
+  const assoc_info_t *k = (const assoc_info_t *)key;
+
+  /* Add the ports so that the hash is the same regardless of direction */
+  return g_direct_hash(GUINT_TO_POINTER(k->sport + k->dport));
+}
+
+static guint
+sctp_assoc_hash(gconstpointer key)
+{
+  const assoc_info_t *k = (const assoc_info_t *)key;
+
+  // When inserting in this map, we know we have both vtags.
+  // Hash via the first one (we expect vtag collisions will be low.)
+  // When looking up with a entry from a packet that only has one vtag,
+  // we'll reverse the temporary key as necessary.
+  return g_int_hash(&k->verification_tag1);
+}
+
+/* Association comparison strategy:
+ * 1. Ports MUST match.
+ * 2. Assume vtag collisions are rare compared to multihoming. Thus:
+ * 3. If we have already discovered the vtags on both sides (e.g., with an
+ *    INIT ACK, which contains both sides) and the ports match, don't require
+ *    address matches.
+ * 4. If we have two keys each with 1 matching vtag in the same direction (and
+ *    the other vtag 0), don't require address matches; if there are new addresses
+ *    assume it's multihoming.
+ * 5. However, if we have two keys each with 1 vtag (and the other tag 0)
+ *    that are different but could be the two vtags of one association
+ *    (e.g., two unmatched DATA chunks in the opposite direction, or an INIT
+ *    and a DATA in the same direction) require address matching. Otherwise
+ *    we'll make likely spurious matches.
+ * 6. Don't worry about odd possibilities like both sides of an association
+ *    chosing the same vtag.
+ * 7. We ought to track additional addresses given in INIT, INIT ACK, ASCONF.
+ *    If we do, we could have an option of more strict association matching
+ *    that uses the addresses in all cases and is more similar to what SCTP
+ *    stacks actually do. We'd have to store a list/map/set of known source
+ *    and destinatiion addresses instead of just one each. This would fail in
+ *    the case of multihoming and where we missed the configuration messages
+ *    setting up multihoming.
+ */
+
+static gboolean
+sctp_assoc_half_equal(gconstpointer key1, gconstpointer key2)
+{
+  const assoc_info_t *a = (const assoc_info_t *)key1;
+  const assoc_info_t *b = (const assoc_info_t *)key2;
+
+  /* Matching for associations where for the entries already in the table
+   * only have one vtag, and have zero for the other direction. (For an
+   * new INIT ACK, we know both directions.)
+   */
+
+  if (a->sport == b->sport && a->dport == b->dport) {
+    // Forward match
+    if ((a->verification_tag1 == 0 || b->verification_tag1 == 0) &&
+        (a->verification_tag2 == 0 || b->verification_tag2 == 0)) {
+      // Possible INIT and DATA in the same direction, where we didn't get
+      // the INIT ACK. Call it a match if the addresses match.
+      if (addresses_equal(&a->saddr, &b->saddr) && addresses_equal(&a->daddr, &b->daddr)) {
+          return TRUE;
+      }
+    } else if (sctp_vtag_match(a->verification_tag1, b->verification_tag1) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag2)) {
+      return TRUE;
+    }
+  }
+  if (a->sport == b->dport && a->dport == b->sport) {
+    // Reverse direction (not an else so we can handle identical ports)
+    if ((a->verification_tag1 == 0 || b->verification_tag2 == 0) &&
+        (a->verification_tag2 == 0 || b->verification_tag1 == 0)) {
+      // Possible two DATAs chunks in the opposite direction, where we
+      // didn't get the INIT ACK. Call it a match if the addresses match.
+      if (addresses_equal(&a->saddr, &b->daddr) && addresses_equal(&a->daddr, &b->saddr)) {
+          return TRUE;
+      }
+    } else if (sctp_vtag_match(a->verification_tag1, b->verification_tag2) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag1)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean
+sctp_assoc_equal(gconstpointer key1, gconstpointer key2)
+{
+  const assoc_info_t *a = (const assoc_info_t *)key1;
+  const assoc_info_t *b = (const assoc_info_t *)key2;
+
+  /*
+   * Matching for associations where for the entries already in the map
+   * we know the vtags in each direction.
+   * We will not check addresses.
+   */
+
+  if (a->sport == b->sport && a->dport == b->dport) {
+    // Forward match
+    // ASSERTION: at least one of the verification tags must be nonzero.
+    if (sctp_vtag_match(a->verification_tag1, b->verification_tag1) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag2)) {
+      return TRUE;
+    }
+  }
+  if (a->sport == b->dport && a->dport == b->sport) {
+    // Reverse direction (not an else so we can handle identical ports)
+    if (sctp_vtag_match(a->verification_tag1, b->verification_tag2) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag1)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
 
 static infodata_t
-find_assoc_index(assoc_info_t* tmpinfo, gboolean visited)
+find_assoc_index(assoc_info_t* tmpinfo, packet_info *pinfo)
 {
   assoc_info_t *info = NULL;
-  wmem_list_frame_t *elem;
-  gboolean cmp = FALSE;
   infodata_t inf;
   inf.assoc_index = -1;
   inf.direction = 1;
 
-  if (assoc_info_list == NULL) {
-    assoc_info_list = wmem_list_new(wmem_file_scope());
-  }
-
-  for (elem = wmem_list_head(assoc_info_list); elem; elem = wmem_list_frame_next(elem))
-  {
-    info = (assoc_info_t*) wmem_list_frame_data(elem);
-
-    if (!visited) {
-      cmp = sctp_assoc_vtag_cmp(tmpinfo, info);
-      if (cmp < ASSOC_NOT_FOUND) {
-        switch (cmp)
-        {
-          case FORWARD_ADD_FORWARD_VTAG:
-          case BACKWARD_ADD_FORWARD_VTAG:
-            info->verification_tag1 = tmpinfo->verification_tag1;
-            break;
-          case BACKWARD_ADD_BACKWARD_VTAG:
-            info->verification_tag2 = tmpinfo->verification_tag1;
-            info->direction = 1;
-            inf.assoc_index = info->assoc_index;
-            inf.direction = 2;
-            return inf;
-          case BACKWARD_STREAM:
-            inf.assoc_index = info->assoc_index;
-            inf.direction = 2;
-            return inf;
-        }
-        if (cmp == FORWARD_STREAM || cmp == FORWARD_ADD_FORWARD_VTAG) {
-          info->direction = 1;
-        } else {
-          info->direction = 2;
-        }
-        inf.assoc_index = info->assoc_index;
-        inf.direction = info->direction;
-        return inf;
-      }
-    } else {
-      if ((tmpinfo->initiate_tag != 0 && tmpinfo->initiate_tag == info->initiate_tag) ||
-          (tmpinfo->verification_tag1 != 0 && tmpinfo->verification_tag1 == info->verification_tag1) ||
-          (tmpinfo->verification_tag2 != 0 && tmpinfo->verification_tag2 == info->verification_tag2)) {
-        inf.assoc_index = info->assoc_index;
-        inf.direction = info->direction;
-        return inf;
-      } else if ((tmpinfo->verification_tag1 != 0 && tmpinfo->verification_tag1 == info->verification_tag2) ||
-                 (tmpinfo->verification_tag2 != 0 && tmpinfo->verification_tag2 == info->verification_tag1) ||
-                 (tmpinfo->verification_tag1 == 0 && tmpinfo->initiate_tag != 0 &&
-                 tmpinfo->initiate_tag == info->verification_tag1)) {
-        inf.assoc_index = info->assoc_index;
-        if (info->direction == 1)
-          inf.direction = 2;
-        else
-          inf.direction = 1;
-        return inf;
-      }
+  /* At least one of tmpinfo's vtag1 must be nonzero (both might be, if
+   * it's an INIT ACK.) Lookup in the proper direction(s).
+   */
+  if (tmpinfo->verification_tag1 != 0) {
+    info = (assoc_info_t*)wmem_map_lookup(assoc_info_map, tmpinfo);
+    if (info) {
+      inf.assoc_index = info->assoc_index;
+      inf.direction = info->direction;
+      return inf;
     }
   }
 
-  if (!elem && !visited) {
-    info = wmem_new0(wmem_file_scope(), assoc_info_t);
-    info->assoc_index = num_assocs;
-    info->sport = tmpinfo->sport;
-    info->dport = tmpinfo->dport;
-    info->verification_tag1 = tmpinfo->verification_tag1;
-    info->verification_tag2 = tmpinfo->verification_tag2;
-    info->initiate_tag = tmpinfo->initiate_tag;
-    num_assocs++;
-    wmem_list_prepend(assoc_info_list, info);
+  if (tmpinfo->verification_tag2 != 0) {
+    info = sctp_assoc_reverse(pinfo->pool, tmpinfo);
+    info = (assoc_info_t*)wmem_map_lookup(assoc_info_map, info);
+    if (info) {
+      inf.assoc_index = info->assoc_index;
+      inf.direction = info->direction == 1 ? 2 : 1;
+      return inf;
+    }
+  }
+
+  info = (assoc_info_t*)wmem_map_lookup(assoc_info_half_map, tmpinfo);
+  if (info == NULL) {
+    if (!PINFO_FD_VISITED(pinfo)) {
+      info = wmem_new(wmem_file_scope(), assoc_info_t);
+      *info = *tmpinfo;
+      copy_address_wmem(wmem_file_scope(), &info->saddr, &tmpinfo->saddr);
+      copy_address_wmem(wmem_file_scope(), &info->daddr, &tmpinfo->daddr);
+      info->assoc_index = num_assocs++;
+      info->direction = 1;
+      inf.assoc_index = info->assoc_index;
+      if (info->verification_tag1 == 0 || info->verification_tag2 == 0) {
+        wmem_map_insert(assoc_info_half_map, info, info);
+      } else {
+        info->direction = 1;
+        wmem_map_insert(assoc_info_map, info, info);
+        info = sctp_assoc_reverse(wmem_file_scope(), info);
+        wmem_map_insert(assoc_info_map, info, info);
+      }
+    } else {
+      ws_info("association not found on second pass");
+    }
+  } else {
     inf.assoc_index = info->assoc_index;
-    inf.direction = 1;
+    /* Now figure out why we matched and fill in new information. */
+    if (info->sport == tmpinfo->dport &&
+        sctp_vtag_match(info->verification_tag1, tmpinfo->verification_tag1) &&
+        sctp_vtag_match(info->verification_tag2, tmpinfo->verification_tag2)) {
+      /* We already checked the addresses if needed when looking up in the map. */
+      if (info->verification_tag1 == 0) {
+        info->verification_tag1 = tmpinfo->verification_tag1;
+      }
+      if (info->verification_tag2 == 0) {
+        info->verification_tag2 = tmpinfo->verification_tag2;
+      }
+    } else if (sctp_vtag_match(info->verification_tag1, tmpinfo->verification_tag2) &&
+        sctp_vtag_match(info->verification_tag2, tmpinfo->verification_tag1)) {
+      /* We already checked the addresses if needed when looking up in the map. */
+      inf.direction = 2;
+      if (info->verification_tag1 == 0) {
+        info->verification_tag1 = tmpinfo->verification_tag2;
+      }
+      if (info->verification_tag2 == 0) {
+        info->verification_tag2 = tmpinfo->verification_tag1;
+      }
+    }
+    if (info->verification_tag1 != 0 && info->verification_tag2 != 0) {
+      DISSECTOR_ASSERT(wmem_map_remove(assoc_info_half_map, info) != NULL);
+      wmem_map_insert(assoc_info_map, info, info);
+      info = sctp_assoc_reverse(wmem_file_scope(), info);
+      wmem_map_insert(assoc_info_map, info, info);
+    }
   }
 
   return inf;
@@ -2673,7 +2729,6 @@ sctp_init(void)
   frag_table = g_hash_table_new_full(frag_hash, frag_equal,
       (GDestroyNotify)g_free, (GDestroyNotify)frag_free_msgs);
   num_assocs = 0;
-  assoc_info_list = NULL;
 }
 
 static void
@@ -4452,9 +4507,9 @@ dissect_sctp_chunk(tvbuff_t *chunk_tvb,
     col_append_fstr(pinfo->cinfo, COL_INFO, "%s ", val_to_str_const(type, chunk_type_values, "RESERVED"));
 
   /* create proto_tree stuff */
-  chunk_tree   = proto_tree_add_subtree_format(sctp_tree, chunk_tvb, CHUNK_HEADER_OFFSET, reported_length,
-                    ett_sctp_chunk, &chunk_item, "%s chunk",
-                    val_to_str_const(type, chunk_type_values, "RESERVED"));
+  chunk_item = proto_tree_add_none_format(sctp_tree, hf_chunk, chunk_tvb, CHUNK_HEADER_OFFSET, reported_length,
+                    "%s chunk", val_to_str_const(type, chunk_type_values, "RESERVED"));
+  chunk_tree = proto_item_add_subtree(chunk_item, ett_sctp_chunk);
 
   if (tree) {
     /* then insert the chunk header components into the protocol tree */
@@ -4585,14 +4640,16 @@ dissect_sctp_chunk(tvbuff_t *chunk_tvb,
 }
 
 static void
-dissect_sctp_chunks(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *sctp_item, proto_tree *sctp_tree, sctp_half_assoc_t *ha, gboolean encapsulated)
+dissect_sctp_chunks(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *sctp_item, proto_tree *sctp_tree, sctp_half_assoc_t *ha, gboolean encapsulated, proto_item *vt)
 {
+  proto_item *pi;
   tvbuff_t *chunk_tvb;
   guint16 length, total_length, remaining_length;
   gint last_offset, offset;
   gboolean sctp_item_length_set;
   assoc_info_t tmpinfo;
   infodata_t id_dir;
+  bool first_chunk = true;
 
   /* the common header of the datagram is already handled */
   last_offset = 0;
@@ -4619,42 +4676,62 @@ dissect_sctp_chunks(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_i
       else
         sctp_info.incomplete = TRUE;
     }
-    if (enable_association_indexing) {
-      tmpinfo.assoc_index = -1;
-      tmpinfo.sport = sctp_info.sport;
-      tmpinfo.dport = sctp_info.dport;
-      tmpinfo.vtag_reflected = FALSE;
-      if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_ABORT_CHUNK_ID) {
-        if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_ABORT_CHUNK_T_BIT) != 0) {
-          tmpinfo.vtag_reflected = TRUE;
+    if (first_chunk) {
+      first_chunk = false;
+      if (enable_association_indexing) {
+        tmpinfo.assoc_index = -1;
+        tmpinfo.direction = 1;
+        copy_address_shallow(&tmpinfo.saddr, &pinfo->src);
+        copy_address_shallow(&tmpinfo.daddr, &pinfo->dst);
+        tmpinfo.sport = sctp_info.sport;
+        tmpinfo.dport = sctp_info.dport;
+        bool vtag_reflected = false;
+        /* Certain chunk types have exceptional Verification Tag handling
+         * ( see https://datatracker.ietf.org/doc/html/rfc9260#section-8.5.1 )
+         * XXX: Those chunk types shouldn't be bundled with other chunk types
+         * (ABORT can be bundled after other control types, but ABORT with the
+         * T bit set should not be) and there should be an expert info if so.
+         * Should we use the association from the first chunk or the last
+         * chunk in such a case?
+         */
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_ABORT_CHUNK_ID) {
+          if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_ABORT_CHUNK_T_BIT) != 0) {
+            vtag_reflected = true;
+          }
         }
-      }
-      if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_SHUTDOWN_COMPLETE_CHUNK_ID) {
-        if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_SHUTDOWN_COMPLETE_CHUNK_T_BIT) != 0) {
-          tmpinfo.vtag_reflected = TRUE;
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_SHUTDOWN_COMPLETE_CHUNK_ID) {
+          if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_SHUTDOWN_COMPLETE_CHUNK_T_BIT) != 0) {
+            vtag_reflected = true;
+          }
         }
-      }
-      if (tmpinfo.vtag_reflected) {
-        tmpinfo.verification_tag2 = sctp_info.verification_tag;
-        tmpinfo.verification_tag1 = 0;
-      }
-      else {
-        tmpinfo.verification_tag1 = sctp_info.verification_tag;
-        tmpinfo.verification_tag2 = 0;
-      }
-      if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_INIT_CHUNK_ID) {
-        tmpinfo.initiate_tag = tvb_get_ntohl(sctp_info.tvb[0], 4);
-      }
-      else {
-        tmpinfo.initiate_tag = 0;
+        if (vtag_reflected) {
+          tmpinfo.verification_tag1 = 0;
+          tmpinfo.verification_tag2 = sctp_info.verification_tag;
+        }
+        else {
+          tmpinfo.verification_tag1 = sctp_info.verification_tag;
+          tmpinfo.verification_tag2 = 0;
+        }
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_INIT_CHUNK_ID) {
+          tmpinfo.verification_tag1 = 0;
+          tmpinfo.verification_tag2 = tvb_get_ntohl(sctp_info.tvb[0], 4);
+        }
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_INIT_ACK_CHUNK_ID) {
+          tmpinfo.verification_tag2 = tvb_get_ntohl(sctp_info.tvb[0], 4);
+        }
+
+        id_dir = find_assoc_index(&tmpinfo, pinfo);
+        pi = proto_tree_add_uint(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, id_dir.assoc_index);
+        /* XXX: Should we set these if encapsulated is true or not? */
+        sctp_info.assoc_index = id_dir.assoc_index;
+        sctp_info.direction = id_dir.direction;
+
+      } else {
+          pi = proto_tree_add_uint_format_value(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, sctp_info.assoc_index, "disabled (enable in preferences)");
       }
 
-      id_dir = find_assoc_index(&tmpinfo, PINFO_FD_VISITED(pinfo));
-      sctp_info.assoc_index = id_dir.assoc_index;
-      sctp_info.direction = id_dir.direction;
-    } else {
-      sctp_info.assoc_index = -1;
-      sctp_info.direction = ASSOC_NOT_FOUND;
+      proto_item_set_generated(pi);
+      proto_tree_move_item(sctp_tree, vt, pi);
     }
 
     /* call dissect_sctp_chunk for the actual work */
@@ -4689,7 +4766,7 @@ dissect_sctp_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolea
   proto_tree *sctp_tree;
   guint32 vtag;
   sctp_half_assoc_t *ha = NULL;
-  proto_item *pi, *vt = NULL;
+  proto_item *vt = NULL;
 
   captured_length = tvb_captured_length(tvb);
   reported_length = tvb_reported_length(tvb);
@@ -4800,17 +4877,8 @@ dissect_sctp_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolea
   }
 
   /* add all chunks of the sctp datagram to the protocol tree */
-  dissect_sctp_chunks(tvb, pinfo, tree, sctp_item, sctp_tree, ha, encapsulated);
+  dissect_sctp_chunks(tvb, pinfo, tree, sctp_item, sctp_tree, ha, encapsulated, vt);
 
-  /* add assoc_index and move it behind the verification tag */
-  if (enable_association_indexing) {
-     pi = proto_tree_add_uint(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, sctp_info.assoc_index);
-  }
-  else {
-     pi = proto_tree_add_uint_format_value(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, sctp_info.assoc_index, "disabled (enable in preferences)");
-  }
-  proto_item_set_generated(pi);
-  proto_tree_move_item(sctp_tree, vt, pi);
 }
 
 static gboolean
@@ -4860,6 +4928,9 @@ dissect_sctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   sctp_info.vtag_reflected = 0;
   sctp_info.number_of_tvbs = 0;
   sctp_info.verification_tag = tvb_get_ntohl(tvb, VERIFICATION_TAG_OFFSET);
+  /* Initialize these to unknown */
+  sctp_info.assoc_index = -1;
+  sctp_info.direction = ASSOC_NOT_FOUND;
 
   sctp_info.sport = pinfo->srcport;
   sctp_info.dport = pinfo->destport;
@@ -4869,9 +4940,22 @@ dissect_sctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   p_add_proto_data(pinfo->pool, pinfo, hf_source_port, pinfo->curr_layer_num, GUINT_TO_POINTER(pinfo->srcport));
   p_add_proto_data(pinfo->pool, pinfo, hf_destination_port, pinfo->curr_layer_num, GUINT_TO_POINTER(pinfo->destport));
 
-  dissect_sctp_packet(tvb, pinfo, tree, FALSE);
-  if (!pinfo->flags.in_error_pkt && sctp_info.number_of_tvbs > 0)
-    tap_queue_packet(sctp_tap, pinfo, &sctp_info);
+  TRY {
+    dissect_sctp_packet(tvb, pinfo, tree, FALSE);
+  }
+
+  FINALLY {
+    if (!pinfo->flags.in_error_pkt && sctp_info.number_of_tvbs > 0)
+      /* XXX: If a (only present in an expired Internet-Draft)
+       * PKTDROP chunk is present, that shouldn't stop us from
+       * tapping the information from the outer encapsulation,
+       * but we'd have to be careful about not updating sctp_info
+       * with information from the encapsulated packet.
+       */
+      tap_queue_packet(sctp_tap, pinfo, &sctp_info);
+  }
+
+  ENDTRY;
 
   return tvb_captured_length(tvb);
 }
@@ -4891,6 +4975,7 @@ proto_register_sctp(void)
     { &hf_checksum_adler,                           { "Checksum (Adler)",                               "sctp.checksum",                                        FT_UINT32,  BASE_HEX,  NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_checksum_crc32c,                          { "Checksum (CRC32C)",                              "sctp.checksum",                                        FT_UINT32,  BASE_HEX,  NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_checksum_status,                          { "Checksum Status",                                "sctp.checksum.status",                                 FT_UINT8,   BASE_NONE, VALS(proto_checksum_vals),                      0x0,                                NULL, HFILL } },
+    { &hf_chunk,                                    { "Chunk",                                          "sctp.chunk",                                           FT_NONE,    BASE_NONE, NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_chunk_type,                               { "Chunk type",                                     "sctp.chunk_type",                                      FT_UINT8,   BASE_DEC,  VALS(chunk_type_values),                        0x0,                                NULL, HFILL } },
     { &hf_chunk_flags,                              { "Chunk flags",                                    "sctp.chunk_flags",                                     FT_UINT8,   BASE_HEX,  NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_chunk_bit_1,                              { "Bit",                                            "sctp.chunk_bit_1",                                     FT_BOOLEAN, 8,         TFS(&sctp_chunk_bit_1_value),                   SCTP_CHUNK_BIT_1,                   NULL, HFILL } },
@@ -5196,7 +5281,7 @@ proto_register_sctp(void)
   sctp_ppi_dissector_table  = register_dissector_table("sctp.ppi",  "SCTP payload protocol identifier", proto_sctp, FT_UINT32, BASE_HEX);
 
   sctp_handle = register_dissector("sctp", dissect_sctp, proto_sctp);
-  sctp_heur_subdissector_list = register_heur_dissector_list("sctp", proto_sctp);
+  sctp_heur_subdissector_list = register_heur_dissector_list_with_description("sctp", "SCTP payload", proto_sctp);
 
   register_init_routine(sctp_init);
   register_cleanup_routine(sctp_cleanup);
@@ -5208,6 +5293,11 @@ proto_register_sctp(void)
   register_decode_as(&sctp_da_ppi);
 
   register_conversation_table(proto_sctp, FALSE, sctp_conversation_packet, sctp_endpoint_packet);
+
+  assoc_info_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(),
+        sctp_assoc_hash, sctp_assoc_equal);
+  assoc_info_half_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(),
+        sctp_assoc_half_hash, sctp_assoc_half_equal);
 }
 
 void

@@ -40,32 +40,32 @@ static dissector_handle_t gsm_a_dtap_handle;
 #define SGSAP_SCTP_PORT_RANGE "29118"
 
 /* Initialize the protocol and registered fields */
-static int proto_sgsap = -1;
+static int proto_sgsap;
 
-static int hf_sgsap_msg_type = -1;
-int hf_sgsap_elem_id = -1;
-static int hf_sgsap_eps_location_update_type = -1;
-static int hf_sgsap_service_indicator_value = -1;
-static int hf_sgsap_sgs_cause = -1;
-static int hf_sgsap_ue_emm_mode = -1;
-static int hf_sgsap_eci = -1;
-static int hf_sgsap_cn_id = -1;
-static int hf_sgsap_imsi_det_eps = -1;
-static int hf_sgsap_imsi_det_non_eps = -1;
-static int hf_sgsap_lcs_indic = -1;
-static int hf_sgsap_mme_name = -1;
-static int hf_sgsap_vlr_name = -1;
-static int hf_sgsap_imeisv = -1;
-static int hf_sgsap_unknown_msg = -1;
-static int hf_sgsap_message_elements = -1;
-static int hf_sgsap_csri = -1;
-static int hf_sgsap_sel_cs_dmn_op = -1;
+static int hf_sgsap_msg_type;
+int hf_sgsap_elem_id;
+static int hf_sgsap_eps_location_update_type;
+static int hf_sgsap_service_indicator_value;
+static int hf_sgsap_sgs_cause;
+static int hf_sgsap_ue_emm_mode;
+static int hf_sgsap_eci;
+static int hf_sgsap_cn_id;
+static int hf_sgsap_imsi_det_eps;
+static int hf_sgsap_imsi_det_non_eps;
+static int hf_sgsap_lcs_indic;
+static int hf_sgsap_mme_name;
+static int hf_sgsap_vlr_name;
+static int hf_sgsap_imeisv;
+static int hf_sgsap_unknown_msg;
+static int hf_sgsap_message_elements;
+static int hf_sgsap_csri;
+static int hf_sgsap_sel_cs_dmn_op;
 
-static int ett_sgsap = -1;
-static int ett_sgsap_sel_cs_dmn_op = -1;
+static int ett_sgsap;
+static int ett_sgsap_sel_cs_dmn_op;
 
-static expert_field ei_sgsap_extraneous_data = EI_INIT;
-static expert_field ei_sgsap_missing_mandatory_element = EI_INIT;
+static expert_field ei_sgsap_extraneous_data;
+static expert_field ei_sgsap_missing_mandatory_element;
 
 static dissector_handle_t sgsap_handle;
 
@@ -134,7 +134,7 @@ de_sgsap_err_msg(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, guint32 of
      * Octet 3 - Octet n
      * Erroneous message including the message type.
      */
-     /* Messge type IE*/
+     /* Message type IE*/
     oct = tvb_get_guint8(tvb, offset);
     msg_fcn_p = NULL;
     ett_tree = -1;
@@ -1525,7 +1525,7 @@ dissect_sgsap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
     item = proto_tree_add_item(tree, proto_sgsap, tvb, 0, -1, ENC_NA);
     sgsap_tree = proto_item_add_subtree(item, ett_sgsap);
 
-    /* Messge type IE*/
+    /* Message type IE*/
     oct       = tvb_get_guint8(tvb, offset);
     msg_fcn_p = NULL;
     ett_tree  = -1;
@@ -1684,13 +1684,11 @@ void proto_register_sgsap(void) {
 
     for (i=0; i < NUM_SGSAP_ELEM; i++, last_offset++)
     {
-        ett_sgsap_elem[i] = -1;
         ett[last_offset] = &ett_sgsap_elem[i];
     }
 
     for (i=0; i < NUM_SGSAP_MSG; i++, last_offset++)
     {
-        ett_sgsap_msg[i] = -1;
         ett[last_offset] = &ett_sgsap_msg[i];
     }
 

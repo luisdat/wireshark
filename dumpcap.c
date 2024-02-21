@@ -16,6 +16,8 @@
 
 #include <string.h>
 
+#include <ws_exit_codes.h>
+
 #include <sys/types.h>
 
 #ifdef HAVE_NETINET_IN_H
@@ -78,6 +80,7 @@
 #include "wsutil/time_util.h"
 #include "wsutil/please_report_bug.h"
 #include "wsutil/glib-compat.h"
+#include <wsutil/json_dumper.h>
 #include <wsutil/ws_assert.h>
 
 #include "capture/ws80211_utils.h"
@@ -94,12 +97,14 @@
 #include "wiretap/pcapng.h"
 
 /*
- * Define these for extra logging messages at INFO and below. Note
- * that when dumpcap is spawned as a child process, logs are sent
- * to the parent via the sync pipe.
+ * Define these for extra logging. Note that when dumpcap is spawned as
+ * a child process, logs are sent to the parent via the sync pipe.
+ * The parent will pass along the Capchild domain log level settings,
+ * so "--log-debug Capchild" or "--log-level debug" can be used to get
+ * debugging from dumpcap sent to the parent.
  */
-/**#define DEBUG_DUMPCAP**/       /* Logs INFO and below messages normally */
-/**#define DEBUG_CHILD_DUMPCAP**/ /* Writes INFO and below logs to file */
+//#define DEBUG_DUMPCAP       /* Waits for keypress on quitting on Windows */
+//#define DEBUG_CHILD_DUMPCAP /* Writes logs to file */
 
 #ifdef _WIN32
 #include "wsutil/win32-utils.h"
@@ -112,9 +117,7 @@
 FILE *debug_log;   /* for logging debug messages to  */
                    /*  a file if DEBUG_CHILD_DUMPCAP */
                    /*  is defined                    */
-#ifdef DEBUG_DUMPCAP
 #include <stdarg.h> /* va_copy */
-#endif
 #endif
 
 static GAsyncQueue *pcap_queue;
@@ -130,6 +133,7 @@ static gchar *sig_pipe_name = NULL;
 static HANDLE sig_pipe_handle = NULL;
 static gboolean signal_pipe_check_running(void);
 #endif
+static int sync_pipe_fd = 2;
 
 #ifdef ENABLE_ASAN
 /* This has public visibility so that if compiled with shared libasan (the
@@ -562,7 +566,7 @@ dumpcap_cmdarg_err(const char *fmt, va_list ap)
         gchar *msg;
         /* Generate a 'special format' message back to parent */
         msg = ws_strdup_vprintf(fmt, ap);
-        sync_pipe_write_errmsgs_to_parent(2, msg, "");
+        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, msg, "");
         g_free(msg);
     } else {
         fprintf(stderr, "dumpcap: ");
@@ -582,7 +586,7 @@ dumpcap_cmdarg_err_cont(const char *fmt, va_list ap)
     if (capture_child) {
         gchar *msg;
         msg = ws_strdup_vprintf(fmt, ap);
-        sync_pipe_write_errmsgs_to_parent(2, msg, "");
+        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, msg, "");
         g_free(msg);
     } else {
         vfprintf(stderr, fmt, ap);
@@ -621,189 +625,6 @@ relinquish_all_capabilities(void)
     cap_free(caps);
 }
 #endif
-
-/*
- * Platform-dependent suggestions for fixing permissions.
- */
-
-#ifdef HAVE_LIBCAP
-  #define LIBCAP_PERMISSIONS_SUGGESTION \
-    "\n\n" \
-    "If you did not install Wireshark from a package, ensure that Dumpcap " \
-    "has the needed CAP_NET_RAW and CAP_NET_ADMIN capabilities by running " \
-    "\n\n" \
-    "    sudo setcap cap_net_raw,cap_net_admin=ep {path/to/}dumpcap" \
-    "\n\n" \
-    "and then restarting Wireshark."
-#else
-  #define LIBCAP_PERMISSIONS_SUGGESTION
-#endif
-
-#if defined(__linux__)
-  #define PLATFORM_PERMISSIONS_SUGGESTION \
-    "\n\n" \
-    "On Debian and Debian derivatives such as Ubuntu, if you have " \
-    "installed Wireshark from a package, try running" \
-    "\n\n" \
-    "    sudo dpkg-reconfigure wireshark-common" \
-    "\n\n" \
-    "selecting \"<Yes>\" in response to the question" \
-    "\n\n" \
-    "    Should non-superusers be able to capture packets?" \
-    "\n\n" \
-    "adding yourself to the \"wireshark\" group by running" \
-    "\n\n" \
-    "    sudo usermod -a -G wireshark {your username}" \
-    "\n\n" \
-    "and then logging out and logging back in again." \
-    LIBCAP_PERMISSIONS_SUGGESTION
-#elif defined(__APPLE__)
-  #define PLATFORM_PERMISSIONS_SUGGESTION \
-    "\n\n" \
-    "If you installed Wireshark using the package from wireshark.org, " \
-    "close this dialog and click on the \"installing ChmodBPF\" link in " \
-    "\"You can fix this by installing ChmodBPF.\" on the main screen, " \
-    "and then complete the installation procedure."
-#else
-  #define PLATFORM_PERMISSIONS_SUGGESTION
-#endif
-
-static const char *
-get_pcap_failure_secondary_error_message(cap_device_open_status open_status,
-                                         const char *open_status_str)
-{
-#ifdef _WIN32
-    /*
-     * On Windows, first make sure they *have* Npcap installed.
-     */
-    if (!has_wpcap) {
-        return
-            "In order to capture packets, Npcap or WinPcap must be installed. See\n"
-            "\n"
-            "        https://npcap.com/\n"
-            "\n"
-            "for a downloadable version of Npcap and for instructions on how to\n"
-            "install it.";
-    }
-#endif
-
-    /*
-     * OK, now just return a largely platform-independent error that might
-     * have platform-specific suggestions at the end (for example, suggestions
-     * for how to get permission to capture).
-     */
-    switch (open_status) {
-
-    case CAP_DEVICE_OPEN_ERROR_NO_SUCH_DEVICE:
-    case CAP_DEVICE_OPEN_ERROR_RFMON_NOTSUP:
-    case CAP_DEVICE_OPEN_ERROR_IFACE_NOT_UP:
-        /*
-         * Not clear what suggestions to make for these cases.
-         */
-        return "";
-
-    case CAP_DEVICE_OPEN_ERROR_PERM_DENIED:
-    case CAP_DEVICE_OPEN_ERROR_PROMISC_PERM_DENIED:
-        /*
-         * This is a permissions error, so no need to specify any other
-         * warnings.
-         */
-        return
-               "Please check to make sure you have sufficient permissions."
-               PLATFORM_PERMISSIONS_SUGGESTION;
-        break;
-
-    case CAP_DEVICE_OPEN_ERROR_OTHER:
-    case CAP_DEVICE_OPEN_ERROR_GENERIC:
-        {
-        /*
-         * We don't know what kind of error it is.  See if there's a hint
-         * in the error string; if not, throw all generic suggestions at
-         * the user.
-         */
-        static const char promisc_failed[] =
-            "failed to set hardware filter to promiscuous mode";
-#if defined(__linux__)
-        static const char af_notsup[] =
-            "socket: Address family not supported by protocol";
-#endif
-
-        /*
-         * Check for some text that pops up in some errors.
-         */
-        if (strncmp(open_status_str, promisc_failed, sizeof promisc_failed - 1) == 0) {
-            /*
-             * The error string begins with the error produced by WinPcap
-             * and Npcap if attempting to set promiscuous mode fails.
-             * (Note that this string could have a specific error message
-             * from an NDIS error after the initial part, so we do a prefix
-             * check rather than an exact match check.)
-             *
-             * Suggest that the user turn off promiscuous mode on that
-             * device.
-             */
-            return
-                   "Please turn off promiscuous mode for this device";
-#if defined(__linux__)
-        } else if (strcmp(open_status_str, af_notsup) == 0) {
-            /*
-             * The error string is the message provided by libpcap on
-	     * Linux if an attempt to open a PF_PACKET socket failed
-	     * with EAFNOSUPPORT.  This probably means that either 1)
-	     * the kernel doesn't have PF_PACKET support configured in
-	     * or 2) this is a Flatpak version of Wireshark that's been
-	     * sandboxed in a way that disallows opening PF_PACKET
-	     * sockets.
-	     *
-	     * Suggest that the user find some other package of
-	     * Wireshark if they want to capture traffic and are
-	     * running a Flatpak of Wireshark or that they configure
-	     * PF_PACKET support back in if it's configured out.
-	     */
-	    return
-                       "If you are running Wireshark from a Flatpak package, "
-                       "it does not support packet capture; you will need "
-                       "to run a different version of Wireshark in order "
-                       "to capture traffic.\n"
-                       "\n"
-                       "Otherwise, if your machine is running a kernel that "
-                       "was not configured with CONFIG_PACKET, that kernel "
-                       "does not support packet capture; you will need to "
-                       "use a kernel configured with CONFIG_PACKET.";
-#endif
-        } else {
-            /*
-             * No.  Was this a "generic" error from pcap_open_live()
-             * or pcap_open(), in which case it might be a permissions
-             * error?
-             */
-            if (open_status == CAP_DEVICE_OPEN_ERROR_GENERIC) {
-                return
-                       "Please check to make sure you have sufficient permissions, and that you have "
-                       "the proper interface or pipe specified."
-                       PLATFORM_PERMISSIONS_SUGGESTION;
-            } else {
-                /*
-                 * This is not a permissions error, so no need to suggest
-                 * checking permissions.
-                 */
-                return
-                    "Please check that you have the proper interface or pipe specified.";
-            }
-        }
-        }
-        break;
-
-    default:
-        /*
-         * This is not a permissions error, so no need to suggest
-         * checking permissions.
-         */
-        return
-            "Please check that you have the proper interface or pipe specified.";
-        break;
-    }
-}
 
 static void
 get_capture_device_open_failure_messages(cap_device_open_status open_status,
@@ -957,81 +778,112 @@ show_filter_code(capture_options *capture_opts)
 #endif
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
     }
     return TRUE;
 }
+
+static void
+print_machine_readable_if_capabilities(json_dumper *dumper, if_capabilities_t *caps, int queries);
 
 /*
  * Output a machine readable list of the interfaces
  * This list is retrieved by the sync_interface_list_open() function
  * The actual output of this function can be viewed with the command "dumpcap -D -Z none"
  */
-static void
-print_machine_readable_interfaces(GList *if_list)
+static int
+print_machine_readable_interfaces(GList *if_list, int caps_queries, bool print_statistics)
 {
-    int         i;
     GList       *if_entry;
     if_info_t   *if_info;
     GSList      *addr;
     if_addr_t   *if_addr;
     char        addr_str[WS_INET6_ADDRSTRLEN];
+    int         status;
 
-    if (capture_child) {
-        /* Let our parent know we succeeded. */
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
-    }
+    json_dumper dumper = {
+        .output_string = g_string_new(NULL),
+        .flags = JSON_DUMPER_FLAGS_NO_DEBUG,
+        // Don't abort on failure
+    };
+    json_dumper_begin_array(&dumper);
 
-    i = 1;  /* Interface id number */
+    /*
+     * Print the contents of the if_entry struct in a parseable format (JSON)
+     */
     for (if_entry = g_list_first(if_list); if_entry != NULL;
          if_entry = g_list_next(if_entry)) {
         if_info = (if_info_t *)if_entry->data;
-        printf("%d. %s\t", i++, if_info->name);
 
-        /*
-         * Print the contents of the if_entry struct in a parseable format.
-         * Each if_entry element is tab-separated.  Addresses are comma-
-         * separated.
-         */
-        /* XXX - Make sure our description doesn't contain a tab */
-        if (if_info->vendor_description != NULL)
-            printf("%s\t", if_info->vendor_description);
-        else
-            printf("\t");
+        json_dumper_begin_object(&dumper);
+        json_dumper_set_member_name(&dumper, if_info->name);
 
-        /* XXX - Make sure our friendly name doesn't contain a tab */
-        if (if_info->friendly_name != NULL)
-            printf("%s\t", if_info->friendly_name);
-        else
-            printf("\t");
+        json_dumper_begin_object(&dumper);
 
-        printf("%i\t", if_info->type);
+        json_dumper_set_member_name(&dumper, "friendly_name");
+        json_dumper_value_string(&dumper, if_info->friendly_name);
 
+        json_dumper_set_member_name(&dumper, "vendor_description");
+        json_dumper_value_string(&dumper, if_info->vendor_description);
+
+        json_dumper_set_member_name(&dumper, "type");
+        json_dumper_value_anyf(&dumper, "%i", if_info->type);
+
+        json_dumper_set_member_name(&dumper, "addrs");
+
+        json_dumper_begin_array(&dumper);
         for (addr = g_slist_nth(if_info->addrs, 0); addr != NULL;
                     addr = g_slist_next(addr)) {
-            if (addr != g_slist_nth(if_info->addrs, 0))
-                printf(",");
 
             if_addr = (if_addr_t *)addr->data;
             switch(if_addr->ifat_type) {
             case IF_AT_IPv4:
-                printf("%s", ws_inet_ntop4(&if_addr->addr.ip4_addr, addr_str, sizeof(addr_str)));
+                json_dumper_value_string(&dumper, ws_inet_ntop4(&if_addr->addr.ip4_addr, addr_str, sizeof(addr_str)));
                 break;
             case IF_AT_IPv6:
-                printf("%s", ws_inet_ntop6(&if_addr->addr.ip6_addr, addr_str, sizeof(addr_str)));
+                json_dumper_value_string(&dumper, ws_inet_ntop6(&if_addr->addr.ip6_addr, addr_str, sizeof(addr_str)));
                 break;
             default:
-                printf("<type unknown %i>", if_addr->ifat_type);
+                json_dumper_value_anyf(&dumper, "<type unknown %i>", if_addr->ifat_type);
             }
         }
+        json_dumper_end_array(&dumper);
 
-        if (if_info->loopback)
-            printf("\tloopback");
-        else
-            printf("\tnetwork");
-        printf("\t%s", if_info->extcap);
-        printf("\n");
+        json_dumper_set_member_name(&dumper, "loopback");
+        json_dumper_value_anyf(&dumper, "%s", if_info->loopback ? "true" : "false");
+
+        json_dumper_set_member_name(&dumper, "extcap");
+        json_dumper_value_string(&dumper, if_info->extcap);
+
+        if (if_info->caps && caps_queries) {
+            json_dumper_set_member_name(&dumper, "caps");
+            json_dumper_begin_object(&dumper);
+            print_machine_readable_if_capabilities(&dumper, if_info->caps, caps_queries);
+            json_dumper_end_object(&dumper);
+        }
+        json_dumper_end_object(&dumper);
+        json_dumper_end_object(&dumper);
     }
+    json_dumper_end_array(&dumper);
+    if (json_dumper_finish(&dumper)) {
+        status = 0;
+        if (capture_child) {
+            if (print_statistics) {
+                sync_pipe_write_string_msg(sync_pipe_fd, SP_IFACE_LIST, dumper.output_string->str);
+            } else {
+                /* Let our parent know we succeeded. */
+                sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
+                printf("%s", dumper.output_string->str);
+            }
+        }
+    } else {
+        status = 2;
+        if (capture_child) {
+            sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, "Unexpected JSON error", "");
+        }
+    }
+    g_string_free(dumper.output_string, TRUE);
+    return status;
 }
 
 /*
@@ -1039,21 +891,23 @@ print_machine_readable_interfaces(GList *if_list)
  * you MUST update capture_ifinfo.c:capture_get_if_capabilities() accordingly!
  */
 static void
-print_machine_readable_if_capabilities(if_capabilities_t *caps, int queries)
+print_machine_readable_if_capabilities(json_dumper *dumper, if_capabilities_t *caps, int queries)
 {
     GList *lt_entry, *ts_entry;
     const gchar *desc_str;
 
-    if (capture_child) {
-        /* Let our parent know we succeeded. */
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+    json_dumper_set_member_name(dumper, "status");
+    json_dumper_value_anyf(dumper, "%i", caps->status);
+    if (caps->primary_msg) {
+        json_dumper_set_member_name(dumper, "primary_msg");
+        json_dumper_value_string(dumper, caps->primary_msg);
     }
 
     if (queries & CAPS_QUERY_LINK_TYPES) {
-        if (caps->can_set_rfmon)
-            printf("1\n");
-        else
-            printf("0\n");
+        json_dumper_set_member_name(dumper, "rfmon");
+        json_dumper_value_anyf(dumper, "%s", caps->can_set_rfmon ? "true" : "false");
+        json_dumper_set_member_name(dumper, "data_link_types");
+        json_dumper_begin_array(dumper);
         for (lt_entry = caps->data_link_types; lt_entry != NULL;
              lt_entry = g_list_next(lt_entry)) {
           data_link_info_t *data_link_info = (data_link_info_t *)lt_entry->data;
@@ -1061,12 +915,40 @@ print_machine_readable_if_capabilities(if_capabilities_t *caps, int queries)
             desc_str = data_link_info->description;
           else
             desc_str = "(not supported)";
-          printf("%d\t%s\t%s\n", data_link_info->dlt, data_link_info->name,
-                 desc_str);
+          json_dumper_begin_object(dumper);
+          json_dumper_set_member_name(dumper, "dlt");
+          json_dumper_value_anyf(dumper, "%d", data_link_info->dlt);
+          json_dumper_set_member_name(dumper, "name");
+          json_dumper_value_string(dumper, data_link_info->name);
+          json_dumper_set_member_name(dumper, "description");
+          json_dumper_value_string(dumper, desc_str);
+          json_dumper_end_object(dumper);
         }
+        json_dumper_end_array(dumper);
+
+        json_dumper_set_member_name(dumper, "data_link_types_rfmon");
+        json_dumper_begin_array(dumper);
+        for (lt_entry = caps->data_link_types_rfmon; lt_entry != NULL;
+             lt_entry = g_list_next(lt_entry)) {
+          data_link_info_t *data_link_info = (data_link_info_t *)lt_entry->data;
+          if (data_link_info->description != NULL)
+            desc_str = data_link_info->description;
+          else
+            desc_str = "(not supported)";
+          json_dumper_begin_object(dumper);
+          json_dumper_set_member_name(dumper, "dlt");
+          json_dumper_value_anyf(dumper, "%d", data_link_info->dlt);
+          json_dumper_set_member_name(dumper, "name");
+          json_dumper_value_string(dumper, data_link_info->name);
+          json_dumper_set_member_name(dumper, "description");
+          json_dumper_value_string(dumper, desc_str);
+          json_dumper_end_object(dumper);
+        }
+        json_dumper_end_array(dumper);
     }
-    printf("\n");
     if (queries & CAPS_QUERY_TIMESTAMP_TYPES) {
+        json_dumper_set_member_name(dumper, "timestamp_types");
+        json_dumper_begin_array(dumper);
         for (ts_entry = caps->timestamp_types; ts_entry != NULL;
              ts_entry = g_list_next(ts_entry)) {
           timestamp_info_t *timestamp = (timestamp_info_t *)ts_entry->data;
@@ -1074,8 +956,14 @@ print_machine_readable_if_capabilities(if_capabilities_t *caps, int queries)
             desc_str = timestamp->description;
           else
             desc_str = "(none)";
-          printf("%s\t%s\n", timestamp->name, desc_str);
+          json_dumper_begin_object(dumper);
+          json_dumper_set_member_name(dumper, "name");
+          json_dumper_value_string(dumper, timestamp->name);
+          json_dumper_set_member_name(dumper, "description");
+          json_dumper_value_string(dumper, desc_str);
+          json_dumper_end_object(dumper);
         }
+        json_dumper_end_array(dumper);
     }
 }
 
@@ -1099,8 +987,10 @@ print_statistics_loop(gboolean machine_readable)
 
     if_list = get_interface_list(&err, &err_str);
     if (if_list == NULL) {
-       if (err == 0)
+        if (err == 0) {
             cmdarg_err("There are no interfaces on which a capture can be done");
+            err = WS_EXIT_NO_INTERFACES;
+        }
         else {
             cmdarg_err("%s", err_str);
             g_free(err_str);
@@ -1147,7 +1037,7 @@ print_statistics_loop(gboolean machine_readable)
 
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
     }
 
     if (!machine_readable) {
@@ -1159,15 +1049,16 @@ print_statistics_loop(gboolean machine_readable)
     while (global_ld.go) {
         for (stat_entry = g_list_first(stat_list); stat_entry != NULL; stat_entry = g_list_next(stat_entry)) {
             if_stat = (if_stat_t *)stat_entry->data;
-            pcap_stats(if_stat->pch, &ps);
-
-            if (!machine_readable) {
-                printf("%-15s  %10u  %10u\n", if_stat->name,
-                    ps.ps_recv, ps.ps_drop);
-            } else {
-                printf("%s\t%u\t%u\n", if_stat->name,
-                    ps.ps_recv, ps.ps_drop);
-                fflush(stdout);
+            /* XXX - what if this fails? */
+            if (pcap_stats(if_stat->pch, &ps) == 0) {
+                if (!machine_readable) {
+                    printf("%-15s  %10u  %10u\n", if_stat->name,
+                           ps.ps_recv, ps.ps_drop);
+                } else {
+                    printf("%s\t%u\t%u\n", if_stat->name,
+                           ps.ps_recv, ps.ps_drop);
+                    fflush(stdout);
+                }
             }
         }
 #ifdef _WIN32
@@ -1881,7 +1772,6 @@ cap_pipe_open_live(char *pipename,
     ws_statb64         pipe_stat;
     struct sockaddr_un sa;
 #else /* _WIN32 */
-    char    *pncopy, *pos;
     guintptr extcap_pipe_handle;
 #endif
     gboolean extcap_pipe = FALSE;
@@ -2013,27 +1903,13 @@ cap_pipe_open_live(char *pipename,
         }
         else
         {
-#define PIPE_STR "\\pipe\\"
-            /* Under Windows, named pipes _must_ have the form
-             * "\\<server>\pipe\<pipename>".  <server> may be "." for localhost.
-             */
-            pncopy = g_strdup(pipename);
-            if ((pos = strstr(pncopy, "\\\\")) == pncopy) {
-                pos = strchr(pncopy + 3, '\\');
-                if (pos && g_ascii_strncasecmp(pos, PIPE_STR, strlen(PIPE_STR)) != 0)
-                    pos = NULL;
-            }
-
-            g_free(pncopy);
-
-            if (!pos) {
+            if (!win32_is_pipe_name(pipename)) {
                 snprintf(errmsg, errmsgl,
                     "The capture session could not be initiated because\n"
                     "\"%s\" is neither an interface nor a pipe.", pipename);
                 pcap_src->cap_pipe_err = PIPNEXIST;
                 return;
             }
-
 
             /* Wait for the pipe to appear */
             while (1) {
@@ -4632,7 +4508,11 @@ capture_loop_start(capture_options *capture_opts, gboolean *stats_known, struct 
                                               interface_opts->display_name);
                 secondary_msg = handle_npcap_bug(interface_opts->display_name,
                                                  "The interface disappeared (error code ERROR_DEVICE_REMOVED/STATUS_DEVICE_REMOVED)");
-            } else if (strcmp(cap_err_str, "The other host terminated the connection.") == 0) {
+            } else if (strcmp(cap_err_str, "The other host terminated the connection.") == 0 ||
+                       g_str_has_prefix(cap_err_str, "Is the server properly installed?")) {
+                /*
+                 * Networking error for a remote capture.
+                 */
                 primary_msg = g_strdup(cap_err_str);
                 secondary_msg = g_strdup("This may be a problem with the "
                                          "remote host on which you are "
@@ -4921,17 +4801,13 @@ capture_loop_write_pcapng_cb(capture_src *pcap_src, const pcapng_block_header_t 
             pcap_src->dropped++;
         } else if (bh->block_type == BLOCK_TYPE_EPB || bh->block_type == BLOCK_TYPE_SPB || bh->block_type == BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT || bh->block_type == BLOCK_TYPE_SYSDIG_EVENT || bh->block_type == BLOCK_TYPE_SYSDIG_EVENT_V2 || bh->block_type == BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE) {
             /* Count packets for block types that should be dissected, i.e. ones that show up in the packet list. */
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Wrote a pcapng block type %u of length %d captured on interface %u.",
+            ws_debug("Wrote a pcapng block type %u of length %d captured on interface %u.",
                    bh->block_type, bh->block_total_length, pcap_src->interface_id);
-#endif
             capture_loop_wrote_one_packet(pcap_src);
         } else if (bh->block_type == BLOCK_TYPE_SHB && report_capture_filename) {
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Sending SP_FILE on first SHB");
-#endif
+            ws_debug("Sending SP_FILE on first SHB");
             /* SHB is now ready for capture parent to read on SP_FILE message */
-            sync_pipe_write_string_msg(2, SP_FILE, report_capture_filename);
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_FILE, report_capture_filename);
             report_capture_filename = NULL;
         }
     }
@@ -4983,10 +4859,8 @@ capture_loop_write_packet_cb(u_char *pcap_src_p, const struct pcap_pkthdr *phdr,
             global_ld.err = err;
             pcap_src->dropped++;
         } else {
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Wrote a pcap packet of length %d captured on interface %u.",
+            ws_debug("Wrote a pcap packet of length %d captured on interface %u.",
                    phdr->caplen, pcap_src->interface_id);
-#endif
             capture_loop_wrote_one_packet(pcap_src);
         }
     }
@@ -5160,7 +5034,7 @@ set_80211_channel(const char *iface, const char *opt)
     }
 
     if (capture_child)
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
 
 out:
     g_strfreev(options);
@@ -5184,6 +5058,9 @@ gather_dumpcap_runtime_info(feature_list l)
 #define LONGOPT_IFNAME             LONGOPT_BASE_APPLICATION+1
 #define LONGOPT_IFDESCR            LONGOPT_BASE_APPLICATION+2
 #define LONGOPT_CAPTURE_COMMENT    LONGOPT_BASE_APPLICATION+3
+#ifdef _WIN32
+#define LONGOPT_SIGNAL_PIPE        LONGOPT_BASE_APPLICATION+4
+#endif
 
 /* And now our feature presentation... [ fade to music ] */
 int
@@ -5198,6 +5075,9 @@ main(int argc, char *argv[])
         {"ifname", ws_required_argument, NULL, LONGOPT_IFNAME},
         {"ifdescr", ws_required_argument, NULL, LONGOPT_IFDESCR},
         {"capture-comment", ws_required_argument, NULL, LONGOPT_CAPTURE_COMMENT},
+#ifdef _WIN32
+        {"signal-pipe", ws_required_argument, NULL, LONGOPT_SIGNAL_PIPE},
+#endif
         {0, 0, 0, 0 }
     };
 
@@ -5254,10 +5134,31 @@ main(int argc, char *argv[])
         if (strcmp("-Z", argv[i]) == 0) {
             capture_child    = TRUE;
             machine_readable = TRUE;  /* request machine-readable output */
+            i++;
+            if (i >= argc) {
+                exit_main(1);
+            }
+
+            if (strcmp(argv[i], SIGNAL_PIPE_CTRL_ID_NONE) != 0) {
+                // get_positive_int calls cmdarg_err
+                if (!ws_strtoi(argv[i], NULL, &sync_pipe_fd) || sync_pipe_fd <= 0) {
+                    exit_main(1);
+                }
 #ifdef _WIN32
-            /* set output pipe to binary mode, to avoid ugly text conversions */
-            _setmode(2, O_BINARY);
+                /* On UN*X the fd is the same when we fork + exec.
+                 * On Windows the HANDLE value is the same for inherited
+                 * handles in the child process and the parent, although
+                 * not necessarily the fd value from _open_osfhandle.
+                 * https://learn.microsoft.com/en-us/windows/win32/procthread/inheritance
+                 * Also, "64-bit versions of Windows use 32-bit handles for
+                 * interoperability... only the lower 32 bits are significant,
+                 * so it is safe to truncate... or sign-extend the handle."
+                 * https://learn.microsoft.com/en-us/windows/win32/winprog64/interprocess-communication
+                 */
+                /* set output pipe to binary mode, avoid ugly text conversions */
+                sync_pipe_fd = _open_osfhandle( (intptr_t) sync_pipe_fd, _O_BINARY);
 #endif
+            }
         }
     }
 
@@ -5269,17 +5170,14 @@ main(int argc, char *argv[])
     /* Early logging command-line initialization. */
     ws_log_parse_args(&argc, argv, vcmdarg_err, 1);
 
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-    /* sync_pipe_start does not pass along log level information from
-     * the parent (XXX: it probably should.) Assume that if we're
-     * specially compiled with dumpcap debugging then we want it on.
+#if DEBUG_CHILD_DUMPCAP
+    /* Assume that if we're specially compiled with dumpcap debugging
+     * then we want maximum debugging.
      */
     if (capture_child) {
-        ws_log_set_level(LOG_LEVEL_DEBUG);
+        ws_log_set_level(LOG_LEVEL_NOISY);
     }
-#endif
 
-#ifdef DEBUG_CHILD_DUMPCAP
     if ((debug_log = ws_fopen("dumpcap_debug_log.tmp","w")) == NULL) {
         fprintf (stderr, "Unable to open debug log file .\n");
         exit (1);
@@ -5574,9 +5472,17 @@ main(int argc, char *argv[])
             break;
         case 'Z':
             capture_child = TRUE;
+            /*
+             * Handled above
+             */
+            break;
 #ifdef _WIN32
-            /* set output pipe to binary mode, to avoid ugly text conversions */
-            _setmode(2, O_BINARY);
+        case LONGOPT_SIGNAL_PIPE:
+            if (!capture_child) {
+                /* We have already checked for -Z at the very beginning. */
+                cmdarg_err("--signal-pipe may only be specified with -Z");
+                exit_main(1);
+            }
             /*
              * ws_optarg = the control ID, aka the PPID, currently used for the
              * signal pipe name.
@@ -5592,9 +5498,8 @@ main(int argc, char *argv[])
                     exit_main(1);
                 }
             }
-#endif
             break;
-
+#endif
         case 'q':        /* Quiet */
             quiet = TRUE;
             break;
@@ -5603,20 +5508,23 @@ main(int argc, char *argv[])
             break;
             /*** all non capture option specific ***/
         case 'D':        /* Print a list of capture devices and exit */
-            if (!list_interfaces) {
-                list_interfaces = TRUE;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
                 run_once_args++;
             }
+            list_interfaces = TRUE;
             break;
         case 'L':        /* Print list of link-layer types and exit */
-            if (!(caps_queries & CAPS_QUERY_LINK_TYPES)) {
-                caps_queries |= CAPS_QUERY_LINK_TYPES;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
                 run_once_args++;
             }
+            caps_queries |= CAPS_QUERY_LINK_TYPES;
             break;
         case LONGOPT_LIST_TSTAMP_TYPES:
-                caps_queries |= CAPS_QUERY_TIMESTAMP_TYPES;
-        break;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
+                run_once_args++;
+            }
+            caps_queries |= CAPS_QUERY_TIMESTAMP_TYPES;
+            break;
         case 'd':        /* Print BPF code for capture filter and exit */
             if (!print_bpf_code) {
                 print_bpf_code = TRUE;
@@ -5624,10 +5532,10 @@ main(int argc, char *argv[])
             }
             break;
         case 'S':        /* Print interface statistics once a second */
-            if (!print_statistics) {
-                print_statistics = TRUE;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
                 run_once_args++;
             }
+            print_statistics = TRUE;
             break;
         case 'k':        /* Set wireless channel */
             if (!set_chan) {
@@ -5773,12 +5681,68 @@ main(int argc, char *argv[])
             }
         }
 
-        if (machine_readable)      /* tab-separated values to stdout */
-            print_machine_readable_interfaces(if_list);
-        else
+        if (!machine_readable) {
+            status = 0;
             capture_opts_print_interfaces(if_list);
+        }
+
+        if (caps_queries) {
+            if_info_t *if_info;
+            interface_options *interface_opts;
+            cap_device_open_status open_status;
+            gchar *open_status_str;
+            for (GList *if_entry = if_list; if_entry != NULL; if_entry = g_list_next(if_entry)) {
+                if_info = (if_info_t *)if_entry->data;
+
+                interface_opts = interface_opts_from_if_info(&global_capture_opts, if_info);
+
+                if_info->caps = get_if_capabilities(interface_opts, &open_status, &open_status_str);
+
+                if (!machine_readable) {
+                    if (if_info->caps == NULL) {
+                        cmdarg_err("The capabilities of the capture device "
+                                    "\"%s\" could not be obtained (%s).\n%s",
+                                    interface_opts->name, open_status_str,
+                                    get_pcap_failure_secondary_error_message(open_status, open_status_str));
+                        g_free(open_status_str);
+                        /* Break after one error, as when printing selected
+                         * interface capabilities. (XXX: We could print all
+                         * the primary status strings, and only the unique
+                         * set of secondary messages / suggestions; printing
+                         * the same long secondary error is a lot.)
+                         */
+                        interface_opts_free(interface_opts);
+                        g_free(interface_opts);
+                        break;
+                    } else {
+                        status = capture_opts_print_if_capabilities(if_info->caps, interface_opts, caps_queries);
+                        if (status != 0) {
+                            interface_opts_free(interface_opts);
+                            g_free(interface_opts);
+                            break;
+                        }
+                    }
+                } else {
+                    if (if_info->caps == NULL) {
+                        if_info->caps = g_new0(if_capabilities_t, 1);
+                        if_info->caps->primary_msg = open_status_str;
+                        if_info->caps->secondary_msg = g_strdup(get_pcap_failure_secondary_error_message(open_status, open_status_str));
+                    }
+                    if_info->caps->status = open_status;
+                }
+
+                interface_opts_free(interface_opts);
+                g_free(interface_opts);
+            }
+        }
+
+        if (machine_readable) {
+            status = print_machine_readable_interfaces(if_list, caps_queries, print_statistics);
+        }
         free_interface_list(if_list);
-        exit_main(0);
+        if (!print_statistics) {
+            exit_main(status);
+        }
     }
 
     /*
@@ -5820,43 +5784,86 @@ main(int argc, char *argv[])
         gchar *open_status_str;
         guint  ii;
 
-        for (ii = 0; ii < global_capture_opts.ifaces->len; ii++) {
-            interface_options *interface_opts;
+        if (machine_readable) {
+            json_dumper dumper = {
+                .output_file = stdout,
+                .flags = JSON_DUMPER_FLAGS_NO_DEBUG,
+                // Don't abort on failure
+            };
+            json_dumper_begin_array(&dumper);
+            for (ii = 0; ii < global_capture_opts.ifaces->len; ii++) {
+                interface_options *interface_opts;
 
-            interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, ii);
+                interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, ii);
 
-            caps = get_if_capabilities(interface_opts, &open_status, &open_status_str);
-            if (caps == NULL) {
-                if (capture_child) {
-                    char *error_msg = ws_strdup_printf("The capabilities of the capture device "
-                                                "\"%s\" could not be obtained (%s)",
-                                                interface_opts->name, open_status_str);
-                    sync_pipe_write_errmsgs_to_parent(2, error_msg,
-                            get_pcap_failure_secondary_error_message(open_status, open_status_str));
-                    g_free(error_msg);
+                json_dumper_begin_object(&dumper);
+                json_dumper_set_member_name(&dumper, interface_opts->name);
+
+                json_dumper_begin_object(&dumper);
+
+                open_status = CAP_DEVICE_OPEN_NO_ERR;
+                caps = get_if_capabilities(interface_opts, &open_status, &open_status_str);
+                if (caps == NULL) {
+                    json_dumper_set_member_name(&dumper, "status");
+                    json_dumper_value_anyf(&dumper, "%i", open_status);
+                    json_dumper_set_member_name(&dumper, "primary_msg");
+                    json_dumper_value_string(&dumper, open_status_str);
+                    g_free(open_status_str);
+                } else {
+                    caps->status = open_status;
+                    print_machine_readable_if_capabilities(&dumper, caps, caps_queries);
+                    free_if_capabilities(caps);
                 }
-                else {
-                    cmdarg_err("The capabilities of the capture device "
-                                "\"%s\" could not be obtained (%s).\n%s",
-                                interface_opts->name, open_status_str,
-                                get_pcap_failure_secondary_error_message(open_status, open_status_str));
-                }
-                g_free(open_status_str);
-                exit_main(2);
+                json_dumper_end_object(&dumper);
+                json_dumper_end_object(&dumper);
             }
-
-            if (machine_readable) {     /* tab-separated values to stdout */
-                /* XXX: We need to change the format and adapt consumers */
-                print_machine_readable_if_capabilities(caps, caps_queries);
+            json_dumper_end_array(&dumper);
+            if (json_dumper_finish(&dumper)) {
                 status = 0;
-	    } else
+                if (capture_child) {
+                    /* Let our parent know we succeeded. */
+                    sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
+                }
+            } else {
+                status = 2;
+                if (capture_child) {
+                    sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, "Unexpected JSON error", "");
+                }
+            }
+        } else {
+            for (ii = 0; ii < global_capture_opts.ifaces->len; ii++) {
+                interface_options *interface_opts;
+
+                interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, ii);
+
+                caps = get_if_capabilities(interface_opts, &open_status, &open_status_str);
+                if (caps == NULL) {
+                    if (capture_child) {
+                        char *error_msg = ws_strdup_printf("The capabilities of the capture device "
+                                                    "\"%s\" could not be obtained (%s)",
+                                                    interface_opts->name, open_status_str);
+                        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, error_msg,
+                                get_pcap_failure_secondary_error_message(open_status, open_status_str));
+                        g_free(error_msg);
+                    }
+                    else {
+                        cmdarg_err("The capabilities of the capture device "
+                                    "\"%s\" could not be obtained (%s).\n%s",
+                                    interface_opts->name, open_status_str,
+                                    get_pcap_failure_secondary_error_message(open_status, open_status_str));
+                    }
+                    g_free(open_status_str);
+                    exit_main(2);
+                }
+
                 /* XXX: We might want to print also the interface name */
                 status = capture_opts_print_if_capabilities(caps,
                                                             interface_opts,
                                                             caps_queries);
-            free_if_capabilities(caps);
-            if (status != 0)
-                break;
+                free_if_capabilities(caps);
+                if (status != 0)
+                    break;
+            }
         }
         exit_main(status);
     }
@@ -5968,18 +5975,36 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
                                     const char *user_format, va_list user_ap,
                                     void *user_data _U_)
 {
-    /* DEBUG & INFO msgs (if we're debugging today)                 */
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-    if (level <= LOG_LEVEL_INFO && ws_log_msg_is_active(domain, level)) {
-#ifdef DEBUG_DUMPCAP
+    if (ws_log_msg_is_active(domain, level)) {
+        /* log messages go to stderr or    */
+        /* to parent especially formatted if dumpcap running as child. */
 #ifdef DEBUG_CHILD_DUMPCAP
         va_list user_ap_copy;
         va_copy(user_ap_copy, user_ap);
 #endif
         if (capture_child) {
-            gchar *msg = ws_strdup_vprintf(user_format, user_ap);
-            sync_pipe_write_errmsgs_to_parent(2, msg, "");
-            g_free(msg);
+            /* Format the log mesage as the numeric level, followed
+             * by a colon and then a string matching the standard log
+             * string. In the future perhaps we serialize file, line,
+             * and func (which can be NULL) instead.
+             */
+            GString *msg = g_string_new(NULL);
+            g_string_append_printf(msg, "%u:", level);
+            if (file != NULL) {
+                g_string_append_printf(msg, "%s", file);
+                if (line >= 0) {
+                    g_string_append_printf(msg, ":%ld", line);
+                }
+            }
+            g_string_append(msg, " --");
+            if (func != NULL) {
+                g_string_append_printf(msg, " %s():", func);
+            }
+            g_string_append_c(msg, ' ');
+            g_string_append_vprintf(msg, user_format, user_ap);
+
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_LOG_MSG, msg->str);
+            g_string_free(msg, TRUE);
         } else {
             ws_log_console_writer(domain, level, file, line, func, mft, user_format, user_ap);
         }
@@ -5987,21 +6012,6 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
         ws_log_file_writer(debug_log, domain, level, file, line, func, mft, user_format, user_ap_copy);
         va_end(user_ap_copy);
 #endif
-#elif defined(DEBUG_CHILD_DUMPCAP)
-        ws_log_file_writer(debug_log, domain, level, file, line, func, mft, user_format, user_ap);
-#endif
-        return;
-    }
-#endif
-
-    /* ERROR, CRITICAL, WARNING, MESSAGE messages goto stderr or    */
-    /*  to parent especially formatted if dumpcap running as child. */
-    if (capture_child) {
-        gchar *msg = ws_strdup_vprintf(user_format, user_ap);
-        sync_pipe_write_errmsgs_to_parent(2, msg, "");
-        g_free(msg);
-    } else if(ws_log_msg_is_active(domain, level)) {
-        ws_log_console_writer(domain, level, file, line, func, mft, user_format, user_ap);
     }
 }
 
@@ -6017,7 +6027,7 @@ report_packet_count(unsigned int packet_count)
 
     if (capture_child) {
         ws_debug("Packets: %u", packet_count);
-        sync_pipe_write_uint_msg(2, SP_PACKET_COUNT, packet_count);
+        sync_pipe_write_uint_msg(sync_pipe_fd, SP_PACKET_COUNT, packet_count);
     } else {
         count += packet_count;
         fprintf(stderr, "\rPackets: %u ", count);
@@ -6033,12 +6043,10 @@ report_new_capture_file(const char *filename)
         ws_debug("File: %s", filename);
         if (global_ld.pcapng_passthrough) {
             /* Save filename for sending SP_FILE to capture parent after SHB is passed-through */
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Delaying SP_FILE until first SHB");
-#endif
+            ws_debug("Delaying SP_FILE until first SHB");
             report_capture_filename = filename;
         } else {
-            sync_pipe_write_string_msg(2, SP_FILE, filename);
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_FILE, filename);
         }
     } else {
 #ifdef SIGINFO
@@ -6078,7 +6086,7 @@ report_cfilter_error(capture_options *capture_opts, guint i, const char *errmsg)
         if (capture_child) {
             snprintf(tmp, sizeof(tmp), "%u:%s", i, errmsg);
             ws_debug("Capture filter error: %s", errmsg);
-            sync_pipe_write_string_msg(2, SP_BAD_FILTER, tmp);
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_BAD_FILTER, tmp);
         } else {
             /*
              * clopts_step_invalid_capfilter in test/suite-clopts.sh MUST match
@@ -6101,7 +6109,7 @@ report_capture_error(const char *error_msg, const char *secondary_error_msg)
     if (capture_child) {
         ws_debug("Primary Error: %s", error_msg);
         ws_debug("Secondary Error: %s", secondary_error_msg);
-        sync_pipe_write_errmsgs_to_parent(2, error_msg, secondary_error_msg);
+        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, error_msg, secondary_error_msg);
     } else {
         cmdarg_err("%s", error_msg);
         if (secondary_error_msg[0] != '\0')
@@ -6119,7 +6127,7 @@ report_packet_drops(guint32 received, guint32 pcap_drops, guint32 drops, guint32
 
         ws_debug("Packets received/dropped on interface '%s': %u/%u (pcap:%u/dumpcap:%u/flushed:%u/ps_ifdrop:%u)",
             name, received, total_drops, pcap_drops, drops, flushed, ps_ifdrop);
-        sync_pipe_write_string_msg(2, SP_DROPS, tmp);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_DROPS, tmp);
         g_free(tmp);
     } else {
         fprintf(stderr,

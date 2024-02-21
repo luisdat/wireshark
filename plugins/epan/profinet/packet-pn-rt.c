@@ -30,59 +30,59 @@ void proto_reg_handoff_pn_rt(void);
 #define PROFINET_UDP_PORT 0x8892
 
 /* Define the pn-rt proto */
-static int proto_pn_rt     = -1;
+static int proto_pn_rt;
 static gboolean pnio_desegment = TRUE;
 
 static dissector_handle_t pn_rt_handle;
 
 /* Define many header fields for pn-rt */
-static int hf_pn_rt_frame_id = -1;
-static int hf_pn_rt_cycle_counter = -1;
-static int hf_pn_rt_transfer_status = -1;
-static int hf_pn_rt_data_status = -1;
-static int hf_pn_rt_data_status_ignore = -1;
-static int hf_pn_rt_frame_info_type = -1;
-static int hf_pn_rt_frame_info_function_meaning_input_conv = -1;
-static int hf_pn_rt_frame_info_function_meaning_output_conv = -1;
-static int hf_pn_rt_data_status_Reserved_2 = -1;
-static int hf_pn_rt_data_status_ok = -1;
-static int hf_pn_rt_data_status_operate = -1;
-static int hf_pn_rt_data_status_res3 = -1;
-static int hf_pn_rt_data_status_valid = -1;
-static int hf_pn_rt_data_status_redundancy = -1;
-static int hf_pn_rt_data_status_redundancy_output_cr = -1;
-static int hf_pn_rt_data_status_redundancy_input_cr_state_is_backup = -1;
-static int hf_pn_rt_data_status_redundancy_input_cr_state_is_primary = -1;
-static int hf_pn_rt_data_status_primary = -1;
+static int hf_pn_rt_frame_id;
+static int hf_pn_rt_cycle_counter;
+static int hf_pn_rt_transfer_status;
+static int hf_pn_rt_data_status;
+static int hf_pn_rt_data_status_ignore;
+static int hf_pn_rt_frame_info_type;
+static int hf_pn_rt_frame_info_function_meaning_input_conv;
+static int hf_pn_rt_frame_info_function_meaning_output_conv;
+static int hf_pn_rt_data_status_Reserved_2;
+static int hf_pn_rt_data_status_ok;
+static int hf_pn_rt_data_status_operate;
+static int hf_pn_rt_data_status_res3;
+static int hf_pn_rt_data_status_valid;
+static int hf_pn_rt_data_status_redundancy;
+static int hf_pn_rt_data_status_redundancy_output_cr;
+static int hf_pn_rt_data_status_redundancy_input_cr_state_is_backup;
+static int hf_pn_rt_data_status_redundancy_input_cr_state_is_primary;
+static int hf_pn_rt_data_status_primary;
 
-static int hf_pn_rt_sf_crc16 = -1;
-static int hf_pn_rt_sf_crc16_status = -1;
-static int hf_pn_rt_sf = -1;
-static int hf_pn_rt_sf_position = -1;
-/* static int hf_pn_rt_sf_position_control = -1; */
-static int hf_pn_rt_sf_data_length = -1;
-static int hf_pn_rt_sf_cycle_counter = -1;
+static int hf_pn_rt_sf_crc16;
+static int hf_pn_rt_sf_crc16_status;
+static int hf_pn_rt_sf;
+static int hf_pn_rt_sf_position;
+/* static int hf_pn_rt_sf_position_control; */
+static int hf_pn_rt_sf_data_length;
+static int hf_pn_rt_sf_cycle_counter;
 
-static int hf_pn_rt_frag = -1;
-static int hf_pn_rt_frag_data_length = -1;
-static int hf_pn_rt_frag_status = -1;
-static int hf_pn_rt_frag_status_more_follows = -1;
-static int hf_pn_rt_frag_status_error = -1;
-static int hf_pn_rt_frag_status_fragment_number = -1;
-static int hf_pn_rt_frag_data = -1;
+static int hf_pn_rt_frag;
+static int hf_pn_rt_frag_data_length;
+static int hf_pn_rt_frag_status;
+static int hf_pn_rt_frag_status_more_follows;
+static int hf_pn_rt_frag_status_error;
+static int hf_pn_rt_frag_status_fragment_number;
+static int hf_pn_rt_frag_data;
 
 
 /*
  * Define the trees for pn-rt
  * We need one tree for pn-rt itself and one for the pn-rt data status subtree
  */
-static int ett_pn_rt = -1;
-static int ett_pn_rt_data_status = -1;
-static int ett_pn_rt_sf = -1;
-static int ett_pn_rt_frag = -1;
-static int ett_pn_rt_frag_status = -1;
+static int ett_pn_rt;
+static int ett_pn_rt_data_status;
+static int ett_pn_rt_sf;
+static int ett_pn_rt_frag;
+static int ett_pn_rt_frag_status;
 
-static expert_field ei_pn_rt_sf_crc16 = EI_INIT;
+static expert_field ei_pn_rt_sf_crc16;
 
 /*
  * Here are the global variables associated with
@@ -177,12 +177,12 @@ dissect_DataStatus(tvbuff_t *tvb, int offset, proto_tree *tree, packet_info *pin
         apdu_status_switch = (apduStatusSwitch*)conversation_get_proto_data(conversation, proto_pn_io_apdu_status);
         if (apdu_status_switch != NULL && apdu_status_switch->isRedundancyActive) {
             /* IOC -> IOD: OutputCR */
-            if (addresses_equal(&(pinfo->src), conversation_key_addr1(conversation->key_ptr)) && addresses_equal(&(pinfo->dst), conversation_key_addr2(conversation->key_ptr))) {
+            if (addresses_equal(&(pinfo->dst), conversation_key_addr1(conversation->key_ptr)) && addresses_equal(&(pinfo->src), conversation_key_addr2(conversation->key_ptr))) {
                 outputFlag = TRUE;
                 inputFlag = FALSE;
             }
             /* IOD -> IOC: InputCR */
-            if (addresses_equal(&(pinfo->dst), conversation_key_addr1(conversation->key_ptr)) && addresses_equal(&(pinfo->src), conversation_key_addr2(conversation->key_ptr))) {
+            if (addresses_equal(&(pinfo->src), conversation_key_addr1(conversation->key_ptr)) && addresses_equal(&(pinfo->dst), conversation_key_addr2(conversation->key_ptr))) {
                 inputFlag = TRUE;
                 outputFlag = FALSE;
             }
@@ -280,7 +280,7 @@ IsDFP_Frame(tvbuff_t *tvb, packet_info *pinfo, guint16 u16FrameID)
     gint          tvb_len          = 0;
     unsigned char virtualFramebuffer[16];
 
-    /* try to build a temporaray buffer for generating this CRC */
+    /* try to build a temporary buffer for generating this CRC */
     if (!pinfo->src.data || !pinfo->dst.data ||
             pinfo->dst.type != AT_ETHER || pinfo->src.type != AT_ETHER) {
         /* if we don't have src/dst mac addresses then we assume it's not
@@ -447,11 +447,11 @@ dissect_CSF_SDU_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 
 }
 
-/* for reasemble processing we need some inits.. */
+/* for reassemble processing we need some inits.. */
 /* Register PNIO defrag table init routine.      */
 
 static reassembly_table pdu_reassembly_table;
-static GHashTable *reasembled_frag_table = NULL;
+static GHashTable *reassembled_frag_table = NULL;
 
 static dissector_table_t ethertype_subdissector_table;
 
@@ -464,13 +464,13 @@ pnio_defragment_init(void)
     guint32 i;
     for (i=0; i < 16; i++)    /* init  the reasemble help array */
         start_frag_OR_ID[i] = 0;
-    reasembled_frag_table = g_hash_table_new(NULL, NULL);
+    reassembled_frag_table = g_hash_table_new(NULL, NULL);
 }
 
 static void
 pnio_defragment_cleanup(void)
 {
-    g_hash_table_destroy(reasembled_frag_table);
+    g_hash_table_destroy(reassembled_frag_table);
 }
 
 /* possibly dissect a FRAG_PDU related PN-RT packet */
@@ -547,12 +547,12 @@ dissect_FRAG_PDU_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void 
 
             if (pdu_frag && !bMoreFollows) /* PDU is complete! and last fragment */
             {   /* store this fragment as the completed fragment in hash table */
-                g_hash_table_insert(reasembled_frag_table, GUINT_TO_POINTER(pinfo->num), pdu_frag);
+                g_hash_table_insert(reassembled_frag_table, GUINT_TO_POINTER(pinfo->num), pdu_frag);
                 start_frag_OR_ID[u32FragID] = 0; /* reset the starting frame counter */
             }
             if (!bMoreFollows) /* last fragment */
             {
-                pdu_frag = (fragment_head *)g_hash_table_lookup(reasembled_frag_table, GUINT_TO_POINTER(pinfo->num));
+                pdu_frag = (fragment_head *)g_hash_table_lookup(reassembled_frag_table, GUINT_TO_POINTER(pinfo->num));
                 if (pdu_frag)    /* found a matching fragment; dissect it */
                 {
                     guint16   type;
@@ -1166,7 +1166,7 @@ proto_register_pn_rt(void)
                                    &pnio_desegment);
 
     /* register heuristics anchor for payload dissectors */
-    heur_subdissector_list = register_heur_dissector_list("pn_rt", proto_pn_rt);
+    heur_subdissector_list = register_heur_dissector_list_with_description("pn_rt", "PROFINET RT payload", proto_pn_rt);
 
     init_pn (proto_pn_rt);
     register_init_routine(pnio_defragment_init);

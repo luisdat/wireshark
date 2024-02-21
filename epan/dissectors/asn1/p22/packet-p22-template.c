@@ -14,6 +14,7 @@
 #include <epan/packet.h>
 #include <epan/oids.h>
 #include <epan/asn1.h>
+#include <epan/proto_data.h>
 
 #include "packet-ber.h"
 #include "packet-acse.h"
@@ -32,7 +33,7 @@
 #define PFNAME "p22"
 
 /* Initialize the protocol and registered fields */
-static int proto_p22 = -1;
+static int proto_p22;
 
 static const value_string charsetreg_vals [] = {
   { 1, "C0: (ISO/IEC 6429)"},
@@ -68,7 +69,7 @@ static const value_string charsetreg_vals [] = {
 #include "packet-p22-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_p22 = -1;
+static gint ett_p22;
 #include "packet-p22-ett.c"
 
 #include "packet-p22-fn.c"

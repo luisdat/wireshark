@@ -353,90 +353,90 @@ static gboolean doip_hide_address_names = TRUE;
  */
 
 /* DoIP header */
-static int hf_doip_version = -1;
-static int hf_doip_inv_version = -1;
-static int hf_doip_type = -1;
-static int hf_doip_length = -1;
+static int hf_doip_version;
+static int hf_doip_inv_version;
+static int hf_doip_type;
+static int hf_doip_length;
 
 
 /* Generic NACK */
-static int hf_generic_nack_code = -1;
+static int hf_generic_nack_code;
 
 
 /* Common */
-static int hf_reserved_iso = -1;
-static int hf_reserved_oem = -1;
+static int hf_reserved_iso;
+static int hf_reserved_oem;
 
 
 /* Routing activation request */
-static int hf_activation_type_v1 = -1;
-static int hf_activation_type_v2 = -1;
+static int hf_activation_type_v1;
+static int hf_activation_type_v2;
 
 
 /* Routing activation response */
-static int hf_tester_logical_address = -1;
-static int hf_tester_logical_address_name = -1;
-static int hf_response_code = -1;
+static int hf_tester_logical_address;
+static int hf_tester_logical_address_name;
+static int hf_response_code;
 
 
 /* Vehicle announcement message */
-static int hf_logical_address = -1;
-static int hf_logical_address_name = -1;
-static int hf_gid = -1;
-static int hf_futher_action = -1;
-static int hf_sync_status = -1;
+static int hf_logical_address;
+static int hf_logical_address_name;
+static int hf_gid;
+static int hf_further_action;
+static int hf_sync_status;
 
 
 /* Diagnostic power mode information response */
-static int hf_power_mode = -1;
+static int hf_power_mode;
 
 
 /* Entity status response */
-static int hf_node_type = -1;
-static int hf_max_sockets = -1;
-static int hf_current_sockets = -1;
-static int hf_max_data_size = -1;
+static int hf_node_type;
+static int hf_max_sockets;
+static int hf_current_sockets;
+static int hf_max_data_size;
 
 
 /* Common */
-static int hf_vin = -1;
-static int hf_eid = -1;
-static int hf_source_address = -1;
-static int hf_source_address_name = -1;
-static int hf_target_address = -1;
-static int hf_target_address_name = -1;
-static int hf_previous = -1;
+static int hf_vin;
+static int hf_eid;
+static int hf_source_address;
+static int hf_source_address_name;
+static int hf_target_address;
+static int hf_target_address_name;
+static int hf_previous;
 
 
 /* Diagnostic message */
-static int hf_data = -1;
+static int hf_data;
 
 
 /* Diagnostic message ACK */
-static int hf_ack_code = -1;
+static int hf_ack_code;
 
 
 /* Diagnostic message NACK */
-static int hf_nack_code = -1;
+static int hf_nack_code;
 
 
 
 /*
  * Trees
  */
-static gint ett_doip = -1;
-static gint ett_header = -1;
-static gint ett_address = -1;
+static gint ett_doip;
+static gint ett_header;
+static gint ett_address;
 
 
 /* Misc */
 static dissector_handle_t doip_handle;
 static dissector_handle_t uds_handle;
-static gint proto_doip    = -1;
+static gint proto_doip;
 
 
 /* expert info items */
-static expert_field ef_doip_illegal_length_field = EI_INIT;
+static expert_field ei_doip_illegal_length_field;
 
 
 /*
@@ -641,7 +641,7 @@ add_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *doip_tree)
     proto_tree_add_item_ret_uint(subtree, hf_doip_length, tvb, DOIP_LENGTH_OFFSET, DOIP_LENGTH_LEN, ENC_BIG_ENDIAN, &len);
 
     if (tvb_captured_length(tvb) < len) {
-        proto_tree_add_expert(doip_tree, pinfo, &ef_doip_illegal_length_field, tvb, DOIP_LENGTH_OFFSET, DOIP_LENGTH_LEN);
+        proto_tree_add_expert(doip_tree, pinfo, &ei_doip_illegal_length_field, tvb, DOIP_LENGTH_OFFSET, DOIP_LENGTH_LEN);
         col_append_str(pinfo->cinfo, COL_INFO, " [DoIP Length Field: Illegal Value]");
     }
 }
@@ -712,7 +712,7 @@ add_vehicle_announcement_message_fields(proto_tree *doip_tree, tvbuff_t *tvb)
     doip_prototree_add_with_resolv(doip_tree, hf_logical_address, hf_logical_address_name, tvb, DOIP_VEHICLE_ANNOUNCEMENT_ADDRESS_OFFSET, DOIP_VEHICLE_ANNOUNCEMENT_ADDRESS_LEN, ENC_BIG_ENDIAN, NULL);
     proto_tree_add_item(doip_tree, hf_eid, tvb, DOIP_VEHICLE_ANNOUNCEMENT_EID_OFFSET, DOIP_COMMON_EID_LEN, ENC_NA);
     proto_tree_add_item(doip_tree, hf_gid, tvb, DOIP_VEHICLE_ANNOUNCEMENT_GID_OFFSET, DOIP_VEHICLE_ANNOUNCEMENT_GID_LEN, ENC_NA);
-    proto_tree_add_item(doip_tree, hf_futher_action, tvb, DOIP_VEHICLE_ANNOUNCEMENT_ACTION_OFFSET, DOIP_VEHICLE_ANNOUNCEMENT_ACTION_LEN, ENC_BIG_ENDIAN);
+    proto_tree_add_item(doip_tree, hf_further_action, tvb, DOIP_VEHICLE_ANNOUNCEMENT_ACTION_OFFSET, DOIP_VEHICLE_ANNOUNCEMENT_ACTION_LEN, ENC_BIG_ENDIAN);
 
     if ( tvb_bytes_exist(tvb, DOIP_VEHICLE_ANNOUNCEMENT_SYNC_OFFSET, DOIP_VEHICLE_ANNOUNCEMENT_SYNC_LEN) ) {
         /* Not part of version 1 and optional in version 2. */
@@ -1031,9 +1031,9 @@ proto_register_doip(void)
             }
         },
         {
-            &hf_futher_action,
+            &hf_further_action,
             {
-                "Further action required", "doip.futher_action",
+                "Further action required", "doip.further_action",
                 FT_UINT8, BASE_HEX,
                 VALS(action_codes), 0x00,
                 NULL, HFILL
@@ -1317,7 +1317,7 @@ proto_register_doip(void)
         &doip_hide_address_names);
 
     static ei_register_info ei[] = {
-     { &ef_doip_illegal_length_field, { "doip.illegal_length_field",
+     { &ei_doip_illegal_length_field, { "doip.illegal_length_field",
        PI_MALFORMED, PI_ERROR, "DoIP illegal length field", EXPFILL } },
     };
 

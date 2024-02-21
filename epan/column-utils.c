@@ -23,7 +23,6 @@
 #include "wsutil/pint.h"
 #include "addr_resolv.h"
 #include "address_types.h"
-#include "ipv6.h"
 #include "osi-utils.h"
 #include "value_string.h"
 #include "column-info.h"
@@ -34,6 +33,7 @@
 #include <epan/epan.h>
 #include <epan/dfilter/dfilter.h>
 
+#include <wsutil/inet_cidr.h>
 #include <wsutil/utf8_entities.h>
 #include <wsutil/ws_assert.h>
 #include <wsutil/unicode-utils.h>
@@ -52,8 +52,8 @@ static char *col_decimal_point;
 /* Used to indicate updated column information, e.g. a new request/response. */
 static gboolean col_data_changed_;
 
-static int proto_cols = -1;
-static gint ett_cols = -1;
+static int proto_cols;
+static gint ett_cols;
 
 /* Allocate all the data structures for constructing column data, given
    the number of columns. */
@@ -78,15 +78,24 @@ col_setup(column_info *cinfo, const gint num_cols)
     cinfo->col_last[i] = -1;
   }
   cinfo->prime_regex = g_regex_new(COL_CUSTOM_PRIME_REGEX,
-    (GRegexCompileFlags) (G_REGEX_ANCHORED | G_REGEX_RAW),
-    G_REGEX_MATCH_ANCHORED, NULL);
+    (GRegexCompileFlags) (G_REGEX_RAW),
+    0, NULL);
+}
+
+static void
+col_custom_free_cb(void *data)
+{
+  col_custom_t *col_custom = (col_custom_t*)data;
+  dfilter_free(col_custom->dfilter);
+  g_free(col_custom->dftext);
+  g_free(col_custom);
 }
 
 static void
 col_custom_fields_ids_free(GSList** custom_fields_id)
 {
   if (*custom_fields_id != NULL) {
-    g_slist_free_full(*custom_fields_id, g_free);
+    g_slist_free_full(*custom_fields_id, col_custom_free_cb);
   }
   *custom_fields_id = NULL;
 }
@@ -2041,10 +2050,10 @@ col_register_protocol(void)
   /* This gets called by proto_init() before column_register_fields()
    * gets called by the preference modules actually getting registered.
    */
-  if (proto_cols == -1) {
+  if (proto_cols <= 0) {
     proto_cols = proto_get_id_by_filter_name("_ws.col");
   }
-  if (proto_cols == -1) {
+  if (proto_cols <= 0) {
     proto_cols = proto_register_protocol("Wireshark Columns", "Columns", "_ws.col");
   }
   static gint *ett[] = {

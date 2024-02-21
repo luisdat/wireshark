@@ -37,44 +37,57 @@ void proto_register_mdb(void);
 
 static dissector_handle_t mdb_handle;
 
-static int proto_mdb = -1;
+static int proto_mdb;
 
-static int ett_mdb = -1;
-static int ett_mdb_hdr = -1;
-static int ett_mdb_cl = -1;
-static int ett_mdb_cgw = -1;
+static int ett_mdb;
+static int ett_mdb_hdr;
+static int ett_mdb_cl;
+static int ett_mdb_cgw;
 
-static int hf_mdb_hdr_ver = -1;
-static int hf_mdb_event = -1;
-static int hf_mdb_addr = -1;
-static int hf_mdb_cmd = -1;
-static int hf_mdb_cl_setup_sub = -1;
-static int hf_mdb_cl_feat_lvl = -1;
-static int hf_mdb_cl_cols = -1;
-static int hf_mdb_cl_rows = -1;
-static int hf_mdb_cl_disp_info = -1;
-static int hf_mdb_cl_max_price = -1;
-static int hf_mdb_cl_min_price = -1;
-static int hf_mdb_cl_vend_sub = -1;
-static int hf_mdb_cl_item_price = -1;
-static int hf_mdb_cl_item_num = -1;
-static int hf_mdb_cl_reader_sub = -1;
-static int hf_mdb_cl_resp = -1;
-static int hf_mdb_cl_scale = -1;
-static int hf_mdb_cl_dec_pl = -1;
-static int hf_mdb_cl_max_rsp_time = -1;
-static int hf_mdb_cl_vend_amt = -1;
-static int hf_mdb_cl_expns_sub = -1;
-static int hf_mdb_cl_manuf_code = -1;
-static int hf_mdb_cl_ser_num = -1;
-static int hf_mdb_cl_mod_num = -1;
-static int hf_mdb_cl_opt_feat = -1;
-static int hf_mdb_cgw_resp = -1;
-static int hf_mdb_ack = -1;
-static int hf_mdb_data = -1;
-static int hf_mdb_chk = -1;
+static int hf_mdb_hdr_ver;
+static int hf_mdb_event;
+static int hf_mdb_addr;
+static int hf_mdb_cmd;
+static int hf_mdb_cl_setup_sub;
+static int hf_mdb_cl_feat_lvl;
+static int hf_mdb_cl_cols;
+static int hf_mdb_cl_rows;
+static int hf_mdb_cl_disp_info;
+static int hf_mdb_cl_max_price;
+static int hf_mdb_cl_min_price;
+static int hf_mdb_cl_vend_sub;
+static int hf_mdb_cl_item_price;
+static int hf_mdb_cl_item_num;
+static int hf_mdb_cl_reader_sub;
+static int hf_mdb_cl_resp;
+static int hf_mdb_cl_scale;
+static int hf_mdb_cl_dec_pl;
+static int hf_mdb_cl_max_rsp_time;
+static int hf_mdb_cl_vend_amt;
+static int hf_mdb_cl_expns_sub;
+static int hf_mdb_cl_manuf_code;
+static int hf_mdb_cl_ser_num;
+static int hf_mdb_cl_mod_num;
+static int hf_mdb_cl_opt_feat;
+static int hf_mdb_cgw_feat_lvl;
+static int hf_mdb_cgw_scale;
+static int hf_mdb_cgw_dec_pl;
+static int hf_mdb_cgw_resp;
+static int hf_mdb_cgw_max_rsp_time;
+static int hf_mdb_cgw_report_sub;
+static int hf_mdb_cgw_dts_evt_code;
+static int hf_mdb_cgw_duration;
+static int hf_mdb_cgw_activity;
+static int hf_mdb_cgw_expns_sub;
+static int hf_mdb_cgw_opt_feat;
+static int hf_mdb_cgw_manuf_code;
+static int hf_mdb_cgw_ser_num;
+static int hf_mdb_cgw_mod_num;
+static int hf_mdb_ack;
+static int hf_mdb_data;
+static int hf_mdb_chk;
 
-static expert_field ei_mdb_short_packet = EI_INIT;
+static expert_field ei_mdb_short_packet;
 
 #define MDB_EVT_DATA_MST_PER 0xFF
 #define MDB_EVT_DATA_PER_MST 0xFE
@@ -187,12 +200,44 @@ static const value_string mdb_cl_resp[] = {
  * There's only one Communications Gateway, the address bits are always the
  * same. (This is different from the Cashless peripherals, see above.)
  */
+#define MDB_CGW_ADDR_CMD_SETUP  0x19
+#define MDB_CGW_ADDR_CMD_REPORT 0x1B
+#define MDB_CGW_ADDR_CMD_EXPNS  0x1F
+
 static const value_string mdb_cgw_addr_cmd[] = {
     { 0x18, "Reset" },
-    { 0x19, "Setup" },
+    { MDB_CGW_ADDR_CMD_SETUP, "Setup" },
     { 0x1A, "Poll" },
-    { 0x1B, "Report" },
-    { 0x1F, "Expansion" },
+    { MDB_CGW_ADDR_CMD_REPORT, "Report" },
+    { MDB_CGW_ADDR_CMD_EXPNS, "Expansion" },
+    { 0, NULL }
+};
+
+#define MDB_CGW_REPORT_DTS_EVT 0x02
+
+static const value_string mdb_cgw_report_sub_cmd[] = {
+    { 0x01, "Transaction" },
+    { MDB_CGW_REPORT_DTS_EVT, "DTS Event" },
+    { 0, NULL }
+};
+
+#define MDB_CGW_EXPNS_FEAT_ENA 0x01
+
+static const value_string mdb_cgw_expns_sub_cmd[] = {
+    { 0x00, "Identification" },
+    { MDB_CGW_EXPNS_FEAT_ENA, "Feature enable" },
+    { 0x02, "Time/Date Request" },
+    { 0, NULL }
+};
+
+#define MDB_CGW_RESP_CFG    0x01
+#define MDB_CGW_RESP_PER_ID 0x06
+
+static const value_string mdb_cgw_resp[] = {
+    { 0x00, "Just Reset" },
+    { MDB_CGW_RESP_CFG, "Comms Gateway Config" },
+    { 0x05, "DTS Event Acknowledge" },
+    { MDB_CGW_RESP_PER_ID, "Peripheral ID" },
     { 0, NULL }
 };
 
@@ -450,26 +495,133 @@ static void dissect_mdb_per_mst_cl( tvbuff_t *tvb, gint offset,
     }
 }
 
-static void dissect_mdb_mst_per_cgw( tvbuff_t *tvb _U_, gint offset _U_, gint len _U_,
-        packet_info *pinfo, proto_tree *tree _U_, proto_item *cmd_it,
+static void dissect_mdb_cgw_report(tvbuff_t *tvb, gint offset,
+        packet_info *pinfo, proto_tree *tree)
+{
+    guint32 sub_cmd;
+    const gchar *s;
+
+    proto_tree_add_item_ret_uint(tree, hf_mdb_cgw_report_sub,
+                    tvb, offset, 1, ENC_BIG_ENDIAN, &sub_cmd);
+    s = try_val_to_str(sub_cmd, mdb_cgw_report_sub_cmd);
+    if (s) {
+        col_set_str(pinfo->cinfo, COL_INFO, s);
+    }
+    offset++;
+
+    switch (sub_cmd) {
+        case MDB_CGW_REPORT_DTS_EVT:
+            proto_tree_add_item(tree, hf_mdb_cgw_dts_evt_code, tvb, offset, 10,
+                    ENC_ASCII);
+            offset += 10;
+            /* XXX - dissect Date */
+            offset += 4;
+            /* XXX - dissect Time */
+            offset += 2;
+            proto_tree_add_item(tree, hf_mdb_cgw_duration, tvb, offset, 4,
+                    ENC_BIG_ENDIAN);
+            offset += 4;
+            proto_tree_add_item(tree, hf_mdb_cgw_activity, tvb, offset, 1,
+                    ENC_BIG_ENDIAN);
+            break;
+    }
+}
+
+static void dissect_mdb_cgw_expns(tvbuff_t *tvb, gint offset,
+        packet_info *pinfo, proto_tree *tree)
+{
+    guint32 sub_cmd;
+    const gchar *s;
+
+    proto_tree_add_item_ret_uint(tree, hf_mdb_cgw_expns_sub,
+                    tvb, offset, 1, ENC_BIG_ENDIAN, &sub_cmd);
+    s = try_val_to_str(sub_cmd, mdb_cgw_expns_sub_cmd);
+    if (s) {
+        col_set_str(pinfo->cinfo, COL_INFO, s);
+    }
+    offset++;
+
+    switch (sub_cmd) {
+        case MDB_CGW_EXPNS_FEAT_ENA:
+            proto_tree_add_item(tree, hf_mdb_cgw_opt_feat, tvb, offset, 4,
+                    ENC_BIG_ENDIAN);
+            break;
+    }
+}
+
+static void dissect_mdb_mst_per_cgw( tvbuff_t *tvb, gint offset, gint len,
+        packet_info *pinfo, proto_tree *tree, proto_item *cmd_it,
         guint8 addr_cmd_byte)
 {
+    proto_tree *cgw_tree;
     const gchar *s;
 
     s = val_to_str_const(addr_cmd_byte, mdb_cgw_addr_cmd, "Unknown");
     proto_item_append_text(cmd_it, " (%s)", s);
     col_set_str(pinfo->cinfo, COL_INFO, s);
+
+    cgw_tree = proto_tree_add_subtree(tree, tvb, offset, len, ett_mdb_cgw,
+            NULL, "Communications Gateway");
+
+    switch (addr_cmd_byte) {
+        case MDB_CGW_ADDR_CMD_SETUP:
+            proto_tree_add_item(cgw_tree, hf_mdb_cgw_feat_lvl, tvb, offset, 1,
+                    ENC_BIG_ENDIAN);
+            offset++;
+            proto_tree_add_item(cgw_tree, hf_mdb_cgw_scale, tvb, offset, 1,
+                    ENC_BIG_ENDIAN);
+            offset++;
+            proto_tree_add_item(cgw_tree, hf_mdb_cgw_dec_pl, tvb, offset, 1,
+                    ENC_BIG_ENDIAN);
+            break;
+        case MDB_CGW_ADDR_CMD_REPORT:
+            dissect_mdb_cgw_report(tvb, offset, pinfo, cgw_tree);
+            break;
+        case MDB_CGW_ADDR_CMD_EXPNS:
+            dissect_mdb_cgw_expns(tvb, offset, pinfo, cgw_tree);
+            break;
+    }
 }
 
 static void dissect_mdb_per_mst_cgw( tvbuff_t *tvb, gint offset,
         gint len, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree *cgw_tree;
+    guint32 cgw_resp;
 
     cgw_tree = proto_tree_add_subtree(tree, tvb, offset, len, ett_mdb_cgw,
             NULL, "Communications Gateway");
 
-    proto_tree_add_item(cgw_tree, hf_mdb_cgw_resp, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(cgw_tree, hf_mdb_cgw_resp, tvb, offset, 1,
+            ENC_BIG_ENDIAN, &cgw_resp);
+    col_set_str(pinfo->cinfo,
+            COL_INFO, val_to_str_const(cgw_resp, mdb_cgw_resp, "Unknown"));
+    offset++;
+
+    switch (cgw_resp) {
+        case MDB_CGW_RESP_CFG:
+            proto_tree_add_item(cgw_tree, hf_mdb_cgw_feat_lvl, tvb, offset, 1,
+                    ENC_BIG_ENDIAN);
+            offset++;
+            proto_tree_add_item(cgw_tree, hf_mdb_cgw_max_rsp_time, tvb, offset,
+                    2, ENC_TIME_SECS | ENC_BIG_ENDIAN);
+            break;
+        case MDB_CGW_RESP_PER_ID:
+            proto_tree_add_item(tree, hf_mdb_cgw_manuf_code, tvb, offset, 3,
+                    ENC_ASCII);
+            offset += 3;
+            proto_tree_add_item(tree, hf_mdb_cgw_ser_num, tvb, offset, 12,
+                    ENC_ASCII);
+            offset += 12;
+            proto_tree_add_item(tree, hf_mdb_cgw_mod_num, tvb, offset, 12,
+                    ENC_ASCII);
+            offset += 12;
+            /* XXX - dissect the Software Version bytes */
+            offset += 2;
+            proto_tree_add_item(tree, hf_mdb_cgw_opt_feat, tvb, offset, 4,
+                    ENC_BIG_ENDIAN);
+            break;
+    }
 }
 
 static void dissect_mdb_mst_per(tvbuff_t *tvb, gint offset, packet_info *pinfo,
@@ -758,9 +910,61 @@ void proto_register_mdb(void)
             { "Optional Feature Bits", "mdb.cashless.opt_feature_bits",
                 FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }
         },
+        { &hf_mdb_cgw_feat_lvl,
+            { "Feature level", "mdb.comms_gw.feature_level",
+                FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_scale,
+            { "Scale factor", "mdb.comms_gw.scale_factor",
+                FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_dec_pl,
+            { "Decimal places", "mdb.comms_gw.decimal_places",
+                FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }
+        },
         { &hf_mdb_cgw_resp,
             { "Response", "mdb.comms_gw.resp",
-                FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }
+                FT_UINT8, BASE_HEX, VALS(mdb_cgw_resp), 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_max_rsp_time,
+            { "Application maximum response time", "mdb.comms_gw.max_rsp_time",
+                FT_RELATIVE_TIME, BASE_NONE, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_report_sub,
+            { "Sub-command", "mdb.comms_gw.report_sub_cmd", FT_UINT8,
+                BASE_HEX, VALS(mdb_cgw_report_sub_cmd), 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_dts_evt_code,
+            { "DTS Event Code", "mdb.comms_gw.dts_event_code",
+                FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_duration,
+            { "Duration", "mdb.comms_gw.duration",
+                FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_activity,
+            { "Activity", "mdb.comms_gw.activity",
+                FT_BOOLEAN, 8, TFS(&tfs_active_inactive), 0x1, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_expns_sub,
+            { "Sub-command", "mdb.comms_gw.expansion_sub_cmd", FT_UINT8,
+                BASE_HEX, VALS(mdb_cgw_expns_sub_cmd), 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_opt_feat,
+            { "Optional Feature Bits", "mdb.comms_gw.opt_feature_bits",
+                FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_manuf_code,
+            { "Manufacturer Code", "mdb.comms_gw.manuf_code",
+                FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_ser_num,
+            { "Serial Number", "mdb.comms_gw.serial_number",
+                FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_mod_num,
+            { "Model Number", "mdb.comms_gw.model_number",
+                FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }
         },
         { &hf_mdb_ack,
             { "Ack byte", "mdb.ack",

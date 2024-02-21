@@ -219,6 +219,21 @@ test_for_fifo(const char *path)
         return 0;
 }
 
+bool
+test_for_regular_file(const char *path)
+{
+    ws_statb64 statb;
+
+    if (!path) {
+        return false;
+    }
+
+    if (ws_stat64(path, &statb) != 0)
+        return false;
+
+    return S_ISREG(statb.st_mode);
+}
+
 #ifdef ENABLE_APPLICATION_BUNDLE
 /*
  * Directory of the application bundle in which we're contained,
@@ -1100,7 +1115,7 @@ get_doc_dir(void)
      */
     else if (appbundle_dir != NULL) {
         doc_dir = ws_strdup_printf("%s/Contents/Resources/%s",
-                                        appbundle_dir, DOC_DIR);
+                                        appbundle_dir, DATA_DIR);
     }
 #endif
     else if (running_in_build_directory_flag && progfile_dir != NULL) {
@@ -1139,9 +1154,7 @@ get_doc_dir(void)
  *    configure script.
  */
 static char *plugin_dir = NULL;
-static char *plugin_dir_with_version = NULL;
 static char *plugin_pers_dir = NULL;
-static char *plugin_pers_dir_with_version = NULL;
 static char *extcap_pers_dir = NULL;
 
 static void
@@ -1252,16 +1265,6 @@ get_plugins_dir(void)
     return plugin_dir;
 }
 
-const char *
-get_plugins_dir_with_version(void)
-{
-    if (!plugin_dir)
-        init_plugin_dir();
-    if (plugin_dir && !plugin_dir_with_version)
-        plugin_dir_with_version = g_build_filename(plugin_dir, PLUGIN_PATH_ID, (char *)NULL);
-    return plugin_dir_with_version;
-}
-
 /* Get the personal plugin dir */
 const char *
 get_plugins_pers_dir(void)
@@ -1269,16 +1272,6 @@ get_plugins_pers_dir(void)
     if (!plugin_pers_dir)
         init_plugin_pers_dir();
     return plugin_pers_dir;
-}
-
-const char *
-get_plugins_pers_dir_with_version(void)
-{
-    if (!plugin_pers_dir)
-        init_plugin_pers_dir();
-    if (plugin_pers_dir && !plugin_pers_dir_with_version)
-        plugin_pers_dir_with_version = g_build_filename(plugin_pers_dir, PLUGIN_PATH_ID, (char *)NULL);
-    return plugin_pers_dir_with_version;
 }
 
 /*
@@ -2040,7 +2033,7 @@ copy_persconffile_profile(const char *toname, const char *fromname, bool from_gl
             from_file = ws_strdup_printf ("%s%s%s", from_dir, G_DIR_SEPARATOR_S, filename);
             to_file = ws_strdup_printf ("%s%s%s", to_dir, G_DIR_SEPARATOR_S, filename);
 
-            if (file_exists(from_file) && !copy_file_binary_mode(from_file, to_file)) {
+            if (test_for_regular_file(from_file) && !copy_file_binary_mode(from_file, to_file)) {
                 *pf_filename_return = g_strdup(filename);
                 g_free (from_file);
                 g_free (to_file);
@@ -2068,18 +2061,20 @@ copy_persconffile_profile(const char *toname, const char *fromname, bool from_gl
  * Get the (default) directory in which personal data is stored.
  *
  * On Win32, this is the "My Documents" folder in the personal profile.
- * On UNIX this is simply the current directory.
+ * On UNIX this is simply the current directory, unless that's "/",
+ * which it will be, for example, when Wireshark is run from the
+ * Finder in macOS, in which case we use the user's home directory.
  */
 /* XXX - should this and the get_home_dir() be merged? */
 extern const char *
 get_persdatafile_dir(void)
 {
-#ifdef _WIN32
-    TCHAR tszPath[MAX_PATH];
-
     /* Return the cached value, if available */
     if (persdatafile_dir != NULL)
         return persdatafile_dir;
+
+#ifdef _WIN32
+    TCHAR tszPath[MAX_PATH];
 
     /*
      * Hint: SHGetFolderPath is not available on MSVC 6 - without
@@ -2092,7 +2087,25 @@ get_persdatafile_dir(void)
         return "";
     }
 #else
-    return "";
+    /*
+     * Get the current directory.
+     */
+    persdatafile_dir = g_get_current_dir();
+    if (persdatafile_dir == NULL) {
+      /* XXX - can this fail? */
+      /*
+       * g_get_home_dir() returns a const gchar *; g_strdup() it
+       * so that it's something that can be freed.
+       */
+      persdatafile_dir = g_strdup(g_get_home_dir());
+    } else if (strcmp(persdatafile_dir, "/") == 0) {
+        g_free(persdatafile_dir);
+        /*
+         * See above.
+         */
+        persdatafile_dir = g_strdup(g_get_home_dir());
+    }
+    return persdatafile_dir;
 #endif
 }
 
@@ -2675,12 +2688,8 @@ free_progdirs(void)
 #if defined(HAVE_PLUGINS) || defined(HAVE_LUA)
     g_free(plugin_dir);
     plugin_dir = NULL;
-    g_free(plugin_dir_with_version);
-    plugin_dir_with_version = NULL;
     g_free(plugin_pers_dir);
     plugin_pers_dir = NULL;
-    g_free(plugin_pers_dir_with_version);
-    plugin_pers_dir_with_version = NULL;
 #endif
     g_free(extcap_dir);
     extcap_dir = NULL;

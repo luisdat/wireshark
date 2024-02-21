@@ -29,31 +29,31 @@
 void proto_register_krb4(void);
 void proto_reg_handoff_krb4(void);
 
-static int proto_krb4 = -1;
-static int hf_krb4_version = -1;
-static int hf_krb4_auth_msg_type = -1;
-static int hf_krb4_m_type = -1;
-static int hf_krb4_byte_order = -1;
-static int hf_krb4_name = -1;
-static int hf_krb4_instance = -1;
-static int hf_krb4_realm = -1;
-static int hf_krb4_time_sec = -1;
-static int hf_krb4_exp_date = -1;
-static int hf_krb4_req_date = -1;
-static int hf_krb4_lifetime = -1;
-static int hf_krb4_s_name = -1;
-static int hf_krb4_s_instance = -1;
-static int hf_krb4_kvno = -1;
-static int hf_krb4_length = -1;
-static int hf_krb4_ticket_length = -1;
-static int hf_krb4_request_length = -1;
-static int hf_krb4_ticket_blob = -1;
-static int hf_krb4_request_blob = -1;
-static int hf_krb4_encrypted_blob = -1;
-static int hf_krb4_unknown_transarc_blob = -1;
+static int proto_krb4;
+static int hf_krb4_version;
+static int hf_krb4_auth_msg_type;
+static int hf_krb4_m_type;
+static int hf_krb4_byte_order;
+static int hf_krb4_name;
+static int hf_krb4_instance;
+static int hf_krb4_realm;
+static int hf_krb4_time_sec;
+static int hf_krb4_exp_date;
+static int hf_krb4_req_date;
+static int hf_krb4_lifetime;
+static int hf_krb4_s_name;
+static int hf_krb4_s_instance;
+static int hf_krb4_kvno;
+static int hf_krb4_length;
+static int hf_krb4_ticket_length;
+static int hf_krb4_request_length;
+static int hf_krb4_ticket_blob;
+static int hf_krb4_request_blob;
+static int hf_krb4_encrypted_blob;
+static int hf_krb4_unknown_transarc_blob;
 
-static gint ett_krb4 = -1;
-static gint ett_krb4_auth_msg_type = -1;
+static gint ett_krb4;
+static gint ett_krb4_auth_msg_type;
 
 static dissector_handle_t krb4_handle;
 
@@ -419,8 +419,7 @@ proto_register_krb4(void)
 		&ett_krb4_auth_msg_type,
 	};
 
-	proto_krb4 = proto_register_protocol("Kerberos v4",
-					     "KRB4", "krb4");
+	proto_krb4 = proto_register_protocol("Kerberos v4", "KRB4", "krb4");
 	krb4_handle = register_dissector("krb4", dissect_krb4, proto_krb4);
 	proto_register_field_array(proto_krb4, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));

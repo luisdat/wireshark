@@ -48,89 +48,91 @@ void proto_reg_handoff_pdcp_nr(void);
 
 
 /* Initialize the protocol and registered fields. */
-int proto_pdcp_nr = -1;
+int proto_pdcp_nr;
 
 extern int proto_rlc_nr;
 
 /* Configuration (info known outside of PDU) */
-static int hf_pdcp_nr_configuration = -1;
-static int hf_pdcp_nr_direction = -1;
-static int hf_pdcp_nr_ueid = -1;
-static int hf_pdcp_nr_bearer_type = -1;
-static int hf_pdcp_nr_bearer_id = -1;
-static int hf_pdcp_nr_plane = -1;
-static int hf_pdcp_nr_seqnum_length = -1;
-static int hf_pdcp_nr_maci_present = -1;
-static int hf_pdcp_nr_sdap = -1;
-static int hf_pdcp_nr_ciphering_disabled = -1;
+static int hf_pdcp_nr_configuration;
+static int hf_pdcp_nr_direction;
+static int hf_pdcp_nr_ueid;
+static int hf_pdcp_nr_bearer_type;
+static int hf_pdcp_nr_bearer_id;
+static int hf_pdcp_nr_plane;
+static int hf_pdcp_nr_seqnum_length;
+static int hf_pdcp_nr_maci_present;
+static int hf_pdcp_nr_sdap;
+static int hf_pdcp_nr_ciphering_disabled;
 
-static int hf_pdcp_nr_rohc_compression = -1;
-static int hf_pdcp_nr_rohc_mode = -1;
-static int hf_pdcp_nr_rohc_rnd = -1;
-static int hf_pdcp_nr_rohc_udp_checksum_present = -1;
-static int hf_pdcp_nr_rohc_profile = -1;
-static int hf_pdcp_nr_cid_inclusion_info = -1;
-static int hf_pdcp_nr_large_cid_present = -1;
+static int hf_pdcp_nr_rohc_compression;
+static int hf_pdcp_nr_rohc_mode;
+static int hf_pdcp_nr_rohc_rnd;
+static int hf_pdcp_nr_rohc_udp_checksum_present;
+static int hf_pdcp_nr_rohc_profile;
+static int hf_pdcp_nr_cid_inclusion_info;
+static int hf_pdcp_nr_large_cid_present;
 
 /* PDCP header fields */
-static int hf_pdcp_nr_control_plane_reserved = -1;
-static int hf_pdcp_nr_reserved3 = -1;
-static int hf_pdcp_nr_seq_num_12 = -1;
-static int hf_pdcp_nr_reserved5 = -1;
-static int hf_pdcp_nr_seq_num_18 = -1;
-static int hf_pdcp_nr_signalling_data = -1;
-static int hf_pdcp_nr_mac = -1;
-static int hf_pdcp_nr_data_control = -1;
-static int hf_pdcp_nr_user_plane_data = -1;
-static int hf_pdcp_nr_control_pdu_type = -1;
-static int hf_pdcp_nr_fmc = -1;
-static int hf_pdcp_nr_reserved4 = -1;
-static int hf_pdcp_nr_bitmap = -1;
-static int hf_pdcp_nr_bitmap_byte = -1;
+static int hf_pdcp_nr_control_plane_reserved;
+static int hf_pdcp_nr_reserved3;
+static int hf_pdcp_nr_seq_num_12;
+static int hf_pdcp_nr_reserved5;
+static int hf_pdcp_nr_seq_num_18;
+static int hf_pdcp_nr_signalling_data;
+static int hf_pdcp_nr_mac;
+static int hf_pdcp_nr_data_control;
+static int hf_pdcp_nr_user_plane_data;
+static int hf_pdcp_nr_control_pdu_type;
+static int hf_pdcp_nr_fmc;
+static int hf_pdcp_nr_reserved4;
+static int hf_pdcp_nr_bitmap;
+static int hf_pdcp_nr_bitmap_byte;
 
 /* Sequence Analysis */
-static int hf_pdcp_nr_sequence_analysis = -1;
-static int hf_pdcp_nr_sequence_analysis_ok = -1;
-static int hf_pdcp_nr_sequence_analysis_previous_frame = -1;
-static int hf_pdcp_nr_sequence_analysis_next_frame = -1;
-static int hf_pdcp_nr_sequence_analysis_expected_sn = -1;
-static int hf_pdcp_nr_sequence_analysis_repeated = -1;
-static int hf_pdcp_nr_sequence_analysis_skipped = -1;
+static int hf_pdcp_nr_sequence_analysis;
+static int hf_pdcp_nr_sequence_analysis_ok;
+static int hf_pdcp_nr_sequence_analysis_previous_frame;
+static int hf_pdcp_nr_sequence_analysis_next_frame;
+static int hf_pdcp_nr_sequence_analysis_expected_sn;
+static int hf_pdcp_nr_sequence_analysis_repeated;
+static int hf_pdcp_nr_sequence_analysis_skipped;
 
 /* Security Settings */
-static int hf_pdcp_nr_security = -1;
-static int hf_pdcp_nr_security_setup_frame = -1;
-static int hf_pdcp_nr_security_integrity_algorithm = -1;
-static int hf_pdcp_nr_security_ciphering_algorithm = -1;
+static int hf_pdcp_nr_security;
+static int hf_pdcp_nr_security_setup_frame;
+static int hf_pdcp_nr_security_integrity_algorithm;
+static int hf_pdcp_nr_security_ciphering_algorithm;
 
-static int hf_pdcp_nr_security_bearer = -1;
-static int hf_pdcp_nr_security_direction = -1;
-static int hf_pdcp_nr_security_count = -1;
-static int hf_pdcp_nr_security_cipher_key = -1;
-static int hf_pdcp_nr_security_integrity_key = -1;
-static int hf_pdcp_nr_security_cipher_key_setup_frame = -1;
-static int hf_pdcp_nr_security_integrity_key_setup_frame = -1;
-static int hf_pdcp_nr_security_deciphered_data = -1;
+static int hf_pdcp_nr_security_bearer;
+static int hf_pdcp_nr_security_direction;
+static int hf_pdcp_nr_security_count;
+static int hf_pdcp_nr_security_cipher_key;
+static int hf_pdcp_nr_security_integrity_key;
+static int hf_pdcp_nr_security_cipher_key_setup_frame;
+static int hf_pdcp_nr_security_integrity_key_setup_frame;
+static int hf_pdcp_nr_security_deciphered_data;
+
+static int hf_pdcp_nr_security_integrity_data;
 
 
 /* Protocol subtree. */
-static int ett_pdcp = -1;
-static int ett_pdcp_configuration = -1;
-static int ett_pdcp_packet = -1;
-static int ett_pdcp_nr_sequence_analysis = -1;
-static int ett_pdcp_report_bitmap = -1;
-static int ett_pdcp_security = -1;
+static int ett_pdcp;
+static int ett_pdcp_configuration;
+static int ett_pdcp_packet;
+static int ett_pdcp_nr_sequence_analysis;
+static int ett_pdcp_report_bitmap;
+static int ett_pdcp_security;
 
-static expert_field ei_pdcp_nr_sequence_analysis_wrong_sequence_number_ul = EI_INIT;
-static expert_field ei_pdcp_nr_sequence_analysis_wrong_sequence_number_dl = EI_INIT;
-static expert_field ei_pdcp_nr_reserved_bits_not_zero = EI_INIT;
-static expert_field ei_pdcp_nr_sequence_analysis_sn_repeated_ul = EI_INIT;
-static expert_field ei_pdcp_nr_sequence_analysis_sn_repeated_dl = EI_INIT;
-static expert_field ei_pdcp_nr_sequence_analysis_sn_missing_ul = EI_INIT;
-static expert_field ei_pdcp_nr_sequence_analysis_sn_missing_dl = EI_INIT;
-static expert_field ei_pdcp_nr_digest_wrong = EI_INIT;
-static expert_field ei_pdcp_nr_unknown_udp_framing_tag = EI_INIT;
-static expert_field ei_pdcp_nr_missing_udp_framing_tag = EI_INIT;
+static expert_field ei_pdcp_nr_sequence_analysis_wrong_sequence_number_ul;
+static expert_field ei_pdcp_nr_sequence_analysis_wrong_sequence_number_dl;
+static expert_field ei_pdcp_nr_reserved_bits_not_zero;
+static expert_field ei_pdcp_nr_sequence_analysis_sn_repeated_ul;
+static expert_field ei_pdcp_nr_sequence_analysis_sn_repeated_dl;
+static expert_field ei_pdcp_nr_sequence_analysis_sn_missing_ul;
+static expert_field ei_pdcp_nr_sequence_analysis_sn_missing_dl;
+static expert_field ei_pdcp_nr_digest_wrong;
+static expert_field ei_pdcp_nr_unknown_udp_framing_tag;
+static expert_field ei_pdcp_nr_missing_udp_framing_tag;
 
 /*-------------------------------------
  * UAT for UE Keys
@@ -521,13 +523,13 @@ static const value_string ciphering_algorithm_vals[] = {
 
 
 /* SDAP header fields and tree */
-static int proto_sdap = -1;
-static int hf_sdap_rdi = -1;
-static int hf_sdap_rqi = -1;
-static int hf_sdap_qfi = -1;
-static int hf_sdap_data_control = -1;
-static int hf_sdap_reserved = -1;
-static gint ett_sdap = -1;
+static int proto_sdap;
+static int hf_sdap_rdi;
+static int hf_sdap_rqi;
+static int hf_sdap_qfi;
+static int hf_sdap_data_control;
+static int hf_sdap_reserved;
+static gint ett_sdap;
 
 static const true_false_string sdap_rdi = {
     "To store QoS flow to DRB mapping rule",
@@ -1710,7 +1712,7 @@ static tvbuff_t *decipher_payload(tvbuff_t *tvb, packet_info *pinfo, int *offset
 }
 
 /* Try to calculate digest to compare with that found in frame. */
-static guint32 calculate_digest(pdu_security_settings_t *pdu_security_settings, tvbuff_t *header_tvb _U_,
+static guint32 calculate_digest(pdu_security_settings_t *pdu_security_settings, proto_tree *security_tree, tvbuff_t *header_tvb _U_,
                                 tvbuff_t *tvb _U_, gint offset _U_, guint sdap_length _U_, gboolean *calculated)
 {
     *calculated = FALSE;
@@ -1748,6 +1750,12 @@ static guint32 calculate_digest(pdu_security_settings_t *pdu_security_settings, 
                 tvb_memcpy(header_tvb, message_data, 0, header_length);
                 /* Followed by the decrypted message (but not the digest bytes) */
                 tvb_memcpy(tvb, message_data+header_length, offset+sdap_length, message_length-sdap_length);
+
+                /* Show message data in security tree */
+                proto_item *integ_data_ti = proto_tree_add_bytes_with_length(security_tree, hf_pdcp_nr_security_integrity_data,
+                                                                             tvb, 0, 0, message_data,
+                                                                             message_length+1);
+                proto_item_set_generated(integ_data_ti);
 
                 mac = (u8*)snow3g_f9(pdu_security_settings->integrityKey,
                                      pdu_security_settings->count,
@@ -1804,6 +1812,12 @@ static guint32 calculate_digest(pdu_security_settings_t *pdu_security_settings, 
                 /* Followed by the decrypted message (but not the digest bytes or any SDAP bytes) */
                 tvb_memcpy(tvb, message_data+8+header_length, offset+sdap_length, message_length-sdap_length);
 
+                /* Show message data in security tree */
+                proto_item *integ_data_ti = proto_tree_add_bytes_with_length(security_tree, hf_pdcp_nr_security_integrity_data,
+                                                                             tvb, 0, 0, message_data,
+                                                                             8+header_length+message_length-sdap_length);
+                proto_item_set_generated(integ_data_ti);
+
                 /* Pass in the message */
                 gcrypt_err = gcry_mac_write(mac_hd, message_data, 8+header_length+message_length-sdap_length);
                 if (gcrypt_err != 0) {
@@ -1837,6 +1851,12 @@ static guint32 calculate_digest(pdu_security_settings_t *pdu_security_settings, 
                 tvb_memcpy(header_tvb, message_data, 0, header_length);
                 /* Followed by the decrypted message (but not the digest bytes) */
                 tvb_memcpy(tvb, message_data+header_length, offset+sdap_length, message_length-sdap_length);
+
+                /* Show message data in security tree */
+                proto_item *integ_data_ti = proto_tree_add_bytes_with_length(security_tree, hf_pdcp_nr_security_integrity_data,
+                                                                             tvb, 0, 0, message_data,
+                                                                             message_length+header_length);
+                proto_item_set_generated(integ_data_ti);
 
                 zuc_f9(pdu_security_settings->integrityKey,
                        pdu_security_settings->count,
@@ -2456,7 +2476,7 @@ static int dissect_pdcp_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
     /* Try to calculate digest so we can check it */
     if (global_pdcp_check_integrity && p_pdcp_info->maci_present) {
-        calculated_digest = calculate_digest(&pdu_security_settings,
+        calculated_digest = calculate_digest(&pdu_security_settings, security_tree,
                                              tvb_new_subset_length(tvb, 0, header_length),
                                              payload_tvb,
                                              offset, sdap_length, &digest_was_calculated);
@@ -2625,7 +2645,7 @@ static int dissect_pdcp_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
                 expert_add_info_format(pinfo, mac_ti, &ei_pdcp_nr_digest_wrong,
                                        "MAC-I Digest wrong - calculated %08x but found %08x",
                                        calculated_digest, mac);
-                proto_item_append_text(mac_ti, " (but calculated %08x !)", calculated_digest);
+                proto_item_append_text(mac_ti, " (but calculated 0x%08x !)", calculated_digest);
             }
             else {
                 proto_item_append_text(mac_ti, " [Matches calculated result]");
@@ -2696,13 +2716,13 @@ void proto_register_pdcp_nr(void)
         },
         { &hf_pdcp_nr_sdap,
             { "SDAP header",
-              "pdcp-nr.sdap", FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x0,
+              "pdcp-nr.sdap", FT_BOOLEAN, BASE_NONE, TFS(&tfs_present_not_present), 0x0,
               "Indicates whether SDAP appears after PDCP headers", HFILL
             }
         },
         { &hf_pdcp_nr_ciphering_disabled,
             { "Ciphering disabled",
-              "pdcp-nr.ciphering-disabled", FT_BOOLEAN, 8, NULL, 0x0,
+              "pdcp-nr.ciphering-disabled", FT_BOOLEAN, BASE_NONE, NULL, 0x0,
               NULL, HFILL
             }
         },
@@ -2949,6 +2969,12 @@ void proto_register_pdcp_nr(void)
         { &hf_pdcp_nr_security_deciphered_data,
             { "Deciphered Data",
               "pdcp-nr.deciphered-data", FT_BYTES, BASE_NONE, NULL, 0x0,
+              NULL, HFILL
+            }
+        },
+        { &hf_pdcp_nr_security_integrity_data,
+            { "Integrity Data",
+              "pdcp-nr.integrity-data", FT_BYTES, BASE_NONE, NULL, 0x0,
               NULL, HFILL
             }
         },

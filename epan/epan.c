@@ -62,10 +62,6 @@
 #include "wscbor.h"
 #include <dtd.h>
 
-#ifdef HAVE_PLUGINS
-#include <wsutil/plugins.h>
-#endif
-
 #ifdef HAVE_LUA
 #include <lua.h>
 #include <wslua/wslua.h>
@@ -117,10 +113,8 @@ static wmem_allocator_t *pinfo_pool_cache = NULL;
 gboolean wireshark_abort_on_dissector_bug = FALSE;
 gboolean wireshark_abort_on_too_many_items = FALSE;
 
-#ifdef HAVE_PLUGINS
 /* Used for bookkeeping, includes all libwireshark plugin types (dissector, tap, epan). */
 static plugins_t *libwireshark_plugins = NULL;
-#endif
 
 /* "epan_plugins" are a specific type of libwireshark plugin (the name isn't the best for clarity). */
 static GSList *epan_plugins = NULL;
@@ -204,21 +198,32 @@ epan_plugin_cleanup(gpointer data, gpointer user_data _U_)
 	((epan_plugin *)data)->cleanup();
 }
 
-#ifdef HAVE_PLUGINS
 void epan_register_plugin(const epan_plugin *plug)
 {
+	if (epan_plugins_supported() != 0) {
+		ws_debug("epan_register_plugin: plugins not enabled or supported by the platform");
+		return;
+	}
 	epan_plugins = g_slist_prepend(epan_plugins, (epan_plugin *)plug);
 	if (plug->register_all_protocols)
 		epan_plugin_register_all_procotols = g_slist_prepend(epan_plugin_register_all_procotols, plug->register_all_protocols);
 	if (plug->register_all_handoffs)
 		epan_plugin_register_all_handoffs = g_slist_prepend(epan_plugin_register_all_handoffs, plug->register_all_handoffs);
 }
-#else /* HAVE_PLUGINS */
-void epan_register_plugin(const epan_plugin *plug _U_)
+
+void epan_plugins_get_descriptions(plugin_description_callback callback, void *user_data)
 {
-	ws_warning("epan_register_plugin: built without support for binary plugins");
+	GSList *l;
+
+	for (l = epan_plugins; l != NULL; l = l->next) {
+		((epan_plugin *)l->data)->get_descriptions(callback, user_data);
+	}
 }
-#endif /* HAVE_PLUGINS */
+
+void epan_plugins_dump_all(void)
+{
+	epan_plugins_get_descriptions(plugins_print_description, NULL);
+}
 
 int epan_plugins_supported(void)
 {
@@ -227,13 +232,6 @@ int epan_plugins_supported(void)
 #else
 	return -1;
 #endif
-}
-
-static void epan_plugin_register_all_tap_listeners(gpointer data, gpointer user_data _U_)
-{
-	epan_plugin *plug = (epan_plugin *)data;
-	if (plug->register_all_tap_listeners)
-		plug->register_all_tap_listeners();
 }
 
 gboolean
@@ -276,12 +274,19 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 	except_init();
 
 	if (load_plugins) {
-#ifdef HAVE_PLUGINS
 		libwireshark_plugins = plugins_init(WS_PLUGIN_EPAN);
-#endif
 	}
 
 	/* initialize libgcrypt (beware, it won't be thread-safe) */
+#if GCRYPT_VERSION_NUMBER >= 0x010a00
+	/* Ensure FIPS mode is disabled; it makes it impossible to decrypt
+	 * non-NIST approved algorithms. We're decrypting, not promising
+	 * security. This overrides any file or environment variables that
+	 * would normally turn on FIPS mode, and has to be done prior to
+	 * gcry_check_version().
+	 */
+	gcry_control (GCRYCTL_NO_FIPS_MODE);
+#endif
 	gcry_check_version(NULL);
 #if defined(_WIN32)
 	gcry_set_log_handler (quiet_gcrypt_logger, NULL);
@@ -290,6 +295,11 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 	gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 #ifdef HAVE_LIBGNUTLS
 	gnutls_global_init();
+#if GNUTLS_VERSION_NUMBER >= 0x030602
+	if (gnutls_fips140_mode_enabled()) {
+		gnutls_fips140_set_mode(GNUTLS_FIPS140_LAX, 0);
+	}
+#endif
 #endif
 #ifdef HAVE_LIBXML2
 	xmlInitParser();
@@ -314,7 +324,6 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 		conversation_filters_init();
 		g_slist_foreach(epan_plugins, epan_plugin_init, NULL);
 		proto_init(epan_plugin_register_all_procotols, epan_plugin_register_all_handoffs, cb, client_data);
-		g_slist_foreach(epan_plugins, epan_plugin_register_all_tap_listeners, NULL);
 		packet_cache_proto_handles();
 		dfilter_init();
 		wscbor_init();
@@ -430,17 +439,15 @@ epan_cleanup(void)
 	except_deinit();
 	addr_resolv_cleanup();
 
-#ifdef HAVE_PLUGINS
-	plugins_cleanup(libwireshark_plugins);
-	libwireshark_plugins = NULL;
-#endif
-
 	if (pinfo_pool_cache != NULL) {
 		wmem_destroy_allocator(pinfo_pool_cache);
 		pinfo_pool_cache = NULL;
 	}
 
 	wmem_cleanup_scopes();
+
+	plugins_cleanup(libwireshark_plugins);
+	libwireshark_plugins = NULL;
 }
 
 struct epan_session {
@@ -473,19 +480,19 @@ epan_get_modified_block(const epan_t *session, const frame_data *fd)
 }
 
 const char *
-epan_get_interface_name(const epan_t *session, guint32 interface_id)
+epan_get_interface_name(const epan_t *session, guint32 interface_id, unsigned section_number)
 {
 	if (session->funcs.get_interface_name)
-		return session->funcs.get_interface_name(session->prov, interface_id);
+		return session->funcs.get_interface_name(session->prov, interface_id, section_number);
 
 	return NULL;
 }
 
 const char *
-epan_get_interface_description(const epan_t *session, guint32 interface_id)
+epan_get_interface_description(const epan_t *session, guint32 interface_id, unsigned section_number)
 {
 	if (session->funcs.get_interface_description)
-		return session->funcs.get_interface_description(session->prov, interface_id);
+		return session->funcs.get_interface_description(session->prov, interface_id, section_number);
 
 	return NULL;
 }
@@ -498,8 +505,10 @@ epan_get_frame_ts(const epan_t *session, guint32 frame_num)
 	if (session && session->funcs.get_frame_ts)
 		abs_ts = session->funcs.get_frame_ts(session->prov, frame_num);
 
-	if (!abs_ts)
-		ws_warning("!!! couldn't get frame ts for %u !!!\n", frame_num);
+	if (!abs_ts) {
+		/* This can happen if frame_num doesn't have a ts */
+		ws_debug("!!! couldn't get frame ts for %u !!!\n", frame_num);
+	}
 
 	return abs_ts;
 }
@@ -906,6 +915,12 @@ epan_gather_runtime_info(feature_list l)
 	nghttp2_info *nghttp2_ptr = nghttp2_version(0);
 	with_feature(l, "nghttp2 %s",  nghttp2_ptr->version_str);
 #endif /* NGHTTP2_VERSION_AGE */
+
+	/* nghttp3 */
+#if NGHTTP3_VERSION_AGE >= 1
+	const nghttp3_info *nghttp3_ptr = nghttp3_version(0);
+	with_feature(l, "nghttp3 %s", nghttp3_ptr->version_str);
+#endif /* NGHTTP3_VERSION_AGE */
 
 	/* brotli */
 #ifdef HAVE_BROTLI

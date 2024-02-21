@@ -35,10 +35,10 @@ static dissector_handle_t openflow_v5_handle;
 static dissector_handle_t openflow_v6_handle;
 
 /* Initialize the protocol and registered fields */
-static int proto_openflow = -1;
-static int hf_openflow_version = -1;
+static int proto_openflow;
+static int hf_openflow_version;
 
-static expert_field ei_openflow_version = EI_INIT;
+static expert_field ei_openflow_version;
 
 static gboolean openflow_desegment = TRUE;
 
@@ -157,8 +157,7 @@ proto_register_openflow(void)
     expert_module_t* expert_openflow;
 
     /* Register the protocol name and description */
-    proto_openflow = proto_register_protocol("OpenFlow",
-            "OpenFlow", "openflow");
+    proto_openflow = proto_register_protocol("OpenFlow", "OpenFlow", "openflow");
 
     openflow_handle = register_dissector("openflow", dissect_openflow, proto_openflow);
 

@@ -68,42 +68,15 @@ class Context(object):
         self.offset = Offset()
 
 def get_number(value):
-    """Get Natural/Real/Rational number as an object."""
-    class Integer(object):
-        def __init__(self, val):
-            self.val = val
-        def __str__(self):
-            return '{}'.format(self.val)
-        def __float__(self):
-            return float(self.val)
-
-    class Ratio(object):
-        def __init__(self, a, b):
-            self.a = a
-            self.b = b
-        def __str__(self):
-            return '{}/{}'.format(self.a, self.b)
-        def __float__(self):
-            return float(self.a) / float(self.b)
-
-    class Real(object):
-        def __init__(self, val):
-            self.val = val
-        def __str__(self):
-            return '{0:f}'.format(self.val).rstrip('0')
-        def __float__(self):
-            return float(self.val)
-
     t = value['type']
-    val = value['value']
-
     if t == 'Integer':
-        return Integer(int(val))
-    if t == 'Ratio':
-        x, y = val['numerator'], val['denominator']
-        return Ratio(x, y)
-    if t == 'Real':
-        return Real(float(val))
+        return float(value['value'])
+    if t == 'Div':
+        a = get_number(value['numerator'])
+        b = get_number(value['denominator'])
+        return a/b
+    if t == 'Pow':
+        return float(pow(value['base'], value['exponent']))
     raise Exception('unexpected value type {}'.format(t))
 
 def replace_string(s, mapping):
@@ -132,19 +105,10 @@ def safe_string(s):
 
 def get_scaling(content):
     """Get scaling factor from the content."""
-    k = content.get('scaling')
-    if k is None:
+    lsb = content.get('lsb')
+    if lsb is None:
         return None
-    k = get_number(k)
-
-    fract = content['fractionalBits']
-
-    if fract > 0:
-        scale = format(float(k) / (pow(2, fract)), '.29f')
-        scale = scale.rstrip('0')
-    else:
-        scale = format(float(k))
-    return scale
+    return '{}'.format(get_number(lsb))
 
 def get_fieldpart(content):
     """Get FIELD_PART* from the content."""
@@ -397,7 +361,7 @@ def part1(ctx, get_ref, catalogue):
                 return '&I{}_{}'.format(ref, item['name'])
 
             if t == 'Element':
-                tell('static int hf_{} = -1;'.format(ref))
+                tell('static int hf_{};'.format(ref))
                 n = variation['size']
                 content = get_content(variation['rule'])
                 scaling = get_scaling(content)
@@ -425,7 +389,7 @@ def part1(ctx, get_ref, catalogue):
                 description = get_description(item)
                 tell_pr('        {} &hf_{}, {} "{}", "asterix.{}", FT_NONE, BASE_NONE, NULL, 0x00, NULL, HFILL {} {},'.format('{', ref, '{', description, ref, '}', '}'))
 
-                tell('static int hf_{} = -1;'.format(ref))
+                tell('static int hf_{};'.format(ref))
                 for i in variation['items']:
                     handle_item(path, i)
 
@@ -450,7 +414,7 @@ def part1(ctx, get_ref, catalogue):
 
                 description = get_description(item)
                 tell_pr('        {} &hf_{}, {} "{}", "asterix.{}", FT_NONE, BASE_NONE, NULL, 0x00, NULL, HFILL {} {},'.format('{', ref, '{', description, ref, '}', '}'))
-                tell('static int hf_{} = -1;'.format(ref))
+                tell('static int hf_{};'.format(ref))
 
                 items = []
                 for i in variation['items']:
@@ -509,14 +473,14 @@ def part1(ctx, get_ref, catalogue):
 
             elif t == 'Explicit':
                 ctx.reset_offset()
-                tell('static int hf_{} = -1;'.format(ref))
+                tell('static int hf_{};'.format(ref))
                 description = get_description(item)
                 tell_pr('        {} &hf_{}, {} "{}", "asterix.{}", FT_NONE, BASE_NONE, NULL, 0x00, NULL, HFILL {} {},'.format('{', ref, '{', description, ref, '}', '}'))
                 tell('static const AsterixField I{} = {} EXP, 0, 0, 1, &hf_{}, NULL, {} NULL {} {};'.format(ref, '{', ref, '{', '}', '}'))
 
             elif t == 'Compound':
                 ctx.reset_offset()
-                tell('static int hf_{} = -1;'.format(ref))
+                tell('static int hf_{};'.format(ref))
                 description = get_description(item)
                 tell_pr('        {} &hf_{}, {} "{}", "asterix.{}", FT_NONE, BASE_NONE, NULL, 0x00, NULL, HFILL {} {},'.format('{', ref, '{', description, ref, '}', '}'))
                 comp = '{'
@@ -826,4 +790,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

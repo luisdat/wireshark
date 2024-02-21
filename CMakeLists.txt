@@ -59,6 +59,22 @@ set(PROJECT_MAJOR_VERSION 4)
 set(PROJECT_MINOR_VERSION 3)
 set(PROJECT_PATCH_VERSION 0)
 set(PROJECT_BUILD_VERSION 0)
+# ABI version for plugins. It must be incremented by one for
+# every odd minor release number.
+# start at 1 (arbitrary).
+# release 4.3.X (unstable) = ABI version 1 (start)
+# release 4.4.X (stable)   = ABI version 1 (stable release, freeze ABI 1)
+# release 4.5.X (unstable) = ABI version 2 (increment for new unstable release, ABI break)
+# release 4.6.X (stable)   = ABI version 2 (stable release, freeze ABI 2)
+# release 4.7.X (unstable) = ABI version 3 (increment for new unstable release, ABI break)
+# release 5.0.X (stable)   = ABI version 3 (stable release, freeze ABI 3)
+# etc.
+set(PROJECT_ABI_VERSION_EPAN    1)
+set(PROJECT_ABI_VERSION_WIRETAP 1)
+# Codecs API/ABI is much more narrow and stable than the other two so this
+# may not need to be incremented every X.Y release.
+set(PROJECT_ABI_VERSION_CODEC   1)
+
 set(PROJECT_VERSION_EXTENSION "")
 
 if(DEFINED ENV{WIRESHARK_VERSION_EXTRA})
@@ -69,8 +85,8 @@ set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT
 
 set(LOG_PROJECT_NAME ${_log_project_name})
 set(LOG_PROJECT_MAJOR_VERSION 0)
-set(LOG_PROJECT_MINOR_VERSION 8)
-set(LOG_PROJECT_PATCH_VERSION 3)
+set(LOG_PROJECT_MINOR_VERSION 9)
+set(LOG_PROJECT_PATCH_VERSION 0)
 set(LOG_PROJECT_VERSION "${LOG_PROJECT_MAJOR_VERSION}.${LOG_PROJECT_MINOR_VERSION}.${LOG_PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
 
 include( CMakeOptions.txt )
@@ -232,8 +248,8 @@ if(WIN32)
 	file(TO_CMAKE_PATH ${EXTRA_INSTALLER_DIR} _file_download_dir)
 
 	# Download Npcap required by the Windows installer
-	set(NPCAP_VERSION "1.75")
-	set(NPCAP_SHA256 "9ac38dff01b48e18033e8a9015b27042ef847c8c84a9065961a30f8ae22d5245")
+	set(NPCAP_VERSION "1.78")
+	set(NPCAP_SHA256 "deeb39ae22a44ea2698c4a58732e621bc45b84686a444c405491fef946898d90")
 	set(NPCAP_FILENAME "npcap-${NPCAP_VERSION}.exe")
 	set(NPCAP_URL "${LIBS_URL}/Npcap/${NPCAP_FILENAME}")
 	FetchContent_Declare(Npcap
@@ -655,7 +671,7 @@ else() # ! MSVC
 	if(APPLE)
 		# MIN_MACOS_VERSION is used to set LSMinimumSystemVersion
 		# in Info.plist, so start with something low.
-		set(MIN_MACOS_VERSION 10.10)
+		set(MIN_MACOS_VERSION 10.11)
 		if(CMAKE_OSX_DEPLOYMENT_TARGET)
 			if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS MIN_MACOS_VERSION)
 				message(FATAL_ERROR "We don't support building for macOS < ${MIN_MACOS_VERSION}")
@@ -1215,7 +1231,7 @@ if(BUILD_sshdump OR BUILD_ciscodump OR BUILD_wifidump)
 else()
 	set(ENABLE_LIBSSH OFF)
 endif()
-ws_find_package(LIBSSH ENABLE_LIBSSH HAVE_LIBSSH "0.6")
+ws_find_package(LIBSSH ENABLE_LIBSSH HAVE_LIBSSH "0.8.5")
 
 ws_find_package(PCAP ENABLE_PCAP HAVE_LIBPCAP)
 ws_find_package(AIRPCAP ENABLE_AIRPCAP HAVE_AIRPCAP)
@@ -1248,6 +1264,7 @@ if(BUILD_wireshark OR BUILD_logray)
 				Widgets
 				Concurrent
 				Core5Compat
+				DBus
 			OPTIONAL_COMPONENTS
 				Multimedia
 		)
@@ -1281,6 +1298,10 @@ if(BUILD_wireshark OR BUILD_logray)
 		if(WIN32)
 			list(APPEND QT5_PACKAGELIST Qt5WinExtras)
 		endif()
+		if(NOT WIN32 AND NOT APPLE)
+			# DBus is a core component of Qt6, but was an add-on in Qt5.
+			list(APPEND QT5_OPTIONAL_PACKAGELIST Qt5DBus)
+		endif()
 		foreach(_qt5_package IN LISTS QT5_PACKAGELIST)
 			find_package(${_qt5_package} REQUIRED ${QT5_FIND_PACKAGE_OPTIONS})
 			list(APPEND QT5_LIBRARIES ${${_qt5_package}_LIBRARIES})
@@ -1294,11 +1315,11 @@ if(BUILD_wireshark OR BUILD_logray)
 			list(APPEND QT5_COMPILE_DEFINITIONS ${${_qt5_package}_COMPILE_DEFINITIONS})
 		endforeach()
 
-		if (Qt5Widgets_VERSION VERSION_LESS 5.10)
+		if (Qt5Widgets_VERSION VERSION_LESS 5.11)
 			message(FATAL_ERROR "Qt 5.12 or later is required.")
 		endif()
 		if (Qt5Widgets_VERSION VERSION_LESS 5.12)
-			message(WARNING "Wireshark can be build with this version of Qt, though 5.12 or higher is recommended.")
+			message(WARNING "Wireshark can be built with this version of Qt, though 5.12 or higher is recommended.")
 		endif()
 
 		if(APPLE AND "/usr/local/opt/qt5/lib/QtCore.framework" IN_LIST Qt5Core_INCLUDE_DIRS)
@@ -1318,6 +1339,9 @@ if(BUILD_wireshark OR BUILD_logray)
 	endif()
 	if(Qt6Multimedia_FOUND OR Qt5Multimedia_FOUND)
 		set(QT_MULTIMEDIA_LIB 1)
+	endif()
+	if(Qt6DBus_FOUND OR Qt5DBus_FOUND)
+		set(QT_DBUS_LIB 1)
 	endif()
 	if(NOT DEFINED MOC_OPTIONS)
 		# Squelch moc verbose "nothing to do" output
@@ -1361,7 +1385,7 @@ ws_find_package(ZSTD ENABLE_ZSTD HAVE_ZSTD "1.0.0")
 ws_find_package(NGHTTP2 ENABLE_NGHTTP2 HAVE_NGHTTP2 "1.11.0")
 
 # Enhanced HTTP/3 dissection
-ws_find_package(NGHTTP3 ENABLE_NGHTTP3 HAVE_NGHTTP3 "0.6.0")
+ws_find_package(NGHTTP3 ENABLE_NGHTTP3 HAVE_NGHTTP3)
 
 # Embedded Lua interpreter
 if(FETCH_lua)
@@ -1499,16 +1523,14 @@ if (QT_FOUND)
 		# https://doc.qt.io/qt-5.11/supported-platforms-and-configurations.html
 		# https://doc.qt.io/qt-5.15/supported-platforms.html
 		# https://doc-snapshots.qt.io/qt6-dev/supported-platforms.html
-		if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.5.0")
+		if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.5.0" AND MIN_MACOS_VERSION VERSION_LESS "11.0")
 			set(MIN_MACOS_VERSION 11.0)
-		elseif(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.0.0")
+		elseif(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.0.0" AND MIN_MACOS_VERSION VERSION_LESS "10.14")
 			set(MIN_MACOS_VERSION 10.14)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.14.0")
+		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.14.0" AND MIN_MACOS_VERSION VERSION_LESS "10.13")
 			set(MIN_MACOS_VERSION 10.13)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.12.0")
+		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.12.0" AND MIN_MACOS_VERSION VERSION_LESS "10.12")
 			set(MIN_MACOS_VERSION 10.12)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.10.0")
-			set(MIN_MACOS_VERSION 10.11)
 		endif()
 		if(CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS MIN_MACOS_VERSION)
 			message(FATAL_ERROR "Qt version ${Qt${qtver}Widgets_VERSION} requires CMAKE_OSX_DEPLOYMENT_TARGET (${CMAKE_OSX_DEPLOYMENT_TARGET}) >= ${MIN_MACOS_VERSION}")
@@ -1595,24 +1617,6 @@ else()
 endif()
 set(EXTCAP_INSTALL_FULL_LIBDIR "${CMAKE_INSTALL_PREFIX}/${EXTCAP_INSTALL_LIBDIR}")
 
-if(APPLE)
-	#
-	# As https://developer.apple.com/library/archive/technotes/tn2206/_index.html
-	# says,
-	#
-	# "Note that a location where code is expected to reside cannot generally
-	# contain directories full of nested code, because those directories tend
-	# to be interpreted as bundles. So this occasional practice is not
-	# recommended and not officially supported. If you do do this, do not use
-	# periods in the directory names. The code signing machinery interprets
-	# directories with periods in their names as code bundles and will reject
-	# them if they don't conform to the expected code bundle layout."
-	#
-	set(PLUGIN_PATH_ID "${PROJECT_MAJOR_VERSION}-${PROJECT_MINOR_VERSION}")
-else()
-	set(PLUGIN_PATH_ID "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}")
-endif()
-
 # Directory where plugins and Lua dissectors can be found.
 if(WIN32 AND NOT USE_MSYSTEM)
 	set(PLUGIN_INSTALL_LIBDIR "plugins" CACHE INTERNAL "The plugin dir")
@@ -1620,8 +1624,6 @@ else()
 	set(PLUGIN_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/plugins" CACHE INTERNAL "The plugin dir")
 endif()
 set(PLUGIN_INSTALL_FULL_LIBDIR "${CMAKE_INSTALL_PREFIX}/${PLUGIN_INSTALL_LIBDIR}")
-set(PLUGIN_INSTALL_VERSION_LIBDIR "${PLUGIN_INSTALL_LIBDIR}/${PLUGIN_PATH_ID}")
-set(PLUGIN_VERSION_DIR "plugins/${PLUGIN_PATH_ID}")
 
 add_subdirectory( capture )
 add_subdirectory( doc )
@@ -1716,8 +1718,9 @@ if(ENABLE_PLUGINS)
 		plugins/epan/wimax
 		plugins/epan/wimaxasncp
 		plugins/epan/wimaxmacphy
+		plugins/epan/dfilter/ipaddr
 		plugins/wiretap/usbdump
-		plugins/codecs/G711
+		plugins/codecs/g711
 		plugins/codecs/l16_mono
 		${CUSTOM_PLUGIN_SRC_DIR}
 	)
@@ -1729,13 +1732,13 @@ if(ENABLE_PLUGINS)
 	endif()
 	if(SPANDSP_FOUND)
 		list(APPEND PLUGIN_SRC_DIRS
-			plugins/codecs/G722
-			plugins/codecs/G726
+			plugins/codecs/g722
+			plugins/codecs/g726
 		)
 	endif()
 	if(BCG729_FOUND)
 		list(APPEND PLUGIN_SRC_DIRS
-			plugins/codecs/G729
+			plugins/codecs/g729
 		)
 	endif()
 	if(AMRNB_FOUND)
@@ -1745,7 +1748,7 @@ if(ENABLE_PLUGINS)
 	endif()
 	if(ILBC_FOUND)
 		list(APPEND PLUGIN_SRC_DIRS
-			plugins/codecs/iLBC
+			plugins/codecs/ilbc
 		)
 	endif()
 	if(OPUS_FOUND)
@@ -1773,22 +1776,22 @@ endif()
 
 if(ENABLE_APPLICATION_BUNDLE)
 	if(CMAKE_CFG_INTDIR STREQUAL ".")
-		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/Wireshark.app/Contents/PlugIns/wireshark/${PLUGIN_PATH_ID}")
+		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/Wireshark.app/Contents/PlugIns/wireshark")
 	else()
 		# Xcode
-		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Wireshark.app/Contents/PlugIns/wireshark/${PLUGIN_PATH_ID}")
+		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Wireshark.app/Contents/PlugIns/wireshark")
 	endif()
 	if(CMAKE_CFG_INTDIR STREQUAL ".")
-		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/Logray.app/Contents/PlugIns/logray/${PLUGIN_PATH_ID}")
+		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/Logray.app/Contents/PlugIns/logray")
 	else()
 		# Xcode
-		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Logray.app/Contents/PlugIns/logray/${PLUGIN_PATH_ID}")
+		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Logray.app/Contents/PlugIns/logray")
 	endif()
 elseif(MSVC AND NOT CMAKE_CFG_INTDIR STREQUAL ".")
-	set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/${PLUGIN_VERSION_DIR}")
+	set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/plugins")
 	set(_logray_plugin_dir ${_plugin_dir})
 else()
-	set(_plugin_dir "${DATAFILE_DIR}/${PLUGIN_VERSION_DIR}")
+	set(_plugin_dir "${DATAFILE_DIR}/plugins")
 	set(_logray_plugin_dir ${_plugin_dir})
 endif()
 set (PLUGIN_DIR ${_plugin_dir} CACHE INTERNAL "Build time plugin location.")
@@ -1819,12 +1822,6 @@ configure_file(${CMAKE_SOURCE_DIR}/cmakeconfig.h.in ${CMAKE_BINARY_DIR}/config.h
 
 configure_file(${CMAKE_SOURCE_DIR}/ws_version.h.in ${CMAKE_BINARY_DIR}/ws_version.h)
 
-set( prefix "${CMAKE_INSTALL_PREFIX}" )
-set( exec_prefix "\${prefix}" )
-set( libdir "\${exec_prefix}/${CMAKE_INSTALL_LIBDIR}" )
-set( includedir  "\${prefix}/include" )
-set( plugindir "\${libdir}/wireshark/${PLUGIN_VERSION_DIR}" )
-
 # Doxygen variables
 file(GLOB TOP_LEVEL_SOURCE_LIST *.c *.cpp *.h)
 string (REPLACE ";" " " DOXYGEN_TOP_LEVEL_SOURCES "${TOP_LEVEL_SOURCE_LIST}")
@@ -1844,8 +1841,8 @@ set(CFG_OUT_FILES
 	resources/libwiretap.rc
 	resources/libwsutil.rc
 	resources/wireshark.exe.manifest
+	resources/wireshark.pc
 	resources/wireshark.rc
-	wireshark.pc
 )
 
 if(BUILD_logray)
@@ -2063,7 +2060,7 @@ set(INSTALL_DIRS
 set(INSTALL_FILES
 	resources/share/wireshark/cfilters
 	resources/share/wireshark/colorfilters
-	resources/share/wireshark/dfilter_macros
+	resources/share/wireshark/dmacros
 	resources/share/wireshark/dfilters
 	resources/share/wireshark/ipmap.html
 	resources/share/wireshark/smi_modules
@@ -2077,6 +2074,10 @@ set(DOC_FILES
 )
 
 if (BUILD_logray)
+	set(LOG_INSTALL_DIRS
+		resources/share/logray/profiles
+	)
+
 	set(LOG_INSTALL_FILES
 		docbook/ws.css
 		resources/share/logray/colorfilters
@@ -2154,6 +2155,15 @@ if(USE_REPOSITORY)
 		COMMAND_EXPAND_LISTS
 	)
 
+	add_custom_command(TARGET copy_cli_dlls PRE_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			"$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_DLL},${PCRE2_RELEASE_DLL}>"
+			"$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_PDB},${PCRE2_RELEASE_PDB}>"
+			"${_dll_output_dir}"
+		WORKING_DIRECTORY $<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_DLL_DIR},${PCRE2_RELEASE_DLL_DIR}>
+		COMMAND_EXPAND_LISTS
+	)
+
 	if (MSVC AND VLD_FOUND)
 		add_custom_command(TARGET copy_cli_dlls PRE_BUILD
 			COMMAND ${CMAKE_COMMAND} -E "$<IF:$<CONFIG:Debug>,copy_if_different,true>"
@@ -2198,9 +2208,10 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${LZ4_DLL_DIR}/${LZ4_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${LZ4_DLL_DIR}/${LZ4_PDB}")
 	endif(LZ4_FOUND)
-	if (ZSTD_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${ZSTD_DLL_DIR}/${ZSTD_DLL}")
-	endif(ZSTD_FOUND)
+	if (MINIZIP_FOUND)
+		list (APPEND THIRD_PARTY_DLLS "${MINIZIP_DLL_DIR}/${MINIZIP_DLL}")
+		list (APPEND THIRD_PARTY_PDBS "${MINIZIP_DLL_DIR}/${MINIZIP_PDB}")
+	endif()
 	if (NGHTTP2_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${NGHTTP2_DLL_DIR}/${NGHTTP2_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${NGHTTP2_DLL_DIR}/${NGHTTP2_PDB}")
@@ -2209,10 +2220,6 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${NGHTTP3_DLL_DIR}/${NGHTTP3_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${NGHTTP3_DLL_DIR}/${NGHTTP3_PDB}")
 	endif(NGHTTP3_FOUND)
-	if (PCRE2_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${PCRE2_DLL_DIR}/${PCRE2_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${PCRE2_DLL_DIR}/${PCRE2_PDB}")
-	endif(PCRE2_FOUND)
 	if (SBC_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${SBC_DLL_DIR}/${SBC_DLL}")
 	endif(SBC_FOUND)
@@ -2298,6 +2305,9 @@ if(USE_REPOSITORY)
 	if (SPEEXDSP_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${SPEEXDSP_DLL_DIR}/${SPEEXDSP_DLL}")
 	endif()
+	if (ZSTD_FOUND)
+		list (APPEND THIRD_PARTY_DLLS "${ZSTD_DLL_DIR}/${ZSTD_DLL}")
+	endif()
 
 	# With libs downloaded to c:/wireshark-x64-libs this currently
 	# (early 2018) expands to about 1900 characters.
@@ -2353,7 +2363,7 @@ endif()
 set(copy_data_files_depends)
 
 if(WIN32)
-	foreach(_install_as_txt_file COPYING NEWS README.md README.windows)
+	foreach(_install_as_txt_file COPYING NEWS README.md)
 		# On Windows, install some files with a .txt extension so that they're
 		# double-clickable.
 		string(REGEX REPLACE ".md$" "" _no_md_file ${_install_as_txt_file})
@@ -2527,12 +2537,28 @@ add_custom_command(
 		"${CMAKE_SOURCE_DIR}/resources/share/wireshark/profiles" "${DATAFILE_DIR}/profiles"
 )
 
+set (_log_profiles_data_files)
+if (BUILD_logray AND ENABLE_APPLICATION_BUNDLE)
+	set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/logray)
+	file(GLOB _profiles_src_files RELATIVE ${_profiles_src_dir} ${_profiles_src_dir}/profiles/*/*)
+	foreach(_data_file ${_profiles_src_files})
+		list(APPEND _log_profiles_data_files "${LOG_DATAFILE_DIR}/${_data_file}")
+	endforeach()
+
+	add_custom_command(
+		OUTPUT ${_log_profiles_data_files}
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+			"${CMAKE_SOURCE_DIR}/resources/share/logray/profiles" "${LOG_DATAFILE_DIR}/profiles"
+	)
+endif()
+
 list(APPEND copy_data_files_depends
 	${_dtds_data_files}
 	${_diameter_data_files}
 	${_radius_data_files}
 	${_protobuf_data_files}
 	${_profiles_data_files}
+	${_log_profiles_data_files}
 )
 
 # Copy files including ${INSTALL_FILES} and ${INSTALL_DIRS} to ${DATAFILE_DIR}
@@ -2891,11 +2917,11 @@ if(BUILD_logray AND QT_FOUND)
 	)
 
 	if(QT_WINDEPLOYQT_EXECUTABLE)
-		add_custom_target(copy_ls_qt_dlls ALL)
-		set_target_properties(copy_ls_qt_dlls PROPERTIES FOLDER "Copy Tasks")
+		add_custom_target(copy_logray_qt_dlls ALL)
+		set_target_properties(copy_logray_qt_dlls PROPERTIES FOLDER "Copy Tasks")
 		# Will we ever need to use --debug? Windeployqt seems to
 		# be smart enough to copy debug DLLs when needed.
-		add_custom_command(TARGET copy_ls_qt_dlls
+		add_custom_command(TARGET copy_logray_qt_dlls
 			POST_BUILD
 			COMMAND set "PATH=${QT_BIN_PATH};%PATH%"
 			COMMAND "${QT_WINDEPLOYQT_EXECUTABLE}"
@@ -2904,7 +2930,7 @@ if(BUILD_logray AND QT_FOUND)
 				$<$<BOOL:${MSVC}>:--pdb>
 				"$<TARGET_FILE:logray>"
 		)
-		add_dependencies(copy_ls_qt_dlls logray)
+		add_dependencies(copy_logray_qt_dlls logray)
 
 		install(CODE "execute_process(COMMAND
 			\"${QT_WINDEPLOYQT_EXECUTABLE}\"
@@ -3252,6 +3278,7 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
+		${M_LIBRARIES}
 	)
 	if(UNIX)
 		list(APPEND CAPUTILS_SRC
@@ -3346,7 +3373,6 @@ if(WIN32)
 
 	if(MAKENSIS_EXECUTABLE)
 		add_subdirectory( packaging/nsis EXCLUDE_FROM_ALL )
-		ADD_NSIS_UNINSTALLER_TARGETS()
 		ADD_NSIS_PACKAGE_TARGETS()
 	endif()
 
@@ -3531,7 +3557,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
 	COMMAND ${ASCIIDOCTOR_EXECUTABLE}
 		--backend html
 		--out-file ${_wireshark_read_me_first}
-		--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+		--attribute include-dir=${CMAKE_SOURCE_DIR}/doc
 		--attribute min-macos-version=${MIN_MACOS_VERSION}
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Wireshark_read_me_first.adoc
 	DEPENDS
@@ -3545,7 +3571,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
 	COMMAND ${ASCIIDOCTOR_EXECUTABLE}
 		--backend html
 		--out-file ${_wireshark_donate}
-		--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+		--attribute include-dir=${CMAKE_SOURCE_DIR}/doc
 		--attribute min-macos-version=${MIN_MACOS_VERSION}
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Donate_to_the_Wireshark_Foundation.adoc
 	DEPENDS
@@ -3559,7 +3585,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
 	COMMAND ${ASCIIDOCTOR_EXECUTABLE}
 		--backend html
 		--out-file ${_wireshark_dsym_installation}
-		--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+		--attribute include-dir=${CMAKE_SOURCE_DIR}/doc
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Wireshark_dsym_installation.adoc
 	DEPENDS
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Wireshark_dsym_installation.adoc
@@ -3599,7 +3625,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_logray)
 	COMMAND ${ASCIIDOCTOR_EXECUTABLE}
 		--backend html
 		--out-file ${_logray_read_me_first}
-		--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+		--attribute include-dir=${CMAKE_SOURCE_DIR}/doc
 		--attribute min-macos-version=${MIN_MACOS_VERSION}
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Logray_read_me_first.adoc
 	DEPENDS
@@ -3613,7 +3639,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_logray)
 	COMMAND ${ASCIIDOCTOR_EXECUTABLE}
 		--backend html
 		--out-file ${_logray_dsym_installation}
-		--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+		--attribute include-dir=${CMAKE_SOURCE_DIR}/doc
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Logray_dsym_installation.adoc
 	DEPENDS
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Logray_dsym_installation.adoc
@@ -4023,13 +4049,9 @@ if(BUILD_logray AND QT_FOUND AND NOT APPLE AND (NOT WIN32 OR USE_MSYSTEM))
 		RENAME org.wireshark.Logray.svg)
 endif()
 
-install(
-	FILES
-		"${CMAKE_BINARY_DIR}/wireshark.pc"
-	DESTINATION
-		${CMAKE_INSTALL_LIBDIR}/pkgconfig
-	COMPONENT
-		"Development"
+install(FILES "${CMAKE_BINARY_DIR}/resources/wireshark.pc"
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+	COMPONENT "Development"
 	EXCLUDE_FROM_ALL
 )
 
@@ -4067,7 +4089,7 @@ configure_package_config_file(WiresharkConfig.cmake.in
 	PATH_VARS
 		CMAKE_INSTALL_LIBDIR
 		CMAKE_INSTALL_INCLUDEDIR
-		PLUGIN_INSTALL_VERSION_LIBDIR
+		PLUGIN_INSTALL_LIBDIR
 		EXTCAP_INSTALL_LIBDIR
 )
 

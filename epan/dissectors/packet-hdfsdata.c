@@ -54,44 +54,44 @@ static const int RESPONSE_METADATA = 2;
 static const int RESPONSE_DATA = 3;
 #endif
 
-static int proto_hdfsdata = -1;
-static int hf_hdfsdata_version = -1;
-static int hf_hdfsdata_cmd = -1;
-static int hf_hdfsdata_blockid = -1;
-static int hf_hdfsdata_timestamp = -1;
-static int hf_hdfsdata_startoffset = -1;
-static int hf_hdfsdata_blocklen = -1;
-static int hf_hdfsdata_clientlen = -1;
-static int hf_hdfsdata_clientid = -1;
-static int hf_hdfsdata_tokenlen = -1;
-static int hf_hdfsdata_tokenid = -1;
-static int hf_hdfsdata_tokenpassword = -1;
-static int hf_hdfsdata_tokentype = -1;
-static int hf_hdfsdata_tokenservice = -1;
-static int hf_hdfsdata_status = -1;
-static int hf_hdfsdata_checksumtype = -1;
-static int hf_hdfsdata_chunksize = -1;
-static int hf_hdfsdata_chunkoffset = -1;
-static int hf_hdfsdata_datalength = -1;
-static int hf_hdfsdata_inblockoffset = -1;
-static int hf_hdfsdata_seqnum = -1;
-static int hf_hdfsdata_last = -1;
-static int hf_hdfsdata_crc32 = -1;
-static int hf_hdfsdata_datalen = -1;
-static int hf_hdfsdata_rest = -1;
-static int hf_hdfsdata_end = -1;
-static int hf_hdfsdata_packetsize = -1;
-static int hf_hdfsdata_chunklength = -1;
-static int hf_hdfsdata_crc64 = -1;
-static int hf_hdfsdata_pipelinestatus = -1;
+static int proto_hdfsdata;
+static int hf_hdfsdata_version;
+static int hf_hdfsdata_cmd;
+static int hf_hdfsdata_blockid;
+static int hf_hdfsdata_timestamp;
+static int hf_hdfsdata_startoffset;
+static int hf_hdfsdata_blocklen;
+static int hf_hdfsdata_clientlen;
+static int hf_hdfsdata_clientid;
+static int hf_hdfsdata_tokenlen;
+static int hf_hdfsdata_tokenid;
+static int hf_hdfsdata_tokenpassword;
+static int hf_hdfsdata_tokentype;
+static int hf_hdfsdata_tokenservice;
+static int hf_hdfsdata_status;
+static int hf_hdfsdata_checksumtype;
+static int hf_hdfsdata_chunksize;
+static int hf_hdfsdata_chunkoffset;
+static int hf_hdfsdata_datalength;
+static int hf_hdfsdata_inblockoffset;
+static int hf_hdfsdata_seqnum;
+static int hf_hdfsdata_last;
+static int hf_hdfsdata_crc32;
+static int hf_hdfsdata_datalen;
+static int hf_hdfsdata_rest;
+static int hf_hdfsdata_end;
+static int hf_hdfsdata_packetsize;
+static int hf_hdfsdata_chunklength;
+static int hf_hdfsdata_crc64;
+static int hf_hdfsdata_pipelinestatus;
 
-static int hf_hdfsdata_pipelinenum = -1;
-static int hf_hdfsdata_recovery = -1;
-static int hf_hdfsdata_sourcenode = -1;
-static int hf_hdfsdata_currentpipeline = -1;
-static int hf_hdfsdata_node = -1;
+static int hf_hdfsdata_pipelinenum;
+static int hf_hdfsdata_recovery;
+static int hf_hdfsdata_sourcenode;
+static int hf_hdfsdata_currentpipeline;
+static int hf_hdfsdata_node;
 
-static gint ett_hdfsdata = -1;
+static gint ett_hdfsdata;
 
 static dissector_handle_t hdfsdata_handle;
 
@@ -145,7 +145,7 @@ dissect_variable_length_long (tvbuff_t *tvb, proto_tree *hdfsdata_tree, int* off
 static void
 dissect_variable_int_string(tvbuff_t *tvb, proto_tree *hdfsdata_tree, int *offset)
 {
-  /* Get the variable length int that represents the length of the next feild */
+  /* Get the variable length int that represents the length of the next field */
   int len = dissect_variable_length_long (tvb, hdfsdata_tree, offset);
 
   /* client id = amount of bytes in previous */
@@ -298,7 +298,7 @@ dissect_write_request_end(tvbuff_t *tvb, proto_tree *hdfsdata_tree, int *offset)
   proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_currentpipeline, tvb, *offset, 4, ENC_BIG_ENDIAN);
   *offset += 4;
 
-  /* varible length sequence of node objects */
+  /* variable length sequence of node objects */
   for (i = 0; i < len; i++) {
     proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_node, tvb, *offset, 4, ENC_BIG_ENDIAN);
     *offset += 4;
@@ -511,7 +511,7 @@ dissect_hdfsdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
   return tvb_captured_length(tvb);
 }
 
-/* registers the protcol with the given names */
+/* registers the protocol with the given names */
 void
 proto_register_hdfsdata(void)
 {
@@ -583,7 +583,7 @@ proto_register_hdfsdata(void)
       NULL, HFILL }
   },
   { &hf_hdfsdata_currentpipeline,
-    { "HDFSDATA current number of nodes in the pipeline", "hdfsdata.currentpipline",
+    { "HDFSDATA current number of nodes in the pipeline", "hdfsdata.currentpipeline",
       FT_UINT32, BASE_DEC,
       NULL, 0x0,
       NULL, HFILL }

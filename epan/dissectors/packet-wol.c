@@ -13,7 +13,9 @@
  * as needed.
  *
  * The "Wake On LAN" dissector was written based primarily on the AMD white
- * paper, available from: http://www.amd.com/us-en/assets/content_type/white_papers_and_tech_docs/20213.pdf.
+ * paper, available from:
+ *
+ *    https://web.archive.org/web/20100601154907/http://www.amd.com/us-en/assets/content_type/white_papers_and_tech_docs/20213.pdf
  *
  * In addition, testing of the dissector was conducted using 2 utilities
  * downloaded from http://www.moldaner.de/wakeonlan/wakeonlan.html and
@@ -52,14 +54,14 @@ void proto_reg_handoff_wol(void);
 static dissector_handle_t wol_handle;
 
 /* Initialize the protocol and registered fields */
-static int proto_wol = -1;
-static int hf_wol_sync = -1;
-static int hf_wol_mac = -1;
-static int hf_wol_passwd = -1;
+static int proto_wol;
+static int hf_wol_sync;
+static int hf_wol_mac;
+static int hf_wol_passwd;
 
 /* Initialize the subtree pointers */
-static gint ett_wol = -1;
-static gint ett_wol_macblock = -1;
+static gint ett_wol;
+static gint ett_wol_macblock;
 
 /* Code to actually dissect the packets */
 static int

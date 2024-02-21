@@ -39,17 +39,17 @@ void proto_reg_handoff_turnchannel(void);
 static heur_dissector_list_t heur_subdissector_list;
 
 /* Initialize the protocol and registered fields */
-static int proto_turnchannel = -1;
+static int proto_turnchannel;
 
-static int hf_turnchannel_id = -1;
-static int hf_turnchannel_len = -1;
+static int hf_turnchannel_id;
+static int hf_turnchannel_len;
 
 #define TURNCHANNEL_HDR_LEN	((guint)4)
 
 #define MS_MULTIPLEX_TURN 0xFF10
 
 /* Initialize the subtree pointers */
-static gint ett_turnchannel = -1;
+static gint ett_turnchannel;
 
 static dissector_handle_t turnchannel_tcp_handle;
 static dissector_handle_t turnchannel_udp_handle;
@@ -186,8 +186,7 @@ proto_register_turnchannel(void)
 	};
 
 /* Register the protocol name and description */
-	proto_turnchannel = proto_register_protocol("TURN Channel",
-	    "TURNCHANNEL", "turnchannel");
+	proto_turnchannel = proto_register_protocol("TURN Channel", "TURNCHANNEL", "turnchannel");
 
 	turnchannel_tcp_handle = register_dissector("turnchannel-tcp", dissect_turnchannel_tcp, proto_turnchannel);
 	turnchannel_udp_handle = register_dissector("turnchannel", dissect_turnchannel_message, proto_turnchannel);
@@ -198,7 +197,7 @@ proto_register_turnchannel(void)
          * doesn't actually call this dissector but uses its own implementation
          * of TURN Channel messages.
          */
-	heur_subdissector_list = register_heur_dissector_list("turnchannel", proto_turnchannel);
+	heur_subdissector_list = register_heur_dissector_list_with_description("turnchannel", "TURN Channel message", proto_turnchannel);
 
 /* Required function calls to register the header fields and subtrees used */
 	proto_register_field_array(proto_turnchannel, hf, array_length(hf));

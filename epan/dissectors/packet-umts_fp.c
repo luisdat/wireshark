@@ -44,189 +44,189 @@ void proto_reg_handoff_fp(void);
 
 /* Initialize the protocol and registered fields. */
 
-int proto_fp = -1;
+int proto_fp;
 extern int proto_umts_mac;
 extern int proto_umts_rlc;
 
-static int hf_fp_release = -1;
-static int hf_fp_release_version = -1;
-static int hf_fp_release_year = -1;
-static int hf_fp_release_month = -1;
-static int hf_fp_channel_type = -1;
-static int hf_fp_division = -1;
-static int hf_fp_direction = -1;
-static int hf_fp_ddi_config = -1;
-static int hf_fp_ddi_config_ddi = -1;
-static int hf_fp_ddi_config_macd_pdu_size = -1;
+static int hf_fp_release;
+static int hf_fp_release_version;
+static int hf_fp_release_year;
+static int hf_fp_release_month;
+static int hf_fp_channel_type;
+static int hf_fp_division;
+static int hf_fp_direction;
+static int hf_fp_ddi_config;
+static int hf_fp_ddi_config_ddi;
+static int hf_fp_ddi_config_macd_pdu_size;
 
-static int hf_fp_header_crc = -1;
-static int hf_fp_ft = -1;
-static int hf_fp_cfn = -1;
-static int hf_fp_pch_cfn = -1;
-static int hf_fp_pch_toa = -1;
-static int hf_fp_cfn_control = -1;
-static int hf_fp_toa = -1;
-static int hf_fp_tfi = -1;
-static int hf_fp_usch_tfi = -1;
-static int hf_fp_cpch_tfi = -1;
-static int hf_fp_propagation_delay = -1;
-static int hf_fp_tb = -1;
-static int hf_fp_chan_zero_tbs = -1;
-static int hf_fp_received_sync_ul_timing_deviation = -1;
-static int hf_fp_pch_pi = -1;
-static int hf_fp_pch_tfi = -1;
-static int hf_fp_fach_tfi = -1;
-static int hf_fp_transmit_power_level = -1;
-static int hf_fp_paging_indication_bitmap = -1;
-static int hf_fp_relevant_paging_indication_bitmap = -1;
-static int hf_fp_pdsch_set_id = -1;
-static int hf_fp_rx_timing_deviation = -1;
-static int hf_fp_dch_e_rucch_flag = -1;
-static int hf_fp_dch_control_frame_type = -1;
-static int hf_fp_dch_rx_timing_deviation = -1;
-static int hf_fp_quality_estimate = -1;
-static int hf_fp_payload_crc = -1;
-static int hf_fp_payload_crc_status = -1;
-static int hf_fp_edch_header_crc = -1;
-static int hf_fp_edch_fsn = -1;
-static int hf_fp_edch_subframe = -1;
-static int hf_fp_edch_number_of_subframes = -1;
-static int hf_fp_edch_harq_retransmissions = -1;
-static int hf_fp_edch_subframe_number = -1;
-static int hf_fp_edch_number_of_mac_es_pdus = -1;
-static int hf_fp_edch_ddi = -1;
-static int hf_fp_edch_subframe_header = -1;
-static int hf_fp_edch_number_of_mac_d_pdus = -1;
-static int hf_fp_edch_pdu_padding = -1;
-static int hf_fp_edch_tsn = -1;
-static int hf_fp_edch_mac_es_pdu = -1;
+static int hf_fp_header_crc;
+static int hf_fp_ft;
+static int hf_fp_cfn;
+static int hf_fp_pch_cfn;
+static int hf_fp_pch_toa;
+static int hf_fp_cfn_control;
+static int hf_fp_toa;
+static int hf_fp_tfi;
+static int hf_fp_usch_tfi;
+static int hf_fp_cpch_tfi;
+static int hf_fp_propagation_delay;
+static int hf_fp_tb;
+static int hf_fp_chan_zero_tbs;
+static int hf_fp_received_sync_ul_timing_deviation;
+static int hf_fp_pch_pi;
+static int hf_fp_pch_tfi;
+static int hf_fp_fach_tfi;
+static int hf_fp_transmit_power_level;
+static int hf_fp_paging_indication_bitmap;
+static int hf_fp_relevant_paging_indication_bitmap;
+static int hf_fp_pdsch_set_id;
+static int hf_fp_rx_timing_deviation;
+static int hf_fp_dch_e_rucch_flag;
+static int hf_fp_dch_control_frame_type;
+static int hf_fp_dch_rx_timing_deviation;
+static int hf_fp_quality_estimate;
+static int hf_fp_payload_crc;
+static int hf_fp_payload_crc_status;
+static int hf_fp_edch_header_crc;
+static int hf_fp_edch_fsn;
+static int hf_fp_edch_subframe;
+static int hf_fp_edch_number_of_subframes;
+static int hf_fp_edch_harq_retransmissions;
+static int hf_fp_edch_subframe_number;
+static int hf_fp_edch_number_of_mac_es_pdus;
+static int hf_fp_edch_ddi;
+static int hf_fp_edch_subframe_header;
+static int hf_fp_edch_number_of_mac_d_pdus;
+static int hf_fp_edch_pdu_padding;
+static int hf_fp_edch_tsn;
+static int hf_fp_edch_mac_es_pdu;
 
-static int hf_fp_edch_user_buffer_size = -1;
-static int hf_fp_edch_no_macid_sdus = -1;
-static int hf_fp_edch_number_of_mac_is_pdus = -1;
-static int hf_fp_edch_mac_is_pdu = -1;
+static int hf_fp_edch_user_buffer_size;
+static int hf_fp_edch_no_macid_sdus;
+static int hf_fp_edch_number_of_mac_is_pdus;
+static int hf_fp_edch_mac_is_pdu;
 
-static int hf_fp_edch_e_rnti = -1;
-static int hf_fp_edch_macis_descriptors = -1;
-static int hf_fp_edch_macis_lchid = -1;
-static int hf_fp_edch_macis_length = -1;
-static int hf_fp_edch_macis_flag = -1;
-static int hf_fp_edch_entity = -1;
+static int hf_fp_edch_e_rnti;
+static int hf_fp_edch_macis_descriptors;
+static int hf_fp_edch_macis_lchid;
+static int hf_fp_edch_macis_length;
+static int hf_fp_edch_macis_flag;
+static int hf_fp_edch_entity;
 
-static int hf_fp_frame_seq_nr = -1;
-static int hf_fp_hsdsch_pdu_block_header = -1;
-/* static int hf_fp_hsdsch_pdu_block = -1; */
-static int hf_fp_flush = -1;
-static int hf_fp_fsn_drt_reset = -1;
-static int hf_fp_drt_indicator = -1;
-static int hf_fp_fach_indicator = -1;
-static int hf_fp_total_pdu_blocks = -1;
-static int hf_fp_drt = -1;
-static int hf_fp_hrnti = -1;
-static int hf_fp_rach_measurement_result = -1;
-static int hf_fp_lchid = -1;
-static int hf_fp_pdu_length_in_block = -1;
-static int hf_fp_pdus_in_block = -1;
-static int hf_fp_cmch_pi = -1;
-static int hf_fp_user_buffer_size = -1;
-static int hf_fp_hsdsch_credits = -1;
-static int hf_fp_hsdsch_max_macd_pdu_len = -1;
-static int hf_fp_hsdsch_max_macdc_pdu_len = -1;
-static int hf_fp_hsdsch_interval = -1;
-static int hf_fp_hsdsch_calculated_rate = -1;
-static int hf_fp_hsdsch_unlimited_rate = -1;
-static int hf_fp_hsdsch_repetition_period = -1;
-static int hf_fp_hsdsch_data_padding = -1;
-static int hf_fp_hsdsch_new_ie_flags = -1;
-static int hf_fp_hsdsch_new_ie_flag[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
-static int hf_fp_hsdsch_drt = -1;
-static int hf_fp_hsdsch_entity = -1;
-static int hf_fp_hsdsch_physical_layer_category = -1;
-static int hf_fp_timing_advance = -1;
-static int hf_fp_num_of_pdu = -1;
-static int hf_fp_mac_d_pdu_len = -1;
-static int hf_fp_mac_d_pdu = -1;
-static int hf_fp_data = -1;
-static int hf_fp_crcis = -1;
-static int hf_fp_crci[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
-static int hf_fp_common_control_frame_type = -1;
-static int hf_fp_t1 = -1;
-static int hf_fp_t2 = -1;
-static int hf_fp_t3 = -1;
-static int hf_fp_ul_sir_target = -1;
-static int hf_fp_pusch_set_id = -1;
-static int hf_fp_activation_cfn = -1;
-static int hf_fp_duration = -1;
-static int hf_fp_power_offset = -1;
-static int hf_fp_code_number = -1;
-static int hf_fp_spreading_factor = -1;
-static int hf_fp_mc_info = -1;
+static int hf_fp_frame_seq_nr;
+static int hf_fp_hsdsch_pdu_block_header;
+/* static int hf_fp_hsdsch_pdu_block; */
+static int hf_fp_flush;
+static int hf_fp_fsn_drt_reset;
+static int hf_fp_drt_indicator;
+static int hf_fp_fach_indicator;
+static int hf_fp_total_pdu_blocks;
+static int hf_fp_drt;
+static int hf_fp_hrnti;
+static int hf_fp_rach_measurement_result;
+static int hf_fp_lchid;
+static int hf_fp_pdu_length_in_block;
+static int hf_fp_pdus_in_block;
+static int hf_fp_cmch_pi;
+static int hf_fp_user_buffer_size;
+static int hf_fp_hsdsch_credits;
+static int hf_fp_hsdsch_max_macd_pdu_len;
+static int hf_fp_hsdsch_max_macdc_pdu_len;
+static int hf_fp_hsdsch_interval;
+static int hf_fp_hsdsch_calculated_rate;
+static int hf_fp_hsdsch_unlimited_rate;
+static int hf_fp_hsdsch_repetition_period;
+static int hf_fp_hsdsch_data_padding;
+static int hf_fp_hsdsch_new_ie_flags;
+static int hf_fp_hsdsch_new_ie_flag[8];
+static int hf_fp_hsdsch_drt;
+static int hf_fp_hsdsch_entity;
+static int hf_fp_hsdsch_physical_layer_category;
+static int hf_fp_timing_advance;
+static int hf_fp_num_of_pdu;
+static int hf_fp_mac_d_pdu_len;
+static int hf_fp_mac_d_pdu;
+static int hf_fp_data;
+static int hf_fp_crcis;
+static int hf_fp_crci[8];
+static int hf_fp_common_control_frame_type;
+static int hf_fp_t1;
+static int hf_fp_t2;
+static int hf_fp_t3;
+static int hf_fp_ul_sir_target;
+static int hf_fp_pusch_set_id;
+static int hf_fp_activation_cfn;
+static int hf_fp_duration;
+static int hf_fp_power_offset;
+static int hf_fp_code_number;
+static int hf_fp_spreading_factor;
+static int hf_fp_mc_info;
 
-static int hf_fp_rach_new_ie_flags = -1;
-static int hf_fp_rach_new_ie_flag_unused[7] = {-1, -1, -1, -1, -1, -1, -1 };
-static int hf_fp_rach_ext_propagation_delay_present = -1;
-static int hf_fp_rach_cell_portion_id_present = -1;
-static int hf_fp_rach_angle_of_arrival_present = -1;
-static int hf_fp_rach_ext_rx_sync_ul_timing_deviation_present = -1;
-static int hf_fp_rach_ext_rx_timing_deviation_present = -1;
+static int hf_fp_rach_new_ie_flags;
+static int hf_fp_rach_new_ie_flag_unused[7];
+static int hf_fp_rach_ext_propagation_delay_present;
+static int hf_fp_rach_cell_portion_id_present;
+static int hf_fp_rach_angle_of_arrival_present;
+static int hf_fp_rach_ext_rx_sync_ul_timing_deviation_present;
+static int hf_fp_rach_ext_rx_timing_deviation_present;
 
-static int hf_fp_cell_portion_id = -1;
-static int hf_fp_ext_propagation_delay = -1;
-static int hf_fp_angle_of_arrival = -1;
-static int hf_fp_ext_received_sync_ul_timing_deviation = -1;
+static int hf_fp_cell_portion_id;
+static int hf_fp_ext_propagation_delay;
+static int hf_fp_angle_of_arrival;
+static int hf_fp_ext_received_sync_ul_timing_deviation;
 
-static int hf_fp_radio_interface_parameter_update_flag[5] = {-1, -1, -1, -1, -1};
-static int hf_fp_dpc_mode = -1;
-static int hf_fp_tpc_po = -1;
-static int hf_fp_multiple_rl_set_indicator = -1;
-static int hf_fp_max_ue_tx_pow = -1;
-static int hf_fp_congestion_status = -1;
-static int hf_fp_e_rucch_present = -1;
-static int hf_fp_extended_bits_present = -1;
-static int hf_fp_extended_bits = -1;
-static int hf_fp_spare_extension = -1;
-static int hf_fp_ul_setup_frame = -1;
-static int hf_fp_dl_setup_frame = -1;
-static int hf_fp_relevant_pi_frame = -1;
+static int hf_fp_radio_interface_parameter_update_flag[5];
+static int hf_fp_dpc_mode;
+static int hf_fp_tpc_po;
+static int hf_fp_multiple_rl_set_indicator;
+static int hf_fp_max_ue_tx_pow;
+static int hf_fp_congestion_status;
+static int hf_fp_e_rucch_present;
+static int hf_fp_extended_bits_present;
+static int hf_fp_extended_bits;
+static int hf_fp_spare_extension;
+static int hf_fp_ul_setup_frame;
+static int hf_fp_dl_setup_frame;
+static int hf_fp_relevant_pi_frame;
 
 /* Subtrees. */
-static int ett_fp = -1;
-static int ett_fp_release = -1;
-static int ett_fp_data = -1;
-static int ett_fp_crcis = -1;
-static int ett_fp_ddi_config = -1;
-static int ett_fp_edch_subframe_header = -1;
-static int ett_fp_edch_subframe = -1;
-static int ett_fp_edch_maces = -1;
-static int ett_fp_edch_macis_descriptors = -1;
-static int ett_fp_hsdsch_new_ie_flags = -1;
-static int ett_fp_rach_new_ie_flags = -1;
-static int ett_fp_hsdsch_pdu_block_header = -1;
-static int ett_fp_pch_relevant_pi = -1;
+static int ett_fp;
+static int ett_fp_release;
+static int ett_fp_data;
+static int ett_fp_crcis;
+static int ett_fp_ddi_config;
+static int ett_fp_edch_subframe_header;
+static int ett_fp_edch_subframe;
+static int ett_fp_edch_maces;
+static int ett_fp_edch_macis_descriptors;
+static int ett_fp_hsdsch_new_ie_flags;
+static int ett_fp_rach_new_ie_flags;
+static int ett_fp_hsdsch_pdu_block_header;
+static int ett_fp_pch_relevant_pi;
 
-static expert_field ei_fp_hsdsch_common_experimental_support = EI_INIT;
-static expert_field ei_fp_hsdsch_common_t3_not_implemented = EI_INIT;
-static expert_field ei_fp_channel_type_unknown = EI_INIT;
-static expert_field ei_fp_ddi_not_defined = EI_INIT;
-static expert_field ei_fp_stop_hsdpa_transmission = EI_INIT;
-static expert_field ei_fp_hsdsch_entity_not_specified = EI_INIT;
-static expert_field ei_fp_expecting_tdd = EI_INIT;
-static expert_field ei_fp_bad_payload_checksum = EI_INIT;
-static expert_field ei_fp_e_rnti_t2_edch_frames = EI_INIT;
-static expert_field ei_fp_crci_no_subdissector = EI_INIT;
-static expert_field ei_fp_timing_adjustmentment_reported = EI_INIT;
-static expert_field ei_fp_mac_is_sdus_miscount = EI_INIT;
-static expert_field ei_fp_maybe_srb = EI_INIT;
-static expert_field ei_fp_transport_channel_type_unknown = EI_INIT;
-static expert_field ei_fp_pch_lost_relevant_pi_frame = EI_INIT;
-static expert_field ei_fp_unable_to_locate_ddi_entry = EI_INIT;
-static expert_field ei_fp_e_rnti_first_entry = EI_INIT;
-static expert_field ei_fp_bad_header_checksum = EI_INIT;
-static expert_field ei_fp_crci_error_bit_set_for_tb = EI_INIT;
-static expert_field ei_fp_spare_extension = EI_INIT;
-static expert_field ei_fp_no_per_frame_info = EI_INIT;
-static expert_field ei_fp_no_per_conv_channel_info = EI_INIT;
-static expert_field ei_fp_invalid_frame_count = EI_INIT;
+static expert_field ei_fp_hsdsch_common_experimental_support;
+static expert_field ei_fp_hsdsch_common_t3_not_implemented;
+static expert_field ei_fp_channel_type_unknown;
+static expert_field ei_fp_ddi_not_defined;
+static expert_field ei_fp_stop_hsdpa_transmission;
+static expert_field ei_fp_hsdsch_entity_not_specified;
+static expert_field ei_fp_expecting_tdd;
+static expert_field ei_fp_bad_payload_checksum;
+static expert_field ei_fp_e_rnti_t2_edch_frames;
+static expert_field ei_fp_crci_no_subdissector;
+static expert_field ei_fp_timing_adjustmentment_reported;
+static expert_field ei_fp_mac_is_sdus_miscount;
+static expert_field ei_fp_maybe_srb;
+static expert_field ei_fp_transport_channel_type_unknown;
+static expert_field ei_fp_pch_lost_relevant_pi_frame;
+static expert_field ei_fp_unable_to_locate_ddi_entry;
+static expert_field ei_fp_e_rnti_first_entry;
+static expert_field ei_fp_bad_header_checksum;
+static expert_field ei_fp_crci_error_bit_set_for_tb;
+static expert_field ei_fp_spare_extension;
+static expert_field ei_fp_no_per_frame_info;
+static expert_field ei_fp_no_per_conv_channel_info;
+static expert_field ei_fp_invalid_frame_count;
 
 static dissector_handle_t rlc_bcch_handle;
 static dissector_handle_t mac_fdd_dch_handle;
@@ -447,7 +447,7 @@ static const value_string common_control_frame_type_vals[] = {
 static const guint8 hsdsch_macdflow_id_rlc_map[] = {
     RLC_UM,                   /*0 SRB */
     RLC_AM,                   /*1 Interactive PS*/
-    RLC_AM,                   /*2 Interatcive PS*/
+    RLC_AM,                   /*2 Interactive PS*/
     RLC_UNKNOWN_MODE,         /*3 ???*/
     RLC_AM,                   /*4 Streaming PS*/
     RLC_UNKNOWN_MODE,
@@ -460,7 +460,7 @@ static const guint8 hsdsch_macdflow_id_rlc_map[] = {
 static const guint8 hsdsch_macdflow_id_mac_content_map[] = {
     MAC_CONTENT_DCCH,    /*1 SRB */
     MAC_CONTENT_PS_DTCH, /*2 Interactive PS*/
-    MAC_CONTENT_PS_DTCH, /*3 Interatcive PS*/
+    MAC_CONTENT_PS_DTCH, /*3 Interactive PS*/
     RLC_UNKNOWN_MODE,    /*4 ???*/
     MAC_CONTENT_PS_DTCH, /*5 Streaming PS*/
     RLC_UNKNOWN_MODE,
@@ -2799,7 +2799,7 @@ dissect_e_dch_channel_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             proto_tree *subframe_tree;
             guint bits_in_subframe = 0;
             guint mac_d_pdus_in_subframe = 0;
-            guint    lchid=0;    /*Logcial channel id*/
+            guint    lchid=0;    /*Logical channel id*/
             guint32 user_identity;
             umts_mac_info *macinf;
             bit_offset = 0;
@@ -2896,7 +2896,7 @@ dissect_e_dch_channel_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                         macinf->lchid[macd_idx] = lchid;
                         rlcinf->mode[macd_idx] = lchId_rlc_map[lchid]; /* Set RLC mode by lchid to RLC_MODE map in nbap.h */
 
-                        /* Set UE ID to U-RNTI or NBAP Comuncation Context*/
+                        /* Set UE ID to U-RNTI or NBAP Communication Context*/
                         rlcinf->ueid[macd_idx] = user_identity;
                         rlcinf->rbid[macd_idx] = lchid;
                         rlcinf->li_size[macd_idx] = RLC_LI_7BITS;
@@ -3278,7 +3278,7 @@ dissect_hsdsch_channel_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             } else if (p_fp_info->hsdsch_macflowd_id == 0) {              /*MACd-flow = 0 is often SRB */
                 expert_add_info(pinfo, NULL, &ei_fp_maybe_srb);
             } else {
-                    macinf->ctmux[i] = FALSE;    /*Either it's multiplexed and not signled or it's not MUX*/
+                    macinf->ctmux[i] = FALSE;    /*Either it's multiplexed and not signalled or it's not MUX*/
             }
 
             /* Figure out RLC mode */
@@ -4103,7 +4103,7 @@ heur_dissect_fp_dcch_over_dch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                 return TRUE;
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
         }
@@ -4171,7 +4171,7 @@ heur_dissect_fp_dcch_over_dch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     }
 
     /* Checking if the 4th byte in the frame is zeroed. In this case the CRC checks aren't */
-    /* deterministic enough to gurantee this is a DCH since this packet could also be a PCH frame */
+    /* deterministic enough to guarantee this is a DCH since this packet could also be a PCH frame */
     /* with PI Bitmap of 18 bytes + 0 TBs (Both CRCs will match for both formats) */
     pch_collisions_byte = tvb_get_guint8(tvb, 3);
     if (pch_collisions_byte == 0) {
@@ -4238,7 +4238,7 @@ heur_dissect_fp_fach1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void 
                 return TRUE;
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
         }
@@ -4348,7 +4348,7 @@ heur_dissect_fp_fach2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void 
                 return TRUE;
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
         }
@@ -4463,7 +4463,7 @@ heur_dissect_fp_rach(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
                 return TRUE;
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
         }
@@ -4596,7 +4596,7 @@ heur_dissect_fp_pch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
                 }
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
             else {
@@ -4686,7 +4686,7 @@ heur_dissect_fp_pch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
                 cfn_lowest_bits = tvb_get_guint8(tvb, 2) & 0xF0;
                 if(cfn_lowest_bits == 0) {
                     /* Checking if the 4th byte in the frame is zeroed. In this case the CRC checks aren't */
-                    /* deterministic enough to gurantee this is a PCH since this packet could also be a DCH frame */
+                    /* deterministic enough to guarantee this is a PCH since this packet could also be a DCH frame */
                     /* with MAC's C/T is 0 and 4 leftmost bits of RLC are 0 */
                     dch_collisions_byte = tvb_get_guint8(tvb, 3);
                     if (dch_collisions_byte == 0) {
@@ -4794,7 +4794,7 @@ heur_dissect_fp_hsdsch_type_1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                 return TRUE;
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
         }
@@ -4925,7 +4925,7 @@ heur_dissect_fp_hsdsch_type_2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                 return TRUE;
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
         }
@@ -5005,7 +5005,7 @@ heur_dissect_fp_hsdsch_type_2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         else {
             total_header_length += 2;
         }
-        /* Adding this header's paylod's size to expected length*/
+        /* Adding this header's payload's size to expected length*/
         expected_payload_length += (pdu_block_header_pdu_length * pdu_block_header_pdus_count);
 
         /* Checking padding after lchid */
@@ -5095,7 +5095,7 @@ heur_dissect_fp_edch_type_1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 return TRUE;
             }
             else if (umts_fp_conversation_info->channel != CHANNEL_UNKNOWN){
-                /* This conversation was successfuly framed as ANOTHER type */
+                /* This conversation was successfully framed as ANOTHER type */
                 return FALSE;
             }
         }
@@ -5156,7 +5156,7 @@ heur_dissect_fp_edch_type_1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         }
         bit_offset = 4;
 
-        /* Making sure enough bytes are presesnt for all sub-header */
+        /* Making sure enough bytes are present for all sub-header */
         total_sub_headers_len = ((int)((((1.5 + (number_of_mac_es_pdus * 1.5))*8+7)/8)));
         if ((offset + total_sub_headers_len) >= captured_length) {
             return FALSE;
@@ -5555,7 +5555,7 @@ fp_set_per_packet_inf_from_conv(conversation_t *p_conv,
                 /* control frame, we're done */
                 return fpi;
             }
-            /* Inesrting Paging Indication Info extracted from the previous packet */
+            /* Inserting Paging Indication Info extracted from the previous packet */
             fpi->relevant_paging_indications = fp_pch_channel_info->last_paging_indication_info;
             fp_pch_channel_info->last_paging_indication_info = NULL;
 
@@ -6102,7 +6102,7 @@ void proto_register_fp(void)
             },
             { &hf_fp_direction,
               { "Direction",
-                "fp.direction", FT_BOOLEAN, 8, TFS(&tfs_uplink_downlink), 0x0,
+                "fp.direction", FT_BOOLEAN, BASE_NONE, TFS(&tfs_uplink_downlink), 0x0,
                 "Link direction", HFILL
               }
             },

@@ -66,6 +66,14 @@ extern gint ett_opcua_array_DataValue;
 extern gint ett_opcua_array_Variant;
 extern gint ett_opcua_returnDiagnostics;
 
+enum ua_message_mode {
+    UA_MessageMode_Unknown = 0,
+    UA_MessageMode_None,
+    UA_MessageMode_Sign,
+    UA_MessageMode_SignAndEncrypt,
+    UA_MessageMode_MaybeEncrypted
+};
+
 /* simple types */
 proto_item* parseBoolean(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
 proto_item* parseByte(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
@@ -77,6 +85,7 @@ proto_item* parseInt32(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint
 proto_item* parseUInt64(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
 proto_item* parseInt64(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
 proto_item* parseString(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
+proto_item* parseString_ret_string_and_length(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, gint *pOffset, int hfIndex, const guint8 **retval, gint *lenretval);
 proto_item* parseGuid(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
 proto_item* parseByteString(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
 proto_item* parseXmlElement(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
@@ -90,6 +99,7 @@ void parseNodeId(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOff
 void parseDiagnosticInfo(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, const char *szFieldName);
 void parseExtensionObject(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, const char *szFieldName);
 void parseQualifiedName(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, const char *szFieldName);
+void parseCertificate(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, int hfIndex);
 void parseDataValue(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, const char *szFieldName);
 void parseVariant(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, const char *szFieldName);
 void parseExpandedNodeId(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint *pOffset, const char *szFieldName);

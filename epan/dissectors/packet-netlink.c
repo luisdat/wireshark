@@ -72,41 +72,42 @@ extern value_string_ext linux_negative_errno_vals_ext;
 
 static dissector_handle_t netlink_handle;
 
-static int proto_netlink = -1;
+static int proto_netlink;
 
-static int hf_netlink_attr_data = -1;
-static int hf_netlink_attr_index = -1;
-static int hf_netlink_attr_len = -1;
-static int hf_netlink_attr_type = -1;
-static int hf_netlink_attr_type_nested = -1;
-static int hf_netlink_attr_type_net_byteorder = -1;
-static int hf_netlink_error = -1;
-static int hf_netlink_family = -1;
-static int hf_netlink_hatype = -1;
-static int hf_netlink_hdr_flag_ack = -1;
-static int hf_netlink_hdr_flag_append = -1;
-static int hf_netlink_hdr_flag_atomic = -1;
-static int hf_netlink_hdr_flag_create = -1;
-static int hf_netlink_hdr_flag_dumpfiltered = -1;
-static int hf_netlink_hdr_flag_dumpintr = -1;
-static int hf_netlink_hdr_flag_echo = -1;
-static int hf_netlink_hdr_flag_excl = -1;
-static int hf_netlink_hdr_flag_match = -1;
-static int hf_netlink_hdr_flag_multi = -1;
-static int hf_netlink_hdr_flag_replace = -1;
-static int hf_netlink_hdr_flag_request = -1;
-static int hf_netlink_hdr_flag_root = -1;
-static int hf_netlink_hdr_flags = -1;
-static int hf_netlink_hdr_len = -1;
-static int hf_netlink_hdr_pid = -1;
-static int hf_netlink_hdr_seq = -1;
-static int hf_netlink_hdr_type = -1;
+static int hf_netlink_attr_data;
+static int hf_netlink_attr_index;
+static int hf_netlink_attr_len;
+static int hf_netlink_attr_type;
+static int hf_netlink_attr_type_nested;
+static int hf_netlink_attr_type_net_byteorder;
+static int hf_netlink_error;
+static int hf_netlink_family;
+static int hf_netlink_hatype;
+static int hf_netlink_hdr_flag_ack;
+static int hf_netlink_hdr_flag_append;
+static int hf_netlink_hdr_flag_atomic;
+static int hf_netlink_hdr_flag_create;
+static int hf_netlink_hdr_flag_dumpfiltered;
+static int hf_netlink_hdr_flag_dumpintr;
+static int hf_netlink_hdr_flag_echo;
+static int hf_netlink_hdr_flag_excl;
+static int hf_netlink_hdr_flag_match;
+static int hf_netlink_hdr_flag_multi;
+static int hf_netlink_hdr_flag_replace;
+static int hf_netlink_hdr_flag_request;
+static int hf_netlink_hdr_flag_root;
+static int hf_netlink_hdr_flags;
+static int hf_netlink_hdr_len;
+static int hf_netlink_hdr_pid;
+static int hf_netlink_hdr_seq;
+static int hf_netlink_hdr_type;
+static int hf_netlink_padding;
 
-static gint ett_netlink_cooked = -1;
-static gint ett_netlink_msghdr = -1;
-static gint ett_netlink_msg = -1;
-static gint ett_netlink_hdr_flags = -1;
-static gint ett_netlink_attr_type = -1;
+static gint ett_netlink_cooked;
+static gint ett_netlink_msghdr;
+static gint ett_netlink_msg;
+static gint ett_netlink_hdr_flags;
+static gint ett_netlink_attr_type;
 
 static dissector_table_t netlink_dissector_table;
 
@@ -200,7 +201,7 @@ dissect_netlink_attributes_common(tvbuff_t *tvb, int hf_type, int ett_tree, int 
 		offset += 2;
 
 		rta_type = tvb_get_guint16(tvb, offset, encoding);
-		if (ett_attrib == -1) {
+		if (ett_attrib <= 0) {
 			/* List of attributes */
 			type = rta_type & NLA_TYPE_MASK;
 			type_item = proto_tree_add_item(attr_tree, hf_netlink_attr_type, tvb, offset, 2, encoding);
@@ -248,7 +249,7 @@ dissect_netlink_attributes_common(tvbuff_t *tvb, int hf_type, int ett_tree, int 
 				proto_tree_add_item(attr_tree, hf_netlink_attr_data, tvb, offset, rta_len - 4, ENC_NA);
 			}
 
-			/* Restore the originaly established encoding. */
+			/* Restore the originally established encoding. */
 			if (rta_type & NLA_F_NET_BYTEORDER)
 				nl_data->encoding = encoding;
 		} else {
@@ -265,8 +266,16 @@ dissect_netlink_attributes_common(tvbuff_t *tvb, int hf_type, int ett_tree, int 
 		}
 
 		/* Assume offset already aligned, next offset is rta_len plus alignment. */
+		guint signalled_len = rta_len;
 		rta_len = MIN(WS_ROUNDUP_4(rta_len), data_length);
+		/* Possible padding following attr */
+		if (rta_len > signalled_len) {
+			proto_tree_add_item(tree, hf_netlink_padding, tvb, offset+1, rta_len-signalled_len, ENC_NA);
+		}
+
 		offset += rta_len - 4;  /* Header was already skipped */
+
+
 		if (data_length < rta_len)
 			THROW(ReportedBoundsError);
 		data_length -= rta_len;
@@ -290,7 +299,7 @@ dissect_netlink_attributes_to_end(tvbuff_t *tvb, int hf_type, int ett, void *dat
 int
 dissect_netlink_attributes_array(tvbuff_t *tvb, int hf_type, int ett_array, int ett_attrib, void *data, struct packet_netlink_data *nl_data, proto_tree *tree, int offset, int length, netlink_attributes_cb_t cb)
 {
-	DISSECTOR_ASSERT(ett_attrib != -1);
+	DISSECTOR_ASSERT(ett_attrib > 0);
 	return dissect_netlink_attributes_common(tvb, hf_type, ett_array, ett_attrib, data, nl_data, tree, offset, length, cb);
 }
 
@@ -314,7 +323,7 @@ dissect_netlink_header(tvbuff_t *tvb, proto_tree *tree, int offset, int encoding
 		hf_type = hf_netlink_hdr_type;
 		pi = proto_tree_add_item(fh_hdr, hf_type, tvb, offset, 2, encoding);
 	} else {
-		if (hf_type != -1) {
+		if (hf_type > 0) {
 			pi = proto_tree_add_item(fh_hdr, hf_type, tvb, offset, 2, encoding);
 		} else {
 			hf_type = hf_netlink_hdr_type;
@@ -653,6 +662,11 @@ proto_register_netlink(void)
 			{ "Error code", "netlink.error",
 			  FT_INT32, BASE_DEC | BASE_EXT_STRING, &linux_negative_errno_vals_ext, 0x0,
 			  "Negative errno or 0 for acknowledgements", HFILL }
+		},
+		{ &hf_netlink_padding,
+			{ "Padding", "netlink.padding",
+			  FT_BYTES, BASE_NONE, NULL, 0x0,
+			  NULL, HFILL }
 		},
 	};
 

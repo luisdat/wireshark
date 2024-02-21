@@ -23,6 +23,7 @@
 #include <capture/capture_ifinfo.h>
 #include "ringbuffer.h"
 #include <wsutil/wslog.h>
+#include <wsutil/filter_files.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -158,9 +159,6 @@ typedef struct remote_options_tag {
 typedef struct interface_tag {
     gchar          *name;
     gchar          *display_name;
-    gchar          *friendly_name;
-    gchar          *vendor_description;
-    guint           type;
     gchar          *addresses;
     gint            no_addresses;
     gchar          *cfilter;
@@ -337,6 +335,7 @@ typedef struct capture_options_tag {
     gchar             *compress_type;         /**< compress type */
     gchar             *closed_msg;            /**< Dumpcap capture closed message */
     guint              extcap_terminate_id;   /**< extcap process termination source ID */
+    filter_list_t     *capture_filters_list;  /**< list of saved capture filters */
 } capture_options;
 
 /*
@@ -370,7 +369,7 @@ enum caps_query {
 /* print interface capabilities, including link layer types */
 extern int
 capture_opts_print_if_capabilities(if_capabilities_t *caps,
-                                   interface_options *interface_opts,
+                                   const interface_options *interface_opts,
                                    int queries);
 
 /* print list of interfaces */
@@ -394,7 +393,16 @@ extern void
 capture_opts_del_iface(capture_options *capture_opts, guint if_index);
 
 extern void
+interface_opts_free(interface_options *interface_opts);
+
+extern interface_options*
+interface_opts_from_if_info(capture_options *capture_opts, const if_info_t *if_info);
+
+extern void
 collect_ifaces(capture_options *capture_opts);
+
+extern void
+capture_opts_free_link_row(gpointer elem);
 
 extern void
 capture_opts_free_interface_t(interface_t *device);
