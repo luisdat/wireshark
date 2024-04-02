@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-mms.c                                                               */
-/* asn2wrs.py -b -L -p mms -c ./mms.cnf -s ./packet-mms-template -D . -O ../.. mms.asn */
+/* asn2wrs.py -b -q -L -p mms -c ./mms.cnf -s ./packet-mms-template -D . -O ../.. mms.asn */
 
 /* packet-mms_asn1.c
  *
@@ -198,7 +198,7 @@ static int hf_mms_reportEventConditionStatus_01;  /* ReportEventConditionStatus_
 static int hf_mms_alterEventConditionMonitoring_01;  /* AlterEventConditionMonitoring_Response */
 static int hf_mms_triggerEvent_01;                /* TriggerEvent_Response */
 static int hf_mms_defineEventAction_01;           /* DefineEventAction_Response */
-static int hf_mms_deleteEventAction;              /* DeleteEventAction_Response */
+static int hf_mms_confirmedServiceRequest_deleteEventAction_01;  /* DeleteEventAction_Response */
 static int hf_mms_getEventActionAttributes_01;    /* GetEventActionAttributes_Response */
 static int hf_mms_reportActionStatus;             /* ReportEventActionStatus_Response */
 static int hf_mms_defineEventEnrollment_01;       /* DefineEventEnrollment_Response */
@@ -1039,7 +1039,6 @@ static int dissect_mms_AlternateAccess(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 static int dissect_mms_Data(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
-#define MAX_RECURSION_DEPTH 100 // Arbitrarily chosen.
 
 
 static int
@@ -1558,18 +1557,15 @@ static const ber_choice_t TypeSpecification_choice[] = {
 
 static int
 dissect_mms_TypeSpecification(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
-  const unsigned cycle_size = 3;
-  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
-
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
-
+  // TypeSpecification -> TypeSpecification/array -> TypeSpecification
+  actx->pinfo->dissection_depth += 2;
+  increment_dissection_depth(actx->pinfo);
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  TypeSpecification_choice, hf_index, ett_mms_TypeSpecification,
                                  NULL);
 
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth);
+  actx->pinfo->dissection_depth -= 2;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
@@ -1751,17 +1747,14 @@ static const ber_sequence_t AlternateAccess_sequence_of[1] = {
 
 static int
 dissect_mms_AlternateAccess(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
-  const unsigned cycle_size = 5;
-  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
-
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
-
+  // AlternateAccess -> AlternateAccess/_item -> AlternateAccessSelection -> AlternateAccessSelection/selectAlternateAccess -> AlternateAccess
+  actx->pinfo->dissection_depth += 4;
+  increment_dissection_depth(actx->pinfo);
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       AlternateAccess_sequence_of, hf_index, ett_mms_AlternateAccess);
 
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth);
+  actx->pinfo->dissection_depth -= 4;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
@@ -1815,18 +1808,15 @@ static const ber_choice_t VariableSpecification_choice[] = {
 
 static int
 dissect_mms_VariableSpecification(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
-  const unsigned cycle_size = 4;
-  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
-
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
-
+  // VariableSpecification -> ScatteredAccessDescription -> ScatteredAccessDescription/_item -> VariableSpecification
+  actx->pinfo->dissection_depth += 3;
+  increment_dissection_depth(actx->pinfo);
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  VariableSpecification_choice, hf_index, ett_mms_VariableSpecification,
                                  NULL);
 
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth);
+  actx->pinfo->dissection_depth -= 3;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
@@ -2103,18 +2093,15 @@ static const ber_choice_t Data_choice[] = {
 
 static int
 dissect_mms_Data(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
-  const unsigned cycle_size = 3;
-  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
-
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
-
+  // Data -> Data/array -> Data
+  actx->pinfo->dissection_depth += 2;
+  increment_dissection_depth(actx->pinfo);
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  Data_choice, hf_index, ett_mms_Data,
                                  NULL);
 
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth);
+  actx->pinfo->dissection_depth -= 2;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
@@ -6549,7 +6536,7 @@ static const ber_choice_t ConfirmedServiceResponse_choice[] = {
   {  51, &hf_mms_alterEventConditionMonitoring_01, BER_CLASS_CON, 51, BER_FLAGS_IMPLTAG, dissect_mms_AlterEventConditionMonitoring_Response },
   {  52, &hf_mms_triggerEvent_01 , BER_CLASS_CON, 52, BER_FLAGS_IMPLTAG, dissect_mms_TriggerEvent_Response },
   {  53, &hf_mms_defineEventAction_01, BER_CLASS_CON, 53, BER_FLAGS_IMPLTAG, dissect_mms_DefineEventAction_Response },
-  {  54, &hf_mms_deleteEventAction, BER_CLASS_CON, 54, BER_FLAGS_IMPLTAG, dissect_mms_DeleteEventAction_Response },
+  {  54, &hf_mms_confirmedServiceRequest_deleteEventAction_01, BER_CLASS_CON, 54, BER_FLAGS_IMPLTAG, dissect_mms_DeleteEventAction_Response },
   {  55, &hf_mms_getEventActionAttributes_01, BER_CLASS_CON, 55, BER_FLAGS_IMPLTAG, dissect_mms_GetEventActionAttributes_Response },
   {  56, &hf_mms_reportActionStatus, BER_CLASS_CON, 56, BER_FLAGS_IMPLTAG, dissect_mms_ReportEventActionStatus_Response },
   {  57, &hf_mms_defineEventEnrollment_01, BER_CLASS_CON, 57, BER_FLAGS_IMPLTAG, dissect_mms_DefineEventEnrollment_Response },
@@ -8028,8 +8015,8 @@ void proto_register_mms(void) {
       { "defineEventAction", "mms.defineEventAction_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "DefineEventAction_Response", HFILL }},
-    { &hf_mms_deleteEventAction,
-      { "deleteEventAction", "mms.deleteEventAction",
+    { &hf_mms_confirmedServiceRequest_deleteEventAction_01,
+      { "deleteEventAction", "mms.confirmedServiceRequest.deleteEventAction",
         FT_INT32, BASE_DEC, NULL, 0,
         "DeleteEventAction_Response", HFILL }},
     { &hf_mms_getEventActionAttributes_01,

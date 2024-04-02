@@ -1220,11 +1220,16 @@ sharkd_session_process_load(const char *buf, const jsmntok_t *tokens, int count)
  * Process status request
  *
  * Output object with attributes:
- *   (m) frames   - count of currently loaded frames
- *   (m) duration - time difference between time of first frame, and last loaded frame
- *   (o) filename - capture filename
- *   (o) filesize - capture filesize
- *   (o) columns  - array of column titles
+ *   (m) frames      - count of currently loaded frames
+ *   (m) duration    - time difference between time of first frame, and last loaded frame
+ *   (o) filename    - capture filename
+ *   (o) filesize    - capture filesize
+ *   (o) columns     - array of column titles
+ *   (o) column_info - array of column infos, array of object with attributes:
+ *                      'title'    - column title
+ *                      'format'   - column format (%x or %Cus:<expr>:<occurrence> if COL_CUSTOM)
+ *                      'visible'  - true if column is visible
+ *                      'resolved' - true if column is resolved
  */
 static void
 sharkd_session_process_status(void)
@@ -1256,6 +1261,24 @@ sharkd_session_process_status(void)
         for (int i = 0; i < cfile.cinfo.num_cols; ++i)
         {
             sharkd_json_value_string(NULL, get_column_title(i));
+        }
+        sharkd_json_array_close();
+
+        sharkd_json_array_open("column_info");
+        for (int i = 0; i < cfile.cinfo.num_cols; ++i)
+        {
+            int fmt = get_column_format(i);
+            sharkd_json_object_open(NULL);
+            sharkd_json_value_string("title", get_column_title(i));
+            if (fmt != COL_CUSTOM)
+            {
+                sharkd_json_value_string("format", col_format_to_string(fmt));
+            } else {
+                sharkd_json_value_stringf("format", "%s:%s:%d", col_format_to_string(fmt), get_column_custom_fields(i), get_column_custom_occurrence(i));
+            }
+            sharkd_json_value_anyf("visible", get_column_visible(i) ? "true" : "false");
+            sharkd_json_value_anyf("resolved", get_column_resolved(i) ? "true" : "false");
+            sharkd_json_object_close();
         }
         sharkd_json_array_close();
     }
@@ -4310,7 +4333,7 @@ sharkd_session_process_frame_cb(epan_dissect_t *edt, proto_tree *tree, struct ep
     sharkd_json_result_epilogue();
 }
 
-#define SHARKD_IOGRAPH_MAX_ITEMS 250000 /* 250k limit of items is taken from wireshark-qt, on x86_64 sizeof(io_graph_item_t) is 152, so single graph can take max 36 MB */
+#define SHARKD_IOGRAPH_MAX_ITEMS 250000 /* 250k limit of items is taken from wireshark-qt, on x86_64 sizeof(io_graph_item_t) is 88, so single graph can take max 21 MB */
 
 struct sharkd_iograph
 {
@@ -4344,14 +4367,14 @@ sharkd_iograph_packet(void *g, packet_info *pinfo, epan_dissect_t *edt, const vo
             int new_size = idx + 1024;
 
             graph->items = (io_graph_item_t *) g_realloc(graph->items, sizeof(io_graph_item_t) * new_size);
-            reset_io_graph_items(&graph->items[graph->space_items], new_size - graph->space_items);
+            reset_io_graph_items(&graph->items[graph->space_items], new_size - graph->space_items, graph->hf_index);
 
             graph->space_items = new_size;
         }
         else if (graph->items == NULL)
         {
             graph->items = g_new(io_graph_item_t, graph->space_items);
-            reset_io_graph_items(graph->items, graph->space_items);
+            reset_io_graph_items(graph->items, graph->space_items, graph->hf_index);
         }
 
         graph->num_items = idx + 1;
@@ -5175,7 +5198,6 @@ sharkd_session_process_dumpconf_cb(pref_t *pref, gpointer d)
     switch (prefs_get_type(pref))
     {
         case PREF_UINT:
-        case PREF_DECODE_AS_UINT:
             sharkd_json_value_anyf("u", "%u", prefs_get_uint_value_real(pref, pref_current));
             if (prefs_get_uint_base(pref) != 10)
                 sharkd_json_value_anyf("ub", "%u", prefs_get_uint_base(pref));
@@ -5291,8 +5313,8 @@ sharkd_session_process_dumpconf_mod_cb(module_t *module, gpointer d)
  * Output object with attributes:
  *   (o) prefs   - object with module preferences
  *                  (m) [KEY] - preference name
- *                  (o) u - preference value (for PREF_UINT, PREF_DECODE_AS_UINT)
- *                  (o) ub - preference value suggested base for display (for PREF_UINT, PREF_DECODE_AS_UINT) and if different than 10
+ *                  (o) u - preference value (for PREF_UINT)
+ *                  (o) ub - preference value suggested base for display (for PREF_UINT) and if different than 10
  *                  (o) b - preference value (only for PREF_BOOL) (1 true, 0 false)
  *                  (o) s - preference value (for PREF_STRING, PREF_SAVE_FILENAME, PREF_OPEN_FILENAME, PREF_DIRNAME, PREF_PASSWORD, PREF_DISSECTOR)
  *                  (o) e - preference possible values (only for PREF_ENUM)
@@ -5837,7 +5859,7 @@ sharkd_session_process(char *buf, const jsmntok_t *tokens, int count)
 int
 sharkd_session_main(int mode_setting)
 {
-    char buf[2 * 1024];
+    char buf[8 * 1024];
     jsmntok_t *tokens = NULL;
     int tokens_max = -1;
 

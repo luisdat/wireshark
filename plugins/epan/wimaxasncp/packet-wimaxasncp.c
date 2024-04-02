@@ -70,8 +70,8 @@ static int hf_wimaxasncp_tlv_value_bitflags32;
 /* static int hf_wimaxasncp_tlv_value_vendor_id; */
 
 /* Preferences */
-static gboolean show_transaction_id_d_bit      = FALSE;
-static gboolean debug_enabled                  = FALSE;
+static bool show_transaction_id_d_bit      = false;
+static bool debug_enabled                  = false;
 
 /* Default WiMAX ASN control protocol port */
 #define WIMAXASNCP_DEF_UDP_PORT     2231
@@ -1789,6 +1789,7 @@ static void wimaxasncp_dissect_tlv_value(
 
 /* ========================================================================= */
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static guint dissect_wimaxasncp_tlvs(
     tvbuff_t    *tvb,
     packet_info *pinfo,
@@ -1897,8 +1898,9 @@ static guint dissect_wimaxasncp_tlvs(
                     MIN(length, tvb_captured_length_remaining(tvb, offset)),
                     length);
 
-                /* N.B.  This is a recursive call... */
+                increment_dissection_depth(pinfo);
                 dissect_wimaxasncp_tlvs(tlv_tvb, pinfo, tlv_tree);
+                decrement_dissection_depth(pinfo);
             }
             else
             {

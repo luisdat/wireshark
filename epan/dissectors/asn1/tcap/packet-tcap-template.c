@@ -78,9 +78,9 @@ static range_t *ssn_range;
 
 /* These two timeout (in second) are used when some message are lost,
    or when the same TCAP transcation identifier is reused */
-guint gtcap_RepetitionTimeout = 10;
-guint gtcap_LostTimeout = 30;
-gboolean gtcap_PersistentSRT=FALSE;
+static guint gtcap_RepetitionTimeout = 10;
+static guint gtcap_LostTimeout = 30;
+static bool gtcap_PersistentSRT=false;
 gboolean gtcap_DisplaySRT=FALSE;
 gboolean gtcap_StatSRT=FALSE;
 
@@ -1899,7 +1899,7 @@ dissect_tcap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
       }
     }
     if (p_tcap_context && p_tcap_context->callback) {
-      /* Callback fonction for the upper layer */
+      /* Callback function for the upper layer */
       (p_tcap_context->callback)(tvb, pinfo, tcap_stat_tree, p_tcap_context);
     }
   }
@@ -2114,6 +2114,7 @@ static void cleanup_tcap(void)
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_tcap_param(asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset)
 {
   gint tag_offset, saved_offset, len_offset;
@@ -2153,10 +2154,12 @@ dissect_tcap_param(asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset
       proto_tree_add_uint(subtree, hf_tcap_length, tvb, tag_offset,
         len_length, len);
 
-      if (len-(2*ind_field)) /*should always be positive unless we get an empty contructor pointless? */
+      if (len-(2*ind_field)) /*should always be positive unless we get an empty constructor pointless? */
       {
         next_tvb = tvb_new_subset_length(tvb, offset, len-(2*ind_field));
+        increment_dissection_depth(actx->pinfo);
         dissect_tcap_param(actx, subtree,next_tvb,0);
+        decrement_dissection_depth(actx->pinfo);
       }
 
       if (ind_field)

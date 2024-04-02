@@ -81,9 +81,9 @@ static gint ett_json_object_raw;
 static gint ett_json_member_raw;
 
 /* Preferences */
-static gboolean json_compact = FALSE;
+static bool json_compact = false;
 
-static gboolean json_raw = FALSE;
+static bool json_raw = false;
 
 /* Determine whether to hide the tree of original form or root item of compact or raw form
  * based on the enabled status of compact_form and raw_form preferences.
@@ -92,13 +92,13 @@ static gboolean json_raw = FALSE;
  * compact_form or raw_form is TRUE, then hide the root item of compact or raw form and put
  * the content of compact or raw form under the tree item of JSON protocol directly.
  */
-static gboolean auto_hide = FALSE;
+static bool auto_hide = false;
 
-static gboolean ignore_leading_bytes = FALSE;
+static bool ignore_leading_bytes = false;
 
-static gboolean hide_extended_path_based_filtering = FALSE;
+static bool hide_extended_path_based_filtering = false;
 
-static gboolean unescape_strings = FALSE;
+static bool unescape_strings = false;
 
 static tvbparse_wanted_t* want;
 static tvbparse_wanted_t* want_ignore;
@@ -445,6 +445,11 @@ json_key_lookup(proto_tree* tree, tvbparse_elem_t* tok, const char* key_str, pac
 	hf_id = *json_data_decoder_rec->hf_id;
 	DISSECTOR_ASSERT(hf_id > 0);
 
+	int proto_id = proto_registrar_is_protocol(hf_id) ? hf_id : proto_registrar_get_parent(hf_id);
+	if (!proto_is_protocol_enabled(find_protocol_by_id(proto_id))) {
+		return NULL;
+	}
+
 	if (use_compact) {
 		int str_len = (int)strlen(key_str);
 		ti = proto_tree_add_item(tree, hf_id, tok->tvb, tok->offset + (4 + str_len), tok->len - (5 + str_len), ENC_NA);
@@ -678,7 +683,7 @@ before_object(void *tvbparse_data, const void *wanted_data _U_, tvbparse_elem_t 
 		}
 
 		if (data->prev_item_type_raw == JSON_MARK_TYPE_MEMBER_NAME) {
-			/* this is an object value of an member, add the "{" just after the memeber name */
+			/* this is an object value of an member, add the "{" just after the member name */
 			ti_raw = data->prev_item_raw;
 			proto_item_append_text(ti_raw, " {");
 		} else {
@@ -903,7 +908,7 @@ before_array(void *tvbparse_data, const void *wanted_data _U_, tvbparse_elem_t *
 		}
 
 		if (data->prev_item_type_raw == JSON_MARK_TYPE_MEMBER_NAME) {
-			/* this is an array value of an member, add the "[" just after the memeber name */
+			/* this is an array value of an member, add the "[" just after the member name */
 			ti_raw = data->prev_item_raw;
 			proto_item_append_text(ti_raw, " [");
 		} else {

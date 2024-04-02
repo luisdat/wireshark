@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-kerberos.h                                                          */
-/* asn2wrs.py -b -L -p kerberos -c ./kerberos.cnf -s ./packet-kerberos-template -D . -O ../.. KerberosV5Spec2.asn k5.asn RFC3244.asn RFC6113.asn SPAKE.asn */
+/* asn2wrs.py -b -q -L -p kerberos -c ./kerberos.cnf -s ./packet-kerberos-template -D . -O ../.. KerberosV5Spec2.asn k5.asn RFC3244.asn RFC6113.asn SPAKE.asn */
 
 /* packet-kerberos.h
  * Routines for kerberos packet dissection
@@ -126,7 +126,7 @@ decrypt_krb5_krb_cfx_dce(proto_tree *tree,
 
 #endif /* HAVE_HEIMDAL_KERBEROS || HAVE_MIT_KERBEROS */
 
-extern gboolean krb_decrypt;
+extern bool krb_decrypt;
 
 #endif /* HAVE_KERBEROS */
 

@@ -410,8 +410,8 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
     int    rf_open_errno;
     gchar *err_msg = NULL;
 
-    gboolean prev_capture_no_interface_load;
-    gboolean prev_capture_no_extcap;
+    bool prev_capture_no_interface_load;
+    bool prev_capture_no_extcap;
 
     /* First check if profile exists */
     if (!profile_exists(profile_name, FALSE)) {
@@ -503,6 +503,7 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
     emit freezePacketList(true);
 
     emit columnsChanged();
+    emit colorsChanged();
     emit preferencesChanged();
     emit recentPreferencesRead();
     emit filterExpressionsChanged();
@@ -869,6 +870,9 @@ void MainApplication::emitAppSignal(AppSignal signal)
         break;
     case FieldsChanged:
         emit fieldsChanged();
+        break;
+    case ColorsChanged:
+        emit colorsChanged();
         break;
     case FreezePacketList:
         emit freezePacketList(false);

@@ -306,7 +306,7 @@ static dissector_handle_t m3ua_sctp_handle;
 static dissector_handle_t m3ua_tcp_handle;
 static dissector_table_t si_dissector_table;
 
-static gboolean m3ua_tcp_desegment = TRUE;
+static bool m3ua_tcp_desegment = true;
 
 static int ss7pc_address_type = -1;
 
@@ -398,14 +398,14 @@ dissect_v5_protocol_data_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, 
 #define INFO_STRING_OFFSET PARAMETER_VALUE_OFFSET
 
 static void
-dissect_info_string_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item)
+dissect_info_string_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree, proto_item *parameter_item)
 {
   guint16 info_string_length;
 
   info_string_length = tvb_get_ntohs(parameter_tvb, PARAMETER_LENGTH_OFFSET) - PARAMETER_HEADER_LENGTH;
   proto_tree_add_item(parameter_tree, hf_info_string, parameter_tvb, INFO_STRING_OFFSET, info_string_length, ENC_ASCII);
   proto_item_append_text(parameter_item, " (%s)",
-                         tvb_format_text(wmem_packet_scope(), parameter_tvb, INFO_STRING_OFFSET, info_string_length));
+                         tvb_format_text(pinfo->pool, parameter_tvb, INFO_STRING_OFFSET, info_string_length));
 }
 
 #define AFFECTED_MASK_LENGTH 1
@@ -865,6 +865,7 @@ dissect_concerned_destination_parameter(tvbuff_t *parameter_tvb, proto_tree *par
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_routing_key_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -905,6 +906,7 @@ dissect_v67_registration_result_parameter(tvbuff_t *parameter_tvb, proto_tree *p
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_registration_result_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -938,6 +940,7 @@ dissect_v67_deregistration_result_parameter(tvbuff_t *parameter_tvb, proto_tree 
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_deregistration_result_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -1313,6 +1316,7 @@ dissect_deregistration_status_parameter(tvbuff_t *parameter_tvb, proto_tree *par
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_registration_results_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -1324,6 +1328,7 @@ dissect_registration_results_parameter(tvbuff_t *parameter_tvb, packet_info *pin
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_deregistration_results_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *parameter_tree)
 {
   tvbuff_t *parameters_tvb;
@@ -1406,7 +1411,7 @@ dissect_v5_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tr
     dissect_v5_protocol_data_parameter(parameter_tvb, pinfo, tree, parameter_item);
     break;
   case V5_INFO_PARAMETER_TAG:
-    dissect_info_string_parameter(parameter_tvb, parameter_tree, parameter_item);
+    dissect_info_string_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item);
     break;
   case V5_AFFECTED_DESTINATIONS_PARAMETER_TAG:
     dissect_affected_destinations_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -1503,6 +1508,7 @@ static const value_string v6_parameter_tag_values[] = {
   { 0,                           NULL } };
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_v6_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *m3ua_tree)
 {
   guint16 tag, length, padding_length;
@@ -1536,7 +1542,7 @@ dissect_v6_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tr
     dissect_protocol_data_2_parameter(parameter_tvb, pinfo, tree, parameter_tree, parameter_item);
     break;
   case V6_INFO_PARAMETER_TAG:
-    dissect_info_string_parameter(parameter_tvb, parameter_tree, parameter_item);
+    dissect_info_string_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item);
     break;
   case V6_AFFECTED_DESTINATIONS_PARAMETER_TAG:
     dissect_affected_destinations_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -1670,6 +1676,7 @@ static const value_string v7_parameter_tag_values[] = {
   { 0,                           NULL } };
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_v7_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *m3ua_tree)
 {
   guint16 tag, length, padding_length;
@@ -1703,7 +1710,7 @@ dissect_v7_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tr
     dissect_protocol_data_2_parameter(parameter_tvb, pinfo, tree, parameter_tree, parameter_item);
     break;
   case V7_INFO_PARAMETER_TAG:
-    dissect_info_string_parameter(parameter_tvb, parameter_tree, parameter_item);
+    dissect_info_string_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item);
     break;
   case V7_AFFECTED_DESTINATIONS_PARAMETER_TAG:
     dissect_affected_destinations_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -1836,6 +1843,7 @@ static const value_string parameter_tag_values[] = {
   { 0,                           NULL } };
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *m3ua_tree)
 {
   guint16 tag, length, padding_length;
@@ -1861,7 +1869,7 @@ dissect_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree,
 
   switch(tag) {
   case INFO_STRING_PARAMETER_TAG:
-    dissect_info_string_parameter(parameter_tvb, parameter_tree, parameter_item);
+    dissect_info_string_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item);
     break;
   case ROUTING_CONTEXT_PARAMETER_TAG:
     dissect_routing_context_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -1945,6 +1953,7 @@ dissect_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_parameters(tvbuff_t *parameters_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *m3ua_tree)
 {
   gint offset, length, total_length, remaining_length;
@@ -1958,6 +1967,7 @@ dissect_parameters(tvbuff_t *parameters_tvb, packet_info *pinfo, proto_tree *tre
       total_length = MIN(total_length, remaining_length);
     /* create a tvb for the parameter including the padding bytes */
     parameter_tvb    = tvb_new_subset_length(parameters_tvb, offset, total_length);
+    increment_dissection_depth(pinfo);
     switch(version) {
       case M3UA_V5:
         dissect_v5_parameter(parameter_tvb, pinfo, tree, m3ua_tree);
@@ -1972,6 +1982,7 @@ dissect_parameters(tvbuff_t *parameters_tvb, packet_info *pinfo, proto_tree *tre
         dissect_parameter(parameter_tvb, pinfo, tree, m3ua_tree);
         break;
     }
+    decrement_dissection_depth(pinfo);
     /* get rid of the handled parameter */
     offset += total_length;
   }
@@ -1979,6 +1990,7 @@ dissect_parameters(tvbuff_t *parameters_tvb, packet_info *pinfo, proto_tree *tre
 
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, proto_tree *m3ua_tree)
 {
   tvbuff_t *common_header_tvb, *parameters_tvb;

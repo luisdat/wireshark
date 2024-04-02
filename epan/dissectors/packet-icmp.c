@@ -68,7 +68,7 @@ static icmp_transaction_t *transaction_end(packet_info * pinfo,
 
 /* Decode the end of the ICMP payload as ICMP MPLS extensions
 if the packet in the payload has more than 128 bytes */
-static gboolean favor_icmp_mpls_ext = FALSE;
+static bool favor_icmp_mpls_ext = false;
 
 static int proto_icmp;
 
@@ -1788,7 +1788,7 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 		if ((tvb_reported_length(tvb) > 8 + 128)
 		    && (tvb_get_ntohs(tvb, 8 + 2) <= 128
 			|| favor_icmp_mpls_ext)) {
-			int ext_offset = (icmp_original_dgram_length ? icmp_original_dgram_length * 4 : 128) + 8;
+			int ext_offset = MAX(icmp_original_dgram_length * 4, 128) + 8;
 			tvbuff_t * extension_tvb = tvb_new_subset_remaining(tvb, ext_offset);
 			dissect_icmp_extension(extension_tvb, pinfo, icmp_tree, NULL);
 		}

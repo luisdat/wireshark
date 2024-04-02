@@ -414,7 +414,7 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 	/* Early return? */
 	switch(hfinfo->type) {
 		case FT_NONE:
-		case FT_PROTOCOL:
+		case FT_PROTOCOL: /* hfinfo->strings contains the protocol_t */
 		case FT_FLOAT:
 		case FT_DOUBLE:
 		case FT_IEEE_11073_SFLOAT:
@@ -538,6 +538,8 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 	}
 	else if (hfinfo->display & BASE_VAL64_STRING) {
 		const val64_string *vals = (const val64_string *)hfinfo->strings;
+		if (hfinfo->display & BASE_EXT_STRING)
+			vals = VAL64_STRING_EXT_VS_P((const val64_string_ext *) vals);
 
 		while (vals->strptr != NULL && count <= 1) {
 			if (g_ascii_strcasecmp(s, vals->strptr) == 0) {
@@ -924,7 +926,13 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 	hfinfo1 = sttype_field_hfinfo(st_arg1);
 	ftype1 = sttype_field_ftenum(st_arg1);
 	if (!can_func(ftype1)) {
-		if (st_op == STNODE_OP_MATCHES && hfinfo1->strings != NULL && hfinfo1->type != FT_FRAMENUM) {
+		/* For "matches", implicitly convert to the value string, if
+		 * there is one. (FT_FRAMENUM and FT_PROTOCOL have a pointer
+		 * to something other than a value string in their ->strings
+		 * member, though we can't get here for a FT_PROTOCOL because
+		 * it supports "matches" on its bytes without conversion.)
+		 */
+		if (st_op == STNODE_OP_MATCHES && hfinfo1->strings != NULL && hfinfo1->type != FT_FRAMENUM && hfinfo1->type != FT_PROTOCOL) {
 			sttype_field_set_value_string(st_arg1, true);
 		}
 		else {
@@ -2023,6 +2031,16 @@ check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 			ftype = sttype_pointer_ftenum(st_node);
 			break;
 
+		case STTYPE_STRING:
+			dfilter_fvalue_from_string(dfw, logical_ftype, st_node, NULL);
+			ftype = sttype_pointer_ftenum(st_node);
+			break;
+
+		case STTYPE_CHARCONST:
+			dfilter_fvalue_from_charconst(dfw, logical_ftype, st_node);
+			ftype = sttype_pointer_ftenum(st_node);
+			break;
+
 		case STTYPE_NUMBER:
 			dfilter_fvalue_from_number(dfw, logical_ftype, st_node);
 			ftype = sttype_pointer_ftenum(st_node);
@@ -2055,8 +2073,6 @@ check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 				ftype = check_arithmetic_LHS_NUMBER(dfw, st_op, st_node, st_arg1, st_arg2, logical_ftype);
 			break;
 
-		case STTYPE_STRING:
-		case STTYPE_CHARCONST:
 		case STTYPE_SET:
 		case STTYPE_PCRE:
 		case STTYPE_UNPARSED:

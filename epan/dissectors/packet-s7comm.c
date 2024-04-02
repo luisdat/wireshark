@@ -512,7 +512,7 @@ const value_string s7comm_item_return_valuenames[] = {
     { 0,                                        NULL }
 };
 /**************************************************************************
- * Block Types, used when blocktype is transfered as string
+ * Block Types, used when blocktype is transferred as string
  */
 #define S7COMM_BLOCKTYPE_OB                 0x3038      /* '08' */
 #define S7COMM_BLOCKTYPE_CMOD               0x3039      /* '09' */
@@ -4252,6 +4252,7 @@ s7comm_decode_ud_tis_param(tvbuff_t *tvb,
  *
  *******************************************************************************************************/
 static guint32
+// NOLINTNEXTLINE(misc-no-recursion)
 s7comm_decode_ud_tis_jobs(tvbuff_t *tvb,
                           proto_tree *td_tree,
                           guint16 td_size,
@@ -4309,6 +4310,7 @@ s7comm_decode_ud_tis_jobs(tvbuff_t *tvb,
                 }
                 /* New job data tree */
                 if (job_td_size > 0) {
+                    // We recurse here, but we'll run out of packet before we run out of stack.
                     offset = s7comm_decode_ud_tis_data(tvb, td_tree, S7COMM_UD_TYPE_REQ, job_subfunc, job_td_size, offset);
                 }
                 break;
@@ -5122,6 +5124,7 @@ s7comm_decode_ud_tis_breakpoint(tvbuff_t *tvb,
  *
  *******************************************************************************************************/
 static guint32
+// NOLINTNEXTLINE(misc-no-recursion)
 s7comm_decode_ud_tis_data(tvbuff_t *tvb,
                           proto_tree *tree,
                           guint8 type,
@@ -5164,6 +5167,7 @@ s7comm_decode_ud_tis_data(tvbuff_t *tvb,
             case S7COMM_UD_SUBF_TIS_READJOBLIST:
             case S7COMM_UD_SUBF_TIS_READJOB:
             case S7COMM_UD_SUBF_TIS_REPLACEJOB:
+                // We recurse here, but we'll run out of packet before we run out of stack.
                 offset = s7comm_decode_ud_tis_jobs(tvb, td_tree, td_size, type, subfunc, offset);
                 break;
             case S7COMM_UD_SUBF_TIS_MODVAR:
@@ -6503,7 +6507,7 @@ s7comm_decode_ud_data(tvbuff_t *tvb,
     gchar str_fragadd[32];
 
     /* The first 4 bytes of the data part of a userdata telegram are the same for all types.
-     * This is also the minumum length of the data part.
+     * This is also the minimum length of the data part.
      */
     if (dlength >= 4) {
         item = proto_tree_add_item(tree, hf_s7comm_data, tvb, offset, dlength, ENC_NA);
@@ -8567,11 +8571,7 @@ proto_register_s7comm (void)
         &ett_s7comm_fragment,
     };
 
-    proto_s7comm = proto_register_protocol (
-            "S7 Communication",         /* name */
-            "S7COMM",                   /* short name */
-            "s7comm"                    /* abbrev */
-            );
+    proto_s7comm = proto_register_protocol ("S7 Communication", "S7COMM", "s7comm");
 
     proto_register_field_array(proto_s7comm, hf, array_length (hf));
 

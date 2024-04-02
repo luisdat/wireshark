@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-camel.c                                                             */
-/* asn2wrs.py -b -L -p camel -c ./camel.cnf -s ./packet-camel-template -D . -O ../.. CAP-object-identifiers.asn CAP-classes.asn CAP-datatypes.asn CAP-errorcodes.asn CAP-errortypes.asn CAP-operationcodes.asn CAP-GPRS-ReferenceNumber.asn CAP-gsmSCF-gsmSRF-ops-args.asn CAP-gsmSSF-gsmSCF-ops-args.asn CAP-gprsSSF-gsmSCF-ops-args.asn CAP-SMS-ops-args.asn CAP-U-ABORT-Data.asn CamelV2diff.asn ../ros/Remote-Operations-Information-Objects.asn ../ros/Remote-Operations-Generic-ROS-PDUs.asn */
+/* asn2wrs.py -b -q -L -p camel -c ./camel.cnf -s ./packet-camel-template -D . -O ../.. CAP-object-identifiers.asn CAP-classes.asn CAP-datatypes.asn CAP-errorcodes.asn CAP-errortypes.asn CAP-operationcodes.asn CAP-GPRS-ReferenceNumber.asn CAP-gsmSCF-gsmSRF-ops-args.asn CAP-gsmSSF-gsmSCF-ops-args.asn CAP-gprsSSF-gsmSCF-ops-args.asn CAP-SMS-ops-args.asn CAP-U-ABORT-Data.asn CamelV2diff.asn ../ros/Remote-Operations-Information-Objects.asn ../ros/Remote-Operations-Generic-ROS-PDUs.asn */
 
 /* packet-camel-template.c
  * Routines for Camel
@@ -606,7 +606,7 @@ static int dissect_camel_EstablishTemporaryConnectionArgV2(bool implicit_tag _U_
 static int dissect_camel_SpecializedResourceReportArgV23(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 /* XXX - can we get rid of these and always do the SRT work? */
-static gboolean gcamel_PersistentSRT=FALSE;
+static bool gcamel_PersistentSRT=false;
 static gboolean gcamel_DisplaySRT=FALSE;
 gboolean gcamel_StatSRT=FALSE;
 
@@ -8011,7 +8011,7 @@ camelsrt_call_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     break;
 
   case 64: /*EventReportSMS*/
-    /* Session has been explicity closed without TC_END */
+    /* Session has been explicitly closed without TC_END */
     camelsrt_close_call_matching(pinfo, p_camelsrt_info);
     tcapsrt_close((struct tcaphash_context_t *)p_camelsrt_info->tcap_context, pinfo);
     break;

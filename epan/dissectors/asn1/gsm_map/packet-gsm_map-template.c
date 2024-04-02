@@ -198,15 +198,15 @@ static dissector_handle_t       ranap_handle;
 static dissector_handle_t       dtap_handle;
 static dissector_handle_t       map_handle;
 static dissector_handle_t       bssap_handle;
-static dissector_table_t        map_prop_arg_opcode_table; /* prorietary operation codes */
-static dissector_table_t        map_prop_res_opcode_table; /* prorietary operation codes */
-static dissector_table_t        map_prop_err_opcode_table; /* prorietary operation codes */
+static dissector_table_t        map_prop_arg_opcode_table; /* proprietary operation codes */
+static dissector_table_t        map_prop_res_opcode_table; /* proprietary operation codes */
+static dissector_table_t        map_prop_err_opcode_table; /* proprietary operation codes */
 /* Preference settings default */
 #define MAX_SSN 254
 static range_t *global_ssn_range;
 #define APPLICATON_CONTEXT_FROM_TRACE 0
 static gint pref_application_context_version = APPLICATON_CONTEXT_FROM_TRACE;
-static gboolean pref_ericsson_proprietary_ext = FALSE;
+static bool pref_ericsson_proprietary_ext = false;
 
 /* Global variables */
 static guint32 opcode=0;
@@ -1137,7 +1137,7 @@ typedef int (* dissect_function_t)( bool,
 /*
  * Dissect Multiple Choice Message
  * This function is used to decode a message, when several encoding may be used.
- * For exemple, in the last MAP version, the Cancel Location is defined like this:
+ * For example, in the last MAP version, the Cancel Location is defined like this:
  * CancelLocationArg ::= [3] IMPLICIT SEQUENCE
  * But in the previous MAP version, it was a CHOICE between a SEQUENCE and an IMSI
  * As ASN1 encoders (or software) still uses the old encoding, this function allows

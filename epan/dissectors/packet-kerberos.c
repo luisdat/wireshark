@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-kerberos.c                                                          */
-/* asn2wrs.py -b -L -p kerberos -c ./kerberos.cnf -s ./packet-kerberos-template -D . -O ../.. KerberosV5Spec2.asn k5.asn RFC3244.asn RFC6113.asn SPAKE.asn */
+/* asn2wrs.py -b -q -L -p kerberos -c ./kerberos.cnf -s ./packet-kerberos-template -D . -O ../.. KerberosV5Spec2.asn k5.asn RFC3244.asn RFC6113.asn SPAKE.asn */
 
 /* packet-kerberos.c
  * Routines for Kerberos
@@ -193,7 +193,7 @@ static int dissect_kerberos_FastOptions(bool implicit_tag _U_, tvbuff_t *tvb _U_
 #endif
 
 /* Desegment Kerberos over TCP messages */
-static gboolean krb_desegment = TRUE;
+static bool krb_desegment = true;
 
 static gint proto_kerberos;
 
@@ -894,7 +894,7 @@ static int dissect_kerberos_defer_PA_FX_FAST_REQUEST(bool implicit_tag _U_, tvbu
 #ifdef HAVE_KERBEROS
 
 /* Decrypt Kerberos blobs */
-gboolean krb_decrypt = FALSE;
+bool krb_decrypt = false;
 
 /* keytab filename */
 static const char *keytab_filename = "";

@@ -126,7 +126,7 @@ static int hf_aprs_sym_code;
 static int hf_aprs_comment;
 static int hf_aprs_storm;
 
-/* aprs main catgories items */
+/* aprs main catagories items */
 static int hf_ultimeter_2000;
 static int hf_aprs_status;
 static int hf_aprs_object;
@@ -153,7 +153,7 @@ static int hf_aprs_shelter_data;
 static int hf_aprs_space_weather;
 
 
-static gboolean gPREF_APRS_LAX = FALSE;
+static bool gPREF_APRS_LAX = false;
 
 static gint ett_aprs;
 static gint ett_aprs_msg;

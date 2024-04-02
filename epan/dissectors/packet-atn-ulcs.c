@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-atn-ulcs.c                                                          */
-/* asn2wrs.py -u -L -p atn-ulcs -c ./atn-ulcs.cnf -s ./packet-atn-ulcs-template -D . -O ../.. atn-ulcs.asn */
+/* asn2wrs.py -u -q -L -p atn-ulcs -c ./atn-ulcs.cnf -s ./packet-atn-ulcs-template -D . -O ../.. atn-ulcs.asn */
 
 /* packet-atn-ulcs.c
  * By Mathias Guettler <guettler@web.de>
@@ -9,28 +9,26 @@
  *
  * Routines for ATN upper layer
  * protocol packet disassembly
-
+ *
  * ATN upper layers are embedded within OSI Layer 4 (COTP).
  *
  * ATN upper layers contain:
  * Session Layer (NUL protocol option)
  * Presentation Layer (NUL protocol option)
  * ATN upper Layer/Application (ACSE PDU or PDV-list PDU)
-
+ *
  * ATN applications protocols (i.e. CM or CPDLC) are contained within
  * ACSE user-information or PDV presentation data.
-
+ *
  * details see:
- * http://en.wikipedia.org/wiki/CPDLC
- * http://members.optusnet.com.au/~cjr/introduction.htm
-
+ * https://en.wikipedia.org/wiki/CPDLC
+ * https://members.optusnet.com.au/~cjr/introduction.htm
+ *
  * standards:
- * http://legacy.icao.int/anb/panels/acp/repository.cfm
-
- * note:
- * We are dealing with ATN/ULCS aka ICAO Doc 9705 Ed2 here
+ * We are dealing with ATN/ULCS aka ICAO Doc 9705 Second Edition here
  * (don't think there is an ULCS equivalent for "FANS-1/A ").
-
+ * https://www.icao.int/safety/acp/repository/_%20Doc9705_ed2_1999.pdf
+ *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
@@ -43,10 +41,10 @@
 why not using existing ses, pres and acse dissectors ?
     ATN upper layers are derived from OSI standards for session,
     presentation and application but the encoding differs
-    (it's PER instead of BER encoding to save bandwith).
+    (it's PER instead of BER encoding to save bandwidth).
     Session and presentation use the "null" encoding option,
     meaning that they are only present at connection establishment
-    and ommitted otherwise.
+    and omitted otherwise.
     Instead of adapting existing dissectors it seemed simpler and cleaner
     to implement everything the new atn-ulcs dissector.
 
@@ -363,7 +361,7 @@ dissect_atn_ulcs_T_pdv_list_presentation_data_values_arbitrary(tvbuff_t *tvb _U_
         NULL);
 
     if (tvb_usr) {
-      /* call appropiate dissector for bitstring data */
+      /* call appropriate dissector for bitstring data */
       switch(ulcs_context_value){
           case  1: /* ACSE PDU*/
               atn_ulcs_tree = proto_tree_add_subtree(

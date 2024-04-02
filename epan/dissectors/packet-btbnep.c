@@ -64,7 +64,7 @@ static expert_field ei_btbnep_len_past_end;
 
 static dissector_handle_t btbnep_handle;
 
-static gboolean top_dissect                                              = TRUE;
+static bool top_dissect                                              = true;
 
 static dissector_handle_t llc_handle;
 static dissector_handle_t ipx_handle;
@@ -237,6 +237,7 @@ dissect_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_extension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
     guint8  extension_flag;
@@ -262,7 +263,9 @@ dissect_extension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
         offset += extension_length;
     }
 
+    increment_dissection_depth(pinfo);
     if (extension_flag) offset = dissect_extension(tvb, pinfo, tree, offset);
+    decrement_dissection_depth(pinfo);
 
     return offset;
 }

@@ -70,7 +70,7 @@ static wmem_tree_t *sdp_transport_reqs = NULL;
 static wmem_tree_t *sdp_transport_rsps = NULL;
 
 /* preference globals */
-static gboolean global_sdp_establish_conversation = TRUE;
+static bool global_sdp_establish_conversation = true;
 
 /* Top level fields */
 static int hf_protocol_version;
@@ -1403,7 +1403,7 @@ static const string_string ice_candidate_types[] = {
     { "srflx",      "Server reflexive candidate" },
     { "prflx",      "Peer reflexive candidate" },
     { "relay",      "Relayed candidate" },
-    { 0, NULL }
+    { NULL, NULL }
 };
 
 static void
@@ -1558,7 +1558,7 @@ static const string_string media_format_str_types[] = {
     { "mcvideo",  "Mission Critical Video"},
     /* OMA PoC Control Plane */
     { "tbcp",     "Talk Burst Control Protocol"},
-    { 0, NULL }
+    { NULL, NULL }
 };
 
 static void
@@ -1757,7 +1757,7 @@ dissect_sdp_media_attribute_fmtp(proto_tree *tree, packet_info *pinfo, tvbuff_t 
         decode_sdp_fmtp(fmtp_tree, tvb, pinfo, offset, tokenlen,
                         media_format, transport_info, rtp_dyn_payload);
 
-        /* Move offset past "; " and onto firts char */
+        /* Move offset past "; " and onto first char */
         offset = next_offset + 1;
     }
 }

@@ -45,7 +45,7 @@ typedef struct _ucp_tap_rec_t {
 } ucp_tap_rec_t;
 
 /* Preferences */
-static gboolean ucp_desegment = TRUE;
+static bool ucp_desegment = true;
 
 /* STX + TRN(2 num. char.) + / + LEN(5 num. char.) + / + 'O'/'R' + / + OT(2 num. char.) + / */
 #define UCP_HEADER_SIZE 15
@@ -804,7 +804,7 @@ ucp_mktime(const gint len, const char *datestr)
 
 /*!
  * Scanning routines to add standard types (byte, int, string, data)
- * to the protocol-tree. Each field is seperated with a slash ('/').
+ * to the protocol-tree. Each field is separated with a slash ('/').
  *
  * \param       tree    The protocol tree to add to
  * \param       tvb     Buffer containing the data

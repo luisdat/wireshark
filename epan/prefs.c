@@ -66,7 +66,7 @@ static module_t *prefs_register_module_or_subtree(module_t *parent,
     void (*apply_cb)(void), gboolean use_gui);
 static void prefs_register_modules(void);
 static module_t *prefs_find_module_alias(const char *name);
-static prefs_set_pref_e set_pref(gchar*, const gchar*, void *, gboolean);
+static prefs_set_pref_e set_pref(gchar*, const gchar*, void *, bool);
 static void free_col_info(GList *);
 static void pre_init_prefs(void);
 static gboolean prefs_is_column_visible(const gchar *cols_hidden, int col);
@@ -215,7 +215,7 @@ struct preference {
                                           Flags must be non-zero to ensure saving to disk */
     union {                          /* The Qt preference code assumes that these will all be pointers (and unique) */
         guint *uint;
-        gboolean *boolp;
+        bool *boolp;
         gint *enump;
         char **string;
         range_t **range;
@@ -331,7 +331,6 @@ free_pref(gpointer data, gpointer user_data _U_)
     case PREF_BOOL:
     case PREF_ENUM:
     case PREF_UINT:
-    case PREF_DECODE_AS_UINT:
     case PREF_STATIC_TEXT:
     case PREF_UAT:
     case PREF_COLOR:
@@ -1217,7 +1216,7 @@ prefs_register_uint_custom_preference(module_t *module, const char *name,
 void
 prefs_register_bool_preference(module_t *module, const char *name,
                                const char *title, const char *description,
-                               gboolean *var)
+                               bool *var)
 {
     pref_t *preference;
 
@@ -1753,7 +1752,11 @@ range_t* prefs_get_range_value_real(pref_t *pref, pref_source_t source)
 
 range_t* prefs_get_range_value(const char *module_name, const char* pref_name)
 {
-    return prefs_get_range_value_real(prefs_find_preference(prefs_find_module(module_name), pref_name), pref_current);
+    pref_t *pref = prefs_find_preference(prefs_find_module(module_name), pref_name);
+    if (pref == NULL) {
+        return NULL;
+    }
+    return prefs_get_range_value_real(pref, pref_current);
 }
 
 void
@@ -1996,12 +1999,6 @@ gboolean prefs_add_decode_as_value(pref_t *pref, guint value, gboolean replace)
 {
     switch(pref->type)
     {
-    case PREF_DECODE_AS_UINT:
-        /* This doesn't support multiple values for a dissector in Decode As because the
-            preference only supports a single value. This leads to a "last port for
-            dissector in Decode As wins" */
-        *pref->varp.uint = value;
-        break;
     case PREF_DECODE_AS_RANGE:
         if (replace)
         {
@@ -2023,18 +2020,14 @@ gboolean prefs_add_decode_as_value(pref_t *pref, guint value, gboolean replace)
     return TRUE;
 }
 
-gboolean prefs_remove_decode_as_value(pref_t *pref, guint value, gboolean set_default)
+gboolean prefs_remove_decode_as_value(pref_t *pref, guint value, gboolean set_default _U_)
 {
     switch(pref->type)
     {
-    case PREF_DECODE_AS_UINT:
-        if (set_default) {
-            *pref->varp.uint = pref->default_val.uint;
-        } else {
-            *pref->varp.uint = 0;
-        }
-        break;
     case PREF_DECODE_AS_RANGE:
+        /* XXX - We could set to the default if the value is the only one
+         * in the range.
+         */
         prefs_range_remove_value(pref, value);
         break;
     default:
@@ -2092,10 +2085,6 @@ pref_stash(pref_t *pref, gpointer unused _U_)
 {
     switch (pref->type) {
 
-    case PREF_DECODE_AS_UINT:
-        pref->stashed_val.uint = *pref->varp.uint;
-        break;
-
     case PREF_UINT:
         pref->stashed_val.uint = *pref->varp.uint;
         break;
@@ -2150,30 +2139,6 @@ pref_unstash(pref_t *pref, gpointer unstash_data_p)
 
     /* Revert the preference to its saved value. */
     switch (pref->type) {
-
-    case PREF_DECODE_AS_UINT:
-        if (*pref->varp.uint != pref->stashed_val.uint) {
-            unstash_data->module->prefs_changed_flags |= prefs_get_effect_flags(pref);
-
-            if (unstash_data->handle_decode_as) {
-                if (*pref->varp.uint != pref->default_val.uint) {
-                    dissector_reset_uint(pref->name, *pref->varp.uint);
-                }
-            }
-
-            *pref->varp.uint = pref->stashed_val.uint;
-
-            if (unstash_data->handle_decode_as) {
-                sub_dissectors = find_dissector_table(pref->name);
-                if (sub_dissectors != NULL) {
-                    handle = dissector_table_get_dissector_handle(sub_dissectors, unstash_data->module->title);
-                    if (handle != NULL) {
-                        dissector_change_uint(pref->name, *pref->varp.uint, handle);
-                    }
-                }
-            }
-        }
-        break;
 
     case PREF_UINT:
         if (*pref->varp.uint != pref->stashed_val.uint) {
@@ -2235,14 +2200,23 @@ pref_unstash(pref_t *pref, gpointer unstash_data_p)
                 if (sub_dissectors != NULL) {
                     handle = dissector_table_get_dissector_handle(sub_dissectors, unstash_data->module->title);
                     if (handle != NULL) {
-                        /* Delete all of the old values from the dissector table */
+                        /* Set the current handle to NULL for all the old values
+                         * in the dissector table. If there isn't an initial
+                         * handle, this actually deletes the entry. (If there
+                         * is an initial entry, keep it around so that the
+                         * user can see the original value.)
+                         *
+                         * XXX - If there's an initial handle which is not this,
+                         * reset it instead? At least this leaves the initial
+                         * handle visible in the Decode As table.
+                         */
                         for (i = 0; i < (*pref->varp.range)->nranges; i++) {
                             for (j = (*pref->varp.range)->ranges[i].low; j < (*pref->varp.range)->ranges[i].high; j++) {
-                                dissector_delete_uint(pref->name, j, handle);
+                                dissector_change_uint(pref->name, j, NULL);
                                 decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(j), NULL, NULL);
                             }
 
-                            dissector_delete_uint(pref->name, (*pref->varp.range)->ranges[i].high, handle);
+                            dissector_change_uint(pref->name, (*pref->varp.range)->ranges[i].high, NULL);
                             decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER((*pref->varp.range)->ranges[i].high), NULL, NULL);
                         }
                     }
@@ -2304,10 +2278,6 @@ void
 reset_stashed_pref(pref_t *pref) {
     switch (pref->type) {
 
-    case PREF_DECODE_AS_UINT:
-        pref->stashed_val.uint = pref->default_val.uint;
-        break;
-
     case PREF_UINT:
         pref->stashed_val.uint = pref->default_val.uint;
         break;
@@ -2364,7 +2334,6 @@ pref_clean_stash(pref_t *pref, gpointer unused _U_)
     switch (pref->type) {
 
     case PREF_UINT:
-    case PREF_DECODE_AS_UINT:
         break;
 
     case PREF_BOOL:
@@ -2412,17 +2381,6 @@ pref_clean_stash(pref_t *pref, gpointer unused _U_)
     }
     return 0;
 }
-
-#if 0
-/* Return the value assigned to the given uint preference. */
-guint
-prefs_get_uint_preference(pref_t *pref)
-{
-    if (pref && pref->type == PREF_UINT)
-        return *pref->varp.uint;
-    return 0;
-}
-#endif
 
 /*
  * Call a callback function, with a specified argument, for each preference
@@ -3358,7 +3316,8 @@ prefs_register_modules(void)
 
     /* User Interface : Colors */
     gui_color_module = prefs_register_subtree(gui_module, "Colors", "Colors", NULL);
-    prefs_set_module_effect_flags(gui_color_module, gui_effect_flags);
+    unsigned gui_color_effect_flags = gui_effect_flags | PREF_EFFECT_GUI_COLOR;
+    prefs_set_module_effect_flags(gui_color_module, gui_color_effect_flags);
 
     prefs_register_color_preference(gui_color_module, "active_frame.fg", "Foreground color for an active selected item",
         "Foreground color for an active selected item", &prefs.gui_active_fg);
@@ -3582,9 +3541,13 @@ prefs_register_modules(void)
                                    "The maximum number of items that can be added to the dissection tree (Increase with caution)",
                                    10,
                                    &prefs.gui_max_tree_items);
+    /*
+     * Used independently by proto_tree_add_node, call_dissector*, dissector_try_heuristic,
+     * and increment_dissection_depth.
+     */
     prefs_register_uint_preference(gui_module, "max_tree_depth",
-                                   "Maximum tree depth",
-                                   "The maximum depth of the dissection tree (Increase with caution)",
+                                   "Maximum dissection depth",
+                                   "The maximum depth for dissection tree and protocol layer checks. (Increase with caution)",
                                    10,
                                    &prefs.gui_max_tree_depth);
 
@@ -3635,10 +3598,15 @@ prefs_register_modules(void)
                                     "Show column definition in packet list header",
                                     &prefs.gui_packet_header_column_definition);
 
+    /* packet_list_hover_style affects the colors, not the layout.
+     * It's in the layout module to group it with the other packet list
+     * preferences for the user's benefit with the dialog.
+     */
     prefs_register_bool_preference(gui_layout_module, "packet_list_hover_style.enabled",
                                    "Enable Packet List mouse-over colorization",
                                    "Enable Packet List mouse-over colorization",
                                    &prefs.gui_packet_list_hover_style);
+    prefs_set_effect_flags_by_name(gui_layout_module, "packet_list_hover_style.enabled", gui_color_effect_flags);
 
     prefs_register_bool_preference(gui_layout_module, "show_selected_packet.enabled",
                                    "Show selected packet in the Status Bar",
@@ -4484,7 +4452,6 @@ reset_pref(pref_t *pref)
     switch (type) {
 
     case PREF_UINT:
-    case PREF_DECODE_AS_UINT:
         *pref->varp.uint = pref->default_val.uint;
         break;
 
@@ -4638,7 +4605,9 @@ prefs_read_module(const char *module)
     }
 
     /* Construct the pathname of the user's preferences file for the module. */
-    pf_path = get_persconffile_path(module, TRUE);
+    char *pf_name = wmem_strdup_printf(NULL, "%s.cfg", module);
+    pf_path = get_persconffile_path(pf_name, TRUE);
+    wmem_free(NULL, pf_name);
 
     /* Read the user's module preferences file, if it exists and is not a dir. */
     if (!test_for_regular_file(pf_path) || ((pf = ws_fopen(pf_path, "r")) == NULL)) {
@@ -5105,7 +5074,11 @@ guint prefs_get_uint_value_real(pref_t *pref, pref_source_t source)
 
 guint prefs_get_uint_value(const char *module_name, const char* pref_name)
 {
-    return prefs_get_uint_value_real(prefs_find_preference(prefs_find_module(module_name), pref_name), pref_current);
+    pref_t *pref = prefs_find_preference(prefs_find_module(module_name), pref_name);
+    if (pref == NULL) {
+        return 0;
+    }
+    return prefs_get_uint_value_real(pref, pref_current);
 }
 
 char* prefs_get_password_value(pref_t *pref, pref_source_t source)
@@ -5716,7 +5689,7 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
                 ws_warning("Deprecated ports pref '%s.%s' not found", module->name, port_prefs[i].table_name);
                 continue;
             }
-            if (pref->type != PREF_DECODE_AS_UINT && pref->type != PREF_DECODE_AS_RANGE) {
+            if (pref->type != PREF_DECODE_AS_RANGE) {
                 ws_warning("Deprecated ports pref '%s.%s' has wrong type: %#x (%s)", module->name, port_prefs[i].table_name, pref->type, prefs_pref_type_name(pref));
             }
         }
@@ -5731,9 +5704,7 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
             pref = prefs_find_preference(module, port_prefs[i].table_name);
             if (pref != NULL) {
                 module->prefs_changed_flags |= prefs_get_effect_flags(pref);
-                if (pref->type == PREF_DECODE_AS_UINT) {
-                    *pref->varp.uint = uval;
-                } else if (pref->type == PREF_DECODE_AS_RANGE) {
+                if (pref->type == PREF_DECODE_AS_RANGE) {
                     // The legacy preference was a port number, but the new
                     // preference is a port range. Add to existing range.
                     if (uval) {
@@ -5842,11 +5813,11 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
 
 static prefs_set_pref_e
 set_pref(gchar *pref_name, const gchar *value, void *private_data,
-         gboolean return_range_errors)
+         bool return_range_errors)
 {
     guint    cval;
     guint    uval;
-    gboolean bval;
+    bool     bval;
     gint     enum_val;
     gchar    *dotp, *last_dotp;
     static gchar *filter_label = NULL;
@@ -6326,47 +6297,12 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data,
                 *pref->varp.uint = uval;
             }
             break;
-        case PREF_DECODE_AS_UINT:
-        {
-            /* This is for backwards compatibility in case any of the preferences
-               that shared the "Decode As" preference name and used to be PREF_UINT
-               are now applied directly to the Decode As funtionality */
-
-            dissector_table_t sub_dissectors;
-            dissector_handle_t handle;
-
-            if (!ws_basestrtou32(value, NULL, &uval, pref->info.base))
-                return PREFS_SET_SYNTAX_ERR;        /* number was bad */
-
-            if (*pref->varp.uint != uval) {
-                containing_module->prefs_changed_flags |= prefs_get_effect_flags(pref);
-                *pref->varp.uint = uval;
-
-                /* Name of preference is the dissector table */
-                sub_dissectors = find_dissector_table(pref->name);
-                if (sub_dissectors != NULL) {
-                    handle = dissector_table_get_dissector_handle(sub_dissectors, module->title);
-                    if (handle != NULL) {
-                        if (uval != 0) {
-                            dissector_change_uint(pref->name, uval, handle);
-                            decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), GUINT_TO_POINTER(uval), NULL, NULL);
-                        } else {
-                            dissector_delete_uint(pref->name, *pref->varp.uint, handle);
-                            decode_build_reset_list(pref->name, dissector_table_get_type(sub_dissectors), pref->varp.uint, NULL, NULL);
-                        }
-
-                        /* XXX - Do we save the decode_as_entries file here? */
-                    }
-                }
-            }
-            break;
-        }
         case PREF_BOOL:
             /* XXX - give an error if it's neither "true" nor "false"? */
             if (g_ascii_strcasecmp(value, "true") == 0)
-                bval = TRUE;
+                bval = true;
             else
-                bval = FALSE;
+                bval = false;
             if (*pref->varp.boolp != bval) {
                 containing_module->prefs_changed_flags |= prefs_get_effect_flags(pref);
                 *pref->varp.boolp = bval;
@@ -6392,7 +6328,7 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data,
             break;
 
         case PREF_PASSWORD:
-            /* Read value is everytime empty */
+            /* Read value is every time empty */
             containing_module->prefs_changed_flags |= prefs_set_string_value(pref, "", pref_current);
             break;
 
@@ -6572,10 +6508,6 @@ prefs_pref_type_name(pref_t *pref)
         type_name = "Custom";
         break;
 
-    case PREF_DECODE_AS_UINT:
-        type_name = "Decode As value";
-        break;
-
     case PREF_DECODE_AS_RANGE:
         type_name = "Range (for Decode As)";
         break;
@@ -6612,6 +6544,9 @@ void
 prefs_set_effect_flags(pref_t *pref, unsigned int flags)
 {
     if (pref != NULL) {
+        if (flags == 0) {
+            ws_error("Setting \"%s\" preference effect flags to 0", pref->name);
+        }
         pref->effect_flags = flags;
     }
 }
@@ -6635,6 +6570,9 @@ void
 prefs_set_module_effect_flags(module_t * module, unsigned int flags)
 {
     if (module != NULL) {
+        if (flags == 0) {
+            ws_error("Setting module \"%s\" preference effect flags to 0", module->name);
+        }
         module->effect_flags = flags;
     }
 }
@@ -6726,10 +6664,6 @@ prefs_pref_type_description(pref_t *pref)
         type_desc = "A custom value";
         break;
 
-    case PREF_DECODE_AS_UINT:
-        type_desc = "An integer value used in Decode As";
-        break;
-
     case PREF_DECODE_AS_RANGE:
         type_desc = "A string denoting an positive integer range for Decode As";
         break;
@@ -6770,11 +6704,6 @@ prefs_pref_is_default(pref_t *pref)
     }
 
     switch (type) {
-
-    case PREF_DECODE_AS_UINT:
-        if (pref->default_val.uint == *pref->varp.uint)
-            return TRUE;
-        break;
 
     case PREF_UINT:
         if (pref->default_val.uint == *pref->varp.uint)
@@ -6872,7 +6801,6 @@ prefs_pref_to_str(pref_t *pref, pref_source_t source) {
 
     switch (type) {
 
-    case PREF_DECODE_AS_UINT:
     case PREF_UINT:
     {
         guint pref_uint = *(guint *) valp;
@@ -6891,7 +6819,7 @@ prefs_pref_to_str(pref_t *pref, pref_source_t source) {
     }
 
     case PREF_BOOL:
-        return g_strdup((*(gboolean *) valp) ? "TRUE" : "FALSE");
+        return g_strdup((*(bool *) valp) ? "TRUE" : "FALSE");
 
     case PREF_ENUM:
     case PREF_PROTO_TCP_SNDAMB_ENUM:
@@ -6993,7 +6921,6 @@ write_pref(gpointer data, gpointer user_data)
     case PREF_UAT:
         /* Nothing to do; don't bother printing the description */
         return;
-    case PREF_DECODE_AS_UINT:
     case PREF_DECODE_AS_RANGE:
         /* Data is saved through Decode As mechanism and not part of preferences file */
         return;
@@ -7072,7 +6999,6 @@ count_non_uat_pref(gpointer data, gpointer user_data)
     {
     case PREF_UAT:
     case PREF_OBSOLETE:
-    case PREF_DECODE_AS_UINT:
     case PREF_DECODE_AS_RANGE:
     case PREF_PROTO_TCP_SNDAMB_ENUM:
         //These types are not written in preference file
@@ -7212,7 +7138,7 @@ write_prefs(char **pf_path_return)
 
         module_t *extcap_module = prefs_find_module("extcap");
         if (extcap_module && !prefs.capture_no_extcap) {
-            char *ext_path = get_persconffile_path("extcap", TRUE);
+            char *ext_path = get_persconffile_path("extcap.cfg", TRUE);
             FILE *extf;
             if ((extf = ws_fopen(ext_path, "w")) == NULL) {
                 if (errno != EISDIR) {

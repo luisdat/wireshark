@@ -353,7 +353,7 @@ static const value_string vs_ppi_field_type[] = {
 static reassembly_table ampdu_reassembly_table;
 
 /* Reassemble A-MPDUs? */
-static gboolean ppi_ampdu_reassemble = TRUE;
+static bool ppi_ampdu_reassemble = true;
 
 
 static gboolean
@@ -1212,7 +1212,7 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     return tvb_captured_length(tvb);
 }
 
-/* Establish our beachead */
+/* Establish our beachhead */
 
 void
 proto_register_ppi(void)

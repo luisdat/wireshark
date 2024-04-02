@@ -255,8 +255,8 @@ static gint ett_dcs;
 static dissector_handle_t smpp_handle;
 
 /* Reassemble SMPP TCP segments */
-static gboolean reassemble_over_tcp = TRUE;
-static gboolean smpp_gsm7_unpacked = TRUE;
+static bool reassemble_over_tcp = true;
+static bool smpp_gsm7_unpacked = true;
 
 typedef enum {
   DECODE_AS_DEFAULT    =   0,
@@ -270,7 +270,7 @@ typedef enum {
   DECODE_AS_GSM7       = 241, /* One of many GSM DCS values that means GSM7 */
 } SMPP_DCS_Type;
 
-/* ENC_NA is the same as ENC_ASCII, so use an artifical value to mean
+/* ENC_NA is the same as ENC_ASCII, so use an artificial value to mean
  * "treat this as 8-bit binary / FT_BYTES, not a string."
  */
 #define DO_NOT_DECODE G_MAXUINT

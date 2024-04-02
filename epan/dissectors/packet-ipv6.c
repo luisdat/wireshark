@@ -816,28 +816,28 @@ static dissector_table_t ip_dissector_table;
 static dissector_table_t ipv6_routing_dissector_table;
 
 /* Reassemble fragmented datagrams */
-static gboolean ipv6_reassemble = TRUE;
+static bool ipv6_reassemble = true;
 
 /* Place IPv6 summary in proto tree */
-static gboolean ipv6_summary_in_tree = TRUE;
+static bool ipv6_summary_in_tree = true;
 
 /* Show expanded information about IPv6 address */
-static gboolean ipv6_address_detail = TRUE;
+static bool ipv6_address_detail = true;
 
 /* Perform strict RFC adherence checking */
-static gboolean g_ipv6_rpl_srh_strict_rfc_checking = FALSE;
+static bool g_ipv6_rpl_srh_strict_rfc_checking = false;
 
 /* Use heuristics to determine subdissector */
-static gboolean try_heuristic_first = FALSE;
+static bool try_heuristic_first = false;
 
 /* Display IPv6 extension headers under the root tree */
-static gboolean ipv6_exthdr_under_root = FALSE;
+static bool ipv6_exthdr_under_root = false;
 
 /* Hide extension header generated field for length */
-static gboolean ipv6_exthdr_hide_len_oct_field = FALSE;
+static bool ipv6_exthdr_hide_len_oct_field = false;
 
 /* Assume TSO and correct zero-length IP packets */
-static gboolean ipv6_tso_supported = FALSE;
+static bool ipv6_tso_supported = false;
 
 /*
  * defragmentation of IPv6
@@ -2281,10 +2281,8 @@ dissect_opt_ioam_trace(tvbuff_t *tvb, gint offset, packet_info *pinfo,
     offset += 2;
 
     nodelen = tvb_get_bits8(tvb, offset * 8, 5);
-    ti = proto_tree_add_bits_item(opt_tree, hf_ipv6_opt_ioam_trace_nodelen, tvb,
-                                  offset * 8, 5, ENC_BIG_ENDIAN);
-    if (!nodelen)
-        expert_add_info(pinfo, ti, &ei_ipv6_opt_ioam_invalid_nodelen);
+    proto_tree_add_bits_item(opt_tree, hf_ipv6_opt_ioam_trace_nodelen, tvb,
+                             offset * 8, 5, ENC_BIG_ENDIAN);
 
     proto_tree_add_bitmask(opt_tree, tvb, offset, hf_ipv6_opt_ioam_trace_flags,
                            ett_ipv6_opt_ioam_trace_flags, ioam_trace_flags, ENC_NA);
@@ -2306,7 +2304,11 @@ dissect_opt_ioam_trace(tvbuff_t *tvb, gint offset, packet_info *pinfo,
     offset += 4;
 
     /* node data list parsing starts here */
-    if (!nodelen || remlen * 4 > opt_len - 10)
+    if (!nodelen && trace_type != IP6IOAM_TRACE_MASK_BIT22) {
+        expert_add_info(pinfo, ti, &ei_ipv6_opt_ioam_invalid_nodelen);
+        return offset;
+    }
+    if (remlen * 4 > opt_len - 10)
         return offset;
 
     proto_tree* trace_tree

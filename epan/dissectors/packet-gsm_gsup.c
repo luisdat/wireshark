@@ -55,7 +55,7 @@
 #define OSMO_GSUP_PORT 4222
 #define IPAC_PROTO_EXT_GSUP 0x05
 
-/*! Maximum nubmer of PDP inside \ref osmo_gsup_message */
+/*! Maximum number of PDP inside \ref osmo_gsup_message */
 #define OSMO_GSUP_MAX_NUM_PDP_INFO		10 /* GSM 09.02 limits this to 50 */
 /*! Maximum number of auth info inside \ref osmo_gsup_message */
 #define OSMO_GSUP_MAX_NUM_AUTH_INFO		5
@@ -79,6 +79,7 @@ enum osmo_gsup_iei {
 	OSMO_GSUP_ACCESS_POINT_NAME_IE		= 0x12,
 	OSMO_GSUP_PDP_QOS_IE			= 0x13,
 	OSMO_GSUP_CHARG_CHAR_IE			= 0x14,
+	OSMO_GSUP_PCO_IE			= 0x15,
 	OSMO_GSUP_RAND_IE			= 0x20,
 	OSMO_GSUP_SRES_IE			= 0x21,
 	OSMO_GSUP_KC_IE				= 0x22,
@@ -183,6 +184,10 @@ enum osmo_gsup_message_type {
 	OSMO_GSUP_MSGT_E_ABORT					= 0x4b,
 
 	OSMO_GSUP_MSGT_E_ROUTING_ERROR				= 0x4e,
+
+	OSMO_GSUP_MSGT_EPDG_TUNNEL_REQUEST			= 0x50,
+	OSMO_GSUP_MSGT_EPDG_TUNNEL_ERROR			= 0x51,
+	OSMO_GSUP_MSGT_EPDG_TUNNEL_RESULT			= 0x52,
 };
 
 #define OSMO_GSUP_IS_MSGT_REQUEST(msgt) (((msgt) & 0b00000011) == 0b00)
@@ -264,7 +269,7 @@ void proto_reg_handoff_gsup(void);
 static int proto_gsup;
 
 /* show GSUP source/destination names as text (true) or only binary (false) */
-static gboolean show_name_as_text = TRUE;
+static bool show_name_as_text = true;
 
 static int hf_gsup_msg_type;
 static int hf_gsup_iei;
@@ -339,6 +344,7 @@ static const value_string gsup_iei_types[] = {
 	{ OSMO_GSUP_ACCESS_POINT_NAME_IE, "Access Point Name (APN)" },
 	{ OSMO_GSUP_PDP_QOS_IE,		"PDP Quality of Service (QoS)" },
 	{ OSMO_GSUP_CHARG_CHAR_IE,	"Charging Character" },
+	{ OSMO_GSUP_PCO_IE,		"Protocol Configuration Options" },
 	{ OSMO_GSUP_RAND_IE,		"RAND" },
 	{ OSMO_GSUP_SRES_IE,		"SRES" },
 	{ OSMO_GSUP_KC_IE,		"Kc" },
@@ -422,6 +428,9 @@ static const value_string gsup_msg_types[] = {
 	{ OSMO_GSUP_MSGT_E_CLOSE,			"E Close"},
 	{ OSMO_GSUP_MSGT_E_ABORT,			"E Abort"},
 	{ OSMO_GSUP_MSGT_E_ROUTING_ERROR,		"E Routing Error"},
+	{ OSMO_GSUP_MSGT_EPDG_TUNNEL_REQUEST,		"ePDG Tunnel Request"},
+	{ OSMO_GSUP_MSGT_EPDG_TUNNEL_ERROR,		"ePDG Tunnel Error"},
+	{ OSMO_GSUP_MSGT_EPDG_TUNNEL_RESULT,		"ePDG Tunnel Result"},
 	{ 0, NULL }
 };
 
@@ -699,6 +708,7 @@ static void dissect_name_ie(tvbuff_t *tvb, packet_info *pinfo _U_, guint offset,
 
 
 static gint
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_gsup_tlvs(tvbuff_t *tvb, int base_offs, int length, packet_info *pinfo, proto_tree *tree,
 		  proto_item *gsup_ti, guint8 msg_type)
 {
@@ -714,6 +724,7 @@ dissect_gsup_tlvs(tvbuff_t *tvb, int base_offs, int length, packet_info *pinfo, 
 		gint apn_len;
 		guint32 ui32;
 		guint8 i;
+		tvbuff_t *subset_tvb;
 
 		tag = tvb_get_guint8(tvb, offset);
 		offset++;
@@ -732,6 +743,7 @@ dissect_gsup_tlvs(tvbuff_t *tvb, int base_offs, int length, packet_info *pinfo, 
 		proto_tree_add_item(att_tree, hf_gsup_iei, tvb, offset-2, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_uint(att_tree, hf_gsup_ie_len, tvb, offset-1, 1, len);
 
+		increment_dissection_depth(pinfo);
 		switch (tag) {
 		/* Nested TLVs */
 		case OSMO_GSUP_AUTH_TUPLE_IE:
@@ -808,6 +820,23 @@ dissect_gsup_tlvs(tvbuff_t *tvb, int base_offs, int length, packet_info *pinfo, 
 			break;
 		case OSMO_GSUP_CHARG_CHAR_IE:
 			proto_tree_add_item(att_tree, hf_gsup_charg_char, tvb, offset, len, ENC_ASCII);
+			break;
+		case OSMO_GSUP_PCO_IE:
+			switch (msg_type) {
+			case OSMO_GSUP_MSGT_EPDG_TUNNEL_REQUEST:
+				/* PCO options as MS to network direction */
+				pinfo->link_dir = P2P_DIR_UL;
+				break;
+			case OSMO_GSUP_MSGT_EPDG_TUNNEL_ERROR:
+			case OSMO_GSUP_MSGT_EPDG_TUNNEL_RESULT:
+				/* PCO options as Network to MS direction: */
+				pinfo->link_dir = P2P_DIR_DL;
+				break;
+			default:
+				break;
+			}
+			subset_tvb = tvb_new_subset_length(tvb, offset, len);
+			de_sm_pco(subset_tvb, att_tree, pinfo, 0, len, NULL, 0);
 			break;
 		case OSMO_GSUP_CAUSE_IE:
 			proto_tree_add_item(att_tree, hf_gsup_cause, tvb, offset, len, ENC_NA);
@@ -912,6 +941,7 @@ dissect_gsup_tlvs(tvbuff_t *tvb, int base_offs, int length, packet_info *pinfo, 
 			proto_tree_add_item(att_tree, hf_gsup_ie_payload, tvb, offset, len, ENC_NA);
 			break;
 		}
+		decrement_dissection_depth(pinfo);
 
 		offset += len;
 	}

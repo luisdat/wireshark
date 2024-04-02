@@ -46,7 +46,7 @@
  * IOS 4, probably most common
  */
 static gint global_a_variant = A_VARIANT_IOS401;
-static gboolean global_a_info_display = TRUE;
+static bool global_a_info_display = true;
 
 /* PROTOTYPES/FORWARDS */
 
@@ -790,7 +790,7 @@ static const value_string cell_disc_vals[] = {
 };
 
 /*
- * Not strictly A-interface info, but put here to avoid file polution
+ * Not strictly A-interface info, but put here to avoid file pollution
  *
  * Title                3GPP2                   Other
  *

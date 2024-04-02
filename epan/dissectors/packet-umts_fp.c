@@ -243,11 +243,11 @@ static dissector_handle_t fp_aal2_handle;
 static proto_tree *top_level_tree = NULL;
 
 /* Variables used for preferences */
-static gboolean preferences_call_mac_dissectors = TRUE;
-static gboolean preferences_show_release_info = TRUE;
-static gboolean preferences_payload_checksum = TRUE;
-static gboolean preferences_header_checksum = TRUE;
-static gboolean preferences_track_paging_indications = TRUE;
+static bool preferences_call_mac_dissectors = true;
+static bool preferences_show_release_info = true;
+static bool preferences_payload_checksum = true;
+static bool preferences_header_checksum = true;
+static bool preferences_track_paging_indications = true;
 
 /* E-DCH (T1) channel header information */
 struct edch_t1_subframe_info
@@ -740,8 +740,6 @@ dissect_tb_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         }
 
         /* Show TBs from non-empty channels */
-        pinfo->fd->subnum = chan; /* set subframe number to current TB */
-
         for (n=0; n < p_fp_info->chan_num_tbs[chan]; n++) {
 
             proto_item *ti;
@@ -862,7 +860,6 @@ dissect_macd_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             proto_item_set_text(pdu_ti, "MAC-d PDU (PDU %u)", pdu+1);
         }
 
-        pinfo->fd->subnum = pdu; /* set subframe number to current TB */
         p_fp_info->cur_tb = pdu;    /*Set TB (PDU) index correctly*/
         if (preferences_call_mac_dissectors) {
             tvbuff_t *next_tvb;
@@ -937,7 +934,6 @@ dissect_macd_pdu_data_type_2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
             tvbuff_t *next_tvb = tvb_new_subset_length(tvb, offset, length);
 
             fpi->cur_tb = pdu;    /*Set proper pdu index for MAC and higher layers*/
-            pinfo->fd->subnum = pdu;
             call_dissector_with_data(mac_fdd_hsdsch_handle, next_tvb, pinfo, top_level_tree, data);
             dissected = TRUE;
         }
@@ -2886,7 +2882,6 @@ dissect_e_dch_channel_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                         }
 
                         tvbuff_t *next_tvb;
-                        pinfo->fd->subnum = macd_idx; /* set subframe number to current TB */
                         /* create new TVB and pass further on */
                         next_tvb = tvb_new_subset_length(tvb, offset + bit_offset/8,
                                 ((bit_offset % 8) + size + 7) / 8);
@@ -2903,7 +2898,7 @@ dissect_e_dch_channel_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
                         rlcinf->ciphered[macd_idx] = FALSE;
                         rlcinf->deciphered[macd_idx] = FALSE;
-                        p_fp_info->cur_tb = macd_idx;    /*Set the transport block index (NOTE: This and not subnum is used in MAC dissector!)*/
+                        p_fp_info->cur_tb = macd_idx;    /*Set the transport block index */
 
                         call_dissector_with_data(mac_fdd_edch_handle, next_tvb, pinfo, top_level_tree, data);
                         dissected = TRUE;
@@ -3847,14 +3842,12 @@ void dissect_hsdsch_common_channel_info(tvbuff_t *tvb, packet_info *pinfo, proto
                     offset += (gint)pdu_length[n];
                 } else { /* Else go for CCCH UM, this seems to work. */
                     p_fp_info->hsdsch_entity = ehs; /* HSDSCH type 2 */
-                    /* TODO: use cur_tb or subnum everywhere. */
                     if (j >= MAX_MAC_FRAMES) {
                         /* Should not happen as we check no_of_pdus[n]*/
                         expert_add_info_format(pinfo, tree, &ei_fp_invalid_frame_count, "Invalid frame count (max is %u)", MAX_MAC_FRAMES);
                         return;
                     }
-                    p_fp_info->cur_tb = j; /* set cur_tb for MAC */
-                    pinfo->fd->subnum = j; /* set subframe number for RRC */
+                    p_fp_info->cur_tb = j; /* set cur_tb for MAC and RRC */
                     macinf->content[j] = MAC_CONTENT_CCCH;
                     macinf->lchid[j] = (guint8)lchid[n]+1; /*Add 1 since it is zero indexed? */
                     macinf->macdflow_id[j] = p_fp_info->hsdsch_macflowd_id;
@@ -5228,7 +5221,7 @@ heur_dissect_fp_edch_type_1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 /* This method can frame UDP streams containing FP packets but dissection of those packets will */
 /* fail since the FP conversation info is never attached */
-/* Usefull for DCH streams containing CS data and don't have their own heuristic method */
+/* Useful for DCH streams containing CS data and don't have their own heuristic method */
 static gboolean
 heur_dissect_fp_unknown_format(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {

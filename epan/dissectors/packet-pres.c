@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-pres.c                                                              */
-/* asn2wrs.py -b -L -p pres -c ./pres.cnf -s ./packet-pres-template -D . -O ../.. ISO8823-PRESENTATION.asn ISO9576-PRESENTATION.asn */
+/* asn2wrs.py -b -q -L -p pres -c ./pres.cnf -s ./packet-pres-template -D . -O ../.. ISO8823-PRESENTATION.asn ISO9576-PRESENTATION.asn */
 
 /* packet-pres.c
  * Routine to dissect ISO 8823 OSI Presentation Protocol packets
@@ -46,7 +46,7 @@ void proto_reg_handoff_pres(void);
 /* Initialize the protocol and registered fields */
 static int proto_pres;
 
-/* Initialize the connectionles protocol */
+/* Initialize the connectionless protocol */
 static int proto_clpres;
 
 /*      pointers for acse dissector  */

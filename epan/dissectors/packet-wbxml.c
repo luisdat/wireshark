@@ -172,8 +172,8 @@ static expert_field ei_wbxml_too_much_recursion;
 static dissector_handle_t wbxml_handle;
 
 /* WBXML Preferences */
-static gboolean skip_wbxml_token_mapping = FALSE;
-static gboolean disable_wbxml_token_parsing = FALSE;
+static bool skip_wbxml_token_mapping = false;
+static bool disable_wbxml_token_parsing = false;
 
 
 typedef struct _value_valuestring {
@@ -7248,7 +7248,7 @@ parse_wbxml_attribute_list_defined (proto_tree *tree, tvbuff_t *tvb, packet_info
 			/* Move to end of buffer */
 			off = tvb_len;
 			break;
-		} else { /* Known atribute token */
+		} else { /* Known attribute token */
 			const char* s;
 			if (peek & 0x80) { /* attrValue */
 				if (map != NULL) {
@@ -7307,6 +7307,7 @@ parse_wbxml_attribute_list_defined (proto_tree *tree, tvbuff_t *tvb, packet_info
  */
 #define WBXML_MAX_RECURSION_LEVEL 255
 static guint32
+// NOLINTNEXTLINE(misc-no-recursion)
 parse_wbxml_tag_defined (proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, guint32 offset,
 			 guint32 str_tbl, guint8 *codepage_stag, guint8 *codepage_attr,
 			 const wbxml_decoding *map)

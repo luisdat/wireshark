@@ -21,7 +21,7 @@ void proto_register_fcip(void);
 void proto_reg_handoff_fcip(void);
 
 #define FCIP_ENCAP_HEADER_LEN                    28
-#define FCIP_MIN_HEADER_LEN                      16 /* upto frame len field */
+#define FCIP_MIN_HEADER_LEN                      16 /* up to frame len field */
 #define FCIP_IS_SF(pflags)                       ((pflags & 0x1) == 0x1)
 #define FCIP_IS_CH(pflags)                       ((pflags & 0x80) == 0x80)
 
@@ -119,7 +119,7 @@ static int hf_fcip_conn_flags;
 static int ett_fcip;
 
 static guint fcip_port         = 3225;
-static gboolean fcip_desegment = TRUE;
+static bool fcip_desegment = true;
 
 static dissector_handle_t fc_handle;
 static dissector_handle_t fcip_handle;
@@ -381,7 +381,7 @@ dissect_fcip (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         }
         else if (offset == -2) {
             /* We need more data to desegment */
-            return (TRUE);
+            return TRUE;
         }
 
         start = offset;
@@ -401,7 +401,7 @@ dissect_fcip (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                  */
                 pinfo->desegment_offset = offset;
                 pinfo->desegment_len = frame_len - bytes_remaining;
-                return (TRUE);
+                return TRUE;
             }
         }
 
@@ -498,7 +498,7 @@ dissect_fcip (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         bytes_remaining -= frame_len;
     }
 
-    return (TRUE);
+    return TRUE;
 }
 
 /* This is called for those sessions where we have explicitly said

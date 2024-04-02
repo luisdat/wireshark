@@ -29,6 +29,8 @@
 #include <QMenu>
 #include <QTextStream>
 
+#include <vector>
+
 class QRubberBand;
 class QTimer;
 
@@ -39,8 +41,18 @@ class QCustomPlot;
 class QCPAxisTicker;
 class QCPAxisTickerDateTime;
 
-// GTK+ sets this to 100000 (NUM_IO_ITEMS)
-const int max_io_items_ = 250000;
+// GTK+ set this to 100000 (NUM_IO_ITEMS) before raising it to unlimited
+// in commit 524583298beb671f43e972476693866754d38a38.
+// This is the maximum index returned from get_io_graph_index that will
+// be added to the graph. Thus, for a minimum interval size of 1 ms we
+// can span no more than 4.66 days, and if we decrease the minimum interval
+// size without increasing this it would decrease proportionately (e.g.
+// for 1 μs no more than 16.8 s.)
+// Each io_graph_item_t is 88 bytes on a system with 64 bit time_t, so
+// the max size we'll attempt to allocate for the array of items is 1.375 GiB
+// (plus a tiny amount extra for the std::vector bookkeeping.)
+// 2^24 = 16777216
+const int max_io_items_ = 1 << 24;
 
 // XXX - Move to its own file?
 class IOGraph : public QObject {
@@ -51,29 +63,29 @@ public:
 
     explicit IOGraph(QCustomPlot *parent);
     ~IOGraph();
-    const QString configError() { return config_err_; }
-    const QString name() { return name_; }
+    QString configError() const { return config_err_; }
+    QString name() const { return name_; }
     void setName(const QString &name);
-    const QString filter() { return filter_; }
+    QString filter() const { return filter_; }
     void setFilter(const QString &filter);
     void applyCurrentColor();
-    bool visible() { return visible_; }
+    bool visible() const { return visible_; }
     void setVisible(bool visible);
-    QRgb color();
+    QRgb color() const;
     void setColor(const QRgb color);
     void setPlotStyle(int style);
-    const QString valueUnitLabel();
+    QString valueUnitLabel() const;
     void setValueUnits(int val_units);
-    const QString valueUnitField() { return vu_field_; }
+    QString valueUnitField() const { return vu_field_; }
     void setValueUnitField(const QString &vu_field);
-    unsigned int movingAveragePeriod() { return moving_avg_period_; }
+    unsigned int movingAveragePeriod() const { return moving_avg_period_; }
     void setInterval(int interval);
     bool addToLegend();
     bool removeFromLegend();
-    QCPGraph *graph() { return graph_; }
-    QCPBars *bars() { return bars_; }
-    double startOffset();
-    int packetFromTime(double ts);
+    QCPGraph *graph() const { return graph_; }
+    QCPBars *bars() const { return bars_; }
+    double startOffset() const;
+    int packetFromTime(double ts) const;
     bool hasItemToShow(int idx, double value) const;
     double getItemValue(int idx, const capture_file *cap_file) const;
     int maxInterval () const { return cur_idx_; }
@@ -111,6 +123,7 @@ private:
     QCPGraph *graph_;
     QCPBars *bars_;
     QString filter_;
+    QString full_filter_; // Includes vu_field_ if used
     QBrush color_;
     io_graph_item_unit_t val_units_;
     QString vu_field_;
@@ -121,7 +134,7 @@ private:
 
     // Cached data. We should be able to change the Y axis without retapping as
     // much as is feasible.
-    io_graph_item_t items_[max_io_items_];
+    std::vector<io_graph_item_t> items_;
     int cur_idx_;
 };
 
@@ -187,6 +200,7 @@ private:
     bool need_recalc_; // Medium weight: recalculate values, then replot
     bool need_retap_; // Heavy weight: re-read packet data
     bool auto_axes_;
+    int precision_;
 
     QSharedPointer<QCPAxisTicker> number_ticker_;
     QSharedPointer<QCPAxisTickerDateTime> datetime_ticker_;

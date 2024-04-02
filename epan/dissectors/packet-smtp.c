@@ -81,10 +81,10 @@ static gint ett_smtp_data_fragments;
 static expert_field ei_smtp_base64_decode;
 static expert_field ei_smtp_rsp_code;
 
-static gboolean    smtp_auth_parameter_decoding_enabled     = FALSE;
+static bool    smtp_auth_parameter_decoding_enabled     = false;
 /* desegmentation of SMTP command and response lines */
-static gboolean    smtp_desegment              = TRUE;
-static gboolean    smtp_data_desegment         = TRUE;
+static bool    smtp_desegment              = true;
+static bool    smtp_data_desegment         = true;
 
 static reassembly_table smtp_data_reassembly_table;
 
@@ -155,7 +155,7 @@ typedef enum {
   SMTP_AUTH_STATE_PLAIN_REQ,          /* Received AUTH PLAIN request from server */
   SMTP_AUTH_STATE_PLAIN_RSP,          /* Received AUTH PLAIN response from client */
   SMTP_AUTH_STATE_NTLM_REQ,           /* Received ntlm negotiate request from client */
-  SMTP_AUTH_STATE_NTLM_CHALLANGE,     /* Received ntlm challange request from server */
+  SMTP_AUTH_STATE_NTLM_CHALLANGE,     /* Received ntlm challenge request from server */
   SMTP_AUTH_STATE_NTLM_RSP,           /* Received ntlm auth request from client */
   SMTP_AUTH_STATE_SUCCESS,            /* Password received, authentication successful, start decoding */
   SMTP_AUTH_STATE_FAILED              /* authentication failed, no decoding */
@@ -187,7 +187,7 @@ struct smtp_session_state {
   guint32  user_pass_cmd_frame; /* AUTH command contains username and password */
   guint32  user_pass_frame;     /* Frame contains username and password */
   guint32  ntlm_req_frame;      /* Frame containing NTLM request */
-  guint32  ntlm_cha_frame;      /* Frame containing NTLM challange. */
+  guint32  ntlm_cha_frame;      /* Frame containing NTLM challenge. */
   guint32  ntlm_rsp_frame;      /* Frame containing NTLM response. */
 };
 
@@ -1128,7 +1128,8 @@ dissect_smtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
           while (linep < lineend && *linep != ' ')
             linep++;
           cmdlen = (int)(linep - line);
-          if (line_is_smtp_command(line, cmdlen)) {
+          if (line_is_smtp_command(line, cmdlen) &&
+               ( session_state->auth_state != SMTP_AUTH_STATE_PASSWORD_REQ )) {
             if (g_ascii_strncasecmp(line, "DATA", 4) == 0) {
               /*
                * DATA command.

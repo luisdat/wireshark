@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-tetra.c                                                             */
-/* asn2wrs.py -u -L -p tetra -c ./tetra.cnf -s ./packet-tetra-template -D . -O ../.. tetra.asn */
+/* asn2wrs.py -u -q -L -p tetra -c ./tetra.cnf -s ./packet-tetra-template -D . -O ../.. tetra.asn */
 
 /* packet-tetra.c
  * Routines for TETRA packet dissection
@@ -44,7 +44,7 @@ static dissector_handle_t tetra_handle;
 #define TETRA_UDP_PORT  7074 /* Not IANA assigned */
 
 /* Whether the capture data include carrier numbers */
-static gboolean include_carrier_number = TRUE;
+static bool include_carrier_number = true;
 
 /* The following hf_* variables are used to hold the Wireshark IDs of
 * our header fields; they are filled out when we call

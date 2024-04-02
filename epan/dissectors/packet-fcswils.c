@@ -495,13 +495,13 @@ get_zoneobj_len(tvbuff_t *tvb, gint offset)
      * id (id_len bytes)
      */
     objtype = tvb_get_guint8(tvb, offset);
-    len = 4 + ZONENAME_LEN(tvb, offset+4); /* length upto num_of_mbrs field */
+    len = 4 + ZONENAME_LEN(tvb, offset+4); /* length up to num_of_mbrs field */
     numrec = tvb_get_ntohl(tvb, offset+len); /* gets us num of zone mbrs */
 
     len += 4;                   /* + num_mbrs */
     for (i = 0; i < numrec; i++) {
         if (objtype == FC_SWILS_ZONEOBJ_ZONESET) {
-            len += 4 + ZONENAME_LEN(tvb, offset+4+len); /* length upto num_of_mbrs field */
+            len += 4 + ZONENAME_LEN(tvb, offset+4+len); /* length up to num_of_mbrs field */
             numrec1 = tvb_get_ntohl(tvb, offset+len);
 
             len += 4;
@@ -1207,6 +1207,7 @@ dissect_swils_zone_mbr(tvbuff_t *tvb, packet_info* pinfo, proto_tree *zmbr_tree,
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_swils_zone_obj(tvbuff_t *tvb, packet_info* pinfo, proto_tree *zobj_tree, int offset)
 {
     proto_tree *zmbr_tree;
@@ -1229,6 +1230,7 @@ dissect_swils_zone_obj(tvbuff_t *tvb, packet_info* pinfo, proto_tree *zobj_tree,
     offset += 8 + ZONENAME_LEN(tvb, offset+4);
     for (i = 0; i < numrec; i++) {
         if (objtype == FC_SWILS_ZONEOBJ_ZONESET) {
+            // We recurse here, but we'll run out of packet before we run out of stack.
             dissect_swils_zone_obj(tvb, pinfo, zobj_tree, offset);
             offset += get_zoneobj_len(tvb, offset);
         }

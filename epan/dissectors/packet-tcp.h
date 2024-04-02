@@ -174,6 +174,8 @@ struct tcp_acked {
 
 	guint32 new_data_seq; /* For segments with old data,
 				 where new data starts */
+	gboolean partial_ack; /* true when acknowledging data
+				 and not a full segment */
 };
 
 /* One instance of this structure is created for each pdu that spans across
@@ -400,7 +402,7 @@ struct mptcp_analysis {
 	mptcp_meta_flow_t meta_flow[2];
 
 	guint32 stream; /* Keep track of unique mptcp stream (per MP_CAPABLE handshake) */
-	guint8 hmac_algo;  /* hmac decided after negociation */
+	guint8 hmac_algo;  /* hmac decided after negotiation */
 	wmem_list_t* subflows;	/* List of subflows (tcp_analysis) */
 
 	/* identifier of the tcp stream that saw the initial 3WHS with MP_CAPABLE option */
@@ -471,6 +473,9 @@ struct tcp_analysis {
 	 */
 	guint32         stream;
 
+	/* Keep track of packet number within the TCP stream */
+	uint32_t        pnum;
+
 	/* Remembers the server port on the SYN (or SYN|ACK) packet to
 	 * help determine which dissector to call
 	 */
@@ -509,6 +514,7 @@ struct tcp_analysis {
  */
 struct tcp_per_packet_data_t {
 	nstime_t	ts_del;
+	uint32_t        pnum;
 	guint8		tcp_snd_manual_analysis;
 };
 

@@ -329,7 +329,7 @@ static expert_field ei_bitcoin_address_length;
 static expert_field ei_bitcoin_script_len;
 
 
-static gboolean bitcoin_desegment  = TRUE;
+static bool bitcoin_desegment  = true;
 
 static guint
 get_bitcoin_pdu_length(packet_info *pinfo _U_, tvbuff_t *tvb,
@@ -1530,7 +1530,7 @@ proto_register_bitcoin(void)
         NULL, HFILL }
     },
     { &hf_msg_version_addr_me,
-      { "Address of emmitting node", "bitcoin.version.addr_me",
+      { "Address of emitting node", "bitcoin.version.addr_me",
         FT_NONE, BASE_NONE, NULL, 0x0,
         NULL, HFILL }
     },

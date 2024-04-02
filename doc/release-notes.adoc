@@ -19,6 +19,9 @@ It is used for troubleshooting, analysis, development and education.
 // Add a summary of **major** changes here.
 // Add other changes to "New and Updated Features" below.
 
+Lua 5.3 and 5.4 are supported, and the Lua version included with the
+Windows and MacOS installers is now 5.4.6.
+
 Improved display filter support for value strings (optional string
 representations for numeric fields).
 
@@ -30,6 +33,9 @@ plugins as described below.
 Custom columns can be defined using any valid field expression, such as
 display filter functions, slices, arithmetic calculations, logical tests,
 raw byte addressing, and the layer modifier.
+
+Custom output fields for `tshark -e` can also be defined using any
+valid field expression.
 
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
@@ -76,6 +82,11 @@ The following features are new (or have been significantly updated) since versio
 
   ** Added new display filter functions to test various IP address properties.
      Check the wireshark-filter(5) manpage for more information.
+
+  ** Added new display filter functions to convert unsigned integer types to
+     decimal or hexadecimal, and convert fields with value strings into the
+     associated string for their value (used to produce results similar to
+     custom columns). Check the wireshark-filter(5) manpage for more information.
 
   ** Display filter macros can be written with a semicolon after the macro
      name before the argument list, e.g. `${mymacro;arg1;...;argN}`, instead
@@ -137,6 +148,14 @@ The following features are new (or have been significantly updated) since versio
      resolution or value string lookup) are not supported for any of the new
      expressions yet.
 
+* Custom output fields for `tshark -e <field>` can also be defined using any
+  valid field expression as above.
+
+  ** For custom output fields, `X or Y` is the usual logical test; to output
+     multiple fields use multiple `-e` terms as before.
+
+  ** The various `-E` options, including `-E occurrence`, all work as expected.
+
 * When selecting "Manage Interfaces" from "Capture Options", Wireshark only
   attempts to reconnect to rpcap (remote) hosts that were connected to in the
   last session, instead of every remote host that the current profile has ever
@@ -171,6 +190,21 @@ The following features are new (or have been significantly updated) since versio
 
 * The "Follow Stream" dialog can now show delta times between turns and all packets and events.
 
+* The "Find Packet" dialog can search backwards, and find additional occurrences
+  of a string, hex value, or regular expression in a single frame.
+
+* The included Lua version has been updated to 5.4. While most Lua dissectors
+  should continue to work (the lua_bitop library has been patched to work with
+  Lua 5.3 and 5.4, in addition to the native Lua support for bit operations
+  present in those versions), different versions of Lua are not guaranteed to
+  be compatible. If a Lua dissector has issues, check the manuals for
+  https://www.lua.org/manual/5.4/manual.html#8[Lua 5.4],
+  https://www.lua.org/manual/5.3/manual.html#8[Lua 5.3], and
+  https://www.lua.org/manual/5.2/manual.html#8[Lua 5.2] for
+  incompatibilities and suggested workarounds. Note that features marked as
+  deprecated in one version are removed in the subsequent version without
+  additional notice, so it can be worth checking the manual for previous versions.
+
 === Removed Features and Support
 
 * The tshark `-G` option with no argument is deprecated and will be removed in
@@ -198,6 +232,7 @@ MAC NR Framed (mac-nr-framed)
 RF4CE Network Layer (RF4CE)
 RF4CE Profile (RF4CE Profile)
 EGNOS Message Server (EMS) file format
+ZeroMQ Message Transport Protocol (ZMTP)
 --
 
 === Updated Protocol Support

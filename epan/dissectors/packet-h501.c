@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-h501.c                                                              */
-/* asn2wrs.py -L -p h501 -c ./h501.cnf -s ./packet-h501-template -D . -O ../.. H501-MESSAGES.asn */
+/* asn2wrs.py -q -L -p h501 -c ./h501.cnf -s ./packet-h501-template -D . -O ../.. H501-MESSAGES.asn */
 
 /* packet-h501.c
  * Routines for H.501 packet dissection
@@ -396,7 +396,7 @@ static dissector_handle_t h501_tcp_handle;
 
 /* Preferences */
 #define H501_PORT 2099
-static gboolean h501_desegment_tcp = TRUE;
+static bool h501_desegment_tcp = true;
 
 void proto_reg_handoff_h501(void);
 

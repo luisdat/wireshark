@@ -370,7 +370,7 @@ static const option_part_definition saphdb_part_fetch_options_vals[] = {
 
 static const option_part_definition saphdb_part_transaction_flags_vals[] = {
 	{ 0, "Rolled Back", 28 },
-	{ 1, "Commited", 28 },
+	{ 1, "Committed", 28 },
 	{ 2, "New Isolation Level", 3 },
 	{ 3, "DDL Commit Mode Changed", 28 },
 	{ 4, "Write Transaction Started", 28 },
@@ -556,7 +556,7 @@ static expert_field ei_saphdb_varpartlenght_incorrect;
 
 
 /* Global highlight preference */
-static gboolean global_saphdb_highlight_items = TRUE;
+static bool global_saphdb_highlight_items = true;
 
 
 /* Protocol handle */

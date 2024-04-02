@@ -191,24 +191,24 @@ gboolean lbttcp_transport_sid_find(const address * source_address, guint16 sourc
     conv = find_conversation(frame, source_address, &lbttcp_null_address, CONVERSATION_TCP, source_port, 0, 0);
     if (conv == NULL)
     {
-        return (FALSE);
+        return FALSE;
     }
     conv_data = (lbttcp_transport_conv_data_t *) conversation_get_proto_data(conv, proto_lbttcp);
     if (conv_data == NULL)
     {
-        return (FALSE);
+        return FALSE;
     }
     if (conv_data->frame_tree == NULL)
     {
-        return (FALSE);
+        return FALSE;
     }
     transport = (lbttcp_transport_t *)wmem_tree_lookup32_le(conv_data->frame_tree, frame);
     if (transport == NULL)
     {
-        return (FALSE);
+        return FALSE;
     }
     *session_id = transport->session_id;
-    return (TRUE);
+    return TRUE;
 }
 
 void lbttcp_transport_sid_add(const address * source_address, guint16 source_port, guint32 frame, guint32 session_id)
@@ -266,7 +266,7 @@ static guint32 global_lbttcp_request_port_low = LBTTCP_DEFAULT_REQUEST_PORT_LOW;
 static guint32 global_lbttcp_request_port_high = LBTTCP_DEFAULT_REQUEST_PORT_HIGH;
 static guint32 global_lbttcp_store_port_low = LBTTCP_DEFAULT_STORE_PORT_LOW;
 static guint32 global_lbttcp_store_port_high = LBTTCP_DEFAULT_STORE_PORT_HIGH;
-static gboolean global_lbttcp_use_tag = FALSE;
+static bool global_lbttcp_use_tag = false;
 
 /* Local preferences variables (used by the dissector). */
 static guint32 lbttcp_source_port_low = LBTTCP_DEFAULT_SOURCE_PORT_LOW;
@@ -649,7 +649,7 @@ static gboolean test_lbttcp_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tr
     /* Destination address must be IPV4 and 4 bytes in length. */
     if ((pinfo->dst.type != AT_IPv4) || (pinfo->dst.len != 4))
     {
-        return (FALSE);
+        return FALSE;
     }
 
     if (lbttcp_use_tag)
@@ -657,11 +657,11 @@ static gboolean test_lbttcp_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tr
         if (lbttcp_tag_find(pinfo) != NULL)
         {
             dissect_lbttcp_real(tvb, pinfo, tree, data);
-            return (TRUE);
+            return TRUE;
         }
         else
         {
-            return (FALSE);
+            return FALSE;
         }
     }
 
@@ -676,7 +676,7 @@ static gboolean test_lbttcp_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tr
           || ((pinfo->srcport >= lbttcp_store_port_low) && (pinfo->srcport <= lbttcp_store_port_high))
           || ((pinfo->destport >= lbttcp_store_port_low) && (pinfo->destport <= lbttcp_store_port_high))))
     {
-        return (FALSE);
+        return FALSE;
     }
 
     if (!lbmc_test_lbmc_header(tvb, 0))
@@ -684,7 +684,7 @@ static gboolean test_lbttcp_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tr
 
     /* One of ours. Probably. */
     dissect_lbttcp_real(tvb, pinfo, tree, data);
-    return (TRUE);
+    return TRUE;
 }
 
 /* Register all the bits needed with the filtering engine */

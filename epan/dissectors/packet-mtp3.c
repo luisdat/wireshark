@@ -112,7 +112,7 @@ static gint japan_pc_structure = JAPAN_PC_STRUCTURE_NONE;
 #include "packet-mtp3.h"
 
 gint mtp3_standard = ITU_STANDARD;
-gboolean mtp3_heuristic_standard = FALSE;
+bool mtp3_heuristic_standard = false;
 
 static gint pref_mtp3_standard;
 
@@ -124,9 +124,9 @@ const value_string mtp3_standard_vals[] = {
   { 0,        NULL }
 };
 
-static gboolean mtp3_use_ansi_5_bit_sls = FALSE;
-static gboolean mtp3_use_japan_5_bit_sls = FALSE;
-static gboolean mtp3_show_itu_priority = FALSE;
+static bool mtp3_use_ansi_5_bit_sls = false;
+static bool mtp3_use_japan_5_bit_sls = false;
+static bool mtp3_show_itu_priority = false;
 static gint mtp3_addr_fmt = MTP3_ADDR_FMT_DASHED;
 
 #define SIO_LENGTH                1
@@ -734,7 +734,7 @@ reset_mtp3_standard(void)
 static int
 dissect_mtp3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  mtp3_tap_rec_t* tap_rec = wmem_new0(wmem_packet_scope(), mtp3_tap_rec_t);
+  mtp3_tap_rec_t* tap_rec = wmem_new0(pinfo->pool, mtp3_tap_rec_t);
   gint heuristic_standard;
   guint8 si;
   mtp3_addr_pc_t* mtp3_addr_dpc;

@@ -2152,6 +2152,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Go言語のリテラルとしてパケットバイト列をコピーします。</translation>
     </message>
     <message>
+        <source>…as C Array</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as C Array.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as a Hex Stream</source>
         <translation>16進数ストリームとして…</translation>
     </message>
@@ -2990,10 +2998,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>開始</translation>
     </message>
     <message>
-        <source>Save</source>
-        <translation>保存</translation>
-    </message>
-    <message>
         <source>Default</source>
         <translation>デフォルト</translation>
     </message>
@@ -3322,20 +3326,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 <context>
     <name>FolderListModel</name>
     <message>
-        <source>&quot;File&quot; dialogs</source>
-        <translation>&quot;ファイル&quot; ダイアログ</translation>
-    </message>
-    <message>
-        <source>capture files</source>
-        <translation>キャプチャファイル</translation>
-    </message>
-    <message>
         <source>Temp</source>
         <translation>一時的</translation>
-    </message>
-    <message>
-        <source>untitled capture files</source>
-        <translation>名称未設定キャプチャファイル</translation>
     </message>
     <message>
         <source>Personal configuration</source>
@@ -3344,14 +3336,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Global configuration</source>
         <translation>グローバル設定</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, ethers, …</source>
-        <translation>dfilters, preferences, ethers, …</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, manuf, …</source>
-        <translation>dfilters, preferences, manuf, …</translation>
     </message>
     <message>
         <source>System</source>
@@ -3366,16 +3350,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>プログラム</translation>
     </message>
     <message>
-        <source>program files</source>
-        <translation>プログラムファイル</translation>
-    </message>
-    <message>
         <source>Personal Plugins</source>
         <translation>個人プラグイン</translation>
-    </message>
-    <message>
-        <source>binary plugins</source>
-        <translation>バイナリプラグイン</translation>
     </message>
     <message>
         <source>Global Plugins</source>
@@ -3394,12 +3370,36 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Luaスクリプト</translation>
     </message>
     <message>
+        <source>&quot;File&quot; dialog location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Untitled capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preferences, profiles, manuf, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Program files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugins</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Personal Extcap path</source>
         <translation>個人Extcapパス</translation>
     </message>
     <message>
-        <source>external capture (extcap) plugins</source>
-        <translation>外部キャプチャ(extcap)プラグイン</translation>
+        <source>External capture (extcap) plugins</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Global Extcap path</source>
@@ -3657,6 +3657,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Find:</source>
         <translation>検索:</translation>
+    </message>
+    <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">大文字小文字を区別</translation>
     </message>
     <message>
         <source>Find &amp;Next</source>
@@ -11173,6 +11177,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>検索:</translation>
     </message>
     <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">大文字小文字を区別</translation>
+    </message>
+    <message>
         <source>Find &amp;Next</source>
         <translation>次を検索</translation>
     </message>
@@ -14193,6 +14201,18 @@ a:hover {
     <message>
         <source>TCP throughput</source>
         <translation>TCP スループット</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Query-Response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DNS Query-Response Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Request Sequences</source>

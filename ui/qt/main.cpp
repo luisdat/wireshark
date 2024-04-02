@@ -1010,6 +1010,7 @@ int main(int argc, char *qt_argv[])
 #endif
     splash_update(RA_PREFERENCES_APPLY, NULL, NULL);
     prefs_apply_all();
+    wsApp->emitAppSignal(WiresharkApplication::ColorsChanged);
     wsApp->emitAppSignal(WiresharkApplication::PreferencesChanged);
 
 #ifdef HAVE_LIBPCAP
@@ -1081,7 +1082,7 @@ int main(int argc, char *qt_argv[])
             if (global_commandline_info.go_to_packet != 0) {
                 /* Jump to the specified frame number, kept for backward
                    compatibility. */
-                cf_goto_frame(CaptureFile::globalCapFile(), global_commandline_info.go_to_packet);
+                cf_goto_frame(CaptureFile::globalCapFile(), global_commandline_info.go_to_packet, FALSE);
             } else if (global_commandline_info.jfilter != NULL) {
                 dfilter_t *jump_to_filter = NULL;
                 /* try to compile given filter */

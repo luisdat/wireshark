@@ -115,7 +115,7 @@ static const string_string versiontypenames[] = {
     { "20140617", "Support for anchoring session connect time" },
     { "20141004", "Support for extendable performance counters" },
     { "20150330", "Support for allocating a new port (\"Un\"/\"Ln\" commands)" },
-    { 0, NULL }
+    { NULL, NULL }
 };
 
 static const value_string commandtypenames[] = {
@@ -250,7 +250,7 @@ static const string_string errortypenames[] = {
     { "E89", "Out of memory (NOMEM_9)" },
     { "E98", "OVERLOAD" },
     { "E99", "Software error: proxy is in the deorbiting-burn mode, new session rejected (SLOWSHTDN)" },
-    { 0, NULL }
+    { NULL, NULL }
 };
 
 static gint ett_rtpproxy;
@@ -279,7 +279,7 @@ static gint ett_rtpproxy_ng_bencode;
 static range_t* rtpproxy_tcp_range = NULL;
 static range_t* rtpproxy_udp_range = NULL;
 
-static gboolean rtpproxy_establish_conversation = TRUE;
+static bool rtpproxy_establish_conversation = true;
 /* See - https://www.opensips.org/html/docs/modules/1.10.x/rtpproxy.html#id293555 */
 /* See - http://www.kamailio.org/docs/modules/4.3.x/modules/rtpproxy.html#idp15794952 */
 static guint rtpproxy_timeout = 1000;

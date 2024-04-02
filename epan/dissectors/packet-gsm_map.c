@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-gsm_map.c                                                           */
-/* asn2wrs.py -b -L -c ./gsm_map.cnf -s ./packet-gsm_map-template -D . -O ../.. ../ros/Remote-Operations-Information-Objects.asn MobileDomainDefinitions.asn MAP-ApplicationContexts.asn MAP-SS-Code.asn MAP-BS-Code.asn MAP-TS-Code.asn MAP-ExtensionDataTypes.asn MAP-CommonDataTypes.asn MAP-SS-DataTypes.asn MAP-ER-DataTypes.asn MAP-SM-DataTypes.asn MAP-OM-DataTypes.asn MAP-MS-DataTypes.asn MAP-CH-DataTypes.asn MAP-LCS-DataTypes.asn MAP-GR-DataTypes.asn MAP-DialogueInformation.asn MAP-LocationServiceOperations.asn MAP-Group-Call-Operations.asn MAP-ShortMessageServiceOperations.asn MAP-SupplementaryServiceOperations.asn MAP-CallHandlingOperations.asn MAP-OperationAndMaintenanceOperations.asn MAP-MobileServiceOperations.asn MAP-Errors.asn MAP-Protocol.asn GSMMAP.asn SS-DataTypes.asn SS-Operations.asn Ericsson.asn Nokia.asn */
+/* asn2wrs.py -b -q -L -c ./gsm_map.cnf -s ./packet-gsm_map-template -D . -O ../.. ../ros/Remote-Operations-Information-Objects.asn MobileDomainDefinitions.asn MAP-ApplicationContexts.asn MAP-SS-Code.asn MAP-BS-Code.asn MAP-TS-Code.asn MAP-ExtensionDataTypes.asn MAP-CommonDataTypes.asn MAP-SS-DataTypes.asn MAP-ER-DataTypes.asn MAP-SM-DataTypes.asn MAP-OM-DataTypes.asn MAP-MS-DataTypes.asn MAP-CH-DataTypes.asn MAP-LCS-DataTypes.asn MAP-GR-DataTypes.asn MAP-DialogueInformation.asn MAP-LocationServiceOperations.asn MAP-Group-Call-Operations.asn MAP-ShortMessageServiceOperations.asn MAP-SupplementaryServiceOperations.asn MAP-CallHandlingOperations.asn MAP-OperationAndMaintenanceOperations.asn MAP-MobileServiceOperations.asn MAP-Errors.asn MAP-Protocol.asn GSMMAP.asn SS-DataTypes.asn SS-Operations.asn Ericsson.asn Nokia.asn */
 
 /* XXX see bug 1852:
  *
@@ -2798,15 +2798,15 @@ static dissector_handle_t       ranap_handle;
 static dissector_handle_t       dtap_handle;
 static dissector_handle_t       map_handle;
 static dissector_handle_t       bssap_handle;
-static dissector_table_t        map_prop_arg_opcode_table; /* prorietary operation codes */
-static dissector_table_t        map_prop_res_opcode_table; /* prorietary operation codes */
-static dissector_table_t        map_prop_err_opcode_table; /* prorietary operation codes */
+static dissector_table_t        map_prop_arg_opcode_table; /* proprietary operation codes */
+static dissector_table_t        map_prop_res_opcode_table; /* proprietary operation codes */
+static dissector_table_t        map_prop_err_opcode_table; /* proprietary operation codes */
 /* Preference settings default */
 #define MAX_SSN 254
 static range_t *global_ssn_range;
 #define APPLICATON_CONTEXT_FROM_TRACE 0
 static gint pref_application_context_version = APPLICATON_CONTEXT_FROM_TRACE;
-static gboolean pref_ericsson_proprietary_ext = FALSE;
+static bool pref_ericsson_proprietary_ext = false;
 
 /* Global variables */
 static guint32 opcode=0;
@@ -3985,7 +3985,7 @@ MAP interfaces
 	case 1:
 	/* gsm-0408 */
 		/* As per comment abowe Individual IE:(s) will be found here in TLV format
-		 * Unfortunatly a branch for each IE must be made to call the apropriate
+		 * Unfortunately a branch for each IE must be made to call the appropriate
 		 * function
 		 */
 		 /* Get tag */
@@ -18042,7 +18042,7 @@ if (!gsm_map_priv || !gsm_map_priv->signal_info_tvb)
 	case 1:
 	/* gsm-0408 */
 		/* As per comment abowe Individual IE:(s) will be found here in TLV format
-		 * Unfortunatly a branch for each IE must be made to call the apropriate
+		 * Unfortunately a branch for each IE must be made to call the appropriate
 		 * function
 		 */
 		 /* Get tag */
@@ -22388,7 +22388,7 @@ typedef int (* dissect_function_t)( bool,
 /*
  * Dissect Multiple Choice Message
  * This function is used to decode a message, when several encoding may be used.
- * For exemple, in the last MAP version, the Cancel Location is defined like this:
+ * For example, in the last MAP version, the Cancel Location is defined like this:
  * CancelLocationArg ::= [3] IMPLICIT SEQUENCE
  * But in the previous MAP version, it was a CHOICE between a SEQUENCE and an IMSI
  * As ASN1 encoders (or software) still uses the old encoding, this function allows

@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#define WS_LOG_DOMAIN LOG_DOMAIN_QTUI
 #include "io_graph_dialog.h"
 #include <ui_io_graph_dialog.h>
 
@@ -25,6 +26,7 @@
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/widgets/qcustomplot.h>
+#include <ui/qt/widgets/qcp_string_legend_item.h>
 #include "progress_frame.h"
 #include "main_application.h"
 
@@ -47,6 +49,8 @@
 #include <QTimer>
 #include <QVariant>
 
+#include <new> // std::bad_alloc
+
 // Bugs and uncertainties:
 // - Regular (non-stacked) bar graphs are drawn on top of each other on the Z axis.
 //   The QCP forum suggests drawing them side by side:
@@ -54,15 +58,27 @@
 // - We retap and redraw more than we should.
 // - Smoothing doesn't seem to match GTK+
 // - Closing the color picker on macOS sends the dialog to the background.
-// - The color picker triggers https://bugreports.qt.io/browse/QTBUG-58699.
 
 // To do:
 // - Use scroll bars?
+//   https://www.qcustomplot.com/index.php/tutorials/specialcases/scrollbar
 // - Scroll during live captures
 // - Set ticks per pixel (e.g. pressing "2" sets 2 tpp).
 // - Explicitly handle missing values, e.g. via NAN.
 // - Add a "show missing" or "show zero" option to the UAT?
 //   It would add yet another graph configuration column.
+// - Increase max number of items (or make configurable)
+// - Dark Mode support, e.g.
+//   https://www.qcustomplot.com/index.php/demos/barchartdemo
+// - Multiple y-axes?
+//   https://www.qcustomplot.com/index.php/demos/multiaxisdemo
+//   https://www.qcustomplot.com/index.php/tutorials/specialcases/axistags
+
+// Scale factor to convert the units the interval is stored in to seconds.
+// Must match what get_io_graph_index() in io_graph_item expects.
+// Increase this in order to make smaller intervals possible.
+const int SCALE = 1000;
+const double SCALE_F = (double)SCALE;
 
 const qreal graph_line_width_ = 1.0;
 
@@ -142,13 +158,14 @@ static const char *iog_uat_defaults_[] = {
 
 extern "C" {
 
-//Allow the enable/disable field to be a checkbox, but for backwards compatibility,
-//the strings have to be "Enabled"/"Disabled", not "TRUE"/"FALSE"
+//Allow the enable/disable field to be a checkbox, but for backwards
+//compatibility with pre-2.6 versions, the strings are "Enabled"/"Disabled",
+//not "TRUE"/"FALSE". (Pre-4.4 versions require "TRUE" to be all-caps.)
 #define UAT_BOOL_ENABLE_CB_DEF(basename,field_name,rec_t) \
 static void basename ## _ ## field_name ## _set_cb(void* rec, const char* buf, guint len, const void* UNUSED_PARAMETER(u1), const void* UNUSED_PARAMETER(u2)) {\
     char* tmp_str = g_strndup(buf,len); \
-    if ((g_strcmp0(tmp_str, "Enabled") == 0) || \
-        (g_strcmp0(tmp_str, "TRUE") == 0)) \
+    if (tmp_str && ((g_strcmp0(tmp_str, "Enabled") == 0) || \
+        (g_ascii_strcasecmp(tmp_str, "true") == 0))) \
         ((rec_t*)rec)->field_name = 1; \
     else \
         ((rec_t*)rec)->field_name = 0; \
@@ -161,10 +178,11 @@ static bool uat_fld_chk_enable(void* u1 _U_, const char* strptr, guint len, cons
 {
     char* str = g_strndup(strptr,len);
 
-    if ((g_strcmp0(str, "Enabled") == 0) ||
+    if (str &&
+       ((g_strcmp0(str, "Enabled") == 0) ||
         (g_strcmp0(str, "Disabled") == 0) ||
-        (g_strcmp0(str, "TRUE") == 0) ||    //just for UAT functionality
-        (g_strcmp0(str, "FALSE") == 0)) {
+        (g_ascii_strcasecmp(str, "TRUE") == 0) ||  //just for UAT functionality
+        (g_ascii_strcasecmp(str, "FALSE") == 0))) {
         *err = NULL;
         g_free(str);
         return TRUE;
@@ -373,21 +391,21 @@ IOGraphDialog::IOGraphDialog(QWidget &parent, CaptureFile &cf, QString displayFi
     stat_timer_->start(stat_update_interval_);
 
     // Intervals (ms)
-    ui->intervalComboBox->addItem(tr("1 ms"),        1);
-    ui->intervalComboBox->addItem(tr("2 ms"),        2);
-    ui->intervalComboBox->addItem(tr("5 ms"),        5);
-    ui->intervalComboBox->addItem(tr("10 ms"),      10);
-    ui->intervalComboBox->addItem(tr("20 ms"),      20);
-    ui->intervalComboBox->addItem(tr("50 ms"),      50);
-    ui->intervalComboBox->addItem(tr("100 ms"),    100);
-    ui->intervalComboBox->addItem(tr("200 ms"),    200);
-    ui->intervalComboBox->addItem(tr("500 ms"),    500);
-    ui->intervalComboBox->addItem(tr("1 sec"),    1000);
-    ui->intervalComboBox->addItem(tr("2 sec"),    2000);
-    ui->intervalComboBox->addItem(tr("5 sec"),    5000);
-    ui->intervalComboBox->addItem(tr("10 sec"),  10000);
-    ui->intervalComboBox->addItem(tr("1 min"),   60000);
-    ui->intervalComboBox->addItem(tr("10 min"), 600000);
+    ui->intervalComboBox->addItem(tr("1 ms"),   SCALE / 1000);
+    ui->intervalComboBox->addItem(tr("2 ms"),   SCALE / 500);
+    ui->intervalComboBox->addItem(tr("5 ms"),   SCALE / 200);
+    ui->intervalComboBox->addItem(tr("10 ms"),  SCALE / 100);
+    ui->intervalComboBox->addItem(tr("20 ms"),  SCALE / 50);
+    ui->intervalComboBox->addItem(tr("50 ms"),  SCALE / 20);
+    ui->intervalComboBox->addItem(tr("100 ms"), SCALE / 10);
+    ui->intervalComboBox->addItem(tr("200 ms"), SCALE / 5);
+    ui->intervalComboBox->addItem(tr("500 ms"), SCALE / 2);
+    ui->intervalComboBox->addItem(tr("1 sec"),  SCALE);
+    ui->intervalComboBox->addItem(tr("2 sec"),  SCALE * 2);
+    ui->intervalComboBox->addItem(tr("5 sec"),  SCALE * 5);
+    ui->intervalComboBox->addItem(tr("10 sec"), SCALE * 10);
+    ui->intervalComboBox->addItem(tr("1 min"),  SCALE * 60);
+    ui->intervalComboBox->addItem(tr("10 min"), SCALE * 600);
     ui->intervalComboBox->setCurrentIndex(9);
 
     ui->todCheckBox->setChecked(false);
@@ -619,6 +637,9 @@ void IOGraphDialog::syncGraphSettings(int row)
 
     bool visible = graphIsEnabled(row);
     bool retap = !iog->visible() && visible;
+    // XXX - Do we really need to retap every time we make the graph
+    // visible from invisible? If we have tapped before and nothing
+    // has changed, we might be able to get away with only a recalc.
     QString data_str;
 
     iog->setName(uat_model_->data(uat_model_->index(row, colName)).toString());
@@ -972,20 +993,20 @@ void IOGraphDialog::updateLegend()
 
     // Nothing.
     if (vu_label_set.size() < 1) {
+        iop->legend->layer()->replot();
         return;
     }
 
     // All the same. Use the Y Axis label.
     if (vu_label_set.size() == 1) {
         iop->yAxis->setLabel(vu_label_set.values()[0] + "/" + intervalText);
-        return;
     }
 
-    // Differing labels. Create a legend with a Title label at top.
+    // Create a legend with a Title label at top.
     // Legend Title thanks to: https://www.qcustomplot.com/index.php/support/forum/443
-    QCPTextElement* legendTitle = qobject_cast<QCPTextElement*>(iop->legend->elementAt(0));
+    QCPStringLegendItem* legendTitle = qobject_cast<QCPStringLegendItem*>(iop->legend->elementAt(0));
     if (legendTitle == NULL) {
-        legendTitle = new QCPTextElement(iop, QString(""));
+        legendTitle = new QCPStringLegendItem(iop->legend, QString(""));
         iop->legend->insertRow(0);
         iop->legend->addElement(0, 0, legendTitle);
     }
@@ -1011,6 +1032,7 @@ void IOGraphDialog::updateLegend()
     else {
         iop->legend->setVisible(false);
     }
+    iop->legend->layer()->replot();
 }
 
 QRectF IOGraphDialog::getZoomRanges(QRect zoom_rect)
@@ -1127,10 +1149,10 @@ void IOGraphDialog::mouseMoved(QMouseEvent *event)
             }
             hint += tr("%1 (%2s%3).")
                     .arg(msg)
-                    .arg(QString::number(ts, 'g', 4))
+                    .arg(QString::number(ts, 'f', precision_))
                     .arg(val);
         }
-        iop->replot();
+        iop->replot(QCustomPlot::rpQueuedReplot);
     } else {
         if (event && rubber_band_ && rubber_band_->isVisible()) {
             rubber_band_->setGeometry(QRect(rb_origin_, event->pos()).normalized());
@@ -1266,8 +1288,8 @@ void IOGraphDialog::loadProfileGraphs()
         }
     }
 
-    uat_model_ = new UatModel(NULL, iog_uat_);
-    uat_delegate_ = new UatDelegate;
+    uat_model_ = new UatModel(ui->graphUat, iog_uat_);
+    uat_delegate_ = new UatDelegate(ui->graphUat);
     ui->graphUat->setModel(uat_model_);
     ui->graphUat->setItemDelegate(uat_delegate_);
 
@@ -1282,6 +1304,22 @@ void IOGraphDialog::on_intervalComboBox_currentIndexChanged(int)
 {
     int interval = ui->intervalComboBox->itemData(ui->intervalComboBox->currentIndex()).toInt();
     bool need_retap = false;
+
+    precision_ = ceil(log10(SCALE_F / interval));
+    if (precision_ < 0) {
+        precision_ = 0;
+    }
+
+    // XXX - This is the default QCP date time format, but adding fractional
+    // seconds when our interval is small. Should we make it something else,
+    // like ISO 8601 (but still with a line break between time and date)?
+    // Note this is local time, with no time zone offset displayed. Should
+    // it be in UTC? (call setDateTimeSpec())
+    if (precision_) {
+        datetime_ticker_->setDateTimeFormat("hh:mm:ss.z\ndd.MM.yy");
+    } else {
+        datetime_ticker_->setDateTimeFormat("hh:mm:ss\ndd.MM.yy");
+    }
 
     if (uat_model_ != NULL) {
         for (int row = 0; row < uat_model_->rowCount(); row++) {
@@ -1335,6 +1373,12 @@ void IOGraphDialog::on_graphUat_currentItemChanged(const QModelIndex &current, c
         ui->clearToolButton->setEnabled(true);
         ui->moveUpwardsToolButton->setEnabled(true);
         ui->moveDownwardsToolButton->setEnabled(true);
+        if (graphIsEnabled(current.row())) {
+            // Try to set the tracer to the new current graph.
+            // If it's not enabled, don't try to switch from the
+            // old graph to the one in the first row.
+            getGraphInfo();
+        }
     } else {
         ui->deleteToolButton->setEnabled(false);
         ui->copyToolButton->setEnabled(false);
@@ -1352,6 +1396,7 @@ void IOGraphDialog::modelDataChanged(const QModelIndex &index)
     {
     case colYAxis:
     case colSMAPeriod:
+    case colYAxisFactor:
         recalc = true;
     }
 
@@ -1423,6 +1468,23 @@ void IOGraphDialog::on_moveUpwardsToolButton_clicked()
             ioGraphs_[current_row] = temp;
 
             uat_model_->moveRow(current_row, current_row - 1);
+
+            // setting a QCPLayerable to its current layer moves it to the
+            // end as though it were the last added. Do that for all the
+            // elements starting with the first one that changed.
+            // (moveToLayer() is the same thing but with a parameter to prepend
+            // instead, which would be faster if we're in the top half of the
+            // list, except that's a protected function. There's no function
+            // to swap layerables in a layer.)
+            for (int row = current_row - 1; row < uat_model_->rowCount(); row++) {
+                temp = ioGraphs_[row];
+                if (temp->graph()) {
+                    temp->graph()->setLayer(temp->graph()->layer());
+                } else if (temp->bars()) {
+                    temp->bars()->setLayer(temp->bars()->layer());
+                }
+            }
+            ui->ioPlot->replot();
         }
     }
 }
@@ -1440,6 +1502,16 @@ void IOGraphDialog::on_moveDownwardsToolButton_clicked()
             ioGraphs_[current_row] = temp;
 
             uat_model_->moveRow(current_row, current_row + 1);
+
+            for (int row = current_row; row < uat_model_->rowCount(); row++) {
+                temp = ioGraphs_[row];
+                if (temp->graph()) {
+                    temp->graph()->setLayer(temp->graph()->layer());
+                } else if (temp->bars()) {
+                    temp->bars()->setLayer(temp->bars()->layer());
+                }
+            }
+            ui->ioPlot->replot();
         }
     }
 }
@@ -1463,7 +1535,13 @@ void IOGraphDialog::on_logCheckBox_toggled(bool checked)
 {
     QCustomPlot *iop = ui->ioPlot;
 
-    iop->yAxis->setScaleType(checked ? QCPAxis::stLogarithmic : QCPAxis::stLinear);
+    if (checked) {
+        iop->yAxis->setScaleType(QCPAxis::stLogarithmic);
+        iop->yAxis->setTicker(QSharedPointer<QCPAxisTickerLog>(new QCPAxisTickerLog));
+    } else {
+        iop->yAxis->setScaleType(QCPAxis::stLinear);
+        iop->yAxis->setTicker(QSharedPointer<QCPAxisTicker>(new QCPAxisTicker));
+    }
     iop->replot();
 }
 
@@ -1664,8 +1742,20 @@ void IOGraphDialog::makeCsv(QTextStream &stream) const
     stream << '\n';
 
     for (int interval = 0; interval <= max_interval; interval++) {
-        double interval_start = (double)interval * ((double)ui_interval / 1000.0);
-        stream << interval_start;
+        double interval_start = (double)interval * ((double)ui_interval / SCALE_F);
+        if (qSharedPointerDynamicCast<QCPAxisTickerDateTime>(ui->ioPlot->xAxis->ticker()) != nullptr) {
+            interval_start += start_time_;
+            // XXX - If we support precision smaller than ms, we can't use
+            // QDateTime, and would use nstime_to_iso8601 or similar. (In such
+            // case we'd want to store the nstime_t version of start_time_ rather
+            // than immediately converting it to a double in tapPacket().)
+            // Should we convert to UTC for output, even if the graph axis has
+            // local time?
+            QDateTime interval_dt = QDateTime::fromMSecsSinceEpoch(int64_t(interval_start * 1000.0));
+            stream << interval_dt.toString(Qt::ISODateWithMs);
+        } else {
+            stream << interval_start;
+        }
         foreach (IOGraph *iog, activeGraphs) {
             double value = 0.0;
             if (interval <= iog->maxInterval()) {
@@ -1704,6 +1794,7 @@ IOGraph::IOGraph(QCustomPlot *parent) :
     bars_(NULL),
     val_units_(IOG_ITEM_UNIT_FIRST),
     hf_index_(-1),
+    interval_(0),
     cur_idx_(-1)
 {
     Q_ASSERT(parent_ != NULL);
@@ -1779,16 +1870,37 @@ void IOGraph::setFilter(const QString &filter)
         }
     }
 
-    error_string = set_tap_dfilter(this, full_filter.toUtf8().constData());
-    if (error_string) {
-        config_err_ = error_string->str;
-        g_string_free(error_string, TRUE);
-        return;
-    } else {
-        if (filter_.compare(filter) && visible_) {
+    if (full_filter_.compare(full_filter)) {
+        error_string = set_tap_dfilter(this, full_filter.toUtf8().constData());
+        if (error_string) {
+            config_err_ = error_string->str;
+            g_string_free(error_string, TRUE);
+            return;
+        }
+
+        filter_ = filter;
+        full_filter_ = full_filter;
+        /* If we changed the tap filter the graph is visible, we need to
+         * retap. (If it's not visible, we'll retap when it becomes
+         * visible, see syncGraphSettings.) Note that setting the tap
+         * dfilter will mark the tap as needing a redraw, which will
+         * cause a recalculation (via tapDraw) via the (fairly long)
+         * main application timer.
+         */
+        /* XXX - When changing from an advanced graph to one that doesn't
+         * use the field, we don't actually need to retap if filter and
+         * full_filter produce the same results. (We do have to retap
+         * regardless if changing _to_ an advanced graph, because the
+         * extra fields in the io_graph_item_t aren't filled in from the
+         * edt for the basic graph.)
+         * Checking that in full generality would require more optimization
+         * in the dfilter engine plus functions to compare filters, but
+         * we could test the simple case where filter and vu_field are
+         * the same string.
+         */
+        if (visible_) {
             emit requestRetap();
         }
-        filter_ = filter;
     }
 }
 
@@ -1797,7 +1909,15 @@ void IOGraph::applyCurrentColor()
     if (graph_) {
         graph_->setPen(QPen(color_, graph_line_width_));
     } else if (bars_) {
-        bars_->setPen(QPen(QBrush(ColorUtils::graphColor(0)), graph_line_width_)); // ...or omit it altogether?
+        bars_->setPen(QPen(color_.color().darker(110), graph_line_width_));
+        // ...or omit it altogether?
+        // bars_->setPen(QPen(color_);
+        // XXX - We should do something like
+        // bars_->setPen(QPen(ColorUtils::alphaBlend(color_, palette().windowText(), 0.65));
+        // to get a darker outline in light mode and a lighter outline in dark
+        // mode, but we don't yet respect dark mode in IOGraph (or anything
+        // that uses QCustomPlot) - see link below for how to set QCP colors:
+        // https://www.qcustomplot.com/index.php/demos/barchartdemo
         bars_->setBrush(color_);
     }
 }
@@ -1813,7 +1933,14 @@ void IOGraph::setVisible(bool visible)
         bars_->setVisible(visible_);
     }
     if (old_visibility != visible_) {
-        emit requestReplot();
+        // XXX - If the number of enabled graphs changed to or from 1, we
+        // need to recalculate to possibly change the rescaling. (This is
+        // why QCP recommends doing scaling in the axis ticker instead.)
+        // If we can't determined number of enabled graphs here, always
+        // request a recalculation instead of a replot. (At least until we
+        // change the scaling to be done in the ticker.)
+        //emit requestReplot();
+        emit requestRecalc();
     }
 }
 
@@ -1828,7 +1955,7 @@ void IOGraph::setName(const QString &name)
     }
 }
 
-QRgb IOGraph::color()
+QRgb IOGraph::color() const
 {
     return color_.color().rgb();
 }
@@ -1841,14 +1968,23 @@ void IOGraph::setColor(const QRgb color)
 
 void IOGraph::setPlotStyle(int style)
 {
+    bool recalc = false;
+
     // Switch plottable if needed
     switch (style) {
     case psBar:
     case psStackedBar:
         if (graph_) {
             bars_ = new QCPBars(parent_->xAxis, parent_->yAxis);
+            // default widthType is wtPlotCoords. Scale with the interval
+            // size to prevent overlap. (Multiply this by a factor to have
+            // a gap between bars; the QCustomPlot default is 0.75.)
+            if (interval_) {
+                bars_->setWidth(interval_ / SCALE_F);
+            }
             parent_->removeGraph(graph_);
             graph_ = NULL;
+            recalc = true;
         }
         break;
     default:
@@ -1856,6 +1992,7 @@ void IOGraph::setPlotStyle(int style)
             graph_ = parent_->addGraph(parent_->xAxis, parent_->yAxis);
             parent_->removePlottable(bars_);
             bars_ = NULL;
+            recalc = true;
         }
         break;
     }
@@ -1933,9 +2070,14 @@ void IOGraph::setPlotStyle(int style)
 
     setName(name_);
     applyCurrentColor();
+
+    if (recalc) {
+        // switching the plottable requires recalculation to add the data
+        emit requestRecalc();
+    }
 }
 
-const QString IOGraph::valueUnitLabel()
+QString IOGraph::valueUnitLabel() const
 {
     return val_to_str_const(val_units_, y_axis_vs, "Unknown");
 }
@@ -1947,8 +2089,18 @@ void IOGraph::setValueUnits(int val_units)
         val_units_ = (io_graph_item_unit_t)val_units;
 
         if (old_val_units != val_units) {
+            // If val_units changed, switching between a type that doesn't
+            // use the vu_field/hfi/edt to one of the advanced graphs that
+            // does requires a retap. setFilter will handle that.
+            // XXX - If we are switching between LOAD and one of the
+            // other advanced graphs, we also need to retap because
+            // LOAD doesn't fill in the io_graph_item_t the same way.
+            // We don't do that currently.
             setFilter(filter_); // Check config & prime vu field
             if (val_units < IOG_ITEM_UNIT_CALC_SUM) {
+                // XXX - Is this necessary? Won't modelDataChanged()
+                // always be called for colYAxis and that schedule
+                // a recalculation?
                 emit requestRecalc();
             }
         }
@@ -1968,6 +2120,8 @@ void IOGraph::setValueUnitField(const QString &vu_field)
     }
 
     if (old_hf_index != hf_index_) {
+        // If the field changed, and val_units is a type that uses it,
+        // we need to retap. setFilter will handle that.
         setFilter(filter_); // Check config & prime vu field
     }
 }
@@ -1994,7 +2148,7 @@ bool IOGraph::removeFromLegend()
     return false;
 }
 
-double IOGraph::startOffset()
+double IOGraph::startOffset() const
 {
     if (graph_ && qSharedPointerDynamicCast<QCPAxisTickerDateTime>(graph_->keyAxis()->ticker()) && graph_->data()->size() > 0) {
         return graph_->data()->at(0)->key;
@@ -2005,14 +2159,15 @@ double IOGraph::startOffset()
     return 0.0;
 }
 
-int IOGraph::packetFromTime(double ts)
+int IOGraph::packetFromTime(double ts) const
 {
-    int idx = ts * 1000 / interval_;
-    if (idx >= 0 && idx < (int) cur_idx_) {
+    int idx = ts * SCALE_F / interval_;
+    if (idx >= 0 && idx <= cur_idx_) {
         switch (val_units_) {
         case IOG_ITEM_UNIT_CALC_MAX:
+            return items_[idx].max_frame_in_invl;
         case IOG_ITEM_UNIT_CALC_MIN:
-            return items_[idx].extreme_frame_in_invl;
+            return items_[idx].min_frame_in_invl;
         default:
             return items_[idx].last_frame_in_invl;
         }
@@ -2023,7 +2178,9 @@ int IOGraph::packetFromTime(double ts)
 void IOGraph::clearAllData()
 {
     cur_idx_ = -1;
-    reset_io_graph_items(items_, max_io_items_);
+    if (items_.size()) {
+        reset_io_graph_items(&items_[0], items_.size(), hf_index_);
+    }
     if (graph_) {
         graph_->data()->clear();
     }
@@ -2076,7 +2233,7 @@ void IOGraph::recalcGraphData(capture_file *cap_file, bool enable_scaling)
     }
 
     for (int i = 0; i <= cur_idx_; i++) {
-        double ts = (double) i * interval_ / 1000;
+        double ts = (double) i * interval_ / SCALE_F;
         if (x_axis && qSharedPointerDynamicCast<QCPAxisTickerDateTime>(x_axis->ticker())) {
             ts += start_time_;
         }
@@ -2116,8 +2273,9 @@ void IOGraph::recalcGraphData(capture_file *cap_file, bool enable_scaling)
 //        qDebug() << "=rgd i" << i << ts << val;
     }
 
-    // attempt to rescale time values to specific units
-    if (enable_scaling) {
+    // attempt to rescale time values to specific units if this
+    // is the only enabled graph
+    if (enable_scaling && visible_) {
         calculateScaledValueUnit();
     } else {
         scaled_value_unit_.clear();
@@ -2238,7 +2396,7 @@ bool IOGraph::hasItemToShow(int idx, double value) const
     case IOG_ITEM_UNIT_BITS:
     case IOG_ITEM_UNIT_CALC_FRAMES:
     case IOG_ITEM_UNIT_CALC_FIELDS:
-        if(value == 0.0 && (graph_ && graph_->scatterStyle().shape() != QCPScatterStyle::ssNone)) {
+        if (value == 0.0 && (graph_ && graph_->lineStyle() == QCPGraph::lsNone)) {
             result = false;
         }
         else {
@@ -2267,6 +2425,9 @@ bool IOGraph::hasItemToShow(int idx, double value) const
 void IOGraph::setInterval(int interval)
 {
     interval_ = interval;
+    if (bars_) {
+        bars_->setWidth(interval_ / SCALE_F);
+    }
 }
 
 // Get the value at the given interval (idx) for the current value unit.
@@ -2274,7 +2435,7 @@ double IOGraph::getItemValue(int idx, const capture_file *cap_file) const
 {
     ws_assert(idx < max_io_items_);
 
-    return get_io_graph_item(items_, val_units_, idx, hf_index_, cap_file, interval_, cur_idx_);
+    return get_io_graph_item(&items_[0], val_units_, idx, hf_index_, cap_file, interval_, cur_idx_);
 }
 
 // "tap_reset" callback for register_tap_listener
@@ -2300,13 +2461,33 @@ tap_packet_status IOGraph::tapPacket(void *iog_ptr, packet_info *pinfo, epan_dis
 
     /* some sanity checks */
     if ((idx < 0) || (idx >= max_io_items_)) {
-        iog->cur_idx_ = max_io_items_ - 1;
+        iog->cur_idx_ = (int)iog->items_.size() - 1;
         return TAP_PACKET_DONT_REDRAW;
+    }
+
+    if ((size_t)idx >= iog->items_.size()) {
+        const size_t old_size = iog->items_.size();
+        size_t new_size;
+        if (old_size == 0) {
+            new_size = 1024;
+        } else {
+            new_size = MIN(old_size << 1, old_size + 262144);
+        }
+        new_size = MAX(new_size, (size_t)idx + 1);
+        try {
+            iog->items_.resize(new_size);
+        } catch (std::bad_alloc&) {
+            // std::vector.resize() has strong exception safety
+            ws_warning("Failed memory allocation!");
+            return TAP_PACKET_DONT_REDRAW;
+        }
+        // resize zero-initializes new items, which is what we want
+        //reset_io_graph_items(&iog->items_[old_size], new_size - old_size);
     }
 
     /* update num_items */
     if (idx > iog->cur_idx_) {
-        iog->cur_idx_ = (guint32) idx;
+        iog->cur_idx_ = idx;
         recalc = true;
     }
 
@@ -2324,7 +2505,7 @@ tap_packet_status IOGraph::tapPacket(void *iog_ptr, packet_info *pinfo, epan_dis
         adv_edt = edt;
     }
 
-    if (!update_io_graph_item(iog->items_, idx, pinfo, adv_edt, iog->hf_index_, iog->val_units_, iog->interval_)) {
+    if (!update_io_graph_item(&iog->items_[0], idx, pinfo, adv_edt, iog->hf_index_, iog->val_units_, iog->interval_)) {
         return TAP_PACKET_DONT_REDRAW;
     }
 

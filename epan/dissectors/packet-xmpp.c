@@ -29,7 +29,7 @@ void proto_reg_handoff_xmpp(void);
 
 int proto_xmpp;
 
-static gboolean xmpp_desegment = TRUE;
+static bool xmpp_desegment = true;
 
 gint hf_xmpp_xmlns;
 gint hf_xmpp_id;
@@ -479,7 +479,7 @@ dissect_xmpp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
     while(xml_frame)
     {
-        packet = xmpp_xml_frame_to_element_t(pinfo->pool, xml_frame, NULL, tvb);
+        packet = xmpp_xml_frame_to_element_t(pinfo, xml_frame, NULL, tvb);
         DISSECTOR_ASSERT(packet);
         CLEANUP_PUSH(cleanup_xmpp, packet);
 

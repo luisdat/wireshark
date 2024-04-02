@@ -98,8 +98,8 @@ struct pref_custom_cbs {
 #define PREF_CUSTOM           (1u << 9) /* use and not as a generic protocol preference */
 #define PREF_OBSOLETE         (1u << 10)
 #define PREF_DIRNAME          (1u << 11)
-#define PREF_DECODE_AS_UINT   (1u << 12)     /* XXX - These are only supported for "internal" (non-protocol) */
-#define PREF_DECODE_AS_RANGE  (1u << 13) /* use and not as a generic protocol preference */
+// Was PREF_DECODE_AS_UINT   (1u << 12)
+#define PREF_DECODE_AS_RANGE  (1u << 13) /* XXX - Internal use only, not a generic protocol preference */
 #define PREF_OPEN_FILENAME    (1u << 14)
 #define PREF_PASSWORD         (1u << 15) /* like string, but never saved to prefs file */
 /**
@@ -119,7 +119,7 @@ struct pref_custom_cbs {
  * @return an indication of whether it succeeded or failed
  * in some fashion.
  */
-typedef prefs_set_pref_e (*pref_set_pair_cb) (gchar *key, const gchar *value, void *private_data, gboolean return_range_errors);
+typedef prefs_set_pref_e (*pref_set_pair_cb) (gchar *key, const gchar *value, void *private_data, bool return_range_errors);
 
 WS_DLL_PUBLIC
 const char* prefs_get_description(pref_t *pref);
@@ -141,6 +141,7 @@ WS_DLL_PUBLIC guint32 prefs_get_max_value(pref_t *pref);
 #define PREF_EFFECT_GUI_LAYOUT        (1u << 2)
 #define PREF_EFFECT_FIELDS            (1u << 3)
 #define PREF_EFFECT_GUI               (1u << 4)
+#define PREF_EFFECT_GUI_COLOR         (1u << 5)
 
 /** Fetch flags that show the effect of the preference
  *
@@ -266,7 +267,7 @@ read_prefs_file(const char *pf_path, FILE *pf, pref_set_pair_cb pref_set_pair_fc
 
 /** Given a module name, read the preferences associated with only that module.
  * Checks for a file in the personal configuration directory named after the
- * module first.
+ * module with a ".cfg" extension added first.
  *
  * @param name The preference module name, e.g. "extcap".
  */

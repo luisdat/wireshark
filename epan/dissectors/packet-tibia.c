@@ -114,12 +114,12 @@ static int dissect_tibia_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 static dissector_handle_t tibia_handle;
 
 /* preferences */
-static gboolean try_otserv_key          = TRUE,
-                show_char_name          = TRUE,
-                show_acc_info           = TRUE,
-                show_xtea_key           = FALSE,
-                dissect_game_commands   = FALSE,
-                reassemble_tcp_segments = TRUE;
+static bool try_otserv_key          = true,
+                show_char_name          = true,
+                show_acc_info           = true,
+                show_xtea_key           = false,
+                dissect_game_commands   = false,
+                reassemble_tcp_segments = true;
 
 /* User Access Tables */
 #if HAVE_LIBGNUTLS
@@ -727,7 +727,7 @@ enum gameserv_cmd {
     S_CREATURE_HEALTH =        0x8C,
     S_CREATURELIGHT =          0x8d, /* Long creatureid Byte ? Byte ? */
     S_SETOUTFIT =              0x8e, /* Long creatureid Byte lookType Byte headType Byte bodyType Byte legsType Byte feetType // can extended look go here too? */
-    S_CREATURESPEED =          0x8f, /* YIKES! I didnt handle this! */
+    S_CREATURESPEED =          0x8f, /* YIKES! I didn't handle this! */
     S_TEXTWINDOW =             0x96, /* Long windowId Byte icon Byte maxlength String message */
     S_STATUSMSG =              0xA0, /* Status status */
     S_SKILLS =                 0xA1, /* Skills skills */
@@ -1139,7 +1139,7 @@ dissect_gameserv_packet(struct tibia_convo *convo, tvbuff_t *tvb, int offset, in
                 case S_CHANNELSDIALOG: /* 0xAB,Byte channelCount (Int channelId String channelName) */
                 case S_STATUSMSG: /* 0xA0,Status status */
                 case S_SKILLS: /* 0xA1,Skills skills */
-                case S_CREATURESPEED: /* 0x8f,YIKES! I didnt handle this! */
+                case S_CREATURESPEED: /* 0x8f,YIKES! I didn't handle this! */
                 case S_GO_NORTH: /* 0x65,MapDescription (18,1) */
                 case S_GO_EAST: /* 0x66,MapDescription (1,14) */
                 case S_GO_SOUTH: /* 0x67,MapDescription (18,1) */

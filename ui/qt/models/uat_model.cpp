@@ -12,6 +12,7 @@
 
 #include "uat_model.h"
 #include <epan/to_str.h>
+#include <ui/qt/utils/qt_ui_utils.h>
 #include <QBrush>
 #include <QDebug>
 
@@ -54,7 +55,7 @@ void UatModel::reloadUat()
 bool UatModel::applyChanges(QString &error)
 {
     if (uat_->changed) {
-        gchar *err = NULL;
+        char *err = NULL;
 
         if (!uat_save(uat_, &err)) {
             error = QString("Error while saving %1: %2").arg(uat_->name).arg(err);
@@ -76,7 +77,7 @@ bool UatModel::revertChanges(QString &error)
     // to avoid calling post_update_cb. Calling uat_clear + uat_load is a lazy
     // option and might fail (e.g. when the UAT file is removed).
     if (uat_->changed) {
-        gchar *err = NULL;
+        char *err = NULL;
         uat_clear(uat_);
         if (!uat_load(uat_, NULL, &err)) {
             error = QString("Error while loading %1: %2").arg(uat_->name).arg(err);
@@ -114,13 +115,13 @@ QVariant UatModel::data(const QModelIndex &index, int role) const
     uat_field_t *field = &uat_->fields[index.column()];
     if (role == Qt::DisplayRole || role == Qt::EditRole) {
         char *str = NULL;
-        guint length = 0;
+        unsigned length = 0;
         field->cb.tostr(rec, &str, &length, field->cbdata.tostr, field->fld_data);
 
         switch (field->mode) {
         case PT_TXTMOD_HEXBYTES:
             {
-            char* temp_str = bytes_to_str(NULL, (const guint8 *) str, length);
+            char* temp_str = bytes_to_str(NULL, (const uint8_t *) str, length);
             g_free(str);
             QString qstr(temp_str);
             wmem_free(NULL, temp_str);
@@ -128,24 +129,24 @@ QVariant UatModel::data(const QModelIndex &index, int role) const
             }
         case PT_TXTMOD_BOOL:
         case PT_TXTMOD_COLOR:
+            g_free(str);
             return QVariant();
         default:
-            {
-            QString qstr(str);
-            g_free(str);
-            return qstr;
-            }
+            return gchar_free_to_qstring(str);
         }
     }
 
     if ((role == Qt::CheckStateRole) && (field->mode == PT_TXTMOD_BOOL))
     {
         char *str = NULL;
-        guint length = 0;
+        unsigned length = 0;
         enum Qt::CheckState state = Qt::Unchecked;
         field->cb.tostr(rec, &str, &length, field->cbdata.tostr, field->fld_data);
-        if ((g_strcmp0(str, "TRUE") == 0) ||
-            (g_strcmp0(str, "Enabled") == 0))
+        // "Enabled" is for backwards compatibility with pre-UAT IO Graphs:
+        // (Commit 5b3e3ee58748ac1fd9201d2d3facbed1b9b1e800)
+        if (str &&
+           ((g_ascii_strcasecmp(str, "true") == 0) ||
+            (g_strcmp0(str, "Enabled") == 0)))
             state = Qt::Checked;
 
         g_free(str);
@@ -168,10 +169,10 @@ QVariant UatModel::data(const QModelIndex &index, int role) const
 
     if ((role == Qt::DecorationRole) && (field->mode == PT_TXTMOD_COLOR)) {
         char *str = NULL;
-        guint length = 0;
+        unsigned length = 0;
         field->cb.tostr(rec, &str, &length, field->cbdata.tostr, field->fld_data);
 
-        return QColor(QString(str));
+        return QColor(gchar_free_to_qstring(str));
     }
 
     // expose error message if any.
@@ -259,9 +260,9 @@ QModelIndex UatModel::appendEntry(QVariantList rowData)
                 data = rowData[col].toString();
             } else {
                 if (rowData[col].toInt() == Qt::Checked) {
-                    data = QString("TRUE");
+                    data = QString("true");
                 } else {
-                    data = QString("FALSE");
+                    data = QString("false");
                 }
             }
         }
@@ -281,7 +282,7 @@ QModelIndex UatModel::appendEntry(QVariantList rowData)
     // postponed until the row (in the view) is not selected anymore
     checkRow(row);
     dirty_records.insert(row, true);
-    uat_->changed = TRUE;
+    uat_->changed = true;
 
     emit endInsertRows();
 
@@ -316,9 +317,9 @@ bool UatModel::setData(const QModelIndex &index, const QVariant &value, int role
         field->cb.set(rec, bytes.constData(), (unsigned) bytes.size(), field->cbdata.set, field->fld_data);
     } else {
         if (value.toInt() == Qt::Checked) {
-            field->cb.set(rec, "TRUE", 4, field->cbdata.set, field->fld_data);
+            field->cb.set(rec, "true", 4, field->cbdata.set, field->fld_data);
         } else {
-            field->cb.set(rec, "FALSE", 5, field->cbdata.set, field->fld_data);
+            field->cb.set(rec, "false", 5, field->cbdata.set, field->fld_data);
         }
     }
 
@@ -348,7 +349,7 @@ bool UatModel::setData(const QModelIndex &index, const QVariant &value, int role
     }
     uat_update_record(uat_, rec, record_errors[row].isEmpty());
     dirty_records[row] = true;
-    uat_->changed = TRUE;
+    uat_->changed = true;
 
     if (updated_cols.size() > updated_cols.count(index.column())) {
         // The validation status for other columns were also affected by
@@ -388,7 +389,7 @@ bool UatModel::insertRows(int row, int count, const QModelIndex &/*parent*/)
     // postponed until the row (in the view) is not selected anymore
     checkRow(row);
     dirty_records.insert(row, true);
-    uat_->changed = TRUE;
+    uat_->changed = true;
     endInsertRows();
     return true;
 }
@@ -402,7 +403,7 @@ bool UatModel::removeRows(int row, int count, const QModelIndex &/*parent*/)
     uat_remove_record_idx(uat_, row);
     record_errors.removeAt(row);
     dirty_records.removeAt(row);
-    uat_->changed = TRUE;
+    uat_->changed = true;
     endRemoveRows();
     return true;
 }
@@ -416,7 +417,7 @@ void UatModel::clearAll()
     uat_clear(uat_);
     record_errors.clear();
     dirty_records.clear();
-    uat_->changed = TRUE;
+    uat_->changed = true;
     endResetModel();
 }
 
@@ -462,12 +463,12 @@ QModelIndex UatModel::copyRow(QModelIndex original)
       /* According to documentation of uat_copy_cb_t memcpy should be used if uat_->copy_cb is NULL */
       memcpy(dst_record, src_record, uat_->record_size);
     }
-    gboolean src_valid = g_array_index(uat_->valid_data, gboolean, original.row());
+    bool src_valid = g_array_index(uat_->valid_data, bool, original.row());
     uat_update_record(uat_, dst_record, src_valid);
     record_errors[newRow] = record_errors[original.row()];
     dirty_records[newRow] = true;
 
-    uat_->changed = TRUE;
+    uat_->changed = true;
 
     endInsertRows();    
 
@@ -485,7 +486,7 @@ bool UatModel::moveRow(int src_row, int dst_row)
     uat_move_index(uat_, src_row, dst_row);
     record_errors.move(src_row, dst_row);
     dirty_records.move(src_row, dst_row);
-    uat_->changed = TRUE;
+    uat_->changed = true;
     endMoveRows();
 
     return true;
@@ -513,7 +514,7 @@ bool UatModel::checkField(int row, int col, char **error) const
     }
 
     char *str = NULL;
-    guint length;
+    unsigned length;
     field->cb.tostr(rec, &str, &length, field->cbdata.tostr, field->fld_data);
 
     bool ok = field->cb.chk(rec, str, length, field->cbdata.chk, field->fld_data, error);

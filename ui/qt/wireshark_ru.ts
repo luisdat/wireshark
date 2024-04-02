@@ -2165,6 +2165,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>…as C Array</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as C Array.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as a Hex Stream</source>
         <translation>…в виде шестнадцатеричного потока</translation>
     </message>
@@ -3003,10 +3011,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Старт</translation>
     </message>
     <message>
-        <source>Save</source>
-        <translation>Сохранить</translation>
-    </message>
-    <message>
         <source>Default</source>
         <translation>По умолчанию</translation>
     </message>
@@ -3337,20 +3341,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 <context>
     <name>FolderListModel</name>
     <message>
-        <source>&quot;File&quot; dialogs</source>
-        <translation>Диалоговые окна открытия файлов</translation>
-    </message>
-    <message>
-        <source>capture files</source>
-        <translation>Файлы захвата</translation>
-    </message>
-    <message>
         <source>Temp</source>
         <translation>Временные файлы</translation>
-    </message>
-    <message>
-        <source>untitled capture files</source>
-        <translation>Безымянные файлы захвата</translation>
     </message>
     <message>
         <source>Personal configuration</source>
@@ -3359,14 +3351,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Global configuration</source>
         <translation>Глобальная конфигурация</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, ethers, …</source>
-        <translation>dfilters, preferences, ethers, …</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, manuf, …</source>
-        <translation>dfilters, preferences, manuf, …</translation>
     </message>
     <message>
         <source>System</source>
@@ -3381,16 +3365,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Программы</translation>
     </message>
     <message>
-        <source>program files</source>
-        <translation>Файлы программ</translation>
-    </message>
-    <message>
         <source>Personal Plugins</source>
         <translation>Пользовательские подключаемые модули</translation>
-    </message>
-    <message>
-        <source>binary plugins</source>
-        <translation>Исполняемые файлы подключаемых модулей</translation>
     </message>
     <message>
         <source>Global Plugins</source>
@@ -3409,12 +3385,36 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Сценарии Lua</translation>
     </message>
     <message>
+        <source>&quot;File&quot; dialog location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Untitled capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preferences, profiles, manuf, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Program files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugins</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Personal Extcap path</source>
         <translation>Пользовательский путь Extcap</translation>
     </message>
     <message>
-        <source>external capture (extcap) plugins</source>
-        <translation>модули внешненго захвата (extcap)</translation>
+        <source>External capture (extcap) plugins</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Global Extcap path</source>
@@ -3690,6 +3690,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Find:</source>
         <translation>Найти:</translation>
+    </message>
+    <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Чувствительность к регистру</translation>
     </message>
     <message>
         <source>Find &amp;Next</source>
@@ -11230,6 +11234,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Найти:</translation>
     </message>
     <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Чувствительность к регистру</translation>
+    </message>
+    <message>
         <source>Find &amp;Next</source>
         <translation>Найти &amp;следующий</translation>
     </message>
@@ -12122,7 +12130,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Save</source>
-        <translation type="unfinished">Сохранить</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>TLS Keylog file</source>
@@ -14256,6 +14264,18 @@ a:hover {
     <message>
         <source>TCP throughput</source>
         <translation>Пропускная способность TCP</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Query-Response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DNS Query-Response Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Request Sequences</source>

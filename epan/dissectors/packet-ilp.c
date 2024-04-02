@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ilp.c                                                               */
-/* asn2wrs.py -L -p ilp -c ./ilp.cnf -s ./packet-ilp-template -D . -O ../.. ILP.asn ILP-Components.asn */
+/* asn2wrs.py -q -L -p ilp -c ./ilp.cnf -s ./packet-ilp-template -D . -O ../.. ILP.asn ILP-Components.asn */
 
 /* packet-ilp.c
  * Routines for OMA Internal Location Protocol packet dissection
@@ -52,7 +52,7 @@ static int proto_ilp;
 
 #define ILP_HEADER_SIZE 2
 
-static gboolean ilp_desegment = TRUE;
+static bool ilp_desegment = true;
 
 static int hf_ilp_ILP_PDU_PDU;                    /* ILP_PDU */
 static int hf_ilp_length;                         /* INTEGER_0_65535 */

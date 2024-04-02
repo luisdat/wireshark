@@ -168,8 +168,8 @@ Page custom DisplayUSBPcapPage
 
   SetOutPath $INSTDIR
   File "${STAGING_DIR}\${EXTCAP_NAME}.html"
-  SetOutPath $INSTDIR\extcap
-  File "${STAGING_DIR}\extcap\${EXTCAP_NAME}.exe"
+  SetOutPath $INSTDIR\extcap\wireshark
+  File "${STAGING_DIR}\extcap\wireshark\${EXTCAP_NAME}.exe"
 
 !macroend
 
@@ -878,7 +878,7 @@ File "${STAGING_DIR}\dtds\watcherinfo.dtd"
 SetOutPath $INSTDIR
 
 ; Create the extcap directory
-CreateDirectory $INSTDIR\extcap
+CreateDirectory $INSTDIR\extcap\wireshark
 
 ;
 ; install the protobuf .proto definitions in the protobuf subdirectory
@@ -977,6 +977,7 @@ ${If} $0 == "0"
   ${EndIf}
   ${StrRep} $0 '$USBPCAP_UNINSTALL' 'Uninstall.exe' 'USBPcapCMD.exe'
   ${StrRep} $1 '$0' '"' ''
+  SetOutPath $INSTDIR\extcap\wireshark
   CopyFiles  /SILENT $1 $INSTDIR\extcap
   SetRebootFlag true
 ${EndIf}
@@ -1271,7 +1272,7 @@ ${If} $1 != ""
     DetailPrint "USBPcap uninstaller returned $0"
     ${If} $0 == "0"
         Delete "$3\Uninstall.exe"
-        Delete "$INSTDIR\extcap\USBPcapCMD.exe"
+        Delete "$INSTDIR\extcap\wireshark\USBPcapCMD.exe"
     ${EndIf}
 ${EndIf}
 ClearErrors
@@ -1343,13 +1344,13 @@ Delete "$INSTDIR\COPYING*"
 Delete "$INSTDIR\audio\*.*"
 Delete "$INSTDIR\bearer\*.*"
 Delete "$INSTDIR\diameter\*.*"
-Delete "$INSTDIR\extcap\androiddump.*"
-Delete "$INSTDIR\extcap\ciscodump.*"
-Delete "$INSTDIR\extcap\etwdump.*"
-Delete "$INSTDIR\extcap\randpktdump.*"
-Delete "$INSTDIR\extcap\sshdump.*"
-Delete "$INSTDIR\extcap\udpdump.*"
-Delete "$INSTDIR\extcap\wifidump.*"
+Delete "$INSTDIR\extcap\wireshark\androiddump.*"
+Delete "$INSTDIR\extcap\wireshark\ciscodump.*"
+Delete "$INSTDIR\extcap\wireshark\etwdump.*"
+Delete "$INSTDIR\extcap\wireshark\randpktdump.*"
+Delete "$INSTDIR\extcap\wireshark\sshdump.*"
+Delete "$INSTDIR\extcap\wireshark\udpdump.*"
+Delete "$INSTDIR\extcap\wireshark\wifidump.*"
 Delete "$INSTDIR\gpl-2.0-standalone.html"
 Delete "$INSTDIR\Acknowledgements.md"
 Delete "$INSTDIR\generic\*.*"
@@ -1399,6 +1400,7 @@ Delete "$INSTDIR\release-notes.html"
 RMDir "$INSTDIR\accessible"
 RMDir "$INSTDIR\audio"
 RMDir "$INSTDIR\bearer"
+RMDir "$INSTDIR\extcap\wireshark"
 RMDir "$INSTDIR\extcap"
 RMDir "$INSTDIR\iconengines"
 RMDir "$INSTDIR\imageformats"

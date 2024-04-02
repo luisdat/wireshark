@@ -1455,7 +1455,7 @@ dissect_ntlmssp_target_info_list(tvbuff_t *_tvb, packet_info *pinfo, proto_tree 
       case NTLM_TARGET_INFO_DNS_DOMAIN_NAME:
       case NTLM_TARGET_INFO_DNS_TREE_NAME:
       case NTLM_TARGET_INFO_TARGET_NAME:
-        proto_tree_add_item_ret_string(target_info_tree, *hf_array_p[item_type], tvb, content_offset, content_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, wmem_packet_scope(), &text);
+        proto_tree_add_item_ret_string(target_info_tree, *hf_array_p[item_type], tvb, content_offset, content_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &text);
         proto_item_append_text(target_info_tf, ": %s", text);
         break;
 
@@ -1794,7 +1794,7 @@ dissect_ntlmssp_auth (tvbuff_t *tvb, packet_info *pinfo, int offset,
   guint8          sspkey[NTLMSSP_KEY_LEN];    /* exported session key */
   guint8          clientkey[NTLMSSP_KEY_LEN]; /* NTLMSSP cipher key for client */
   guint8          serverkey[NTLMSSP_KEY_LEN]; /* NTLMSSP cipher key for server*/
-  guint8          encryptedsessionkey[NTLMSSP_KEY_LEN];
+  guint8          encryptedsessionkey[NTLMSSP_KEY_LEN] = {0};
   ntlmssp_blob    sessionblob;
   gboolean        unicode_strings      = FALSE;
   ntlmssp_info   *conv_ntlmssp_info;
@@ -2081,6 +2081,7 @@ dissect_ntlmssp_auth (tvbuff_t *tvb, packet_info *pinfo, int offset,
   if (sessionblob.length > NTLMSSP_KEY_LEN) {
     expert_add_info_format(pinfo, NULL, &ei_ntlmssp_blob_len_too_long, "Session blob length too long: %u", sessionblob.length);
   } else if (sessionblob.length != 0) {
+    /* XXX - Is it a problem if sessionblob.length < NTLMSSP_KEY_LEN ? */
     memcpy(encryptedsessionkey, sessionblob.contents, sessionblob.length);
     /* Try to attach to an existing conversation if not then it's useless to try to do so
      * because we are missing important information (ie. server challenge)
@@ -2367,7 +2368,7 @@ decrypt_data_payload(tvbuff_t *tvb, int offset, guint32 encrypted_block_length,
          in case of KEY_EXCH we have independent key so this is not needed*/
       if (!(NTLMSSP_NEGOTIATE_KEY_EXCH & conv_ntlmssp_info->flags)) {
         guint8 *peer_block;
-        peer_block = (guint8 *)wmem_memdup(wmem_packet_scope(), packet_ntlmssp_info->decrypted_payload, encrypted_block_length);
+        peer_block = (guint8 *)wmem_memdup(pinfo->pool, packet_ntlmssp_info->decrypted_payload, encrypted_block_length);
         gcry_cipher_decrypt(rc4_handle_peer, peer_block, encrypted_block_length, NULL, 0);
       }
 
@@ -2403,7 +2404,7 @@ dissect_ntlmssp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
       return offset;
   }
 
-  ntlmssph = wmem_new(wmem_packet_scope(), ntlmssp_header_t);
+  ntlmssph = wmem_new(pinfo->pool, ntlmssp_header_t);
   ntlmssph->type = 0;
   ntlmssph->domain_name = NULL;
   ntlmssph->acct_name = NULL;
@@ -2573,7 +2574,7 @@ decrypt_verifier(tvbuff_t *tvb, packet_info *pinfo)
        * TODO Some analysis needs to be done ...
        */
       if (sign_key != NULL) {
-        check_buf = (guint8 *)wmem_alloc(wmem_packet_scope(), packet_ntlmssp_info->payload_len+4);
+        check_buf = (guint8 *)wmem_alloc(pinfo->pool, packet_ntlmssp_info->payload_len+4);
         tvb_memcpy(tvb, &sequence, packet_ntlmssp_info->verifier_offset+8, 4);
         memcpy(check_buf, &sequence, 4);
         memcpy(check_buf+4, packet_ntlmssp_info->decrypted_payload, packet_ntlmssp_info->payload_len);
@@ -2600,7 +2601,7 @@ decrypt_verifier(tvbuff_t *tvb, packet_info *pinfo)
        This is not needed when we just have EXTENDED SESSION SECURITY because the signature is not encrypted
        and it's also not needed when we have key exchange because server and client have independent keys */
     if (!(NTLMSSP_NEGOTIATE_KEY_EXCH & conv_ntlmssp_info->flags) && !(NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY & conv_ntlmssp_info->flags)) {
-      peer_block = (guint8 *)wmem_memdup(wmem_packet_scope(), packet_ntlmssp_info->verifier, packet_ntlmssp_info->verifier_block_length);
+      peer_block = (guint8 *)wmem_memdup(pinfo->pool, packet_ntlmssp_info->verifier, packet_ntlmssp_info->verifier_block_length);
       if (gcry_cipher_decrypt(rc4_handle_peer, peer_block, packet_ntlmssp_info->verifier_block_length, NULL, 0)) {
         return;
       }

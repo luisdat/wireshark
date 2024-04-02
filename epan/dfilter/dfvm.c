@@ -1303,14 +1303,27 @@ try_value_string(const header_field_info *hfinfo, fvalue_t *fv_num, char *buf)
 {
 	uint64_t val;
 
+	/* XXX - What about BASE_UNIT_STRING? Should we guarantee that we
+	 * don't get here for unit strings in semcheck.c (currently we
+	 * do for OP_MATCHES instead of disallowing it, which will result
+	 * in a legal filter that always compares false as this returns NULL.)
+	 */
 	if (fvalue_to_uinteger64(fv_num, &val) != FT_OK)
 		return NULL;
 
 	/* XXX We should find or create instead a suitable function in proto.h
-	 * to perform this mapping. */
+	 * to perform this mapping. hf_try_val[64]_to_str are similar, though
+	 * don't handle BASE_CUSTOM but do handle BASE_UNIT_STRING */
 
 	if (hfinfo->display & BASE_RANGE_STRING) {
 		return try_rval_to_str((uint32_t)val, hfinfo->strings);
+	}
+	else if (hfinfo->display & BASE_EXT_STRING) {
+		if (hfinfo->display & BASE_VAL64_STRING) {
+			return try_val64_to_str_ext(val, (val64_string_ext *)hfinfo->strings);
+		} else {
+			return try_val_to_str_ext((uint32_t)val, (value_string_ext *)hfinfo->strings);
+		}
 	}
 	else if (hfinfo->display & BASE_VAL64_STRING) {
 		return try_val64_to_str(val, hfinfo->strings);
@@ -1322,9 +1335,6 @@ try_value_string(const header_field_info *hfinfo, fvalue_t *fv_num, char *buf)
 			((custom_fmt_func_64_t)hfinfo->strings)(buf, val);
 		else
 			ws_assert_not_reached();
-	}
-	else if (hfinfo->display & BASE_EXT_STRING) {
-		return try_val_to_str_ext((uint32_t)val, (value_string_ext *)hfinfo->strings);
 	}
 	else {
 		return try_val_to_str((uint32_t)val, hfinfo->strings);
@@ -1357,6 +1367,11 @@ mk_value_string(dfilter_t *df, dfvm_value_t *vs_arg, dfvm_value_t *from_arg, dfv
 			fvalue_set_string(new_fv, str);
 			df_cell_append(to_rp, new_fv);
 		}
+		/* XXX - If there's no match we could have a NULL result
+		 * as now (and return false), or use a string like "Unknown"
+		 * the way columns do. We could fall back to a string
+		 * representation of the value if BASE_SPECIAL_VALS if set.
+		 */
 	}
 
 	return !df_cell_is_empty(to_rp);

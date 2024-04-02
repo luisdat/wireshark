@@ -74,12 +74,16 @@ with open(args.outfile, 'w') as f:
         line = line.strip()
         if not line or line.startswith('#'):
             continue
+        if line.startswith('Adding in plugin'):
+            # https://bugreports.qt.io/browse/QTBUG-122257
+            # Affects 6.6.0 - 6.6.2
+            continue
         path, relative = line.split(" ")
         rel_path = os.path.split(relative)
         if len(rel_path) > 1:
             base_dir = rel_path[0].strip('"')
             if base_dir != current_dir:
-                set_out_path = 'SetOutPath "$INSTDIR\{}"'.format(base_dir)
+                set_out_path = r'SetOutPath "$INSTDIR\{}"'.format(base_dir)
                 print(set_out_path, file=f)
                 current_dir = base_dir
 

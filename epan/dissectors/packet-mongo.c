@@ -322,6 +322,7 @@ dissect_fullcollectionname(tvbuff_t *tvb, guint offset, proto_tree *tree)
 #define BSON_MAX_NESTING 100
 #define BSON_MAX_DOC_SIZE (16 * 1000 * 1000)
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_bson_document(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int hf_mongo_doc)
 {
   gint32 document_length;
@@ -705,6 +706,7 @@ dissect_mongo_op_commandreply(tvbuff_t *tvb, packet_info *pinfo, guint offset, p
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_mongo_op_compressed(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, guint *effective_opcode)
 {
   guint opcode = 0;
@@ -832,7 +834,10 @@ dissect_op_msg_section(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tr
 
   switch (e_type) {
     case KIND_BODY:
-      dissect_bson_document(tvb, pinfo, offset, section_tree, hf_mongo_msg_sections_section_body);
+      section_len = dissect_bson_document(tvb, pinfo, offset, section_tree, hf_mongo_msg_sections_section_body);
+      /* If section_len is bogus (e.g., negative), dissect_bson_document sets
+       * an expert info and can return a different value than read above.
+       */
       break;
     case KIND_DOCUMENT_SEQUENCE: {
       gint32 dsi_length;
@@ -841,6 +846,9 @@ dissect_op_msg_section(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tr
       proto_tree *documents_tree;
 
       proto_tree_add_item(section_tree, hf_mongo_msg_sections_section_size, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+      /* This is redundant with the lengths in the documents, we don't use this
+       * size at all. We could still report an expert info if it's bogus.
+       */
       offset += 4;
       to_read -= 4;
 
@@ -899,9 +907,14 @@ dissect_mongo_op_msg(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_opcode_types(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *mongo_tree, guint opcode, guint *effective_opcode)
 {
     *effective_opcode = opcode;
+
+    unsigned recursion_depth = p_get_proto_depth(pinfo, proto_mongo);
+    DISSECTOR_ASSERT(recursion_depth <= BSON_MAX_NESTING);
+    p_set_proto_depth(pinfo, proto_mongo, recursion_depth + 1);
 
     switch(opcode){
     case OP_REPLY:
@@ -944,6 +957,8 @@ dissect_opcode_types(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree
       /* No default Action */
       break;
     }
+
+    p_set_proto_depth(pinfo, proto_mongo, recursion_depth);
 
     return offset;
 }
@@ -1009,6 +1024,10 @@ get_mongo_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data 
   * Get the length of the MONGO packet.
   */
   plen = tvb_get_letohl(tvb, offset);
+  /* XXX - This is signed, but we can only return an unsigned to
+   * tcp_dissect_pdus. If negative, should we return something like
+   * 1 (less than the fixed len 4) so that it causes a ReportedBoundsError?
+   */
 
   return plen;
 }
@@ -1026,6 +1045,13 @@ test_mongo(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
   uint32_t opcode;
 
   if (tvb_captured_length_remaining(tvb, offset) < 16) {
+    return FALSE;
+  }
+
+  if (tvb_get_letohil(tvb, offset) < 4) {
+    /* Message sizes are signed in the MongoDB Wire Protocol and
+     * include the header.
+     */
     return FALSE;
   }
 
@@ -1058,7 +1084,7 @@ proto_register_mongo(void)
     { &hf_mongo_message_length,
       { "Message Length", "mongo.message_length",
       FT_INT32, BASE_DEC, NULL, 0x0,
-      "Total message size (include this)", HFILL }
+      "Total message size (including header)", HFILL }
     },
     { &hf_mongo_request_id,
       { "Request ID", "mongo.request_id",

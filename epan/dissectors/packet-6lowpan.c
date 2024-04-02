@@ -239,6 +239,7 @@ void proto_reg_handoff_6lowpan(void);
 
 /* 6LoWPAN interface identifier length. */
 #define LOWPAN_IFC_ID_LEN               8
+
 /* Protocol fields handles. */
 static int proto_6lowpan;
 static int hf_6lowpan_pattern;
@@ -573,9 +574,9 @@ static lowpan_context_data  lowpan_context_default;
 static const gchar *        lowpan_context_prefs[LOWPAN_CONTEXT_MAX];
 
 /* Preferences */
-static gboolean rfc4944_short_address_format = FALSE;
-static gboolean iid_has_universal_local_bit = FALSE;
-static gboolean ipv6_summary_in_tree = TRUE;
+static bool rfc4944_short_address_format = false;
+static bool iid_has_universal_local_bit = false;
+static bool ipv6_summary_in_tree = true;
 
 /* Helper macro to convert a bit offset/length into a byte count. */
 #define BITS_TO_BYTE_LEN(bitoff, bitlen)    ((bitlen)?(((bitlen) + ((bitoff)&0x07) + 7) >> 3):(0))
@@ -778,7 +779,7 @@ lowpan_context_insert(guint8 cid, guint16 pan, guint8 plen, ws_in6_addr *prefix,
     data = wmem_new(NULL, lowpan_context_data);
     data->frame = frame;
     data->plen = plen;
-    memset(&data->prefix, 0, sizeof(ws_in6_addr)); /* Ensure zero paddeding */
+    memset(&data->prefix, 0, sizeof(ws_in6_addr)); /* Ensure zero padding */
     lowpan_pfxcpy(&data->prefix, prefix, plen);
     g_hash_table_insert(lowpan_context_table, pkey, data);
 } /* lowpan_context_insert */
@@ -1859,6 +1860,7 @@ dissect_6lowpan_hc1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint dg
  *---------------------------------------------------------------
  */
 static tvbuff_t *
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_6lowpan_iphc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint dgram_size, const guint8 *siid, const guint8 *diid)
 {
     ieee802154_hints_t  *hints;
@@ -2297,6 +2299,7 @@ dissect_6lowpan_iphc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint d
  *---------------------------------------------------------------
  */
 static struct lowpan_nhdr *
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_6lowpan_iphc_nhc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset, gint dgram_size, const guint8 *siid, const guint8 *diid)
 {
     gint                length;
@@ -2327,7 +2330,10 @@ dissect_6lowpan_iphc_nhc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gi
         offset += 1;
 
         /* Decode the remainder of the packet using IPHC encoding. */
+        increment_dissection_depth(pinfo);
         iphc_tvb = dissect_6lowpan_iphc(tvb_new_subset_remaining(tvb, offset), pinfo, tree, dgram_size, siid, diid);
+        decrement_dissection_depth(pinfo);
+
         if (!iphc_tvb) return NULL;
 
         /* Create the next header structure for the tunneled IPv6 header. */
@@ -2458,7 +2464,9 @@ dissect_6lowpan_iphc_nhc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gi
              * There are more LOWPAN_NHC structures to parse. Call ourself again
              * recursively to parse them and build the linked list.
              */
+            increment_dissection_depth(pinfo);
             nhdr->next = dissect_6lowpan_iphc_nhc(tvb, pinfo, tree, offset, dgram_size - nhdr->reported, siid, diid);
+            decrement_dissection_depth(pinfo);
         }
         else if (ipv6_ext.ip6e_nxt != IP_PROTO_NONE) {
             /* Create another next header structure for the remaining payload. */

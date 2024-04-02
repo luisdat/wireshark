@@ -105,7 +105,7 @@ const int overlay_update_interval_ = 100; // 250; // Milliseconds.
  * packet list corresponding to that frame.  If there is no such
  * row, return FALSE, otherwise return TRUE.
  */
-gboolean
+bool
 packet_list_select_row_from_data(frame_data *fdata_needle)
 {
     if (! gbl_cur_packet_list || ! gbl_cur_packet_list->model())
@@ -146,7 +146,7 @@ packet_list_select_row_from_data(frame_data *fdata_needle)
  * selected frame (the function above), because we found a match in the
  * same frame as the currently selected one.
  */
-gboolean
+bool
 packet_list_select_finfo(field_info *fi)
 {
     if (! gbl_cur_packet_list || ! gbl_cur_packet_list->model())
@@ -203,7 +203,7 @@ packet_list_recent_write_all(FILE *rf) {
     gbl_cur_packet_list->writeRecent(rf);
 }
 
-gboolean
+bool
 packet_list_multi_select_active(void)
 {
     if (gbl_cur_packet_list) {
@@ -227,6 +227,7 @@ PacketList::PacketList(QWidget *parent) :
     tail_at_end_(0),
     columns_changed_(false),
     set_column_visibility_(false),
+    set_style_sheet_(false),
     frozen_current_row_(QModelIndex()),
     frozen_selected_rows_(QModelIndexList()),
     cur_history_(-1),
@@ -392,11 +393,27 @@ void PacketList::colorsChanged()
     }
 
     // Set the style sheet
+    set_style_sheet_ = true;
     if(prefs.gui_packet_list_hover_style) {
         setStyleSheet(active_style + inactive_style + hover_style);
     } else {
         setStyleSheet(active_style + inactive_style);
     }
+    set_style_sheet_ = false;
+#if \
+    ( \
+    (QT_VERSION >= QT_VERSION_CHECK(6, 5, 4) && QT_VERSION < QT_VERSION_CHECK(6, 6, 0)) \
+    || (QT_VERSION >= QT_VERSION_CHECK(6, 6, 1)) \
+    )
+    // https://bugreports.qt.io/browse/QTBUG-122109
+    // Affects Qt 6.5.4 and later, 6.6.1 and later.
+    // When setting the style sheet, all visible sections are set
+    // to the new minimum DefaultSectionSize (even if it hasn't
+    // changed.) So make sure the new widths aren't saved to recent
+    // and then restore from recent.
+    applyRecentColumnWidths();
+    setColumnVisibility();
+#endif
 }
 
 QString PacketList::joinSummaryRow(QStringList col_parts, int row, SummaryCopyType type)
@@ -1161,9 +1178,6 @@ void PacketList::applyRecentColumnWidths()
 
 void PacketList::preferencesChanged()
 {
-    // Update color style changes
-    colorsChanged();
-
     // Related packet delegate
     if (prefs.gui_packet_list_show_related) {
         setItemDelegateForColumn(0, &related_packet_delegate_);
@@ -1642,16 +1656,14 @@ void PacketList::goLastPacket(void) {
     scrollViewChanged(false);
 }
 
-// XXX We can jump to the wrong packet if a display filter is applied
 void PacketList::goToPacket(int packet, int hf_id)
 {
-    if (!cf_goto_frame(cap_file_, packet))
+    if (!cf_goto_frame(cap_file_, packet, FALSE))
         return;
 
-    int row = packet_list_model_->packetNumberToRow(packet);
-    if (row >= 0) {
-        selectionModel()->setCurrentIndex(packet_list_model_->index(row, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-        scrollTo(currentIndex(), PositionAtCenter);
+    // cf_goto_frame only returns true if packet_list_select_row_from_data
+    // succeeds, the latter has already selected and scrolled to the frame.
+    if (hf_id > 0) {
         proto_tree_->goToHfid(hf_id);
     }
 
@@ -1803,7 +1815,7 @@ void PacketList::columnVisibilityTriggered()
 
 void PacketList::sectionResized(int col, int, int new_width)
 {
-    if (isVisible() && !columns_changed_ && !set_column_visibility_ && new_width > 0) {
+    if (isVisible() && !columns_changed_ && !set_column_visibility_ && !set_style_sheet_ && new_width > 0) {
         // Column 1 gets an invalid value (32 on macOS) when we're not yet
         // visible.
         //

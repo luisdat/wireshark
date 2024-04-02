@@ -185,11 +185,11 @@ static expert_field ei_ber_real_not_primitive;
 static dissector_handle_t ber_handle;
 static dissector_handle_t ber_file_handle;
 
-static gboolean show_internal_ber_fields     = FALSE;
-static gboolean decode_octetstring_as_ber        = FALSE;
-static gboolean decode_primitive_as_ber          = FALSE;
-static gboolean decode_unexpected                = FALSE;
-static gboolean decode_warning_leading_zero_bits = FALSE;
+static bool show_internal_ber_fields     = false;
+static bool decode_octetstring_as_ber        = false;
+static bool decode_primitive_as_ber          = false;
+static bool decode_unexpected                = false;
+static bool decode_warning_leading_zero_bits = false;
 
 static gchar *decode_as_syntax = NULL;
 
@@ -800,6 +800,7 @@ ber_proto_tree_add_item(packet_info *pinfo, proto_tree *tree,
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 try_dissect_unknown_ber(packet_info *pinfo, tvbuff_t *tvb, volatile int offset, proto_tree *tree, gint nest_level)
 {
     int                start_offset;
@@ -1054,6 +1055,7 @@ try_dissect_unknown_ber(packet_info *pinfo, tvbuff_t *tvb, volatile int offset, 
 }
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_unknown_ber(packet_info *pinfo, tvbuff_t *tvb, int offset, proto_tree *tree)
 {
     return try_dissect_unknown_ber(pinfo, tvb, offset, tree, 1);
@@ -1273,6 +1275,7 @@ dissect_ber_identifier(packet_info *pinfo _U_, proto_tree *tree, tvbuff_t *tvb, 
 /* 8.1.3 Length octets */
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 try_get_ber_length(tvbuff_t *tvb, int offset, guint32 *length, bool *ind, gint nest_level) {
     guint8   oct, len;
     guint32  indef_len;
@@ -1416,6 +1419,7 @@ static int
 dissect_ber_constrained_octet_string_impl(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint32 min_len, gint32 max_len, gint hf_id, tvbuff_t **out_tvb, guint nest_level, guint encoding);
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 reassemble_octet_string(asn1_ctx_t *actx, proto_tree *tree, gint hf_id, tvbuff_t *tvb, int offset, guint32 con_len, bool ind, tvbuff_t **out_tvb, guint nest_level)
 {
     fragment_head *fd_head         = NULL;
@@ -1521,11 +1525,13 @@ reassemble_octet_string(asn1_ctx_t *actx, proto_tree *tree, gint hf_id, tvbuff_t
 
 /* 8.7 Encoding of an octetstring value */
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_constrained_octet_string(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint32 min_len, gint32 max_len, gint hf_id, tvbuff_t **out_tvb) {
   return dissect_ber_constrained_octet_string_impl(implicit_tag, actx, tree, tvb, offset, min_len, max_len, hf_id, out_tvb, 0, 0);
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_constrained_octet_string_impl(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint32 min_len, gint32 max_len, gint hf_id, tvbuff_t **out_tvb, guint nest_level, guint encoding) {
     gint8       ber_class;
     bool    pc, ind;
@@ -1768,6 +1774,7 @@ proto_tree_add_debug_text(tree, "OCTET STRING dissect_ber_octet_string(%s) enter
 }
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_octet_string(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, tvbuff_t **out_tvb) {
   return dissect_ber_constrained_octet_string_impl(implicit_tag, actx, tree, tvb, offset, NO_BOUND, NO_BOUND, hf_id, out_tvb, 0, 0);
 }
@@ -1786,7 +1793,7 @@ dissect_ber_octet_string_wcb(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tr
     if (func && out_tvb && (tvb_reported_length(out_tvb) > 0)) {
         if (hf_id > 0)
             tree = proto_item_add_subtree(actx->created_item, ett_ber_octet_string);
-        /* TODO Should hf_id2 be pased as last parameter???*/
+        /* TODO Should hf_id2 be passed as last parameter???*/
         func(FALSE, out_tvb, 0, actx, tree, -1);
     }
     return offset;
@@ -3085,6 +3092,7 @@ dissect_ber_GeneralString(asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int
 #endif
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_constrained_restricted_string(bool implicit_tag, gint32 type,  asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint32 min_len, gint32 max_len, gint hf_id, tvbuff_t **out_tvb) {
     gint8       ber_class;
     bool    pc;
@@ -3145,12 +3153,14 @@ proto_tree_add_debug_text(tree, "RESTRICTED STRING dissect_ber_octet_string(%s) 
     return dissect_ber_constrained_octet_string(implicit_tag, actx, tree, tvb, hoffset, min_len, max_len, hf_id, out_tvb);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 int dissect_ber_restricted_string(bool implicit_tag, gint32 type, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, tvbuff_t **out_tvb)
 {
     return dissect_ber_constrained_restricted_string(implicit_tag, type, actx, tree, tvb, offset, NO_BOUND, NO_BOUND, hf_id, out_tvb);
 }
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_GeneralString(asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, char *name_string, guint name_len)
 {
     tvbuff_t *out_tvb = NULL;
@@ -3182,6 +3192,7 @@ dissect_ber_GeneralString(asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int
 /* 8.19 Encoding of a relative or absolute object identifier value.
  */
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_any_oid(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, tvbuff_t **value_tvb, bool is_absolute)
 {
     gint8        ber_class;
@@ -3270,6 +3281,7 @@ proto_tree_add_debug_text(tree, "OBJECT IDENTIFIER dissect_ber_any_oid(%s) enter
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_any_oid_str(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, const char **value_stringx, bool is_absolute)
 {
     tvbuff_t *value_tvb = NULL;
@@ -3291,12 +3303,14 @@ dissect_ber_any_oid_str(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, t
 /* 8.19 Encoding of a relative object identifier value.
  */
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_relative_oid(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, tvbuff_t **value_tvb)
 {
     return dissect_ber_any_oid(implicit_tag, actx, tree, tvb, offset, hf_id, value_tvb, FALSE);
 }
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_relative_oid_str(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, const char **value_stringx)
 {
     return dissect_ber_any_oid_str(implicit_tag, actx, tree, tvb, offset, hf_id, value_stringx, FALSE);
@@ -3305,12 +3319,14 @@ dissect_ber_relative_oid_str(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tr
 /* 8.19 Encoding of an object identifier value.
  */
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_object_identifier(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, tvbuff_t **value_tvb)
 {
     return dissect_ber_any_oid(implicit_tag, actx, tree, tvb, offset, hf_id, value_tvb, TRUE);
 }
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_object_identifier_str(bool implicit_tag, asn1_ctx_t *actx, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_id, const char **value_stringx)
 {
     return dissect_ber_any_oid_str(implicit_tag, actx, tree, tvb, offset, hf_id, value_stringx, TRUE);
@@ -3870,6 +3886,7 @@ malformed:
 /* 8.6 Encoding of a bitstring value */
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_constrained_bitstring(bool implicit_tag, asn1_ctx_t *actx, proto_tree *parent_tree, tvbuff_t *tvb, int offset, gint32 min_len, gint32 max_len, int * const *named_bits, int num_named_bits, gint hf_id, gint ett_id, tvbuff_t **out_tvb)
 {
     gint8       ber_class;
@@ -4044,6 +4061,7 @@ dissect_ber_constrained_bitstring(bool implicit_tag, asn1_ctx_t *actx, proto_tre
 
 
 int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ber_bitstring(bool implicit_tag, asn1_ctx_t *actx, proto_tree *parent_tree, tvbuff_t *tvb, int offset, int * const *named_bits, gint num_named_bits, gint hf_id, gint ett_id, tvbuff_t **out_tvb)
 {
     return dissect_ber_constrained_bitstring(implicit_tag, actx, parent_tree, tvb, offset, -1, -1, named_bits, num_named_bits, hf_id, ett_id, out_tvb);

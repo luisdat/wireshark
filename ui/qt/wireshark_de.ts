@@ -2160,6 +2160,14 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Paketbytes als Go Literal kopieren</translation>
     </message>
     <message>
+        <source>…as C Array</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as C Array.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as a Hex Stream</source>
         <translation>...als Hex Stream</translation>
     </message>
@@ -2998,10 +3006,6 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Start</translation>
     </message>
     <message>
-        <source>Save</source>
-        <translation>Speichern</translation>
-    </message>
-    <message>
         <source>Default</source>
         <translation>Standard</translation>
     </message>
@@ -3331,20 +3335,8 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
 <context>
     <name>FolderListModel</name>
     <message>
-        <source>&quot;File&quot; dialogs</source>
-        <translation>&quot;Datei&quot; Dialoge</translation>
-    </message>
-    <message>
-        <source>capture files</source>
-        <translation>Mitschnittdateien</translation>
-    </message>
-    <message>
         <source>Temp</source>
         <translation>Temp</translation>
-    </message>
-    <message>
-        <source>untitled capture files</source>
-        <translation>Unbenannte Mitschnittdateien</translation>
     </message>
     <message>
         <source>Personal configuration</source>
@@ -3353,14 +3345,6 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>Global configuration</source>
         <translation>Globale Konfiguration</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, ethers, …</source>
-        <translation>dfilters, preferences, ethers, …</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, manuf, …</source>
-        <translation>dfilters, preferences, manuf, …</translation>
     </message>
     <message>
         <source>System</source>
@@ -3375,16 +3359,8 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Programm</translation>
     </message>
     <message>
-        <source>program files</source>
-        <translation>program files</translation>
-    </message>
-    <message>
         <source>Personal Plugins</source>
         <translation>Benutzerspezifische Plugins</translation>
-    </message>
-    <message>
-        <source>binary plugins</source>
-        <translation>binary plugins</translation>
     </message>
     <message>
         <source>Global Plugins</source>
@@ -3403,12 +3379,36 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Lua Skripte</translation>
     </message>
     <message>
+        <source>&quot;File&quot; dialog location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Untitled capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preferences, profiles, manuf, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Program files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugins</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Personal Extcap path</source>
         <translation>Benutzerspezifischer Extcap Pfad</translation>
     </message>
     <message>
-        <source>external capture (extcap) plugins</source>
-        <translation>Externe Aufzeichnungs-Plug-Ins (extcap)</translation>
+        <source>External capture (extcap) plugins</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Global Extcap path</source>
@@ -3675,6 +3675,10 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>Find:</source>
         <translation>Suchen:</translation>
+    </message>
+    <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Groß- / Kleinschreibung beachten</translation>
     </message>
     <message>
         <source>Find &amp;Next</source>
@@ -11201,6 +11205,10 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Suchen:</translation>
     </message>
     <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Groß- / Kleinschreibung beachten</translation>
+    </message>
+    <message>
         <source>Find &amp;Next</source>
         <translation>&amp;Nächstes suchen</translation>
     </message>
@@ -14224,6 +14232,18 @@ a:hover {
     <message>
         <source>TCP throughput</source>
         <translation>TCP Durchsatz</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Query-Response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DNS Query-Response Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Request Sequences</source>

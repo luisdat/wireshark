@@ -125,6 +125,7 @@ static int hf_lldp_network_address_family;
 static int hf_port_id_ip4;
 static int hf_port_id_ip6;
 static int hf_time_to_live;
+static int hf_pdu_type;
 static int hf_mgn_address_len;
 static int hf_mgn_address_subtype;
 static int hf_mgn_addr_ipv4;
@@ -354,6 +355,8 @@ static int hf_media_loc_long;
 static int hf_media_loc_alt_type;
 static int hf_media_loc_alt_resolution;
 static int hf_media_loc_alt;
+static int hf_media_loc_ver;
+static int hf_media_loc_reserved;
 static int hf_media_loc_datum;
 static int hf_media_civic_lci_length;
 static int hf_media_civic_what;
@@ -567,6 +570,7 @@ static gint ett_org_spc_hytec_trace_reply;
 
 static expert_field ei_lldp_bad_length;
 static expert_field ei_lldp_bad_length_excess;
+static expert_field ei_lldp_shutdown_excess_tlv;
 static expert_field ei_lldp_bad_type;
 static expert_field ei_lldp_tlv_deprecated;
 
@@ -977,6 +981,14 @@ static const value_string altitude_type[] = {
 	{ 0, NULL }
 };
 
+/* Datum Type */
+static const value_string datum_type_values[] = {
+	{ 1,	"WGS84" },
+	{ 2,	"NAD83 (Latitude, Longitude) + NAVD88" },
+	{ 3,	"NAD83 (Latitude, Longitude) + MLLW" },
+	{ 0, NULL }
+};
+
 /* Civic Address LCI - What field */
 static const value_string civic_address_what_values[] = {
 	{ 0,	"Location of the DHCP server" },
@@ -1355,6 +1367,77 @@ media_power_base(gchar *buf, guint32 value) {
 	snprintf(buf, ITEM_LABEL_LENGTH, "%u mW", value * 100);
 }
 
+// Get absolute 2's complement value
+// Returns true if the value is negative (so if
+// it returns false, there is no conversion).
+//  bitSize: number of bits of the variable.
+static gboolean
+get2sComplementAbsoluteValue(guint64 * value, guint bitSize){
+	const guint64 signMask = G_GINT64_CONSTANT(0x1) << (bitSize - 1);
+
+	guint64 signedMask = G_GINT64_CONSTANT(0x1) << bitSize;
+	signedMask--;
+	signedMask = ~signedMask;
+
+	if(*value & signMask){
+		*value |= signedMask; // sign propagation
+
+		// Convert to absolute value
+		*value = ~(*value);
+		(*value)++;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static guint64
+getUint64MaskedValue(guint64 value, guint bitSize){
+	guint64 mask = G_GINT64_CONSTANT(0x1) << bitSize;
+	mask--;
+	return value & mask;
+}
+
+static guint64
+pow10_uint64(gint exponent){
+	guint64 val = 1;
+
+	while(exponent > 0){
+		val *= 10;
+		exponent--;
+	}
+
+	while(exponent < 0){
+		val /= 10;
+		exponent++;
+	}
+	return val;
+}
+
+// Decode uint fractional variable
+static guint64
+convertFractionalToFixedSizeDecimal(guint64 value, guint fractionalBitSize, guint numberOfDigitToDisplay){
+	const guint64 resolution = G_GINT64_CONSTANT(0x1) << fractionalBitSize;
+	// => 0x02000000 for 25-bits
+	// => 0x00000100 for 8-bits
+
+	const guint64 fractionalPortionMask = resolution - 1;
+	value &= fractionalPortionMask;
+
+	// Maximum value for numberOfDigitToDisplay is :
+	// log10(G_GINT64_CONSTANT(0xFFFFFFFFFFFFFFFF) / fractionalPortionMask);
+	// => if result is stored in 32-bits, numberOfDigitToDisplay max = 9
+	const guint64 displayMultiplier = pow10_uint64(numberOfDigitToDisplay);
+	value *= displayMultiplier;
+	guint64 moduloValue = value % resolution;
+	value /= resolution;
+    if(moduloValue >= (resolution/2)){
+        value++; // rounded value
+    }
+
+	return value;
+}
+
+
 /* Calculate Latitude and Longitude string */
 /*
 	Parameters:
@@ -1364,54 +1447,67 @@ media_power_base(gchar *buf, guint32 value) {
 static void
 get_latitude_or_longitude(gchar *buf, int option, guint64 unmasked_value)
 {
-	guint64 value = unmasked_value & G_GINT64_CONSTANT(0x03FFFFFFFF);
-	guint64 tempValue = value;
-	gboolean negativeNum = FALSE;
-	guint32 integerPortion = 0;
-	const char *direction;
-
 	/* The latitude and longitude are 34 bit fixed point value consisting
 	   of 9 bits of integer and 25 bits of fraction.
 	   When option is equal to 0, positive numbers are represent a location
 	   north of the equator and negative (2s complement) numbers are south of the equator.
 	   When option is equal to 1, positive values are east of the prime
 	   meridian and negative (2s complement) numbers are west of the prime meridian.
+	   Longitude values outside the range of -180 to 180 decimal degrees or latitude values
+	   outside the range of -90 to 90 degrees MUST be considered invalid.
 	*/
+	const guint variableBitSize = 34;
+	const guint fractionalBitSize = 25;
+	const guint64 maxlatitude = (G_GINT64_CONSTANT(0x1) << fractionalBitSize) * G_GINT64_CONSTANT(90);   // 90 degrees
+	const guint64 maxlongitude = (G_GINT64_CONSTANT(0x1) << fractionalBitSize) * G_GINT64_CONSTANT(180); // 180 degrees
 
-	if (value & G_GINT64_CONSTANT(0x0000000200000000))
-	{
-		/* Have a negative number (2s complement) */
-		negativeNum = TRUE;
+	guint64 masked_value = getUint64MaskedValue(unmasked_value, variableBitSize); // get 34-bit value
 
-		tempValue = ~value;
-		tempValue += 1;
-	}
+	// Get absolute value of a 34-bit 2's variable
+	// => value is 33-bit
+	guint64 absolute_value = masked_value;
+	gboolean isNegative = get2sComplementAbsoluteValue(&absolute_value, variableBitSize);
 
-	/* Get the integer portion */
-	integerPortion = (guint32)((tempValue & G_GINT64_CONSTANT(0x00000003FE000000)) >> 25);
+	// Get unsigned integer 8-bit value
+	guint32 integerPortion = (guint32)(absolute_value >> fractionalBitSize);
 
-	/* Calculate decimal portion (using 25 bits for fraction) */
-	tempValue = (tempValue & G_GINT64_CONSTANT(0x0000000001FFFFFF))/33554432;
+	// Get fractional 25-bit value
+	const guint numberOfDigitToDisplay = 4;
+	guint64 fixedSizeDecimal = convertFractionalToFixedSizeDecimal(absolute_value, fractionalBitSize, numberOfDigitToDisplay);
 
-	if (option == 0)
-	{
-		/* Latitude - north/south directions */
-		if (negativeNum)
+	const char *direction;
+	const char *err_str = "";
+	if (option == 0){
+		// Latitude - north/south directions
+		if (isNegative){
 			direction = "South";
-		else
+		} else {
 			direction = "North";
-	}
-	else
-	{
-		/* Longitude - east/west directions */
-		if (negativeNum)
+		}
+		if(absolute_value > maxlatitude){
+			err_str = "[Error: value > 90 degrees] ";
+		}
+	} else {
+		// Longitude - east/west directions
+		if (isNegative){
 			direction = "West";
-		else
+		} else {
 			direction = "East";
+		}
+		if(absolute_value > maxlongitude){
+			err_str = "[Error: value > 180 degrees] ";
+		}
 	}
 
-	snprintf(buf, ITEM_LABEL_LENGTH, "%u.%04" PRIu64 " degrees %s (0x%010" PRIX64 ")",
-	    integerPortion, tempValue, direction, value);
+	const guint64 fractionalMask = (G_GINT64_CONSTANT(0x1) << fractionalBitSize) - 1;
+
+	// %04 correspond to numberOfDigitToDisplay
+	snprintf(buf, ITEM_LABEL_LENGTH, "%s%u.%04" PRIu64 " degrees %s (0x%010" PRIX64 " - %u-bit integer part 0x%04" PRIX64 " / %u-bit fractional part 0x%08" PRIX64 ")",
+	    err_str,
+		integerPortion, fixedSizeDecimal, direction, masked_value,
+		variableBitSize - fractionalBitSize, masked_value >> fractionalBitSize,
+		fractionalBitSize, masked_value & fractionalMask
+	);
 }
 
 static void
@@ -1423,6 +1519,126 @@ static void
 longitude_base(gchar *buf, guint64 value) {
 	get_latitude_or_longitude(buf, 1, value);
 }
+
+static void
+altitude_base(gchar *buf, guint32 unmasked_value) {
+	// RFC6225
+	// Altitude: A 30-bit value defined by the AType field.
+	// In some cases, the altitude of the location might not be provided.
+	// An Altitude Type value of zero indicates that the altitude is not
+	// given to the client.  In this case, the Altitude and Altitude
+	// Uncertainty fields can contain any value and MUST be ignored.
+	//
+	// If the Altitude Type has a value of one, altitude is measured in
+	// meters, in relation to the zero set by the vertical datum.  For AType
+	// = 1, the altitude value is expressed as a 30-bit, fixed-point, two's
+	// complement integer with 22 integer bits and 8 fractional bits.
+	//
+	// A value of two for Altitude Type indicates that the altitude value is
+	// measured in floors.  Since altitude in meters may not be known within
+	// a building, a floor indication may be more useful.  For AType = 2,
+	// the altitude value is expressed as a 30-bit, fixed-point, two's
+	// complement integer with 22 integer bits and 8 fractional bits.
+	//
+	// the altitude resolution (AltRes) value encodes the number of
+	// high-order altitude bits that should be considered valid.
+	// Values above 30 (decimal) are undefined and reserved.
+
+	const guint variableBitSize = 30;
+	const guint fractionalBitSize = 8;
+
+	guint64 masked_value = getUint64MaskedValue(unmasked_value, variableBitSize); // get 30-bit value
+
+	// Get absolute value of a 30-bit 2's variable
+	// => value is 29-bit
+	guint64 absolute_value = masked_value;
+	gboolean isNegative = get2sComplementAbsoluteValue(&absolute_value, variableBitSize);
+
+	// Get unsigned integer 8-bit value
+	guint32 integerPortion = (guint32)(absolute_value >> fractionalBitSize);
+
+	// Get fractional 8-bit value
+	const guint numberOfDigitToDisplay = 4;
+	guint64 fixedSizeDecimal = convertFractionalToFixedSizeDecimal(absolute_value, fractionalBitSize, numberOfDigitToDisplay);
+
+	const char * sign;
+	if (isNegative){
+		sign = "-";
+	} else {
+		sign = "+";
+	}
+
+
+	const guint64 fractionalMask = (G_GINT64_CONSTANT(0x1) << fractionalBitSize) - 1;
+
+	// %04 correspond to numberOfDigitToDisplay
+	snprintf(buf, ITEM_LABEL_LENGTH, "%s%u.%04" PRIu64 " (0x%08" PRIX64 " - %u-bit integer part 0x%06" PRIX64 " / %u-bit fractional part 0x%02" PRIX64 ")",
+	    sign, integerPortion, fixedSizeDecimal, masked_value,
+		variableBitSize - fractionalBitSize, masked_value >> fractionalBitSize,
+		fractionalBitSize, masked_value & fractionalMask
+	);
+}
+
+static void
+latitude_or_longitude_resolution(gchar *buf, guint8 value) {
+	// formula, where x is the encoded integer value:
+	//      Uncertainty = 2 ^ ( 8 - x )
+
+	gint32 masked_value = value & 0x3F;
+	double resolution = 1.0;
+	gint32 i = 8 - masked_value;
+	while(i > 0){
+		resolution *= 2.0;
+		i--;
+	}
+	while(i < 0){
+		resolution /= 2.0;
+		i++;
+	}
+
+	const char *err_str = "";
+	if(masked_value > 34){
+		err_str = "[Error: value > 34] ";
+	} else if(masked_value < 2){
+		err_str = "[Warning: value < 2] ";
+	}
+
+	snprintf(buf, ITEM_LABEL_LENGTH, "%s%lE degrees (%" PRIi32 ")", err_str, resolution, masked_value);
+}
+
+static void
+altitude_resolution(gchar *buf, guint8 value) {
+	// The encoded altitude of 000000000000000010000110110011 decodes to
+	// 33.69921875.  The encoded uncertainty of 15 gives a value of 64;
+	// therefore, the final uncertainty is 33.69921875 +/- 64 (or the range
+	// from -30.30078125 to 97.69921875).
+	// The amount of altitude uncertainty can be determined by the following
+	// formula, where x is the encoded integer value:
+	//      Uncertainty = 2 ^ ( 21 - x )
+	//                  = 2 ^ ( 21 - 15 ) = 2 ^ 6 = 64
+
+	gint32 masked_value = value & 0x3F;
+	double resolution = 1.0;
+	gint32 i = 21 - masked_value;
+	while(i > 0){
+		resolution *= 2.0;
+		i--;
+	}
+	while(i < 0){
+		resolution /= 2.0;
+		i++;
+	}
+
+	const char *err_str = "";
+	if(masked_value > 30){
+		err_str = "[Error: value > 34] ";
+	} else if(masked_value < 2){
+		err_str = "[Warning: value < 2] ";
+	}
+
+	snprintf(buf, ITEM_LABEL_LENGTH, "%s%lf (%" PRIi32 ")", err_str, resolution, masked_value);
+}
+
 
 /* Dissect Chassis Id TLV (Mandatory) */
 static gint32
@@ -1445,7 +1661,7 @@ dissect_lldp_chassis_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 	if (tlvsubType != CHASSIS_ID_TLV_TYPE)
 	{
 		proto_tree_add_expert_format(tree, pinfo, &ei_lldp_bad_type , tvb, offset, TLV_INFO_LEN(tempShort),
-			"Invalid Chassis ID (0x%02X), expected (0x%02X)", tlvsubType, CHASSIS_ID_TLV_TYPE);
+			"Invalid TLV type (0x%02X), expected ChassisID type (0x%02X)", tlvsubType, CHASSIS_ID_TLV_TYPE);
 
 		return -1;
 	}
@@ -1561,7 +1777,7 @@ dissect_lldp_chassis_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 			idType="IA";
 			strPtr = tvb_format_stringzpad(pinfo->pool, tvb, offset, (dataLen - 1));
 			break;
-		case 6: /* Interfae name */
+		case 6: /* Interface name */
 			idType="IN";
 			strPtr = tvb_format_stringzpad(pinfo->pool, tvb, offset, (dataLen - 1));
 			break;
@@ -1771,13 +1987,14 @@ dissect_lldp_port_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint3
 
 /* Dissect Time To Live TLV (Mandatory) */
 static gint32
-dissect_lldp_time_to_live(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset)
+dissect_lldp_time_to_live(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset, guint16 *isShutdown)
 {
 	guint8 tlvsubType;
 	guint16 tempShort;
 	guint32 dataLen = 0;
 
 	proto_tree	*time_to_live_tree;
+	proto_item	*ti;
 
 	/* Get tlv type */
 	tempShort = tvb_get_ntohs(tvb, offset);
@@ -1788,24 +2005,36 @@ dissect_lldp_time_to_live(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
 	/* Get tlv length and seconds field */
 	dataLen = TLV_INFO_LEN(tempShort);
 	tempShort = tvb_get_ntohs(tvb, (offset+2));
-	if (column_info_selection == DEFAULT_COLUMN_INFO)
-	{
-		col_append_fstr(pinfo->cinfo, COL_INFO, "%u ", tempShort);
-	}
+	*isShutdown = !tempShort;
 
-	/* Set port tree */
-	time_to_live_tree = proto_tree_add_subtree_format(tree, tvb, offset, (dataLen + 2),
-							  ett_time_to_live, NULL, "Time To Live = %u sec", tempShort);
+	/* LLDPDU types: IEEE 802.1AB-2016 9.1.2 */
+	if (tempShort != 0) {
+		time_to_live_tree = proto_tree_add_subtree_format(tree, tvb, offset, dataLen + 2,
+			ett_time_to_live, NULL, "Time To Live = %u sec", tempShort);
+		ti = proto_tree_add_none_format(time_to_live_tree, hf_pdu_type, tvb, offset, dataLen + 2, "Normal LLDPDU");
+		proto_item_set_generated(ti);
+	} else {
+		time_to_live_tree = proto_tree_add_subtree_format(tree, tvb, offset, dataLen + 2,
+			ett_time_to_live, NULL, "Discard all info for this MSAP (Time To Live = 0)");
+		ti = proto_tree_add_none_format(time_to_live_tree, hf_pdu_type, tvb, offset, dataLen + 2, "Shutdown LLDPDU");
+		proto_item_set_generated(ti);
+	}
 
 	proto_tree_add_item(time_to_live_tree, hf_lldp_tlv_type, tvb, offset, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(time_to_live_tree, hf_lldp_tlv_len, tvb, offset, 2, ENC_BIG_ENDIAN);
-
 	offset += 2;
 
 	/* Display time to live information */
 	proto_tree_add_item(time_to_live_tree, hf_time_to_live, tvb, offset, 2, ENC_BIG_ENDIAN);
-
 	offset += 2;
+
+	if (column_info_selection == DEFAULT_COLUMN_INFO) {
+		if (tempShort != 0) {
+			col_append_fstr(pinfo->cinfo, COL_INFO, "%u ", tempShort);
+		} else {
+			col_append_fstr(pinfo->cinfo, COL_INFO, "%s ", "0 (Shutdown LLDPDU)");
+		}
+	}
 
 	return offset;
 }
@@ -3229,7 +3458,7 @@ dissect_media_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		case 1:	/* Coordinate-based LCI */
 		{
 			/*
-			 * See RFC 3825.
+			 * See RFC 6225 (obsoletes RFC 3825).
 			 * XXX - should this be handled by the BOOTP
 			 * dissector, and exported to us?
 			 */
@@ -3267,6 +3496,12 @@ dissect_media_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 			proto_tree_add_item(tree, hf_media_loc_alt, tvb, offset, 4, ENC_BIG_ENDIAN);
 
 			offset += 4;
+
+			/* Get Ver */
+			proto_tree_add_item(tree, hf_media_loc_ver, tvb, offset, 1, ENC_BIG_ENDIAN);
+
+			/* Get reserved */
+			proto_tree_add_item(tree, hf_media_loc_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
 
 			/* Get datum */
 			proto_tree_add_item(tree, hf_media_loc_datum, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -4110,7 +4345,7 @@ dissect_hytec_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 			} /* switch (identifier) */
 			break;
 		default: /* unknown group */
-			/* indentifier considered also unknown */
+			/* identifier considered also unknown */
 			proto_item_append_text(identifier_proto_item, "Unknown");
 			proto_tree_add_item(tree, hf_hytec_unknown_identifier_content, tvb, offset, -1, ENC_NA);
 		} /* switch (group) */
@@ -4230,7 +4465,7 @@ dissect_hytec_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 			} /* switch (identifier) */
 			break;
 		default: /* unknown group */
-			/* indentifier considered also unknown */
+			/* identifier considered also unknown */
 			proto_item_append_text(identifier_proto_item, "Unknown");
 			proto_tree_add_item(tree, hf_hytec_unknown_identifier_content, tvb, offset, -1, ENC_NA);
 		} /* switch (group) */
@@ -4650,6 +4885,7 @@ dissect_lldp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	proto_tree *lldp_tree = NULL;
 	tvbuff_t *new_tvb = NULL;
 	guint32 offset = 0;
+	guint16 isShutdown;
 	gint32 rtnValue = 0;
 	guint16 tempShort;
 	guint8 tlvType;
@@ -4662,6 +4898,17 @@ dissect_lldp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
 	ti = proto_tree_add_item(tree, proto_lldp, tvb, offset, -1, ENC_NA);
 	lldp_tree = proto_item_add_subtree(ti, ett_lldp);
+
+	// Maybe add an explicit field for the type of the destination mac address?
+
+	// IEEE 802.1AB-2016, Table 7-2—Support for MAC addresses in different systems
+	// Address                                   | C-VLAN Bridge | S-VLAN  Bridge | TPMR Bridge   | End station
+        // ------------------------------------------+---------------+----------------+---------------+-------------
+	// 01-80-C2-00-00-0E Nearest bridge          | Mandatory     | Mandatory      | Mandatory     | Mandatory
+	// 01-80-C2-00-00-03 Nearest non-TPMR bridge | Mandatory     | Mandatory      | Not permitted | Recommended
+	// 01-80-C2-00-00-00 Nearest Customer Bridge | Mandatory     | Not permitted  | Not permitted | Recommended
+	// Any other group MAC address               | Permitted     | Permitted      | Permitted     | Permitted
+	// Any individual MAC address                | Permitted     | Permitted      | Permitted     | Permitted
 
 	/* Get chassis id tlv */
 	tempShort = tvb_get_ntohs(tvb, offset);
@@ -4696,7 +4943,7 @@ dissect_lldp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	tempShort = tvb_get_ntohs(tvb, offset);
 	new_tvb = tvb_new_subset_length(tvb, offset, TLV_INFO_LEN(tempShort)+2);
 
-	rtnValue = dissect_lldp_time_to_live(new_tvb, pinfo, lldp_tree, 0);
+	rtnValue = dissect_lldp_time_to_live(new_tvb, pinfo, lldp_tree, 0, &isShutdown);
 	if (rtnValue < 0)
 	{
 		col_set_str(pinfo->cinfo, COL_INFO, "Invalid Time-to-Live TLV");
@@ -4711,7 +4958,7 @@ dissect_lldp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	{
 		tempShort = tvb_get_ntohs(tvb, offset);
 		tlvType = TLV_TYPE(tempShort);
-		/* pass only TLV to dissectors, Zero offset (point to front of tlv) */
+		/* pass single TLV to dissectors, Zero offset (point to front of tlv) */
 		new_tvb = tvb_new_subset_length(tvb, offset, TLV_INFO_LEN(tempShort)+2);
 		switch (tlvType)
 		{
@@ -4732,7 +4979,7 @@ dissect_lldp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 			}
 			break;
 		case TIME_TO_LIVE_TLV_TYPE:
-			dissect_lldp_time_to_live(new_tvb, pinfo, lldp_tree, 0);
+			dissect_lldp_time_to_live(new_tvb, pinfo, lldp_tree, 0, &isShutdown);
 			rtnValue = -1;	/* Duplicate time-to-live tlv */
 			if (column_info_selection == DEFAULT_COLUMN_INFO)
 			{
@@ -4761,6 +5008,13 @@ dissect_lldp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 		default:
 			rtnValue = dissect_lldp_unknown_tlv(new_tvb, pinfo, lldp_tree, 0);
 			break;
+		}
+
+		// Shutdown PDU: Verify that only ChassisID, PortID, TTL and optionally END TLVs are present
+		if (isShutdown && tlvType != END_OF_LLDPDU_TLV_TYPE)
+		{
+			proto_tree_add_expert_format(tree, pinfo, &ei_lldp_shutdown_excess_tlv , tvb, offset, TLV_INFO_LEN(tempShort),
+				"TLV type 0x%02X not allowed in Shutdown PDU", tlvType);
 		}
 
 		if (rtnValue < 0) {
@@ -4952,6 +5206,11 @@ proto_register_lldp(void)
 			{ "Seconds", "lldp.time_to_live", FT_UINT16, BASE_DEC,
 			NULL, 0, NULL, HFILL }
 		},
+		{ &hf_pdu_type,
+			{ "PDU Type", "lldp.pdu_type", FT_NONE, BASE_NONE,
+			NULL, 0, NULL, HFILL }
+		},
+
 		{ &hf_mgn_address_len,
 			{ "Address String Length", "lldp.mgn.address.len", FT_UINT8, BASE_DEC,
 			NULL, 0, NULL, HFILL }
@@ -5837,16 +6096,16 @@ proto_register_lldp(void)
 			VALS(location_data_format), 0x0, NULL, HFILL }
 		},
 		{ &hf_media_loc_lat_resolution,
-			{ "Latitude Resolution", "lldp.media.loc.lat_resolution", FT_UINT8, BASE_DEC,
-			NULL, 0xFC, NULL, HFILL }
+			{ "Latitude Resolution", "lldp.media.loc.lat_resolution", FT_UINT8, BASE_CUSTOM,
+			CF_FUNC(latitude_or_longitude_resolution), 0xFC, NULL, HFILL }
 		},
 		{ &hf_media_loc_lat,
 			{ "Latitude", "lldp.media.loc.latitude", FT_UINT40, BASE_CUSTOM,
 			CF_FUNC(latitude_base), 0x0, NULL, HFILL }
 		},
 		{ &hf_media_loc_long_resolution,
-			{ "Longitude Resolution", "lldp.media.loc.long_resolution", FT_UINT8, BASE_DEC,
-			NULL, 0xFC, NULL, HFILL }
+			{ "Longitude Resolution", "lldp.media.loc.long_resolution", FT_UINT8, BASE_CUSTOM,
+			CF_FUNC(latitude_or_longitude_resolution), 0xFC, NULL, HFILL }
 		},
 		{ &hf_media_loc_long,
 			{ "Longitude", "lldp.media.loc.longitude", FT_UINT40, BASE_CUSTOM,
@@ -5857,16 +6116,24 @@ proto_register_lldp(void)
 			VALS(altitude_type), 0xF0, "Unknown", HFILL }
 		},
 		{ &hf_media_loc_alt_resolution,
-			{ "Altitude Resolution", "lldp.media.loc.alt_resolution", FT_UINT16, BASE_DEC,
-			NULL, 0x0FC0, NULL, HFILL }
+			{ "Altitude Resolution", "lldp.media.loc.alt_resolution", FT_UINT16, BASE_CUSTOM,
+			CF_FUNC(altitude_resolution), 0x0FC0, NULL, HFILL }
 		},
 		{ &hf_media_loc_alt,
-			{ "Altitude", "lldp.media.loc.altitude", FT_UINT32, BASE_DEC,
-			NULL, 0x3FFFFFFF, NULL, HFILL }
+			{ "Altitude", "lldp.media.loc.altitude", FT_UINT32, BASE_CUSTOM,
+			CF_FUNC(altitude_base), 0x0, NULL, HFILL }
+		},
+		{ &hf_media_loc_ver,
+			{ "Ver", "lldp.media.loc.ver", FT_UINT8, BASE_DEC,
+			NULL, 0xC0, NULL, HFILL }
+		},
+		{ &hf_media_loc_reserved,
+			{ "Reserved", "lldp.media.loc.reserved", FT_UINT8, BASE_DEC,
+			NULL, 0x38, NULL, HFILL }
 		},
 		{ &hf_media_loc_datum,
 			{ "Datum", "lldp.media.loc.datum", FT_UINT8, BASE_DEC,
-			NULL, 0x0, NULL, HFILL }
+			VALS(datum_type_values), 0x07, NULL, HFILL }
 		},
 		{ &hf_media_civic_lci_length,
 			{ "LCI Length", "lldp.media.civic.length", FT_UINT8, BASE_DEC,
@@ -6524,6 +6791,7 @@ proto_register_lldp(void)
 	static ei_register_info ei[] = {
 		{ &ei_lldp_bad_length, { "lldp.incorrect_length", PI_MALFORMED, PI_WARN, "Invalid length, too short", EXPFILL }},
 		{ &ei_lldp_bad_length_excess, { "lldp.excess_length", PI_MALFORMED, PI_WARN, "Invalid length, greater than expected", EXPFILL }},
+		{ &ei_lldp_shutdown_excess_tlv, { "lldp.excess_tlv", PI_MALFORMED, PI_WARN, "Excess TLV in Shutdown PDU", EXPFILL }},
 		{ &ei_lldp_bad_type, { "lldp.bad_type", PI_MALFORMED, PI_WARN, "Incorrect type", EXPFILL }},
 		{ &ei_lldp_tlv_deprecated, { "lldp.tlv_deprecated", PI_PROTOCOL, PI_WARN, "TLV has been deprecated", EXPFILL }},
 	};

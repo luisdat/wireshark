@@ -46,14 +46,14 @@ extern "C" {
  * @brief Flags to control name resolution.
  */
 typedef struct _e_addr_resolve {
-  gboolean mac_name;                          /**< Whether to resolve Ethernet MAC to manufacturer names */
-  gboolean network_name;                      /**< Whether to resolve IPv4, IPv6, and IPX addresses into host names */
-  gboolean transport_name;                    /**< Whether to resolve TCP/UDP/DCCP/SCTP ports into service names */
-  gboolean dns_pkt_addr_resolution;           /**< Whether to resolve addresses using captured DNS packets */
-  gboolean use_external_net_name_resolver;    /**< Whether to system's configured DNS server to resolve names */
-  gboolean vlan_name;                         /**< Whether to resolve VLAN IDs to names */
-  gboolean ss7pc_name;                        /**< Whether to resolve SS7 Point Codes to names */
-  gboolean maxmind_geoip;                     /**< Whether to lookup geolocation information with mmdbresolve */
+  bool mac_name;                          /**< Whether to resolve Ethernet MAC to manufacturer names */
+  bool network_name;                      /**< Whether to resolve IPv4, IPv6, and IPX addresses into host names */
+  bool transport_name;                    /**< Whether to resolve TCP/UDP/DCCP/SCTP ports into service names */
+  bool dns_pkt_addr_resolution;           /**< Whether to resolve addresses using captured DNS packets */
+  bool use_external_net_name_resolver;    /**< Whether to system's configured DNS server to resolve names */
+  bool vlan_name;                         /**< Whether to resolve VLAN IDs to names */
+  bool ss7pc_name;                        /**< Whether to resolve SS7 Point Codes to names */
+  bool maxmind_geoip;                     /**< Whether to lookup geolocation information with mmdbresolve */
 } e_addr_resolve;
 
 #define ADDR_RESOLV_MACADDR(at) \
@@ -306,10 +306,10 @@ WS_DLL_PUBLIC bool get_hash_wka_used(hashwka_t* wka);
 WS_DLL_PUBLIC char* get_hash_wka_resolved_name(hashwka_t* wka);
 
 /* adds a hostname/IPv4 in the hash table */
-WS_DLL_PUBLIC void add_ipv4_name(const guint addr, const gchar *name, const gboolean static_entry);
+WS_DLL_PUBLIC void add_ipv4_name(const guint addr, const gchar *name, const bool static_entry);
 
 /* adds a hostname/IPv6 in the hash table */
-WS_DLL_PUBLIC void add_ipv6_name(const ws_in6_addr *addr, const gchar *name, const gboolean static_entry);
+WS_DLL_PUBLIC void add_ipv6_name(const ws_in6_addr *addr, const gchar *name, const bool static_entry);
 
 /** Add an additional "hosts" file for IPv4 and IPv6 name resolution.
  *
@@ -343,7 +343,7 @@ extern void add_ether_byip(const guint ip, const guint8 *eth);
 /** Translates a string representing a hostname or dotted-decimal IPv4 address
  *  into a numeric IPv4 address value in network byte order. If compiled with
  *  c-ares, the request will wait a maximum of 250ms for the request to finish.
- *  Otherwise the wait time will be system-dependent, ususally much longer.
+ *  Otherwise the wait time will be system-dependent, usually much longer.
  *  Immediately returns FALSE for hostnames if network name resolution is
  *  disabled.
  *

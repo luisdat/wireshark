@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ngap.c                                                              */
-/* asn2wrs.py -L -p ngap -c ./ngap.cnf -s ./packet-ngap-template -D . -O ../.. NGAP-CommonDataTypes.asn NGAP-Constants.asn NGAP-Containers.asn NGAP-IEs.asn NGAP-PDU-Contents.asn NGAP-PDU-Descriptions.asn */
+/* asn2wrs.py -q -L -p ngap -c ./ngap.cnf -s ./packet-ngap-template -D . -O ../.. NGAP-CommonDataTypes.asn NGAP-Constants.asn NGAP-Containers.asn NGAP-IEs.asn NGAP-PDU-Contents.asn NGAP-PDU-Descriptions.asn */
 
 /* packet-ngap.c
  * Routines for NG-RAN NG Application Protocol (NGAP) packet dissection
@@ -3277,7 +3277,7 @@ static const enum_val_t ngap_lte_container_vals[] = {
 
 /* Global variables */
 static range_t *gbl_ngapSctpRange = NULL;
-static gboolean ngap_dissect_container = TRUE;
+static bool ngap_dissect_container = true;
 static gint ngap_dissect_target_ng_ran_container_as = NGAP_NG_RAN_CONTAINER_AUTOMATIC;
 static gint ngap_dissect_lte_container_as = NGAP_LTE_CONTAINER_AUTOMATIC;
 

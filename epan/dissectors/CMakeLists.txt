@@ -1611,6 +1611,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nisplus.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nlm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nlsp.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-nmea0183.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nntp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-noe.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nordic_ble.c
@@ -2153,6 +2154,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zebra.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zep.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ziop.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-zmtp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zrtp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zvt.c
 )

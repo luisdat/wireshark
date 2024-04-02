@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-c1222.c                                                             */
-/* asn2wrs.py -b -L -p c1222 -c ./c1222.cnf -s ./packet-c1222-template -D . -O ../.. c1222.asn */
+/* asn2wrs.py -b -q -L -p c1222 -c ./c1222.cnf -s ./packet-c1222-template -D . -O ../.. c1222.asn */
 
 /* packet-c1222.c
  * Routines for ANSI C12.22 packet dissection
@@ -229,9 +229,9 @@ static expert_field ei_c1222_epsem_field_length_error;
 static expert_field ei_c1222_mac_missing;
 
 /* Preferences */
-static gboolean c1222_desegment = TRUE;
-static gboolean c1222_decrypt = TRUE;
-static gboolean c1222_big_endian = FALSE;
+static bool c1222_desegment = true;
+static bool c1222_decrypt = true;
+static bool c1222_big_endian = false;
 static const gchar *c1222_baseoid_str = NULL;
 static guint8 *c1222_baseoid = NULL;
 static guint c1222_baseoid_len = 0;

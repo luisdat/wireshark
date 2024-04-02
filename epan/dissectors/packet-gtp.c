@@ -102,8 +102,8 @@ static dissector_handle_t nrup_handle;
 #define GTP_TPDU_AS_ETHERNET 4
 #define GTP_TPDU_AS_CUSTOM 5
 
-static gboolean g_gtp_over_tcp = TRUE;
-gboolean g_gtp_session = FALSE;
+static bool g_gtp_over_tcp = true;
+bool g_gtp_session = false;
 
 static guint pref_pair_matching_max_interval_ms = 0; /* Default: disable */
 
@@ -988,7 +988,7 @@ static uat_pdcp_lte_keys_record_t* look_up_pdcp_lte_keys_record(packet_info *pin
 
 /* --- END PDCP NR DECODE ADDITIONS --- */
 
-static gboolean g_gtp_etsi_order = FALSE;
+static bool g_gtp_etsi_order = false;
 
 static gint dissect_tpdu_as = GTP_TPDU_AS_TPDU_HEUR;
 static const enum_val_t gtp_decode_tpdu_as[] = {
@@ -11573,19 +11573,23 @@ proto_register_gtp(void)
            FT_UINT8, BASE_DEC, VALS(qos_del_err_sdu), GTP_EXT_QOS_DEL_ERR_SDU_MASK,
            NULL, HFILL}
         },
+        /* The SDU size and UL/DL bandwidth items take up one octet in the
+         * frame, but are multiplied by various factors before being added
+         * to the tree with proto_item_add_uint[_format_value].
+         */
         {&hf_gtp_qos_max_sdu_size,
          { "Maximum SDU size", "gtp.qos_max_sdu_size",
-           FT_UINT8, BASE_DEC, VALS(qos_max_sdu_size), 0,
+           FT_UINT16, BASE_DEC, VALS(qos_max_sdu_size), 0,
            NULL, HFILL}
         },
         {&hf_gtp_qos_max_ul,
          { "Maximum bit rate for uplink", "gtp.qos_max_ul",
-           FT_UINT8, BASE_DEC, VALS(qos_max_ul), 0,
+           FT_UINT16, BASE_DEC, VALS(qos_max_ul), 0,
            NULL, HFILL}
         },
         {&hf_gtp_qos_max_dl,
          { "Maximum bit rate for downlink", "gtp.qos_max_dl",
-           FT_UINT8, BASE_DEC, VALS(qos_max_dl), 0,
+           FT_UINT16, BASE_DEC, VALS(qos_max_dl), 0,
            NULL, HFILL}
         },
         {&hf_gtp_qos_res_ber,
@@ -11611,12 +11615,12 @@ proto_register_gtp(void)
         },
         {&hf_gtp_qos_guar_ul,
          { "Guaranteed bit rate for uplink", "gtp.qos_guar_ul",
-           FT_UINT8, BASE_DEC, VALS(qos_guar_ul), 0,
+           FT_UINT16, BASE_DEC, VALS(qos_guar_ul), 0,
            NULL, HFILL}
         },
         {&hf_gtp_qos_guar_dl,
          { "Guaranteed bit rate for downlink", "gtp.qos_guar_dl",
-           FT_UINT8, BASE_DEC, VALS(qos_guar_dl), 0,
+           FT_UINT16, BASE_DEC, VALS(qos_guar_dl), 0,
            NULL, HFILL}
         },
         {&hf_gtp_qos_spare4,

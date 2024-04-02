@@ -543,7 +543,7 @@ struct abis_nm_channel {
 	guint8	subslot;
 };
 
-/* Siemens BS-11 specific objects in the SienemsHW (0xA5) object class */
+/* Siemens BS-11 specific objects in the SiemensHW (0xA5) object class */
 enum abis_bs11_objtype {
 	BS11_OBJ_ALCO		= 0x01,
 	BS11_OBJ_BBSIG		= 0x02,	/* obj_class: 0,1 */
@@ -1567,6 +1567,7 @@ dissect_ipacc_test_rep(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
 
 /* Dissect OML FOM Attributes after OML + FOM header */
 static gint
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_oml_attrs(tvbuff_t *tvb, int base_offs, int length,
 		  packet_info *pinfo, proto_tree *tree)
 {
@@ -1770,7 +1771,9 @@ dissect_oml_attrs(tvbuff_t *tvb, int base_offs, int length,
 							    tvb, loffset++, 1,
 							    ENC_LITTLE_ENDIAN);
 				}
+				increment_dissection_depth(pinfo);
 				dissect_oml_attrs(tvb, loffset, len - 1 - not_counted, pinfo, att_tree);
+				decrement_dissection_depth(pinfo);
 			}
 			break;
 		case NM_ATT_INTERF_BOUND:
@@ -2715,7 +2718,7 @@ proto_register_abis_oml(void)
 	nm_att_tlvdev_bs11.def[_attr].type = _type;		\
 	nm_att_tlvdev_bs11.def[_attr].fixed_len = _fixed_len;	\
 
-	/* different stndard IEs */
+	/* different standard IEs */
 	NM_ATT_TLVDEV_BS11(NM_ATT_OUTST_ALARM,		TLV_TYPE_TLV,	0);
 	NM_ATT_TLVDEV_BS11(NM_ATT_HW_DESC,		TLV_TYPE_TL16V,	0);
 	NM_ATT_TLVDEV_BS11(NM_ATT_ARFCN_LIST,		TLV_TYPE_TLV16,	0);
@@ -2804,8 +2807,7 @@ proto_register_abis_oml(void)
 	NM_ATT_TLVDEF_IPA(NM_ATT_IPACC_CGI,		TLV_TYPE_TL16V, 0);
 
 	/* assign our custom match functions */
-	proto_abis_oml = proto_register_protocol("GSM A-bis OML", "A-bis OML",
-						 "gsm_abis_oml");
+	proto_abis_oml = proto_register_protocol("GSM A-bis OML", "A-bis OML", "gsm_abis_oml");
 
 	proto_register_field_array(proto_abis_oml, hf, array_length(hf));
 

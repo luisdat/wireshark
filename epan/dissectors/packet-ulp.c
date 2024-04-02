@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ulp.c                                                               */
-/* asn2wrs.py -L -p ulp -c ./ulp.cnf -s ./packet-ulp-template -D . -O ../.. ULP.asn SUPL.asn ULP-Components.asn */
+/* asn2wrs.py -q -L -p ulp -c ./ulp.cnf -s ./packet-ulp-template -D . -O ../.. ULP.asn SUPL.asn ULP-Components.asn */
 
 /* packet-ulp.c
  * Routines for OMA UserPlane Location Protocol packet dissection
@@ -54,7 +54,7 @@ static int proto_ulp;
 
 #define ULP_HEADER_SIZE 2
 
-static gboolean ulp_desegment = TRUE;
+static bool ulp_desegment = true;
 
 static int hf_ulp_ULP_PDU_PDU;                    /* ULP_PDU */
 static int hf_ulp_length;                         /* INTEGER_0_65535 */

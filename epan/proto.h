@@ -963,6 +963,8 @@ typedef proto_node proto_item;
 #define PI_RECEIVE              0x0f000000
 /** Something happened at the interface layer (out of buffers, hardware error, etc.) */
 #define PI_INTERFACE            0x10000000
+/** A bug in a dissector was detected, usually PI_ERROR severity */
+#define PI_DISSECTOR_BUG        0x11000000
 
 /*
  * add more, see
@@ -1063,8 +1065,8 @@ static inline void proto_item_set_url(proto_item *ti) {
 }
 #define PROTO_ITEM_SET_URL(ti) proto_item_set_url((ti))
 
-typedef void (*proto_tree_foreach_func)(proto_node *, gpointer);
-typedef gboolean (*proto_tree_traverse_func)(proto_node *, gpointer);
+typedef void (*proto_tree_foreach_func)(proto_node *, void *);
+typedef bool (*proto_tree_traverse_func)(proto_node *, void *);
 
 WS_DLL_PUBLIC void proto_tree_children_foreach(proto_tree *tree,
     proto_tree_foreach_func func, gpointer data);
@@ -2788,24 +2790,24 @@ WS_DLL_PUBLIC void proto_heuristic_dissector_foreach(const protocol_t *protocol,
 
 /** Find commonly-used protocols in a layer list.
  * @param layers Protocol layer list
- * @param is_ip Set to TRUE if the layer list contains IPv4 or IPv6, otherwise
+ * @param is_ip Set to true if the layer list contains IPv4 or IPv6, otherwise
  * unchanged. May be NULL.
- * @param is_tcp Set to TRUE if the layer list contains TCP, otherwise
+ * @param is_tcp Set to true if the layer list contains TCP, otherwise
  * unchanged. May be NULL.
- * @param is_udp Set to TRUE if the layer list contains UDP, otherwise
+ * @param is_udp Set to true if the layer list contains UDP, otherwise
  * unchanged. May be NULL.
- * @param is_sctp Set to TRUE if the layer list contains SCTP, otherwise
+ * @param is_sctp Set to true if the layer list contains SCTP, otherwise
  * unchanged. May be NULL.
- * @param is_tls Set to TRUE if the layer list contains SSL/TLS, otherwise
+ * @param is_tls Set to true if the layer list contains SSL/TLS, otherwise
  * unchanged. May be NULL.
- * @param is_rtp Set to TRUE if the layer list contains RTP, otherwise
+ * @param is_rtp Set to true if the layer list contains RTP, otherwise
  * unchanged. May be NULL.
- * @param is_lte_rlc Set to TRUE if the layer list contains LTE RLC, otherwise
+ * @param is_lte_rlc Set to true if the layer list contains LTE RLC, otherwise
  * unchanged. May be NULL.
  */
 WS_DLL_PUBLIC void proto_get_frame_protocols(const wmem_list_t *layers,
-      gboolean *is_ip, gboolean *is_tcp, gboolean *is_udp, gboolean *is_sctp,
-      gboolean *is_tls, gboolean *is_rtp, gboolean *is_lte_rlc);
+      bool *is_ip, bool *is_tcp, bool *is_udp, bool *is_sctp,
+      bool *is_tls, bool *is_rtp, bool *is_lte_rlc);
 
 /** Check whether a protocol, specified by name, is in a layer list.
  * @param layers Protocol layer list

@@ -80,10 +80,10 @@ static dissector_handle_t openvpn_tcp_handle;
 static dissector_handle_t tls_handle;
 
 /* Preferences */
-static gboolean pref_long_format       = TRUE;
-static gboolean pref_tls_auth          = FALSE;
-static gboolean pref_tls_auth_override = FALSE;
-static gboolean pref_tls_crypt_override = FALSE;
+static bool     pref_long_format       = true;
+static bool     pref_tls_auth          = false;
+static bool     pref_tls_auth_override = false;
+static bool     pref_tls_crypt_override = false;
 static guint    tls_auth_hmac_size     = 20; /* Default SHA-1 160 Bits */
 
 static const value_string openvpn_message_types[] =
@@ -144,7 +144,7 @@ static const fragment_items openvpn_frag_items = {
 /* we check the leading 4 byte of a suspected hmac for 0x00 bytes,
    if more than 1 byte out of the 4 provided contains 0x00, the
    hmac is considered not valid, which suggests that no tls auth is used.
-   unfortunatly there is no other way to detect tls auth on the fly */
+   unfortunately there is no other way to detect tls auth on the fly */
 static gboolean
 check_for_valid_hmac(guint32 hmac)
 {

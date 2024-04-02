@@ -301,15 +301,15 @@ static void show_setup_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 static struct _rtp_packet_info *get_rtp_packet_info(packet_info *pinfo, struct _rtp_info *rtp_info);
 
 /* Preferences bool to control whether or not setup info should be shown */
-static gboolean global_rtp_show_setup_info = TRUE;
+static bool global_rtp_show_setup_info = true;
 
 /* desegment RTP streams */
-static gboolean desegment_rtp = TRUE;
+static bool desegment_rtp = true;
 
 /* RFC2198 Redundant Audio Data */
 #define RFC2198_DEFAULT_PT_RANGE "99"
 
-static gboolean rfc2198_deencapsulate = TRUE;
+static bool rfc2198_deencapsulate = true;
 
 
 
@@ -1161,7 +1161,7 @@ rtp_add_setup_info_if_no_duplicate(sdp_setup_info_t *setup_info, wmem_array_t *s
     for (i = 0; i < wmem_array_get_count(sdp_conv_info_list); i++) {
         stored_setup_info = (sdp_setup_info_t *)wmem_array_index(sdp_conv_info_list, i);
 
-        /* Check if we have the call id allready */
+        /* Check if we have the call id already */
         if ((stored_setup_info->hf_type == SDP_TRACE_ID_HF_TYPE_STR) && (setup_info->hf_type == SDP_TRACE_ID_HF_TYPE_STR)) {
             if (strcmp(stored_setup_info->trace_id.str, setup_info->trace_id.str) == 0) {
                 return; /* Do not store the call id */

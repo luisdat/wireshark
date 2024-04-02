@@ -73,8 +73,8 @@ static int snmp_tap;
 static int proto_snmp;
 static int proto_smux;
 
-static gboolean display_oid = TRUE;
-static gboolean snmp_var_in_tree = TRUE;
+static bool display_oid = true;
+static bool snmp_var_in_tree = true;
 
 void proto_register_snmp(void);
 void proto_reg_handoff_snmp(void);
@@ -173,7 +173,7 @@ static snmp_usm_params_t usm_p = {FALSE,FALSE,0,0,0,0,NULL,NULL,NULL,NULL,NULL,N
 #define TH_REPORT 0x04
 
 /* desegmentation of SNMP-over-TCP */
-static gboolean snmp_desegment = TRUE;
+static bool snmp_desegment = true;
 
 /* Global variables */
 
@@ -411,12 +411,9 @@ snmp_match_request_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	{
 		proto_item *it;
 
-		// if it is a request
-		if (srrp->request_frame_id == pinfo->fd->num)
+		// if it is the response
+		if (srrp->response_frame_id == pinfo->fd->num)
 		{
-			it=proto_tree_add_uint(tree, hf_snmp_response_in, tvb, 0, 0, srrp->response_frame_id);
-			proto_item_set_generated(it);
-		} else {
 			nstime_t ns;
 			it=proto_tree_add_uint(tree, hf_snmp_response_to, tvb, 0, 0, srrp->request_frame_id);
 			proto_item_set_generated(it);
@@ -425,6 +422,9 @@ snmp_match_request_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 			proto_item_set_generated(it);
 
 			return srrp;
+		} else {
+			it=proto_tree_add_uint(tree, hf_snmp_response_in, tvb, 0, 0, srrp->response_frame_id);
+			proto_item_set_generated(it);
 		}
 	}
 
@@ -732,7 +732,7 @@ dissect_snmp_VarBind(bool implicit_tag _U_, tvbuff_t *tvb, int offset,
 		return dissect_unknown_ber(actx->pinfo, tvb, value_start, pt);
 	}
 
-	/* Now, we know where everithing is */
+	/* Now, we know where everything is */
 
 	/* fetch ObjectName and its relative oid_info */
 	oid_bytes = (guint8*)tvb_memdup(actx->pinfo->pool, tvb, name_offset, name_len);
@@ -1222,6 +1222,7 @@ static const true_false_string tfs_snmp_engineid_conform = {
 #define SNMP_ENGINEID_FORMAT_MACADDRESS 0x03
 #define SNMP_ENGINEID_FORMAT_TEXT 0x04
 #define SNMP_ENGINEID_FORMAT_OCTETS 0x05
+#define SNMP_ENGINEID_FORMAT_LOCAL 0x06
 
 static const value_string snmp_engineid_format_vals[] = {
 	{ SNMP_ENGINEID_FORMAT_IPV4,	"IPv4 address" },
@@ -1229,6 +1230,7 @@ static const value_string snmp_engineid_format_vals[] = {
 	{ SNMP_ENGINEID_FORMAT_MACADDRESS,	"MAC address" },
 	{ SNMP_ENGINEID_FORMAT_TEXT,	"Text, administratively assigned" },
 	{ SNMP_ENGINEID_FORMAT_OCTETS,	"Octets, administratively assigned" },
+	{ SNMP_ENGINEID_FORMAT_LOCAL,   "Local engine" },
 	{ 0,	NULL }
 };
 
@@ -1333,6 +1335,8 @@ dissect_snmp_engineid(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, int o
 				len_remain=0;
 			}
 			break;
+		case SNMP_ENGINEID_FORMAT_LOCAL:
+			break;
 		case 128:
 			/* most common enterprise-specific format: (ucd|net)-snmp random */
 			if ((enterpriseid==2021)||(enterpriseid==8072)) {
@@ -1359,7 +1363,7 @@ dissect_snmp_engineid(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, int o
 		case SNMP_ENGINEID_FORMAT_OCTETS:
 		default:
 			/* max. 27 bytes, administratively assigned or unknown format */
-			if (len_remain<=27) {
+			if (len_remain>0 && len_remain<=27) {
 				proto_tree_add_item(tree, hf_snmp_engineid_data, tvb, offset, len_remain, ENC_NA);
 				offset+=len_remain;
 				len_remain=0;

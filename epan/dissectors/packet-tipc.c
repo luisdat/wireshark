@@ -187,14 +187,14 @@ static expert_field ei_tipc_max_recursion_depth_reached;
 static int tipc_address_type = -1;
 
 /* protocol preferences */
-static gboolean tipc_defragment = TRUE;
-static gboolean dissect_tipc_data = TRUE;
-static gboolean try_heuristic_first = FALSE;
+static bool tipc_defragment = true;
+static bool dissect_tipc_data = true;
+static bool try_heuristic_first = false;
 #define V2_AS_ALL  0x1
 #define V2_AS_1_6  0x2
 #define V2_AS_1_7  0x4
 static gint     handle_v2_as = V2_AS_ALL;
-static gboolean tipc_tcp_desegment = TRUE;
+static bool tipc_tcp_desegment = true;
 
 static dissector_handle_t tipc_handle;
 static dissector_handle_t tipc_tcp_handle;
@@ -847,6 +847,7 @@ w9:|          msg count            |       link tolerance          |
 */
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_tipc_v2_internal_msg(tvbuff_t *tipc_tvb, proto_tree *tipc_tree, packet_info *pinfo, int offset, guint8 user, guint32 msg_size, guint8 orig_hdr_size)
 {
 	guint32 dword;
@@ -1721,6 +1722,7 @@ call_tipc_v2_data_subdissectors(tvbuff_t *data_tvb, packet_info *pinfo, guint32 
 
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_tipc_v2(tvbuff_t *tipc_tvb, proto_tree *tipc_tree, packet_info *pinfo, int offset, guint8 user, guint32 msg_size, guint8 hdr_size, gboolean datatype_hdr)
 {
 	guint32 dword;
@@ -1910,6 +1912,7 @@ NB: Connection Manager and Name Distributor use data message format.
 */
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_tipc_int_prot_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tipc_tree, int offset, guint8 user, guint32 msg_size)
 {
 	guint8 msg_type;
@@ -2133,6 +2136,7 @@ dissect_tipc_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, voi
 
 #define TIPC_MAX_RECURSION_DEPTH 10 // Arbitrary
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_tipc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item *ti, *item;

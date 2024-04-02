@@ -225,7 +225,10 @@ bytes_to_str_punct_maxlen(wmem_allocator_t *scope,
 	int truncated = 0;
 
 	ws_return_str_if(!src, scope);
-	ws_return_str_if(!src_size, scope);
+
+	if (!src_size) {
+		return wmem_strdup(scope, "");
+	}
 
 	if (!punct)
 		return bytes_to_str_maxlen(scope, src, src_size, max_bytes_len);
@@ -264,7 +267,10 @@ bytes_to_str_maxlen(wmem_allocator_t *scope,
 	int truncated = 0;
 
 	ws_return_str_if(!src, scope);
-	ws_return_str_if(!src_size, scope);
+
+	if (!src_size) {
+		return wmem_strdup(scope, "");
+	}
 
 	if (max_bytes_len == 0 || max_bytes_len > src_size) {
 		max_bytes_len = src_size;
@@ -412,7 +418,7 @@ uint_to_str_back_len(char *ptr, uint32_t value, int len)
 
 	new_ptr = uint_to_str_back(ptr, value);
 
-	/* substract from len number of generated characters */
+	/* subtract from len number of generated characters */
 	len -= (int)(ptr - new_ptr);
 
 	/* pad remaining with '0' */
@@ -432,7 +438,7 @@ uint64_to_str_back_len(char *ptr, uint64_t value, int len)
 
 	new_ptr = uint64_to_str_back(ptr, value);
 
-	/* substract from len number of generated characters */
+	/* subtract from len number of generated characters */
 	len -= (int)(ptr - new_ptr);
 
 	/* pad remaining with '0' */

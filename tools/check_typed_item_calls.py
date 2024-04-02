@@ -84,6 +84,9 @@ item_lengths['FT_INT56']  = 7
 item_lengths['FT_UINT64'] = 8
 item_lengths['FT_INT64']  = 8
 item_lengths['FT_ETHER']  = 6
+item_lengths['FT_IPv4']   = 4
+item_lengths['FT_IPv6']   = 16
+
 # TODO: other types...
 
 
@@ -180,10 +183,12 @@ class APICheck:
             if self.fun_name.find('add_bits') == -1 and call.hf_name in items_defined:
                 if call.length and items_defined[call.hf_name].item_type in item_lengths:
                     if item_lengths[items_defined[call.hf_name].item_type] < call.length:
-                        print('Warning:', self.file + ':' + str(call.line_number),
-                              self.fun_name + ' called for', call.hf_name, ' - ',
-                              'item type is', items_defined[call.hf_name].item_type, 'but call has len', call.length)
-                        warnings_found += 1
+                        # Don't warn if adding value - value is unlkely to just be bytes value
+                        if self.fun_name.find('_add_uint') == -1:
+                            print('Warning:', self.file + ':' + str(call.line_number),
+                                self.fun_name + ' called for', call.hf_name, ' - ',
+                                'item type is', items_defined[call.hf_name].item_type, 'but call has len', call.length)
+                            warnings_found += 1
 
             # Needs a +ve length
             if self.positive_length and call.length != None:
@@ -328,10 +333,13 @@ class ProtoTreeAddItemCheck(APICheck):
             if call.hf_name in items_defined:
                 if call.length and items_defined[call.hf_name].item_type in item_lengths:
                     if item_lengths[items_defined[call.hf_name].item_type] < call.length:
-                        print('Warning:', self.file + ':' + str(call.line_number),
-                              self.fun_name + ' called for', call.hf_name, ' - ',
-                              'item type is', items_defined[call.hf_name].item_type, 'but call has len', call.length)
-                        warnings_found += 1
+                        # On balance, it is not worth complaining about these - the value is unlikely to be
+                        # just the value found in these bytes..
+                        if self.fun_name.find('_add_uint') == -1:
+                            print('Warning:', self.file + ':' + str(call.line_number),
+                                self.fun_name + ' called for', call.hf_name, ' - ',
+                                'item type is', items_defined[call.hf_name].item_type, 'but call has len', call.length)
+                            warnings_found += 1
             elif check_missing_items:
                 if call.hf_name in items_declared and not call.hf_name in items_declared_extern:
                 #not in common_hf_var_names:
@@ -755,6 +763,40 @@ class RangeString:
         # - if in all cases min==max, suggest value_string instead?
 
 
+class StringString:
+    def __init__(self, file, name, vals, macros, do_extra_checks=False):
+        self.file = file
+        self.name = name
+        self.raw_vals = vals
+        self.parsed_vals = {}
+
+        terminated = False
+        global errors_found
+
+        # Now parse out each entry in the string_string
+        matches = re.finditer(r'\{\s*(["0-9_A-Za-z\s\-]*?)\s*,\s*(["0-9_A-Za-z\s\-]*)\s*', self.raw_vals)
+        for m in matches:
+            key = m.group(1).strip()
+            value = m.group(2).strip()
+            if key in self.parsed_vals:
+                print('Error:', self.file, ': string_string', self.name, 'entry', key, 'has been added twice (values',
+                      self.parsed_vals[key], 'and now', value, ')')
+                errors_found += 1
+
+            else:
+                self.parsed_vals[key] = value
+                # TODO: Also allow key to be "0" ?
+                if (key in { "NULL" }) and value == "NULL":
+                    terminated = True
+
+        if not terminated:
+            print('Error:', self.file, ': string_string', self.name, "is not terminated with { NULL, NULL }")
+            errors_found += 1
+
+    def extraChecks(self):
+        pass
+        # TODO: ?
+
 
 
 # Look for value_string entries in a dissector file.  Return a dict name -> ValueString
@@ -782,7 +824,7 @@ def findValueStrings(filename, macros, do_extra_checks=False):
 
     return vals_found
 
-# Look for value_string entries in a dissector file.  Return a dict name -> ValueString
+# Look for range_string entries in a dissector file.  Return a dict name -> RangeString
 def findRangeStrings(filename, macros, do_extra_checks=False):
     vals_found = {}
 
@@ -806,6 +848,29 @@ def findRangeStrings(filename, macros, do_extra_checks=False):
 
     return vals_found
 
+# Look for string_string entries in a dissector file.  Return a dict name -> StringString
+def findStringStrings(filename, macros, do_extra_checks=False):
+    vals_found = {}
+
+    #static const string_string ice_candidate_types[] = {
+    #    { "host",       "Host candidate" },
+    #    { "srflx",      "Server reflexive candidate" },
+    #    { 0, NULL }
+    #};
+
+    with open(filename, 'r', encoding="utf8") as f:
+        contents = f.read()
+
+        # Remove comments so as not to trip up RE.
+        contents = removeComments(contents)
+
+        matches =   re.finditer(r'.*const string_string\s*([a-zA-Z0-9_]*)\s*\[\s*\]\s*\=\s*\{([\{\}\d\,a-zA-Z0-9_\-\*\#\.:\/\(\)\'\s\"]*)\};', contents)
+        for m in matches:
+            name = m.group(1)
+            vals = m.group(2)
+            vals_found[name] = StringString(filename, name, vals, macros, do_extra_checks)
+
+    return vals_found
 
 
 # The relevant parts of an hf item.  Used as value in dict where hf variable name is key.
@@ -896,6 +961,13 @@ class Item:
             if self.rs_name in range_strings:
                 rs = range_strings[self.rs_name]
                 self.check_range_string_range(rs.min_value, rs.max_value)
+
+        # Could/should this item be FT_FRAMENUM ?
+        #if ((self.label.lower().find(' frame') != -1 or self.label.lower().find('frame ') != -1) and self.label.lower().find('frames') == -1 and
+        #    (self.label.lower().find('in') != -1 or self.label.lower().find('for') != -1) and
+        #    self.item_type == 'FT_UINT32' and self.mask_value == 0x0):
+        #    print('Warning: ' + self.filename, self.hf, 'filter "' + self.filter + '", label "' + label + '"', 'item type is', self.item_type, '- could be FT_FRANENUM?')
+        #    warnings_found += 1
 
 
     def __str__(self):
@@ -1654,6 +1726,11 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
         for name in range_strings:
             range_strings[name].extraChecks()
 
+    # Find (and sanity-check) string_strings
+    string_strings = findStringStrings(filename, macros, do_extra_checks=extra_value_string_checks)
+    if extra_value_string_checks:
+        for name in range_strings:
+            string_strings[name].extraChecks()
 
 
     # Find important parts of items.

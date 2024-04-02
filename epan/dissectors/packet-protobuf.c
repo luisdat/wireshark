@@ -21,7 +21,7 @@
  * For example:
  *    application/grpc,/helloworld.Greeter/SayHello,request
  * In this format, we will try to get real protobuf message type by method (service-name.method-name)
- * and in/out type (request / reponse).
+ * and in/out type (request / response).
  * For other dissectors can specifies message type directly, like:
  *    "message," message_type_name
  * For example:
@@ -45,6 +45,7 @@
 
 #include "protobuf-helper.h"
 #include "packet-protobuf.h"
+#include "epan/dissectors/packet-http.h"
 
 /* converting */
 static inline gdouble
@@ -96,7 +97,8 @@ void proto_reg_handoff_protobuf(void);
 
 #define PREFS_UPDATE_PROTOBUF_SEARCH_PATHS            1
 #define PREFS_UPDATE_PROTOBUF_UDP_MESSAGE_TYPES       2
-#define PREFS_UPDATE_ALL   (PREFS_UPDATE_PROTOBUF_SEARCH_PATHS | PREFS_UPDATE_PROTOBUF_UDP_MESSAGE_TYPES)
+#define PREFS_UPDATE_PROTOBUF_URI_MESSAGE_TYPES       3
+#define PREFS_UPDATE_ALL   (PREFS_UPDATE_PROTOBUF_SEARCH_PATHS | PREFS_UPDATE_PROTOBUF_UDP_MESSAGE_TYPES | PREFS_UPDATE_PROTOBUF_URI_MESSAGE_TYPES)
 
 static void protobuf_reinit(int target);
 
@@ -148,16 +150,16 @@ static int ett_protobuf_packed_repeated;
 static int ett_protobuf_json;
 
 /* preferences */
-static gboolean try_dissect_as_string = FALSE;
-static gboolean show_all_possible_field_types = FALSE;
-static gboolean dissect_bytes_as_string = FALSE;
-static gboolean old_dissect_bytes_as_string = FALSE;
-static gboolean show_details = FALSE;
-static gboolean pbf_as_hf = FALSE; /* dissect protobuf fields as header fields of wireshark */
-static gboolean preload_protos = FALSE;
+static bool try_dissect_as_string = false;
+static bool show_all_possible_field_types = false;
+static bool dissect_bytes_as_string = false;
+static gboolean old_dissect_bytes_as_string = false;
+static bool show_details = false;
+static bool pbf_as_hf = false; /* dissect protobuf fields as header fields of wireshark */
+static bool preload_protos = false;
 /* Show protobuf as JSON similar to https://developers.google.com/protocol-buffers/docs/proto3#json */
-static gboolean display_json_mapping = FALSE;
-static gboolean use_utc_fmt = FALSE;
+static bool display_json_mapping = false;
+static bool use_utc_fmt = false;
 static const char* default_message_type = "";
 
 
@@ -202,6 +204,8 @@ typedef struct {
 static protobuf_search_path_t* protobuf_search_paths = NULL;
 static guint num_protobuf_search_paths = 0;
 
+int proto_http;
+
 static void *
 protobuf_search_paths_copy_cb(void* n, const void* o, size_t siz _U_)
 {
@@ -228,7 +232,9 @@ protobuf_search_paths_free_cb(void*r)
 UAT_DIRECTORYNAME_CB_DEF(protobuf_search_paths, path, protobuf_search_path_t)
 UAT_BOOL_CB_DEF(protobuf_search_paths, load_all, protobuf_search_path_t)
 
-/* the protobuf message type of the data on certain udp ports */
+
+
+/* The protobuf message type of the data on certain udp ports */
 typedef struct {
     range_t  *udp_port_range; /* dissect data on these udp ports as protobuf */
     gchar    *message_type; /* protobuf message type of data on these udp ports */
@@ -284,6 +290,45 @@ UAT_RANGE_CB_DEF(protobuf_udp_message_types, udp_port_range, protobuf_udp_messag
 UAT_CSTRING_CB_DEF(protobuf_udp_message_types, message_type, protobuf_udp_message_type_t)
 
 static GSList* old_udp_port_ranges = NULL;
+
+
+
+/* The protobuf message type associated with a request URI */
+typedef struct {
+    gchar    *uri;          /* URI appearing in HTTP message */
+    gchar    *message_type; /* associated protobuf message type */
+} protobuf_uri_mapping_t;
+
+static protobuf_uri_mapping_t* protobuf_uri_message_types = NULL;
+static guint num_protobuf_uri_message_types = 0;
+
+static void *
+protobuf_uri_message_type_copy_cb(void* n, const void* o, size_t siz _U_)
+{
+    protobuf_uri_mapping_t* new_rec = (protobuf_uri_mapping_t*)n;
+    const protobuf_uri_mapping_t* old_rec = (const protobuf_uri_mapping_t*)o;
+
+    if (old_rec->uri)
+        new_rec->uri = g_strdup(old_rec->uri);
+    if (old_rec->message_type)
+        new_rec->message_type = g_strdup(old_rec->message_type);
+
+    return new_rec;
+}
+
+static void
+protobuf_uri_message_type_free_cb(void*r)
+{
+    protobuf_uri_mapping_t* rec = (protobuf_uri_mapping_t*)r;
+
+    g_free(rec->uri);
+    g_free(rec->message_type);
+}
+
+UAT_CSTRING_CB_DEF(protobuf_uri_message_type, uri,          protobuf_uri_mapping_t)
+UAT_CSTRING_CB_DEF(protobuf_uri_message_type, message_type, protobuf_uri_mapping_t)
+
+
 
 /* If you use int32 or int64 as the type for a negative number, the resulting varint is always
  * ten bytes long - it is, effectively, treated like a very large unsigned integer. If you use
@@ -389,6 +434,7 @@ dissect_protobuf_message(tvbuff_t *tvb, guint offset, guint length, packet_info 
  * Return consumed bytes
  */
 static guint
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_packed_repeated_field_values(tvbuff_t *tvb, guint start, guint length, packet_info *pinfo,
     proto_item *ti_field, int field_type, const gchar* prepend_text, const PbwFieldDescriptor* field_desc,
     json_dumper *dumper)
@@ -535,6 +581,7 @@ abs_time_to_rfc3339(wmem_allocator_t *scope, const nstime_t *nstime, bool use_ut
 
 /* Dissect field value based on a specific type. */
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, guint offset, guint length, packet_info *pinfo,
     proto_item *ti_field, int field_type, const guint64 value, const gchar* prepend_text, const PbwFieldDescriptor* field_desc,
     gboolean is_top_level, json_dumper *dumper)
@@ -846,6 +893,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, guint offset
 
 /* add all possible values according to field types. */
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 protobuf_try_dissect_field_value_on_multi_types(proto_tree *value_tree, tvbuff_t *tvb, guint offset, guint length,
     packet_info *pinfo, proto_item *ti_field, int* field_types, const guint64 value, const gchar* prepend_text,
     json_dumper *dumper)
@@ -863,6 +911,7 @@ protobuf_try_dissect_field_value_on_multi_types(proto_tree *value_tree, tvbuff_t
 }
 
 static gboolean
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_one_protobuf_field(tvbuff_t *tvb, guint* offset, guint maxlen, packet_info *pinfo, proto_tree *protobuf_tree,
     const PbwDescriptor* message_desc, gboolean is_top_level, const PbwFieldDescriptor** field_desc_ptr,
     const PbwFieldDescriptor* prev_field_desc, json_dumper *dumper)
@@ -1008,6 +1057,7 @@ dissect_one_protobuf_field(tvbuff_t *tvb, guint* offset, guint maxlen, packet_in
     /* add value subtree. we add uint value for numeric field or string for length-delimited at least. */
     value_tree = proto_item_add_subtree(ti_value, ett_protobuf_value);
 
+    increment_dissection_depth(pinfo);
     if (field_desc) {
         if (dumper) {
             if (prev_field_desc == NULL || pbw_FieldDescriptor_number(prev_field_desc) != (int) field_number) {
@@ -1049,6 +1099,7 @@ dissect_one_protobuf_field(tvbuff_t *tvb, guint* offset, guint maxlen, packet_in
                 ti_field, field_types, value_uint64, "", dumper);
         }
     }
+    decrement_dissection_depth(pinfo);
 
     if (field_desc && !show_details) {
         proto_item_set_hidden(ti_field_number);
@@ -1375,6 +1426,7 @@ add_missing_fields_with_default_values(tvbuff_t* tvb, guint offset, packet_info*
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_protobuf_message(tvbuff_t *tvb, guint offset, guint length, packet_info *pinfo, proto_tree *protobuf_tree,
     const PbwDescriptor* message_desc, int hf_msg, gboolean is_top_level, json_dumper *dumper, wmem_allocator_t* scope, char** retval)
 {
@@ -1462,6 +1514,7 @@ dissect_protobuf_message(tvbuff_t *tvb, guint offset, guint length, packet_info 
     }
 
     /* each time we dissect one protobuf field. */
+    increment_dissection_depth(pinfo);
     while (offset < max_offset)
     {
         field_desc = NULL;
@@ -1475,6 +1528,7 @@ dissect_protobuf_message(tvbuff_t *tvb, guint offset, guint length, packet_info 
 
         prev_field_desc = field_desc;
     }
+    decrement_dissection_depth(pinfo);
 
     if (dumper && prev_field_desc && pbw_FieldDescriptor_is_repeated(prev_field_desc)) {
         /* The last field is repeated field, we close the JSON array */
@@ -1561,12 +1615,12 @@ dissect_protobuf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
         /* The data_str has two formats:
         * (1) Come from GRPC dissector like:
         *    http2_content_type "," http2_path "," ("request" / "response")
-        * Acording to grpc wire format guide, it will be:
+        * According to grpc wire format guide, it will be:
         *    "application/grpc" ["+proto"] "," "/" service-name "/" method-name "," ("request" / "response")
         * For example:
         *    application/grpc,/helloworld.Greeter/SayHello,request
         * In this format, we will try to get real protobuf message type by method (service-name.method-name)
-        * and in/out type (request / reponse).
+        * and in/out type (request / response).
         * (2) Come from other dissector which specifies message type directly, like:
         *    "message," message_type_name
         * For example:
@@ -1662,7 +1716,26 @@ dissect_protobuf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
             g_free(json_str);
         }
     } else {
-        /* If still have no schema and default is configured, try to use that */
+        /* If this was inside an HTTP request, do we have a message type assigned to this URI? */
+        http_req_res_t  *curr = (http_req_res_t *)p_get_proto_data(wmem_file_scope(), pinfo,
+                                                                   proto_http, HTTP_PROTO_DATA_REQRES);
+        if (curr) {
+            if (curr->request_uri) {
+                for (guint n=0; n < num_protobuf_uri_message_types; n++) {
+                    if (strcmp(curr->request_uri, protobuf_uri_message_types[n].uri) == 0) {
+                        if (strlen(protobuf_uri_message_types[n].message_type)) {
+                            /* Lookup message type for matching URI */
+                            message_desc = pbw_DescriptorPool_FindMessageTypeByName(pbw_pool,
+                                                                                    protobuf_uri_message_types[n].message_type);
+                        }
+                        /* Found a matched URI, so stop looking */
+                        break;
+                    }
+                }
+            }
+        }
+
+        /* If *still* have no schema and a default is configured, try to use that */
         if (!message_desc && strlen(default_message_type)) {
             message_desc = pbw_DescriptorPool_FindMessageTypeByName(pbw_pool,
                                                                     default_message_type);
@@ -1681,13 +1754,18 @@ dissect_protobuf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
 }
 
 static gboolean
-load_all_files_in_dir(PbwDescriptorPool* pool, const gchar* dir_path)
+// NOLINTNEXTLINE(misc-no-recursion)
+load_all_files_in_dir(PbwDescriptorPool* pool, const gchar* dir_path, unsigned depth)
 {
     WS_DIR        *dir;             /* scanned directory */
     WS_DIRENT     *file;            /* current file */
     const gchar   *dot;
     const gchar   *name;            /* current file or dir name (without parent dir path) */
     gchar         *path;            /* sub file or dir path of dir_path */
+
+    if (depth > prefs.gui_max_tree_depth) {
+        return FALSE;
+    }
 
     if (g_file_test(dir_path, G_FILE_TEST_IS_DIR)) {
         if ((dir = ws_dir_open(dir_path, 0, NULL)) != NULL) {
@@ -1704,7 +1782,7 @@ load_all_files_in_dir(PbwDescriptorPool* pool, const gchar* dir_path)
                         return FALSE;
                     }
                 } else {
-                    if (!load_all_files_in_dir(pool, path)) {
+                    if (!load_all_files_in_dir(pool, path, depth + 1)) {
                         g_free(path);
                         ws_dir_close(dir);
                         return FALSE;
@@ -1761,6 +1839,13 @@ update_protobuf_udp_message_types(void)
 {
     protobuf_reinit(PREFS_UPDATE_PROTOBUF_UDP_MESSAGE_TYPES);
 }
+
+static void
+update_protobuf_uri_message_types(void)
+{
+    protobuf_reinit(PREFS_UPDATE_PROTOBUF_URI_MESSAGE_TYPES);
+}
+
 
 static void
 deregister_header_fields(void)
@@ -2020,7 +2105,7 @@ protobuf_reinit(int target)
         /* load all .proto files in the marked search paths, we can invoke FindMethodByName etc later. */
         for (i = 0; i < num_proto_paths; ++i) {
             if ((i < 2) || protobuf_search_paths[i - 2].load_all) {
-                if (!load_all_files_in_dir(pbw_pool, source_paths[i])) {
+                if (!load_all_files_in_dir(pbw_pool, source_paths[i], 0)) {
                     buffer_error("Protobuf: Loading .proto files action stopped!\n");
                     loading_completed = FALSE;
                     break; /* stop loading when error occurs */
@@ -2212,6 +2297,14 @@ proto_register_protobuf(void)
     };
     uat_t* protobuf_udp_message_types_uat;
 
+    static uat_field_t protobuf_uri_message_types_table_columns[] = {
+        UAT_FLD_CSTRING(protobuf_uri_message_type, uri, "HTTP URI", "URI for HTTP request carrying protobuf contents"),
+        UAT_FLD_CSTRING(protobuf_uri_message_type, message_type, "Message Type", "Protobuf message type of data on these URIs"),
+        UAT_END_FIELDS
+    };
+    uat_t* protobuf_uri_message_types_uat;
+
+
     proto_protobuf = proto_register_protocol("Protocol Buffers", "ProtoBuf", "protobuf");
     proto_protobuf_json_mapping = proto_register_protocol("Protocol Buffers (as JSON Mapping View)", "ProtoBuf_JSON", "protobuf_json");
 
@@ -2303,6 +2396,28 @@ proto_register_protobuf(void)
         "Specify the Protobuf message type of data on certain UDP ports.",
         protobuf_udp_message_types_uat);
 
+
+    protobuf_uri_message_types_uat = uat_new("Protobuf URI Message Types",
+        sizeof(protobuf_uri_mapping_t),
+        "protobuf_uri_message_types",
+        TRUE,
+        &protobuf_uri_message_types,
+        &num_protobuf_uri_message_types,
+        UAT_AFFECTS_DISSECTION | UAT_AFFECTS_FIELDS,
+        NULL, //"ChProtobufURIMessageTypes",
+        protobuf_uri_message_type_copy_cb,
+        NULL,
+        protobuf_uri_message_type_free_cb,
+        update_protobuf_uri_message_types,
+        NULL,
+        protobuf_uri_message_types_table_columns
+    );
+
+    prefs_register_uat_preference(protobuf_module, "uri_message_types", "Protobuf URI message types",
+        "Specify the Protobuf message type of data on certain URIs.",
+        protobuf_uri_message_types_uat);
+
+
     prefs_register_bool_preference(protobuf_module, "display_json_mapping",
         "Display JSON mapping for Protobuf message",
         "Specifies that the JSON text of the "
@@ -2368,6 +2483,8 @@ proto_reg_handoff_protobuf(void)
     dissector_add_string("grpc_message_type", "application/grpc-web-text+proto", protobuf_handle);
 
     dissector_add_string("media_type", "application/x-protobuf", protobuf_handle);
+
+    proto_http = proto_get_id_by_filter_name("http");
 }
 
 /*

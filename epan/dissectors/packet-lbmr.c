@@ -1890,7 +1890,7 @@ static guint32 global_lbmr_uc_port_high = LBMR_DEFAULT_UC_PORT_HIGH;
 static guint32 global_lbmr_uc_port_low = LBMR_DEFAULT_UC_PORT_LOW;
 static guint32 global_lbmr_uc_dest_port = LBMR_DEFAULT_UC_DEST_PORT;
 static const char * global_lbmr_uc_address = LBMR_DEFAULT_UC_ADDRESS;
-static gboolean global_lbmr_use_tag = FALSE;
+static bool global_lbmr_use_tag = false;
 
 /* Local preferences variables (used by the dissector). */
 static guint32 lbmr_mc_incoming_udp_port = LBMR_DEFAULT_MC_INCOMING_UDP_PORT;
@@ -5455,12 +5455,12 @@ static gboolean test_lbmr_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tree
     /* Must be a UDP packet. */
     if (pinfo->ptype != PT_UDP)
     {
-        return (FALSE);
+        return FALSE;
     }
     /* Destination address must be IPV4 and 4 bytes in length. */
     if ((pinfo->dst.type != AT_IPv4) || (pinfo->dst.len != 4))
     {
-        return (FALSE);
+        return FALSE;
     }
 
     if (lbmr_use_tag)
@@ -5489,9 +5489,9 @@ static gboolean test_lbmr_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tree
     if (valid_packet)
     {
         dissect_lbmr(tvb, pinfo, tree, NULL);
-        return (TRUE);
+        return TRUE;
     }
-    return (FALSE);
+    return FALSE;
 }
 
 /* Register all the bits needed with the filtering engine */

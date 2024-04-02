@@ -81,6 +81,7 @@ const value_string expert_group_vals[] = {
 	{ PI_DEPRECATED,        "Deprecated" },
 	{ PI_RECEIVE,           "Receive" },
 	{ PI_INTERFACE,         "Interface" },
+	{ PI_DISSECTOR_BUG,     "Dissector bug" },
 	{ 0, NULL }
 };
 
@@ -382,6 +383,7 @@ expert_register_field_init(expert_field_info *expinfo, expert_module_t *module)
 		case PI_DEPRECATED:
 		case PI_RECEIVE:
 		case PI_INTERFACE:
+		case PI_DISSECTOR_BUG:
 			break;
 		default:
 			REPORT_DISSECTOR_BUG("Expert info for %s has invalid group=0x%08x\n", expinfo->name, expinfo->group);
@@ -500,6 +502,7 @@ const gchar* expert_get_summary(expert_field *eiindex)
 /* set's the PI_ flags to a protocol item
  * (and its parent items till the toplevel) */
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 expert_set_item_flags(proto_item *pi, const int group, const guint severity)
 {
 	if (pi != NULL && PITEM_FINFO(pi) != NULL && (severity >= FI_GET_FLAG(PITEM_FINFO(pi), PI_SEVERITY_MASK))) {
@@ -508,6 +511,7 @@ expert_set_item_flags(proto_item *pi, const int group, const guint severity)
 
 		/* propagate till toplevel item */
 		pi = proto_item_get_parent(pi);
+		// We recurse here, but we're limited by our tree depth checks in proto.c
 		expert_set_item_flags(pi, group, severity);
 	}
 }

@@ -61,7 +61,7 @@
 void proto_register_cops(void);
 
 /* Preference: desegmentation of COPS */
-static gboolean cops_desegment = TRUE;
+static bool cops_desegment = true;
 
 #define COPS_OBJECT_HDR_SIZE 4
 
@@ -829,7 +829,7 @@ static void decode_docsis_request_transmission_policy(tvbuff_t *tvb, guint32 off
 static void cops_analyze_packetcable_dqos_obj(tvbuff_t *, packet_info *, proto_tree *, guint8, guint32);
 static void cops_analyze_packetcable_mm_obj(tvbuff_t *, packet_info *, proto_tree *, guint8, guint32);
 
-static gboolean cops_packetcable = TRUE;
+static bool cops_packetcable = true;
 
 /* End of addition for PacketCable */
 
@@ -1658,7 +1658,7 @@ static int dissect_cops_pr_object_data(tvbuff_t *tvb, packet_info *pinfo, guint3
         asn_tree = proto_tree_add_subtree(tree, tvb, offset, len, ett_cops_asn1, NULL, "Contents:");
 
         /*
-         * XXX: LAZYNESS WARNING:
+         * XXX: LAZINESS WARNING:
          * We are assuming that for the first element in the sequence
          * that describes an entry subid==1, and, that the subsequent elements
          * use ++subid; This is true for all IETF's PIBs (and good sense
@@ -1690,7 +1690,7 @@ static int dissect_cops_pr_object_data(tvbuff_t *tvb, packet_info *pinfo, guint3
 
             if (oid_info) {
                 /*
-                 * XXX: LAZYNESS WARNING:
+                 * XXX: LAZINESS WARNING:
                  * We are assuming that the value of the sequenced item is of
                  * the right class, the right type and the right length.
                  * We should check that to avoid throwing a Malformed packet and

@@ -476,6 +476,7 @@ typedef struct heur_dtbl_entry {
  *  Call this in the parent dissectors proto_register function.
  *
  * @param name the name of this protocol
+ * @param ui_name the name used in the user interface
  * @param proto the value obtained when registering the protocol
  */
 WS_DLL_PUBLIC heur_dissector_list_t register_heur_dissector_list_with_description(const char *name, const char *ui_name, const int proto);
@@ -904,6 +905,20 @@ WS_DLL_PUBLIC gboolean postdissectors_want_hfids(void);
  */
 WS_DLL_PUBLIC void
 prime_epan_dissect_with_postdissector_wanted_hfids(epan_dissect_t *edt);
+
+/** Increment the dissection depth.
+ * This should be used to limit recursion outside the tree depth checks in
+ * call_dissector and dissector_try_heuristic.
+ * @param pinfo Packet Info.
+ */
+
+WS_DLL_PUBLIC void increment_dissection_depth(packet_info *pinfo);
+
+/** Decrement the dissection depth.
+ * @param pinfo Packet Info.
+ */
+
+WS_DLL_PUBLIC void decrement_dissection_depth(packet_info *pinfo);
 
 /** @} */
 

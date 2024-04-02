@@ -932,7 +932,7 @@ static const true_false_string tfs_random_public = {
 void proto_register_btle(void);
 void proto_reg_handoff_btle(void);
 
-static gboolean btle_detect_retransmit = TRUE;
+static bool btle_detect_retransmit = true;
 
 static void
 btle_init(void)
@@ -2522,7 +2522,7 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                         case 0x02:  /* AUX_SYNC_IND */
                         case 0x03:  /* AUX_SCAN_RSP */
                             if (aux_pointer_present) {
-                                /* Begining of new sequence of fragments */
+                                /* Beginning of new sequence of fragments */
                                 if (!pinfo->fd->visited && adi_present) {
                                     ae_had_info = wmem_new0(wmem_file_scope(), ae_had_info_t);
                                     ae_had_info->first_frame_num=pinfo->num;

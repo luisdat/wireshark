@@ -2149,6 +2149,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>…as C Array</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as C Array.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as a Hex Stream</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2985,10 +2993,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>开始</translation>
     </message>
     <message>
-        <source>Save</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Default</source>
         <translation>默认</translation>
     </message>
@@ -3317,20 +3321,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 <context>
     <name>FolderListModel</name>
     <message>
-        <source>&quot;File&quot; dialogs</source>
-        <translation>“文件”对话框</translation>
-    </message>
-    <message>
-        <source>capture files</source>
-        <translation>捕获文件</translation>
-    </message>
-    <message>
         <source>Temp</source>
         <translation>临时</translation>
-    </message>
-    <message>
-        <source>untitled capture files</source>
-        <translation>无标题捕获文件</translation>
     </message>
     <message>
         <source>Personal configuration</source>
@@ -3339,14 +3331,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Global configuration</source>
         <translation>全局配置</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, ethers, …</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, manuf, …</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>System</source>
@@ -3361,16 +3345,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>程序</translation>
     </message>
     <message>
-        <source>program files</source>
-        <translation>程序文件</translation>
-    </message>
-    <message>
         <source>Personal Plugins</source>
         <translation>个人插件</translation>
-    </message>
-    <message>
-        <source>binary plugins</source>
-        <translation>二进制插件</translation>
     </message>
     <message>
         <source>Global Plugins</source>
@@ -3389,11 +3365,35 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>&quot;File&quot; dialog location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Untitled capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preferences, profiles, manuf, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Program files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugins</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Personal Extcap path</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>external capture (extcap) plugins</source>
+        <source>External capture (extcap) plugins</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -3652,6 +3652,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Find:</source>
         <translation>查找:</translation>
+    </message>
+    <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">区分大小写</translation>
     </message>
     <message>
         <source>Find &amp;Next</source>
@@ -11151,6 +11155,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>查找:</translation>
     </message>
     <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">区分大小写</translation>
+    </message>
+    <message>
         <source>Find &amp;Next</source>
         <translation>查找下一个(&amp;N)</translation>
     </message>
@@ -14124,6 +14132,18 @@ a:hover {
     </message>
     <message>
         <source>TCP throughput</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Query-Response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DNS Query-Response Statistics</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

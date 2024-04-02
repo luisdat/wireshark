@@ -116,7 +116,7 @@ static int dissect_camel_EstablishTemporaryConnectionArgV2(bool implicit_tag _U_
 static int dissect_camel_SpecializedResourceReportArgV23(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 /* XXX - can we get rid of these and always do the SRT work? */
-static gboolean gcamel_PersistentSRT=FALSE;
+static bool gcamel_PersistentSRT=false;
 static gboolean gcamel_DisplaySRT=FALSE;
 gboolean gcamel_StatSRT=FALSE;
 
@@ -967,7 +967,7 @@ camelsrt_call_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     break;
 
   case 64: /*EventReportSMS*/
-    /* Session has been explicity closed without TC_END */
+    /* Session has been explicitly closed without TC_END */
     camelsrt_close_call_matching(pinfo, p_camelsrt_info);
     tcapsrt_close((struct tcaphash_context_t *)p_camelsrt_info->tcap_context, pinfo);
     break;

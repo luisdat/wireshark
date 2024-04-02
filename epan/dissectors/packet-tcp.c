@@ -49,7 +49,7 @@ static int mptcp_tap;
 static int exported_pdu_tap;
 
 /* Place TCP summary in proto tree */
-static gboolean tcp_summary_in_tree = TRUE;
+static bool tcp_summary_in_tree = true;
 
 static inline guint64 KEEP_32MSB_OF_GUINT64(guint64 nb) {
     return (nb >> 32) << 32;
@@ -72,7 +72,7 @@ static inline guint64 KEEP_32MSB_OF_GUINT64(guint64 nb) {
  * packet to the capture program but a checksummed packet got put onto
  * the wire.
  */
-static gboolean tcp_check_checksum = FALSE;
+static bool tcp_check_checksum = false;
 
 /*
  * Window scaling values to be used when not known (set as a preference) */
@@ -172,6 +172,7 @@ static int hf_tcp_srcport;
 static int hf_tcp_dstport;
 static int hf_tcp_port;
 static int hf_tcp_stream;
+static int hf_tcp_stream_pnum;
 static int hf_tcp_completeness;
 static int hf_tcp_completeness_syn;
 static int hf_tcp_completeness_syn_ack;
@@ -455,6 +456,7 @@ static expert_field ei_tcp_analysis_zero_window_probe_ack;
 static expert_field ei_tcp_analysis_tfo_syn;
 static expert_field ei_tcp_analysis_tfo_ack;
 static expert_field ei_tcp_analysis_tfo_ignored;
+static expert_field ei_tcp_analysis_partial_ack;
 static expert_field ei_tcp_scps_capable;
 static expert_field ei_tcp_option_sack_dsack;
 static expert_field ei_tcp_option_snack_sequence;
@@ -496,11 +498,11 @@ static expert_field ei_mptcp_mapping_missing;
  * This preference can be set for such protocols to make sure that we don't
  * invoke the subdissectors for retransmitted or out-of-order segments.
  */
-static gboolean tcp_no_subdissector_on_error = TRUE;
+static bool tcp_no_subdissector_on_error = true;
 
 /* Enable buffering of out-of-order TCP segments before passing it to a
  * subdissector (depends on "tcp_desegment"). */
-static gboolean tcp_reassemble_out_of_order = FALSE;
+static bool tcp_reassemble_out_of_order = false;
 
 /*
  * FF: https://www.rfc-editor.org/rfc/rfc6994.html
@@ -510,7 +512,7 @@ static gboolean tcp_reassemble_out_of_order = FALSE;
  * The ExID is used to differentiate different experiments and thus will
  * be used in data dissection.
  */
-static gboolean tcp_exp_options_rfc6994 = TRUE;
+static bool tcp_exp_options_rfc6994 = true;
 
 /*
  * This flag indicates which of Fast Retransmission or Out-of-Order
@@ -519,13 +521,13 @@ static gboolean tcp_exp_options_rfc6994 = TRUE;
  * behavior.
  * When set, we keep the historical interpretation (Fast RT > OOO)
  */
-static gboolean tcp_fastrt_precedence = TRUE;
+static bool tcp_fastrt_precedence = true;
 
 /* Process info, currently discovered via IPFIX */
-static gboolean tcp_display_process_info = FALSE;
+static bool tcp_display_process_info = false;
 
 /* Read the sequence number as syn cookie */
-static gboolean read_seq_as_syn_cookie = FALSE;
+static bool read_seq_as_syn_cookie = false;
 
 /*
  *  TCP option
@@ -1665,16 +1667,16 @@ static void conversation_completeness_fill(gchar *buf, guint32 value)
 /* **************************************************************************
  * RTT, relative sequence numbers, window scaling & etc.
  * **************************************************************************/
-static gboolean tcp_analyze_seq           = TRUE;
-static gboolean tcp_relative_seq          = TRUE;
-static gboolean tcp_track_bytes_in_flight = TRUE;
-static gboolean tcp_bif_seq_based         = FALSE;
-static gboolean tcp_calculate_ts          = TRUE;
+static bool tcp_analyze_seq           = true;
+static bool tcp_relative_seq          = true;
+static bool tcp_track_bytes_in_flight = true;
+static bool tcp_bif_seq_based         = false;
+static bool tcp_calculate_ts          = true;
 
-static gboolean tcp_analyze_mptcp                   = TRUE;
-static gboolean mptcp_relative_seq                  = TRUE;
-static gboolean mptcp_analyze_mappings              = FALSE;
-static gboolean mptcp_intersubflows_retransmission  = FALSE;
+static bool tcp_analyze_mptcp                   = true;
+static bool mptcp_relative_seq                  = true;
+static bool mptcp_analyze_mappings              = false;
+static bool mptcp_intersubflows_retransmission  = false;
 
 
 #define TCP_A_RETRANSMISSION          0x0001
@@ -1731,7 +1733,7 @@ mptcp_convert_dsn(guint64 dsn, mptcp_meta_flow_t *meta, enum mptcp_dsn_conversio
     *result = dsn;
 
     /* if relative is set then we need the 64 bits version anyway
-     * we assume no wrapping was done on the 32 lsb so this may be wrong for elphant flows
+     * we assume no wrapping was done on the 32 lsb so this may be wrong for elephant flows
      */
     if(conv == DSN_CONV_32_TO_64 || relative) {
 
@@ -1959,6 +1961,9 @@ tcp_calculate_timestamps(packet_info *pinfo, struct tcp_analysis *tcpd,
 
     if (!tcpd)
         return;
+
+    /* pre-increment so packet numbers start at 1 */
+    tcppd->pnum = ++tcpd->pnum;
 
     nstime_delta(&tcppd->ts_del, &pinfo->abs_ts, &tcpd->ts_prev);
 
@@ -2451,31 +2456,45 @@ finished_fwd:
             /* We ensure there is no matching packet waiting in the unacked list,
              * and take this opportunity to push the tail further than this single packet
              */
-            gboolean is_seq_in_unacked = FALSE;
-            guint32 maxseqtail = ack;
-            ual = tcpd->rev->tcp_analyze_seq_info->segments;
-            while(ual) {
-                /* prevent false positives */
-                if(GT_SEQ(ack,ual->seq) && LE_SEQ(ack,ual->nextseq)) {
-                    is_seq_in_unacked = TRUE;
+
+            guint32 tail_le = 0, tail_re = 0;
+            for(ual=tcpd->rev->tcp_analyze_seq_info->segments; ual; ual=ual->next) {
+
+                if(tail_le == tail_re) { /* init edge values */
+                    tail_le = ual->seq;
+                    tail_re = ual->nextseq;
                 }
-                /* look for a possible tail pushing the maxseqtobeacked further */
-                if(maxseqtail==ual->seq) {
-                    maxseqtail = ual->nextseq;
+
+                /* Only look at what happens above the current ACK value,
+                 * as what happened before is definetely ACKed here and can be
+                 * safely ignored. */
+                if(GE_SEQ(ual->seq,ack)) {
+
+                    /* if the left edge is contiguous, move the tail leftward */
+                    if(EQ_SEQ(ual->nextseq,tail_le)) {
+                        tail_le = ual->seq;
+                    }
+
+                    /* otherwise, we have isolated segments above what is being ACKed here,
+                     * and we reinit the tails with the current values */
+                    else {
+                        tail_le = ual->seq;
+                        tail_re = ual->nextseq; // move the end tail
+                    }
                 }
-                ual=ual->next;
             }
 
-            /* update 'max seq to be acked' in the other direction so we don't get
-             * this indication again.
-             */
-            if(is_seq_in_unacked) {
-                tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=(GT_SEQ(maxseqtail, ack)) ? ack : maxseqtail;
+            /* a tail was found and we can push the maxseqtobeacked further */
+            if(EQ_SEQ(ack,tail_le) && GT_SEQ(tail_re, ack)) {
+                tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=tail_re;
             }
+
+            /* otherwise, just take into account the value being ACKed now */
             else {
-                tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=maxseqtail;
-                tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
+                tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=ack;
             }
+
+            tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
         }
     }
 
@@ -2810,10 +2829,32 @@ finished_checking_retransmission_type:
             tcp_analyze_get_acked_struct(pinfo->num, seq, ack, TRUE, tcpd);
             tcpd->ta->frame_acked=ual->frame;
             nstime_delta(&tcpd->ta->ts, &pinfo->abs_ts, &ual->ts);
+            /* mark it as a full segment ACK */
+            tcpd->ta->partial_ack=0;
         }
-        /* If this acknowledges part of the segment, adjust the segment info for the acked part */
+        /* If this acknowledges part of the segment, adjust the segment info for the acked part.
+         * This typically happens in the context of GSO/GRO or Retransmissions with
+         * segment repackaging (elsewhere called repacketization). For the user, looking at the
+         * previous packets for any Retransmission or at the SYN MSS Option presence would
+         * answer what case is precisely encountered.
+         */
         else if (GT_SEQ(ack, ual->seq) && LE_SEQ(ack, ual->nextseq)) {
             ual->seq = ack;
+            tcp_analyze_get_acked_struct(pinfo->num, seq, ack, TRUE, tcpd);
+            tcpd->ta->frame_acked=ual->frame;
+            nstime_delta(&tcpd->ta->ts, &pinfo->abs_ts, &ual->ts);
+
+            /* mark it as a partial segment ACK
+             *
+             * XXX - This mark is used later to create an Expert Note,
+             * but other ways of tracking these packets are possible:
+             * for example a similar indication to ta->frame_acked
+             * would help differentiating the SEQ/ACK analysis messages.
+             * Also, a TCP Analysis Flag could be added, but doesn't seem
+             * essential yet, as matching packets can be selected with
+             * 'tcp.analysis.partial_ack'.
+             */
+            tcpd->ta->partial_ack=1;
             continue;
         }
         /* If this acknowledges a segment prior to this one, leave this segment alone and move on */
@@ -3544,6 +3585,10 @@ tcp_print_sequence_number_analysis(packet_info *pinfo, tvbuff_t *tvb, proto_tree
             tvb, 0, 0, ta->frame_acked);
             proto_item_set_generated(item);
 
+        if(ta->partial_ack) {
+            expert_add_info(pinfo, item, &ei_tcp_analysis_partial_ack);
+        }
+
         /* only display RTT if we actually have something we are acking */
         if( ta->ts.secs || ta->ts.nsecs ) {
             item = proto_tree_add_time(tree, hf_tcp_analysis_ack_rtt,
@@ -3803,7 +3848,7 @@ static reassembly_table tcp_reassembly_table;
 
 /* functions to trace tcp segments */
 /* Enable desegmenting of TCP streams */
-static gboolean tcp_desegment = TRUE;
+static bool tcp_desegment = true;
 
 /* Returns the maximum contiguous sequence number of the reassembly associated
  * with the msp *if* a new fragment were added ending in the given maxnextseq.
@@ -5765,7 +5810,7 @@ dissect_tcpopt_echo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 }
 
 /* If set, do not put the TCP timestamp information on the summary line */
-static gboolean tcp_ignore_timestamps = FALSE;
+static bool tcp_ignore_timestamps = false;
 
 static int
 dissect_tcpopt_timestamp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
@@ -7372,7 +7417,7 @@ tcp_dissect_options(tvbuff_t *tvb, int offset, guint length,
    This has been separated into a stand alone routine to other protocol
    dissectors can call to it, e.g., SOCKS. */
 
-static gboolean try_heuristic_first = FALSE;
+static bool try_heuristic_first = false;
 
 
 /* this function can be called with tcpd==NULL as from the msproxy dissector */
@@ -7923,9 +7968,26 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                                           ((tcph->th_flags & (TH_AE|TH_ECE)) == TH_AE);
     }
 
+    /* Do we need to calculate timestamps relative to the tcp-stream? */
+    if (tcp_calculate_ts) {
+        tcppd = (struct tcp_per_packet_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tcp, pinfo->curr_layer_num);
+
+        /*
+         * Calculate the timestamps relative to this conversation (but only on
+         * the first run when frames are accessed sequentially)
+         */
+        if (!(pinfo->fd->visited))
+            tcp_calculate_timestamps(pinfo, tcpd, tcppd);
+    }
+
     if (tcpd) {
         item = proto_tree_add_uint(tcp_tree, hf_tcp_stream, tvb, offset, 0, tcpd->stream);
         proto_item_set_generated(item);
+
+        if (tcppd) {
+            item = proto_tree_add_uint(tcp_tree, hf_tcp_stream_pnum, tvb, offset, 0, tcppd->pnum);
+            proto_item_set_generated(item);
+        }
 
         /* Display the completeness of this TCP conversation */
         static int* const completeness_fields[] = {
@@ -7956,18 +8018,6 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         if(tcp_analyze_seq && tcpd->fwd->tcp_analyze_seq_info) {
             tcpd->fwd->tcp_analyze_seq_info->num_sack_ranges = 0;
         }
-    }
-
-    /* Do we need to calculate timestamps relative to the tcp-stream? */
-    if (tcp_calculate_ts) {
-        tcppd = (struct tcp_per_packet_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tcp, pinfo->curr_layer_num);
-
-        /*
-         * Calculate the timestamps relative to this conversation (but only on the
-         * first run when frames are accessed sequentially)
-         */
-        if (!(pinfo->fd->visited))
-            tcp_calculate_timestamps(pinfo, tcpd, tcppd);
     }
 
     /* is there any manual analysis waiting ? */
@@ -8820,6 +8870,11 @@ proto_register_tcp(void)
         { &hf_tcp_stream,
         { "Stream index",       "tcp.stream", FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }},
+
+        { &hf_tcp_stream_pnum,
+        { "Stream Packet Number",       "tcp.stream.pnum", FT_UINT32, BASE_DEC,
+            NULL, 0x0,
+            "Relative packet number in this TCP stream", HFILL }},
 
         { &hf_tcp_completeness,
         { "Conversation completeness",       "tcp.completeness", FT_UINT8,
@@ -9766,6 +9821,7 @@ proto_register_tcp(void)
         { &ei_tcp_analysis_tfo_syn, { "tcp.analysis.tfo_syn", PI_SEQUENCE, PI_NOTE, "TCP SYN with TFO Cookie", EXPFILL }},
         { &ei_tcp_analysis_tfo_ack, { "tcp.analysis.tfo_ack", PI_SEQUENCE, PI_NOTE, "TCP SYN-ACK accepting TFO data", EXPFILL }},
         { &ei_tcp_analysis_tfo_ignored, { "tcp.analysis.tfo_ignored", PI_SEQUENCE, PI_NOTE, "TCP SYN-ACK ignoring TFO data", EXPFILL }},
+        { &ei_tcp_analysis_partial_ack, { "tcp.analysis.partial_ack", PI_SEQUENCE, PI_NOTE, "Partial Acknowledgement of a segment", EXPFILL }},
         { &ei_tcp_connection_fin_active, { "tcp.connection.fin_active", PI_SEQUENCE, PI_NOTE, "This frame initiates the connection closing", EXPFILL }},
         { &ei_tcp_connection_fin_passive, { "tcp.connection.fin_passive", PI_SEQUENCE, PI_NOTE, "This frame undergoes the connection closing", EXPFILL }},
         { &ei_tcp_scps_capable, { "tcp.analysis.zero_window_probe_ack", PI_SEQUENCE, PI_NOTE, "Connection establish request (SYN-ACK): SCPS Capabilities Negotiated", EXPFILL }},
@@ -9982,8 +10038,8 @@ proto_register_tcp(void)
         "This option has no effect if not used with \"Track number of bytes in flight\". ",
         &tcp_bif_seq_based);
     prefs_register_bool_preference(tcp_module, "calculate_timestamps",
-        "Calculate conversation timestamps",
-        "Calculate timestamps relative to the first frame and the previous frame in the tcp conversation",
+        "Calculate stream packet number and timestamps",
+        "Calculate relative packet number and timestamps relative to the first frame and the previous frame in the tcp conversation",
         &tcp_calculate_ts);
     prefs_register_bool_preference(tcp_module, "try_heuristic_first",
         "Try heuristic sub-dissectors first",

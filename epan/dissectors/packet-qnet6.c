@@ -1448,7 +1448,7 @@ static const value_string qnet6_kif_msgsend_msg_openfd_xtypes_vals[] = {
 /*
  * Perform LWL4 crc check
  */
-static gboolean qnet6_lwl4_check_crc = TRUE;
+static bool qnet6_lwl4_check_crc = true;
 
 /*
  * in sys/lsm/qnet/qos.h LR is using sockaddr as addr Family:1 means mac
@@ -1955,6 +1955,11 @@ dissect_qnet6_kif_msgsend_msg_msginfo(tvbuff_t * tvb, packet_info * pinfo _U_, p
   return ret;
 
 }
+
+// Most of the functions below recurse via dissect_qnet6_kif_msgsend_msg.
+// We're guaranteed to run out of packet before we run out of stack, so
+// just skip over them.
+// NOLINTBEGIN(misc-no-recursion)
 
 /*
  * in dissect_qnet6_kif_msgsend_msg already passed the first 2 bytes
@@ -3253,6 +3258,8 @@ dissect_qnet6_kif_msgsend_msg(tvbuff_t * tvb, packet_info * pinfo, proto_tree * 
 
   return ret;
 }
+
+// NOLINTEND(misc-no-recursion)
 
 static void
 qos_tcs_init_addtree(tvbuff_t * tvb, proto_tree * tree, gint * poffset, guint encoding, int hf_off, int hf_generated, gint rlen, gint name_start)

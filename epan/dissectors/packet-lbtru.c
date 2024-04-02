@@ -391,18 +391,17 @@ static lbm_transport_frame_t * lbtru_client_transport_frame_add(lbtru_client_tra
     return (frame_entry);
 }
 
-static char * lbtru_transport_source_string_format(const address * source_address, guint16 source_port, guint32 session_id)
+static char * lbtru_transport_source_string_format(wmem_allocator_t *scope, const address * source_address, guint16 source_port, guint32 session_id)
 {
-    /* Returns a packet-scoped string. */
     char * bufptr = NULL;
 
     if (session_id == 0)
     {
-        bufptr = wmem_strdup_printf(wmem_packet_scope(), "LBT-RU:%s:%" PRIu16, address_to_str(wmem_packet_scope(), source_address), source_port);
+        bufptr = wmem_strdup_printf(scope, "LBT-RU:%s:%" PRIu16, address_to_str(scope, source_address), source_port);
     }
     else
     {
-        bufptr = wmem_strdup_printf(wmem_packet_scope(), "LBT-RU:%s:%" PRIu16 ":%08x", address_to_str(wmem_packet_scope(), source_address), source_port, session_id);
+        bufptr = wmem_strdup_printf(scope, "LBT-RU:%s:%" PRIu16 ":%08x", address_to_str(scope, source_address), source_port, session_id);
     }
     return (bufptr);
 }
@@ -410,13 +409,12 @@ static char * lbtru_transport_source_string_format(const address * source_addres
 char * lbtru_transport_source_string(const address * source_address, guint16 source_port, guint32 session_id)
 {
     /* Returns a file-scoped string. */
-    return (wmem_strdup(wmem_file_scope(), lbtru_transport_source_string_format(source_address, source_port, session_id)));
+    return lbtru_transport_source_string_format(wmem_file_scope(), source_address, source_port, session_id);
 }
 
-static char * lbtru_transport_source_string_transport(lbtru_transport_t * transport)
+static char * lbtru_transport_source_string_transport(wmem_allocator_t *scope, lbtru_transport_t * transport)
 {
-    /* Returns a packet-scoped string. */
-    return (lbtru_transport_source_string(&(transport->source_address), transport->source_port, transport->session_id));
+    return lbtru_transport_source_string_format(scope, &(transport->source_address), transport->source_port, transport->session_id);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -635,10 +633,10 @@ static guint32 global_lbtru_source_port_low = LBTRU_DEFAULT_SOURCE_PORT_LOW;
 static guint32 global_lbtru_source_port_high = LBTRU_DEFAULT_SOURCE_PORT_HIGH;
 static guint32 global_lbtru_receiver_port_low = LBTRU_DEFAULT_RECEIVER_PORT_LOW;
 static guint32 global_lbtru_receiver_port_high = LBTRU_DEFAULT_RECEIVER_PORT_HIGH;
-static gboolean global_lbtru_expert_separate_naks = FALSE;
-static gboolean global_lbtru_expert_separate_ncfs = FALSE;
-static gboolean global_lbtru_use_tag = FALSE;
-static gboolean global_lbtru_sequence_analysis = FALSE;
+static bool global_lbtru_expert_separate_naks = false;
+static bool global_lbtru_expert_separate_ncfs = false;
+static bool global_lbtru_use_tag = false;
+static bool global_lbtru_sequence_analysis = false;
 
 /* Local preferences variables (used by the dissector). */
 static guint32 lbtru_source_port_low = LBTRU_DEFAULT_SOURCE_PORT_LOW;
@@ -962,7 +960,7 @@ static int dissect_lbtru_ncf(tvbuff_t * tvb, int offset, packet_info * pinfo, pr
     }
     tap_info->ncf_reason = LBTRU_NCF_HDR_REASON(reason_format);
     tap_info->num_sqns = num_ncfs;
-    tap_info->sqns = wmem_alloc_array(wmem_packet_scope(), guint32, num_ncfs);
+    tap_info->sqns = wmem_alloc_array(pinfo->pool, guint32, num_ncfs);
     len_dissected += dissect_lbtru_ncf_list(tvb, offset + L_LBTRU_NCF_HDR_T, pinfo, ncf_tree, num_ncfs, LBTRU_NCF_HDR_REASON(reason_format), tap_info);
     proto_item_set_len(ncf_item, len_dissected);
     return (len_dissected);
@@ -1017,7 +1015,7 @@ static int dissect_lbtru_nak(tvbuff_t * tvb, int offset, packet_info * pinfo, pr
         expert_add_info(pinfo, nak_item, &ei_lbtru_analysis_nak);
     }
     tap_info->num_sqns = num_naks;
-    tap_info->sqns = wmem_alloc_array(wmem_packet_scope(), guint32, num_naks);
+    tap_info->sqns = wmem_alloc_array(pinfo->pool, guint32, num_naks);
     len_dissected += dissect_lbtru_nak_list(tvb, offset + L_LBTRU_NAK_HDR_T, pinfo, nak_tree, num_naks, tap_info);
     proto_item_set_len(nak_item, len_dissected);
     return (len_dissected);
@@ -1093,7 +1091,7 @@ static bool dissect_lbtru_sqn_frame_list_callback(const void *key _U_, void * fr
         }
         proto_item_set_generated(transport_item);
     }
-    return (FALSE);
+    return FALSE;
 }
 
 static int dissect_lbtru(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void * user_data _U_)
@@ -1180,7 +1178,7 @@ static int dissect_lbtru(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
     proto_item_set_generated(channel_item);
     channel_tree = proto_item_add_subtree(channel_item, ett_lbtru_channel);
 
-    tapinfo = wmem_new0(wmem_packet_scope(), lbm_lbtru_tap_info_t);
+    tapinfo = wmem_new0(pinfo->pool, lbm_lbtru_tap_info_t);
     tapinfo->type = packet_type;
 
     header_item = proto_tree_add_item(lbtru_tree, hf_lbtru_hdr, tvb, 0, -1, ENC_NA);
@@ -1431,7 +1429,7 @@ static int dissect_lbtru(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
         {
             client = lbtru_client_transport_find(transport, &receiver_address, receiver_port, pinfo->num);
         }
-        tapinfo->transport = lbtru_transport_source_string_transport(transport);
+        tapinfo->transport = lbtru_transport_source_string_transport(pinfo->pool, transport);
         channel = transport->channel;
         fld_item = proto_tree_add_uint64(channel_tree, hf_lbtru_channel_id, tvb, 0, 0, channel);
         proto_item_set_generated(fld_item);
@@ -1654,12 +1652,12 @@ static gboolean test_lbtru_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tre
     /* Must be a UDP packet. */
     if (pinfo->ptype != PT_UDP)
     {
-        return (FALSE);
+        return FALSE;
     }
     /* Destination address must be IPV4 and 4 bytes in length. */
     if ((pinfo->dst.type != AT_IPv4) || (pinfo->dst.len != 4))
     {
-        return (FALSE);
+        return FALSE;
     }
 
     if (lbtru_use_tag)
@@ -1691,10 +1689,10 @@ static gboolean test_lbtru_packet(tvbuff_t * tvb, packet_info * pinfo, proto_tre
     if (valid_packet)
     {
         dissect_lbtru(tvb, pinfo, tree, user_data);
-        return (TRUE);
+        return TRUE;
     }
     /* Not one of ours. */
-    return (FALSE);
+    return FALSE;
 }
 
 /* Register all the bits needed with the filtering engine */

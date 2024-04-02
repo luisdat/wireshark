@@ -83,7 +83,7 @@ void proto_reg_handoff_doip(void);
 #define DOIP_COMMON_EID_LEN                        6
 
 
-/*  Vehicle identifcation request */
+/* Vehicle identification request */
 #define DOIP_VEHICLE_IDENTIFICATION_EID_OFFSET     DOIP_HEADER_LEN
 #define DOIP_VEHICLE_IDENTIFICATION_VIN_OFFSET     DOIP_HEADER_LEN
 
@@ -346,7 +346,7 @@ static const value_string diag_nack_codes[] = {
  * Config
  */
 
-static gboolean doip_hide_address_names = TRUE;
+static bool doip_hide_address_names = true;
 
  /*
  * Fields

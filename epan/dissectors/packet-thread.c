@@ -1024,9 +1024,9 @@ static int
 dissect_thread_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data);
 
 /* Preferences */
-static gboolean thread_use_pan_id_in_key = FALSE;
+static bool thread_use_pan_id_in_key = false;
 static const gchar *thread_seq_ctr_str = NULL;
-static gboolean thread_auto_acq_seq_ctr = TRUE;
+static bool thread_auto_acq_seq_ctr = true;
 
 
 static gboolean thread_seq_ctr_acqd = FALSE;
@@ -1472,7 +1472,7 @@ dissect_thread_address(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                     offset += tlv_len;
                 }
                 else {
-                    //Need to only take 16 bytes for the IPv6 adress
+                    //Need to only take 16 bytes for the IPv6 address
                     for (int i = 0; i < (tlv_len / 16); i++)
                     {
                         proto_tree_add_item(tlv_tree, hf_thread_mc_tlv_ipv6_addr, tvb, offset, 16, ENC_NA);
@@ -1696,7 +1696,7 @@ dissect_thread_nm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
                     offset += tlv_len;
                 }
                 else {
-                    //Need to only take 16 bytes for the IPv6 adress
+                    //Need to only take 16 bytes for the IPv6 address
                     for (int i = 0; i < (tlv_len / 16); i++)
                     {
                         proto_tree_add_item(tlv_tree, hf_thread_mc_tlv_ipv6_addr, tvb, offset, 16, ENC_NA);
@@ -2844,6 +2844,7 @@ dissect_thread_mc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_thread_nwd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     proto_item  *proto_root;
@@ -2860,6 +2861,7 @@ dissect_thread_nwd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     thread_nwd_tree = proto_item_add_subtree(proto_root, ett_thread_nwd);
 
     /* Thread Network Data TLVs */
+    increment_dissection_depth(pinfo);
     while (tvb_offset_exists(tvb, offset)) {
 
         /* Get the length ahead of time to pass to next function so we can highlight
@@ -3195,6 +3197,7 @@ dissect_thread_nwd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 offset += tlv_len;
         }
     }
+    decrement_dissection_depth(pinfo);
     return tvb_captured_length(tvb);
 }
 

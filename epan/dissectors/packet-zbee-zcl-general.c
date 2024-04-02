@@ -2106,8 +2106,8 @@ proto_reg_handoff_zbee_zcl_groups(void)
 #define ZBEE_ZCL_ATTR_ID_SCENES_LAST_CONFIGURED_BY              0x0005  /* Last Configured By */
 
 /* Scene Name Support */
-#define ZBEE_ZCL_SCENES_NAME_SUPPORTED                          0x80  /* Scene Names Supported */
 #define ZBEE_ZCL_SCENES_NAME_NOT_SUPPORTED                      0x00  /* Scene Names Not Supported */
+#define ZBEE_ZCL_SCENES_NAME_SUPPORTED                          0x01  /* Scene Names Supported */
 
 /* Copy Mode */
 #define ZBEE_ZCL_SCENES_COPY_SPECIFIED                          0x00  /* Copy Specified Scenes */
@@ -14379,7 +14379,7 @@ dissect_zcl_gp_proxy_sink_table_request(proto_tree *tree, tvbuff_t *tvb, guint *
             *offset += 4;
         }
         else if (app_id == ZBEE_ZCL_GP_APP_ID_ZGP) {
-            /* App_id = 010: MAC address + Endoint */
+            /* App_id = 010: MAC address + Endpoint */
             proto_tree_add_item(tree, hf_zbee_gp_ieee, tvb, *offset, 8, ENC_LITTLE_ENDIAN);
             *offset += 8;
             proto_tree_add_item(tree, hf_zbee_gp_endpoint, tvb, *offset, 1, ENC_NA);

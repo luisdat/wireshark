@@ -1,25 +1,22 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-atn-cpdlc.c                                                         */
-/* asn2wrs.py -u -L -p atn-cpdlc -c ./atn-cpdlc.cnf -s ./packet-atn-cpdlc-template -D . -O ../.. atn-cpdlc.asn */
+/* asn2wrs.py -u -q -L -p atn-cpdlc -c ./atn-cpdlc.cnf -s ./packet-atn-cpdlc-template -D . -O ../.. atn-cpdlc.asn */
 
 /* packet-atn-cpdlc-template.c
  * By Mathias Guettler <guettler@web.de>
  * Copyright 2013
  *
  * Routines for ATN Cpdlcc protocol packet disassembly
-
+ *
  * details see:
- * http://en.wikipedia.org/wiki/CPDLC
- * http://members.optusnet.com.au/~cjr/introduction.htm
-
+ * https://en.wikipedia.org/wiki/CPDLC
+ * https://members.optusnet.com.au/~cjr/introduction.htm
+ *
  * standards:
- * http://legacy.icao.int/anb/panels/acp/repository.cfm
-
- * note:
- * We are dealing with ATN/CPDLC aka ICAO Doc 9705 Ed2 here
+ * We are dealing with ATN/CPDLC aka ICAO Doc 9705 Second Edition here
  * (CPDLC may also be transmitted via ACARS/AOA aka "FANS-1/A ").
-
+ * https://www.icao.int/safety/acp/repository/_%20Doc9705_ed2_1999.pdf
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>

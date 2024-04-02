@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ansi_tcap.c                                                         */
-/* asn2wrs.py -b -L -p ansi_tcap -c ./ansi_tcap.cnf -s ./packet-ansi_tcap-template -D . -O ../.. TCAP-Remote-Operations-Information-Objects.asn TCAPPackage.asn */
+/* asn2wrs.py -b -q -L -p ansi_tcap -c ./ansi_tcap.cnf -s ./packet-ansi_tcap-template -D . -O ../.. TCAP-Remote-Operations-Information-Objects.asn TCAPPackage.asn */
 
 /* packet-ansi_tcap-template.c
  * Routines for ANSI TCAP
@@ -152,10 +152,6 @@ static gint ett_ansi_tcap_T_paramSet;
 
 #define MAX_SSN 254
 
-extern gboolean gtcap_PersistentSRT;
-extern guint gtcap_RepetitionTimeout;
-extern guint gtcap_LostTimeout;
-
 /* When several Tcap components are received in a single TCAP message,
    we have to use several buffers for the stored parameters
    because else this data are erased during TAP dissector call */
@@ -225,7 +221,7 @@ save_invoke_data(packet_info *pinfo, proto_tree *tree _U_, tvbuff_t *tvb _U_){
   if ((!pinfo->fd->visited)&&(ansi_tcap_private.TransactionID_str)){
 
           /* Only do this once XXX I hope it's the right thing to do */
-          /* The hash string needs to contain src and dest to distiguish differnt flows */
+          /* The hash string needs to contain src and dest to distinguish different flows */
           switch(ansi_tcap_response_matching_type){
                         case ANSI_TCAP_TID_ONLY:
                                 buf = wmem_strdup(pinfo->pool, ansi_tcap_private.TransactionID_str);
@@ -267,7 +263,7 @@ find_saved_invokedata(packet_info *pinfo, proto_tree *tree _U_, tvbuff_t *tvb _U
   src = address_to_str(pinfo->pool, &(pinfo->src));
   dst = address_to_str(pinfo->pool, &(pinfo->dst));
 
-  /* The hash string needs to contain src and dest to distiguish differnt flows */
+  /* The hash string needs to contain src and dest to distinguish different flows */
   buf = (char *)wmem_alloc(pinfo->pool, MAX_TID_STR_LEN);
   buf[0] = '\0';
   /* Reverse order to invoke */
@@ -1366,7 +1362,7 @@ dissect_ansi_tcap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, vo
                         }
                 }
                 if (g_ansi_tcap_HandleSRT && p_tcap_context && p_tcap_context->callback) {
-                        /* Callback fonction for the upper layer */
+                        /* Callback function for the upper layer */
                         (p_tcap_context->callback)(tvb, pinfo, stat_tree, p_tcap_context);
                 }
         }

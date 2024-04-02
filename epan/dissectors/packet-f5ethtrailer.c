@@ -327,16 +327,16 @@ static gint hf_fi_product;
 static gint hf_fi_session;
 
 /* Wireshark preference to show RST cause in info column */
-static gboolean rstcause_in_info = TRUE;
-/** Wireshark prefrence to look at all trailer bytes for f5ethtrailer */
-static gboolean pref_walk_trailer = FALSE;
+static bool rstcause_in_info = true;
+/** Wireshark preference to look at all trailer bytes for f5ethtrailer */
+static bool pref_walk_trailer = false;
 /* Wireshark preference to enable/disable the population of other dissectors'
  * fields.*/
-static gboolean pref_pop_other_fields = FALSE;
+static bool pref_pop_other_fields = false;
 /** Wireshark preference to perform analysis */
-static gboolean pref_perform_analysis = FALSE;
+static bool pref_perform_analysis = false;
 /** Wireshark preference to generate keylog entries from f5ethtrailer TLS data */
-static gboolean pref_generate_keylog = TRUE;
+static bool pref_generate_keylog = true;
 /** Identifiers for taps (when enabled), only the address is important, the
  * values are unused. */
 static gboolean tap_ip_enabled;
@@ -422,7 +422,7 @@ ptype_to_ipproto(const port_type ptype)
 static gboolean
 f5_ip_conv_valid(packet_info *pinfo, void *user_data _U_)
 {
-    gboolean is_ip = FALSE;
+    bool is_ip = false;
     gboolean is_f5ethtrailer = FALSE;
 
     proto_get_frame_protocols(pinfo->layers, &is_ip, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -443,8 +443,8 @@ f5_ip_conv_valid(packet_info *pinfo, void *user_data _U_)
 static gboolean
 f5_tcp_conv_valid(packet_info *pinfo, void *user_data _U_)
 {
-    gboolean is_ip  = FALSE;
-    gboolean is_tcp = FALSE;
+    bool is_ip  = false;
+    bool is_tcp = false;
     gboolean is_f5ethtrailer = FALSE;
 
     proto_get_frame_protocols(pinfo->layers, &is_ip, &is_tcp, NULL, NULL, NULL, NULL, NULL);
@@ -465,8 +465,8 @@ f5_tcp_conv_valid(packet_info *pinfo, void *user_data _U_)
 static gboolean
 f5_udp_conv_valid(packet_info *pinfo, void *user_data _U_)
 {
-    gboolean is_ip  = FALSE;
-    gboolean is_udp = FALSE;
+    bool is_ip  = false;
+    bool is_udp = false;
     gboolean is_f5ethtrailer = FALSE;
 
     proto_get_frame_protocols(pinfo->layers, &is_ip, NULL, &is_udp, NULL, NULL, NULL, NULL);
@@ -686,7 +686,7 @@ f5eth_tmmdist_stats_tree_init(stats_tree *st)
 
 /*-----------------------------------------------------------------------------------------------*/
 /**
- * @brief Per-packet tmm distrubution statistics
+ * @brief Per-packet tmm distribution statistics
  *
  * @attention This is an interface function to be called from the rest of wireshark.
  *

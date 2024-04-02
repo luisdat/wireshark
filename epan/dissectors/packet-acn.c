@@ -14,7 +14,7 @@
 
  /*
     Todo:
-      Add reading of DDL files so we can futher explode DMP packets
+      Add reading of DDL files so we can further explode DMP packets
       For some of the Set/Get properties where we have a range of data
       it would be better to show the block of data rather and
       address-data pair on each line...
@@ -627,11 +627,11 @@ static int hf_acn_dmx_sync_reserved;
 /* static int hf_acn_dmx_dmp_vector; */
 
 /* Try heuristic ACN decode */
-static gboolean global_acn_dmx_enable = FALSE;
+static bool global_acn_dmx_enable = false;
 static gint     global_acn_dmx_display_view = 0;
 static gint     global_acn_dmx_display_line_format = 0;
-static gboolean global_acn_dmx_display_zeros = FALSE;
-static gboolean global_acn_dmx_display_leading_zeros = FALSE;
+static bool global_acn_dmx_display_zeros = false;
+static bool global_acn_dmx_display_leading_zeros = false;
 
 static int proto_magic;
 static gint ett_magic;

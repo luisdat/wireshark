@@ -2160,6 +2160,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Copia i byte del pacchetto come Go letterale.</translation>
     </message>
     <message>
+        <source>…as C Array</source>
+        <translation>...come Array C</translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as C Array.</source>
+        <translation>Copia i byte del pacchetto come Array C.</translation>
+    </message>
+    <message>
         <source>…as a Hex Stream</source>
         <translation>...come un flusso esadecimale</translation>
     </message>
@@ -2998,10 +3006,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Avvia</translation>
     </message>
     <message>
-        <source>Save</source>
-        <translation>Salva</translation>
-    </message>
-    <message>
         <source>Default</source>
         <translation>Predefinito</translation>
     </message>
@@ -3331,20 +3335,8 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
 <context>
     <name>FolderListModel</name>
     <message>
-        <source>&quot;File&quot; dialogs</source>
-        <translation>Finestre &quot;File&quot;</translation>
-    </message>
-    <message>
-        <source>capture files</source>
-        <translation>file di cattura</translation>
-    </message>
-    <message>
         <source>Temp</source>
         <translation>Temporanei</translation>
-    </message>
-    <message>
-        <source>untitled capture files</source>
-        <translation>file di cattura senza titolo</translation>
     </message>
     <message>
         <source>Personal configuration</source>
@@ -3353,14 +3345,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Global configuration</source>
         <translation>Configurazione globale</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, ethers, …</source>
-        <translation>dfilters, preferences, ethers, </translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, manuf, …</source>
-        <translation>dfilters, preferences, manuf, </translation>
     </message>
     <message>
         <source>System</source>
@@ -3375,16 +3359,8 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Programma</translation>
     </message>
     <message>
-        <source>program files</source>
-        <translation>file di programma</translation>
-    </message>
-    <message>
         <source>Personal Plugins</source>
         <translation>Plugin personali</translation>
-    </message>
-    <message>
-        <source>binary plugins</source>
-        <translation>plugin binari</translation>
     </message>
     <message>
         <source>Global Plugins</source>
@@ -3403,12 +3379,36 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Script Lua</translation>
     </message>
     <message>
+        <source>&quot;File&quot; dialog location</source>
+        <translation>Posizione finestra &quot;File&quot;</translation>
+    </message>
+    <message>
+        <source>Capture files</source>
+        <translation>File di cattura</translation>
+    </message>
+    <message>
+        <source>Untitled capture files</source>
+        <translation>File di cattura senza titolo</translation>
+    </message>
+    <message>
+        <source>Preferences, profiles, manuf, …</source>
+        <translation>Preferenze, profili, prod, …</translation>
+    </message>
+    <message>
+        <source>Program files</source>
+        <translation>File di programma</translation>
+    </message>
+    <message>
+        <source>Binary plugins</source>
+        <translation>Plugin binari</translation>
+    </message>
+    <message>
         <source>Personal Extcap path</source>
         <translation>Percorso Extcap personale</translation>
     </message>
     <message>
-        <source>external capture (extcap) plugins</source>
-        <translation>estensioni di cattura esterna (extcap)</translation>
+        <source>External capture (extcap) plugins</source>
+        <translation>Plugin di cattura esterna (extcap)</translation>
     </message>
     <message>
         <source>Global Extcap path</source>
@@ -3675,6 +3675,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Find:</source>
         <translation>Trova:</translation>
+    </message>
+    <message>
+        <source>Case sensitive</source>
+        <translation>Distingui maiuscole</translation>
     </message>
     <message>
         <source>Find &amp;Next</source>
@@ -11201,6 +11205,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Trova:</translation>
     </message>
     <message>
+        <source>Case sensitive</source>
+        <translation>Distingui maiuscole</translation>
+    </message>
+    <message>
         <source>Find &amp;Next</source>
         <translation>Trova &amp;successivo</translation>
     </message>
@@ -14219,6 +14227,18 @@ a:hover {
     <message>
         <source>TCP throughput</source>
         <translation>Throughput TCP</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Generale</translation>
+    </message>
+    <message>
+        <source>Query-Response</source>
+        <translation>Query-Risposta</translation>
+    </message>
+    <message>
+        <source>DNS Query-Response Statistics</source>
+        <translation>Statistiche Query-Risposta DNS</translation>
     </message>
     <message>
         <source>Request Sequences</source>

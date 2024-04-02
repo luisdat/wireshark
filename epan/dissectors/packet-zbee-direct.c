@@ -166,7 +166,7 @@ static guint             num_uat_key_records = 0;
 /* Common data */
 static guint8 g_conn_id;
 
-static gboolean ignore_late_keys = TRUE;
+static bool ignore_late_keys = true;
 
 /* Info types */
 typedef enum
@@ -1280,7 +1280,7 @@ static int dissect_zb_direct_formation(tvbuff_t    *tvb,
 }
 
 /**
- * Dissector for Commisioning Status.
+ * Dissector for Commissioning Status.
  *
  * @param  tvb     pointer to buffer containing raw packet
  * @param  pinfo   pointer to packet information fields

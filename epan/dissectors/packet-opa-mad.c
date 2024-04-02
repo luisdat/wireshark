@@ -1173,7 +1173,7 @@ static gint hf_opa_sa_ServiceGID;
 static gint hf_opa_sa_MGID;
 static gint hf_opa_sa_PortGID;
 
-/* Attribute Specfic Fields */
+/* Attribute Specific Fields */
 static gint hf_opa_Notice;
 static gint hf_opa_Notice_IsGeneric;
 static gint hf_opa_Notice_Type;
@@ -2696,8 +2696,8 @@ static dissector_table_t ethertype_dissector_table;
 
 static reassembly_table opa_mad_rmpp_reassembly_table;
 
-static gboolean pref_parse_on_mad_status_error = FALSE;
-static gboolean pref_attempt_rmpp_defragment = TRUE;
+static bool pref_parse_on_mad_status_error = false;
+static bool pref_attempt_rmpp_defragment = true;
 
 static range_t *global_mad_vendor_class = NULL;
 static range_t *global_mad_vendor_rmpp_class = NULL;

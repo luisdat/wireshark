@@ -107,7 +107,7 @@ void proto_register_z3950(void);
 /* Initialize the protocol and registered fields */
 static int proto_z3950;
 static int global_z3950_port = Z3950_PORT;
-static gboolean z3950_desegment = TRUE;
+static bool z3950_desegment = true;
 
 static const value_string z3950_bib1_att_types[] = {
     { Z3950_BIB1_AT_USE, "Use" },
@@ -962,7 +962,7 @@ static int
 dissect_z3950_segment(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * data _U_)
 {
 
-    /* Min length of 8 assumes 3 for identifer and 5 for length. */
+    /* Min length of 8 assumes 3 for identifier and 5 for length. */
     tcp_dissect_pdus(tvb, pinfo, tree, z3950_desegment, 8, get_z3950_pdu_len, dissect_z3950, data);
     return tvb_captured_length(tvb);
 }

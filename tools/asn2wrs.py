@@ -160,6 +160,7 @@ input_file = None
 g_conform = None
 lexer = None
 in_oid = False
+quiet = False
 
 class LexError(Exception):
     def __init__(self, tok, filename=None):
@@ -1550,23 +1551,19 @@ class EthCtx:
         if self.conform.check_item('PDU', tname):
             out += self.output_proto_root()
 
-        cycle_size = 0
+        cycle_funcs = []
         if self.eth_dep_cycle:
             for cur_cycle in self.eth_dep_cycle:
                 t = self.type[cur_cycle[0]]['ethname']
                 if t == tname:
-                    cycle_size = len(cur_cycle)
+                    cycle_funcs = cur_cycle
                     break
 
-        if cycle_size > 0:
+        if len(cycle_funcs) > 1:
             out += f'''\
-  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
-  const unsigned cycle_size = {cycle_size};
-  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
-
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
-
+  // {' -> '.join(cycle_funcs)}
+  actx->pinfo->dissection_depth += {len(cycle_funcs) - 1};
+  increment_dissection_depth(actx->pinfo);
 '''
 
         if self.conform.get_fn_presence(self.eth_type[tname]['ref'][0]):
@@ -1580,17 +1577,18 @@ class EthCtx:
         #  out += self.conform.get_fn_text(tname, 'FN_FTR')
         #el
 
-        add_recursion_check = False
+        cycle_funcs = []
         if self.eth_dep_cycle:
             for cur_cycle in self.eth_dep_cycle:
                 t = self.type[cur_cycle[0]]['ethname']
                 if t == tname:
-                    add_recursion_check = True
+                    cycle_funcs = cur_cycle
                     break
 
-        if add_recursion_check:
-            out += '''\
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth);
+        if len(cycle_funcs) > 1:
+            out += f'''\
+  actx->pinfo->dissection_depth -= {len(cycle_funcs) - 1};
+  decrement_dissection_depth(actx->pinfo);
 '''
 
         if self.conform.get_fn_presence(self.eth_type[tname]['ref'][0]):
@@ -1877,8 +1875,6 @@ class EthCtx:
                 fx.write('\n')
                 i += 1
             fx.write('\n')
-        if add_depth_define:
-            fx.write('#define MAX_RECURSION_DEPTH 100 // Arbitrarily chosen.\n')
         for t in self.eth_type_ord1:
             if self.eth_type[t]['import']:
                 continue
@@ -2073,6 +2069,8 @@ class EthCtx:
 
     #--- dupl_report -----------------------------------------------------
     def dupl_report(self):
+        if quiet:
+            return
         # types
         tmplist = sorted(self.eth_type_dupl.keys())
         for t in tmplist:
@@ -5978,7 +5976,7 @@ def p_Reference_1 (t):
 
 def p_Reference_2 (t):
     '''Reference : LCASE_IDENT_ASSIGNED
-                 | identifier '''  # instead of valuereference wich causes reduce/reduce conflict
+                 | identifier '''  # instead of valuereference which causes reduce/reduce conflict
     t[0] = Value_Ref(val=t[1])
 
 def p_AssignmentList_1 (t):
@@ -6019,7 +6017,7 @@ def p_DefinedValue_1(t):
     t[0] = t[1]
 
 def p_DefinedValue_2(t):
-    '''DefinedValue : identifier '''  # instead of valuereference wich causes reduce/reduce conflict
+    '''DefinedValue : identifier '''  # instead of valuereference which causes reduce/reduce conflict
     t[0] = Value_Ref(val=t[1])
 
 # 13.6
@@ -6045,7 +6043,7 @@ def p_ValueAssignment (t):
     'ValueAssignment : LCASE_IDENT ValueType ASSIGNMENT Value'
     t[0] = ValueAssignment(ident = t[1], typ = t[2], val = t[4])
 
-# only "simple" types are supported to simplify grammer
+# only "simple" types are supported to simplify grammar
 def p_ValueType (t):
     '''ValueType : type_ref
                  | BooleanType
@@ -8069,13 +8067,14 @@ def ignore_comments(string):
 
     return ''.join(chunks)
 
-def eth_main():
+def asn2wrs_main():
     global input_file
     global g_conform
     global lexer
-    print("ASN.1 to Wireshark dissector compiler");
+    global quiet
+
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "h?d:D:buXp:FTo:O:c:I:eESs:kLCr:");
+        opts, args = getopt.getopt(sys.argv[1:], "h?d:D:buXp:qFTo:O:c:I:eESs:kLCr:");
     except getopt.GetoptError:
         eth_usage(); sys.exit(2)
     if len(args) < 1:
@@ -8117,17 +8116,22 @@ def eth_main():
         if o in ("-C",):
             ectx.constraints_check = True
         if o in ("-L",):
-            ectx.conform.suppress_line = True;
+            ectx.conform.suppress_line = True
+        if o in ("-q",):
+            quiet = True
         if o in ("-X",):
             warnings.warn("Command line option -X is obsolete and can be removed")
         if o in ("-T",):
             warnings.warn("Command line option -T is obsolete and can be removed")
 
+    if not quiet:
+        print("ASN.1 to Wireshark dissector compiler")
+
     if conf_to_read:
         ectx.conform.read(conf_to_read)
 
     for o, a in opts:
-        if o in ("-h", "-?", "-c", "-I", "-E", "-D", "-C", "-X", "-T"):
+        if o in ("-h", "-?", "-c", "-I", "-E", "-D", "-C", "-q", "-X", "-T"):
             pass  # already processed
         else:
             par = []
@@ -8231,7 +8235,7 @@ def main():
 
 if __name__ == '__main__':
     if (os.path.splitext(os.path.basename(sys.argv[0]))[0].lower() in ('asn2wrs', 'asn2eth')):
-        eth_main()
+        asn2wrs_main()
     else:
         main()
 

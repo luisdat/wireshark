@@ -59,6 +59,7 @@
 #include <epan/exported_pdu.h>
 #include <epan/proto_data.h>
 #include <epan/decode_as.h>
+#include <epan/prefs-int.h>
 #include <epan/secrets.h>
 #include <wiretap/secrets-types.h>
 
@@ -67,6 +68,8 @@
 #include <wsutil/strtoi.h>
 #include <wsutil/rsa.h>
 #include <wsutil/ws_assert.h>
+#include <wsutil/filesystem.h>
+#include <wsutil/report_message.h>
 #include "packet-tcp.h"
 #include "packet-x509af.h"
 #include "packet-tls.h"
@@ -80,9 +83,9 @@ static ssldecrypt_assoc_t *tlskeylist_uats = NULL;
 static guint ntlsdecrypt = 0;
 #endif
 
-static gboolean tls_desegment          = TRUE;
-static gboolean tls_desegment_app_data = TRUE;
-static gboolean tls_ignore_mac_failed  = FALSE;
+static bool tls_desegment          = true;
+static bool tls_desegment_app_data = true;
+static bool tls_ignore_mac_failed  = false;
 
 
 /*********************************************************************
@@ -2087,7 +2090,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
      * if we don't already have a version set for this conversation,
      * but this message's version is authoritative (i.e., it's
      * not client_hello, then save the version to the conversation
-     * structure and print the column version. If the message is not authorative
+     * structure and print the column version. If the message is not authoritative
      * (i.e. it is a Client Hello), then this version will still be used for
      * display purposes only (it will not be stored in the conversation).
      */
@@ -4881,6 +4884,23 @@ static int dissect_tls_sct_ber(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 void
 proto_reg_handoff_ssl(void)
 {
+    if (files_identical(ssl_debug_file_name, ssl_options.keylog_filename)) {
+        report_failure("The TLS debug file (\"%s\") cannot point to the same "
+        "file as the TLS key log file (\"%s\").", ssl_debug_file_name,
+        ssl_options.keylog_filename);
+
+        /* ssl_parse_uat() sets (and thus overwrites) the debug file, so to
+         * be safe, set it the empty string before calling that so we don't
+         * overwrite their key log file.
+         */
+        module_t *tls_module = prefs_find_module("tls");
+        if (tls_module) {
+            pref_t *pref_tls_debug = prefs_find_preference(tls_module, "debug_file");
+            if (pref_tls_debug) {
+                prefs_set_string_value(pref_tls_debug, "", pref_current);
+            }
+        }
+    }
 
 #ifdef HAVE_LIBGNUTLS
     /* parse key list */

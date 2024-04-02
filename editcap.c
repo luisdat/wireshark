@@ -270,7 +270,7 @@ add_selection(char *sel, guint* max_selection)
     if (max_selected >= MAX_SELECTIONS) {
         /* Let the user know we stopped selecting */
         fprintf(stderr, "Out of room for packet selections.\n");
-        return(FALSE);
+        return FALSE;
     }
 
     if (verbose)
@@ -311,7 +311,7 @@ add_selection(char *sel, guint* max_selection)
     }
 
     max_selected++;
-    return(TRUE);
+    return TRUE;
 }
 
 /* Was the packet selected? */
@@ -2595,7 +2595,7 @@ handle_chopping(chop_t chop, wtap_packet_header *out_phdr,
         if (chop.off_begin_pos > 0) {
             memmove(*buf + chop.off_begin_pos,
                     *buf + chop.off_begin_pos + chop.len_begin,
-                    out_phdr->caplen - chop.len_begin);
+                    out_phdr->caplen - (chop.off_begin_pos + chop.len_begin));
         } else {
             *buf += chop.len_begin;
         }

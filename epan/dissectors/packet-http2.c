@@ -38,6 +38,7 @@
 
 #ifdef HAVE_NGHTTP2
 #include <epan/uat.h>
+#include <epan/charsets.h>
 #include <epan/decode_as.h>
 #include <nghttp2/nghttp2.h>
 #include <epan/export_object.h>
@@ -263,7 +264,7 @@ typedef struct {
     tcp_flow_t *fwd_flow;
     /* Initial window size of new streams (in both directions) */
     guint32 initial_new_stream_window_size[2];
-    /* Curent window size of the connection (in both directions) */
+    /* Current window size of the connection (in both directions) */
     gint32 current_connection_window_size[2];
 } http2_session_t;
 
@@ -1188,6 +1189,7 @@ http2_cleanup_protocol(void) {
 }
 
 static dissector_handle_t http2_handle;
+static dissector_handle_t data_handle;
 
 static reassembly_table http2_body_reassembly_table;
 static reassembly_table http2_streaming_reassembly_table;
@@ -1928,7 +1930,7 @@ try_append_method_path_info(packet_info *pinfo, proto_tree *tree,
                         const gchar *method_header_value, const gchar *path_header_value)
 {
     if (method_header_value != NULL && path_header_value != NULL) {
-        /* append request inforamtion to info column (for example, HEADERS: GET /demo/1.jpg) */
+        /* append request information to info column (for example, HEADERS: GET /demo/1.jpg) */
         col_append_sep_fstr(pinfo->cinfo, COL_INFO, ": ", "%s %s", method_header_value, path_header_value);
         /* append request information to Stream node */
         proto_item_append_text(tree, ", %s %s", method_header_value, path_header_value);
@@ -3221,6 +3223,21 @@ reassemble_http2_data_according_to_subdissector(tvbuff_t* tvb, packet_info* pinf
     streaming_reassembly_info_t* reassembly_info = get_streaming_reassembly_info(pinfo, http2_session);
 
     dissector_handle_t subdissector_handle = dissector_get_string_handle(streaming_content_type_dissector_table, content_type);
+    if (subdissector_handle == NULL) {
+        /* We didn't get the content type, possibly because of byte errors.
+         * Note that the content type is per direction (as it should be)
+         * but reassembly_mode is set the same for *both* directions.
+         *
+         * We could try to set it to the content type used in the other
+         * direction, but among other things, if this is the request,
+         * we might be getting here for the first time on the second pass,
+         * and reassemble_streaming_data_and_call_subdissector() asserts in
+         *
+         * Just set it to data for now to avoid an assert from a NULL handle.
+         */
+        subdissector_handle = data_handle;
+    }
+    /* XXX - Do we still need to set this? */
     pinfo->match_string = content_type;
 
     reassemble_streaming_data_and_call_subdissector(
@@ -3302,7 +3319,7 @@ get_real_header_value(packet_info* pinfo, const gchar* name, gboolean the_other_
                 value_len = pntoh32(data + 4 + name_len);
                 if (4 + name_len + 4 + value_len == hdr->table.data.datalen) {
                     /* return value */
-                    return wmem_strndup(pinfo->pool, data + 4 + name_len + 4, value_len);
+                    return get_ascii_string(pinfo->pool, data + 4 + name_len + 4, value_len);
                 }
                 else {
                     return NULL; /* unexpected error */
@@ -4197,7 +4214,7 @@ dissect_http2_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     get_http2_session(pinfo, conversation);
     dissect_http2(tvb, pinfo, tree, data);
 
-    return (TRUE);
+    return TRUE;
 }
 
 static gboolean
@@ -4617,7 +4634,7 @@ proto_register_http2(void)
 
         /* Goaway */
         { &hf_http2_goaway_r,
-            { "Reserved", "http2.goway.r",
+            { "Reserved", "http2.goaway.r",
                FT_UINT32, BASE_HEX, NULL, MASK_HTTP2_RESERVED,
               "Must be zero", HFILL }
         },
@@ -4931,6 +4948,8 @@ proto_reg_handoff_http2(void)
     media_type_dissector_table = find_dissector_table("media_type");
 #endif
 
+    data_handle = find_dissector("data");
+
     dissector_add_uint_range_with_preference("tcp.port", "", http2_handle);
     dissector_add_for_decode_as("tcp.port", http2_handle);
 
@@ -4942,7 +4961,8 @@ proto_reg_handoff_http2(void)
     dissector_add_string("http.upgrade", "h2c", http2_handle);
 
     heur_dissector_add("tls", dissect_http2_heur_ssl, "HTTP2 over TLS", "http2_tls", proto_http2, HEURISTIC_ENABLE);
-    heur_dissector_add("http", dissect_http2_heur, "HTTP2 over TCP", "http2_tcp", proto_http2, HEURISTIC_ENABLE);
+    heur_dissector_add("tcp", dissect_http2_heur, "HTTP2 over TCP", "http2_tcp", proto_http2, HEURISTIC_ENABLE);
+    heur_dissector_add("http", dissect_http2_heur, "HTTP2 on an HTTP port", "http2_http", proto_http2, HEURISTIC_ENABLE);
 
     stats_tree_register("http2", "http2", "HTTP2", 0, http2_stats_tree_packet, http2_stats_tree_init, NULL);
 

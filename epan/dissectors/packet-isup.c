@@ -40,7 +40,6 @@
 #include <epan/conversation.h>
 #include <epan/stats_tree.h>
 #include <epan/asn1.h>
-#include <epan/proto_data.h>
 #include <epan/prefs.h>
 #include <epan/sctpppids.h>
 #include <epan/osi-utils.h>
@@ -134,8 +133,6 @@ static gint g_isup_variant = ISUP_ITU_STANDARD_VARIANT;
 #define ANSI_ISUP_MESSAGE_TYPE_CCT_VAL_TEST_RSP 0xEB
 #define ANSI_ISUP_MESSAGE_TYPE_CCT_VAL_TEST     0xEC
 #define ANSI_ISUP_MESSAGE_TYPE_EXIT             0xED
-
-#define MAX_RECURSION_DEPTH 50 // Arbitrarily chosen.
 
 static const value_string isup_message_type_value[] = {
   { MESSAGE_TYPE_INITIAL_ADDR,                "Initial address"},
@@ -2765,7 +2762,7 @@ static const true_false_string isup_Sequence_ind_value = {
 static int proto_isup;
 static int proto_bicc;
 
-static gboolean isup_show_cic_in_info = TRUE;
+static bool isup_show_cic_in_info = true;
 
 static int hf_isup_called;
 static int hf_isup_calling;
@@ -3220,7 +3217,7 @@ static dissector_handle_t sdp_handle = NULL;
 static dissector_handle_t q931_ie_handle = NULL;
 
 /* Declarations to desegment APM Messages */
-static gboolean isup_apm_desegment = TRUE;
+static bool isup_apm_desegment = true;
 
 static const fragment_items isup_apm_msg_frag_items = {
   /* Fragment subtrees */
@@ -6586,7 +6583,7 @@ dissect_isup_conference_treatment_indicators_parameter(tvbuff_t *parameter_tvb, 
  * 0                 3      Display information (IA5 characters)
  * etc.
  * - end - quote -
- * Assuming octet 2 and onwards is pased here - just output text ?
+ * Assuming octet 2 and onwards is passed here - just output text ?
  */
 static void
 dissect_isup_display_information_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item _U_)
@@ -9744,9 +9741,7 @@ dissect_ansi_isup_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree 
   offset                        = 0;
 
   // We call ourselves for MESSAGE_TYPE_PASS_ALONG.
-  unsigned recursion_depth = p_get_proto_depth(pinfo, proto_isup);
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(pinfo, proto_isup, recursion_depth + 1);
+  increment_dissection_depth(pinfo);
 
   /* Extract message type field */
   message_type = tvb_get_guint8(message_tvb, 0);
@@ -10001,7 +9996,7 @@ dissect_ansi_isup_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree 
   tap_rec->cause_value    = tap_cause_value;
   tap_queue_packet(isup_tap, pinfo, tap_rec);
 
-  p_set_proto_depth(pinfo, proto_isup, recursion_depth);
+  decrement_dissection_depth(pinfo);
 }
 // NOLINTEND(misc-no-recursion)
 
@@ -10023,9 +10018,7 @@ dissect_isup_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *isup
   offset                        = 0;
 
   // We call ourselves for MESSAGE_TYPE_PASS_ALONG.
-  unsigned recursion_depth = p_get_proto_depth(pinfo, proto_isup);
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(pinfo, proto_isup, recursion_depth + 1);
+  increment_dissection_depth(pinfo);
 
   /* Extract message type field */
   message_type = tvb_get_guint8(message_tvb, 0);
@@ -10379,7 +10372,7 @@ dissect_isup_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *isup
   tap_rec->cause_value    = tap_cause_value;
   tap_queue_packet(isup_tap, pinfo, tap_rec);
 
-  p_set_proto_depth(pinfo, proto_isup, recursion_depth);
+  decrement_dissection_depth(pinfo);
 }
 // NOLINTEND(misc-no-recursion)
 
@@ -12280,7 +12273,7 @@ proto_register_isup(void)
 
   prefs_register_bool_preference(isup_module, "show_cic_in_info", "Show CIC in Info column",
                                  "Show the CIC value (in addition to the message type) in the Info column",
-                                 (gint *)&isup_show_cic_in_info);
+                                 &isup_show_cic_in_info);
 
   prefs_register_bool_preference(isup_module, "defragment_apm",
                                  "Reassemble APM messages",

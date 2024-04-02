@@ -305,12 +305,6 @@ if(WIN32 AND NOT USE_MSYSTEM)
 	set(CMAKE_INSTALL_INCLUDEDIR "include")
 	set(CMAKE_INSTALL_DATADIR ".")
 	set(CMAKE_INSTALL_DOCDIR ".")
-else()
-	# By default INSTALL_DATADIR is set to INSTALL_DATAROOTDIR, set the
-	# proper value here.
-	set(CMAKE_INSTALL_DATADIR "share/${PROJECT_NAME}"
-		CACHE PATH "Read-only architecture-independent data"
-	)
 endif()
 include(GNUInstallDirs)
 
@@ -319,9 +313,9 @@ set(PROJECT_INSTALL_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}")
 # Make sure our executables can load our libraries if we install into
 # a non-default directory on Unix-like systems other than macOS.
 # https://gitlab.kitware.com/cmake/community/wikis/doc/cmake/RPATH-handling
-set(LIBRARY_INSTALL_RPATH "")
-set(EXECUTABLE_INSTALL_RPATH "")
-set(EXTCAP_INSTALL_RPATH "")
+set(LIBRARY_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}")
+set(EXECUTABLE_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}")
+set(EXTCAP_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}")
 if(NOT (WIN32 OR APPLE OR USE_STATIC))
 	# Try to set a RPATH for installed binaries if the library directory is
 	# not already included in the default search list.
@@ -1390,9 +1384,9 @@ ws_find_package(NGHTTP3 ENABLE_NGHTTP3 HAVE_NGHTTP3)
 # Embedded Lua interpreter
 if(FETCH_lua)
 	# Download and build lua
-	include(${CMAKE_SOURCE_DIR}/cmake/external/lua52/Lua52.cmake)
+	include(${CMAKE_SOURCE_DIR}/cmake/external/lua53/Lua53.cmake)
 else()
-	set(LUA_FIND_VERSIONS "5.2;5.1" CACHE STRING "Lua versions valid for the build (as a list)")
+	set(LUA_FIND_VERSIONS "5.4;5.3;5.2;5.1" CACHE STRING "Lua versions valid for the build (as a list)")
 	ws_find_package(Lua ENABLE_LUA HAVE_LUA)
 endif()
 
@@ -1611,11 +1605,16 @@ include( UseCheckAPI )
 # If you change the nesting level be sure to check also the INSTALL_RPATH
 # target property.
 if(WIN32 AND NOT USE_MSYSTEM)
-	set(EXTCAP_INSTALL_LIBDIR "extcap" CACHE INTERNAL "The extcap dir")
+	set(EXTCAP_INSTALL_LIBDIR "extcap/${PROJECT_NAME}" CACHE INTERNAL "The Wireshark extcap dir")
+	if (BUILD_logray)
+		set(LOG_EXTCAP_INSTALL_LIBDIR "extcap/${LOG_PROJECT_NAME}" CACHE INTERNAL "The Logray extcap dir")
+	endif()
 else()
-	set(EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/extcap" CACHE INTERNAL "The extcap dir")
+	set(EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/extcap" CACHE INTERNAL "The Wireshark extcap dir")
+	if (BUILD_logray)
+		set(LOG_EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${LOG_PROJECT_NAME}/extcap" CACHE INTERNAL "The Logray extcap dir")
+	endif()
 endif()
-set(EXTCAP_INSTALL_FULL_LIBDIR "${CMAKE_INSTALL_PREFIX}/${EXTCAP_INSTALL_LIBDIR}")
 
 # Directory where plugins and Lua dissectors can be found.
 if(WIN32 AND NOT USE_MSYSTEM)
@@ -2046,7 +2045,8 @@ set(TSHARK_TAP_SRC
 
 )
 
-# Installed into ${DATAFILE_DIR}
+# Copied into ${DATAFILE_DIR} at build time and ${CMAKE_INSTALL_DATADIR}/wireshark
+# at install time.
 set(INSTALL_DIRS
 	resources/share/wireshark/profiles
 	resources/protocols/diameter
@@ -2056,7 +2056,8 @@ set(INSTALL_DIRS
 	resources/protocols/wimaxasncp
 )
 
-# Installed into ${DATAFILE_DIR}
+# Copied into ${DATAFILE_DIR} at build time and ${CMAKE_INSTALL_DATADIR}/wireshark
+# at install time.
 set(INSTALL_FILES
 	resources/share/wireshark/cfilters
 	resources/share/wireshark/colorfilters
@@ -2394,21 +2395,26 @@ foreach(_install_file ${INSTALL_FILES} ${DOC_FILES})
 	list(APPEND copy_data_files_depends "${_output_file}")
 endforeach()
 
-if (BUILD_logray AND ENABLE_APPLICATION_BUNDLE)
-	foreach(_install_file ${LOG_INSTALL_FILES})
-		get_filename_component(_install_file_src "${_install_file}" ABSOLUTE)
-		get_filename_component(_install_basename "${_install_file}" NAME)
-		set(_output_file "${LOG_DATAFILE_DIR}/${_install_basename}")
-		add_custom_command(OUTPUT "${_output_file}"
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				"${_install_file_src}"
-				"${_output_file}"
-			DEPENDS
-				docs
-				"${_install_file}"
-		)
-		list(APPEND copy_data_files_depends "${_output_file}")
-	endforeach()
+if (BUILD_logray)
+	if (ENABLE_APPLICATION_BUNDLE)
+		foreach(_install_file ${LOG_INSTALL_FILES})
+			get_filename_component(_install_file_src "${_install_file}" ABSOLUTE)
+			get_filename_component(_install_basename "${_install_file}" NAME)
+			set(_output_file "${LOG_DATAFILE_DIR}/${_install_basename}")
+			add_custom_command(OUTPUT "${_output_file}"
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					"${_install_file_src}"
+					"${_output_file}"
+				DEPENDS
+					docs
+					"${_install_file}"
+			)
+			list(APPEND copy_data_files_depends "${_output_file}")
+		endforeach()
+	else()
+		# XXX The default profile (colorfilters, dfilters) is at the
+		# top-level resources directory for both Wireshark and Logray.
+	endif()
 endif()
 
 set(_protocol_data_dir ${CMAKE_SOURCE_DIR}/resources/protocols)
@@ -3008,7 +3014,6 @@ if(BUILD_tshark)
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
-		${M_LIBRARIES}
 	)
 	set(tshark_FILES
 		$<TARGET_OBJECTS:capture_opts>
@@ -3082,7 +3087,6 @@ if(BUILD_sharkd)
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
 		${SPEEXDSP_LIBRARIES}
-		${M_LIBRARIES}
 		${GCRYPT_LIBRARIES}
 	)
 	set(sharkd_FILES
@@ -3278,7 +3282,6 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
-		${M_LIBRARIES}
 	)
 	if(UNIX)
 		list(APPEND CAPUTILS_SRC
@@ -3954,8 +3957,21 @@ install(
 		GROUP_READ
 		WORLD_READ
 	DESTINATION
-		${CMAKE_INSTALL_DATADIR}
+		${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
 )
+
+if (BUILD_logray)
+	install(
+		FILES
+			${LOG_INSTALL_FILES}
+		PERMISSIONS
+			OWNER_WRITE OWNER_READ
+			GROUP_READ
+			WORLD_READ
+		DESTINATION
+			${CMAKE_INSTALL_DATADIR}/${LOG_PROJECT_NAME}
+	)
+endif()
 
 install(
 	FILES
@@ -4059,7 +4075,7 @@ install(
 	DIRECTORY
 		${INSTALL_DIRS}
 	DESTINATION
-		${CMAKE_INSTALL_DATADIR}
+		${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
 	FILE_PERMISSIONS
 		OWNER_WRITE OWNER_READ
 		GROUP_READ
@@ -4072,6 +4088,26 @@ install(
 	PATTERN ".svn" EXCLUDE
 	PATTERN "Makefile.*" EXCLUDE
 )
+
+if (BUILD_logray)
+	install(
+		DIRECTORY
+			${LOG_INSTALL_DIRS}
+		DESTINATION
+			${CMAKE_INSTALL_DATADIR}/${LOG_PROJECT_NAME}
+		FILE_PERMISSIONS
+			OWNER_WRITE OWNER_READ
+			GROUP_READ
+			WORLD_READ
+		DIRECTORY_PERMISSIONS
+			OWNER_EXECUTE OWNER_WRITE OWNER_READ
+			GROUP_EXECUTE GROUP_READ
+			WORLD_EXECUTE WORLD_READ
+		PATTERN ".git" EXCLUDE
+		PATTERN ".svn" EXCLUDE
+		PATTERN "Makefile.*" EXCLUDE
+	)
+endif()
 
 if(WIN32 AND NOT USE_MSYSTEM)
 	# Note: CMake export mechanism misbehaves with a '.' in the

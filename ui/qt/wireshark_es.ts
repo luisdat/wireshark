@@ -2133,6 +2133,14 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>…as C Array</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as C Array.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as a Hex Stream</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2971,10 +2979,6 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Save</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Default</source>
         <translation type="unfinished">Predeterminado</translation>
     </message>
@@ -3304,20 +3308,8 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
 <context>
     <name>FolderListModel</name>
     <message>
-        <source>&quot;File&quot; dialogs</source>
-        <translation>Diálogos de &quot;Archivo&quot;</translation>
-    </message>
-    <message>
-        <source>capture files</source>
-        <translation>archivos de captura</translation>
-    </message>
-    <message>
         <source>Temp</source>
         <translation>Temporal</translation>
-    </message>
-    <message>
-        <source>untitled capture files</source>
-        <translation>archivos de captura sin título</translation>
     </message>
     <message>
         <source>Personal configuration</source>
@@ -3326,14 +3318,6 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     <message>
         <source>Global configuration</source>
         <translation>Configuración global</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, ethers, …</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, manuf, …</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>System</source>
@@ -3348,16 +3332,8 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation>Programa</translation>
     </message>
     <message>
-        <source>program files</source>
-        <translation>archivos de programa</translation>
-    </message>
-    <message>
         <source>Personal Plugins</source>
         <translation>Complementos personales</translation>
-    </message>
-    <message>
-        <source>binary plugins</source>
-        <translation>complementos binarios</translation>
     </message>
     <message>
         <source>Global Plugins</source>
@@ -3376,11 +3352,35 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>&quot;File&quot; dialog location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Untitled capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preferences, profiles, manuf, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Program files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugins</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Personal Extcap path</source>
         <translation>Ruta personal de Extcap</translation>
     </message>
     <message>
-        <source>external capture (extcap) plugins</source>
+        <source>External capture (extcap) plugins</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -3634,6 +3634,10 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     <message>
         <source>Find:</source>
         <translation>Buscar:</translation>
+    </message>
+    <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Mayúsculas y minúsculas</translation>
     </message>
     <message>
         <source>Find &amp;Next</source>
@@ -11099,6 +11103,10 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation>Buscar:</translation>
     </message>
     <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Mayúsculas y minúsculas</translation>
+    </message>
+    <message>
         <source>Find &amp;Next</source>
         <translation>Buscar &amp;siguiente</translation>
     </message>
@@ -14083,6 +14091,18 @@ a:hover {
     <message>
         <source>TCP throughput</source>
         <translation>Rendimiento TCP</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Query-Response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DNS Query-Response Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Request Sequences</source>

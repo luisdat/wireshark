@@ -551,33 +551,22 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connect(&capture_file_, SIGNAL(captureEvent(CaptureEvent)),
             main_ui_->statusBar, SLOT(captureEventHandler(CaptureEvent)));
 
-    connect(mainApp, SIGNAL(freezePacketList(bool)),
-            packet_list_, SLOT(freezePacketList(bool)));
-    connect(mainApp, SIGNAL(columnsChanged()),
-            packet_list_, SLOT(columnsChanged()));
-    connect(mainApp, SIGNAL(preferencesChanged()),
-            packet_list_, SLOT(preferencesChanged()));
-    connect(mainApp, SIGNAL(recentPreferencesRead()),
-            this, SLOT(applyRecentPaneGeometry()));
-    connect(mainApp, SIGNAL(recentPreferencesRead()),
-            this, SLOT(updateRecentActions()));
-    connect(mainApp, SIGNAL(packetDissectionChanged()),
-            this, SLOT(redissectPackets()), Qt::QueuedConnection);
+    connect(mainApp, &MainApplication::freezePacketList, packet_list_, &PacketList::freezePacketList);
+    connect(mainApp, &MainApplication::columnsChanged, packet_list_, &PacketList::columnsChanged);
+    connect(mainApp, &MainApplication::colorsChanged, packet_list_, &PacketList::colorsChanged);
+    connect(mainApp, &MainApplication::preferencesChanged, packet_list_, &PacketList::preferencesChanged);
+    connect(mainApp, &MainApplication::recentPreferencesRead, this, &LograyMainWindow::applyRecentPaneGeometry);
+    connect(mainApp, &MainApplication::recentPreferencesRead, this, &LograyMainWindow::updateRecentActions);
+    connect(mainApp, &MainApplication::packetDissectionChanged, this, &LograyMainWindow::redissectPackets, Qt::QueuedConnection);
 
-    connect(mainApp, SIGNAL(checkDisplayFilter()),
-            this, SLOT(checkDisplayFilter()));
-    connect(mainApp, SIGNAL(fieldsChanged()),
-            this, SLOT(fieldsChanged()));
-    connect(mainApp, SIGNAL(reloadLuaPlugins()),
-            this, SLOT(reloadLuaPlugins()));
+    connect(mainApp, &MainApplication::checkDisplayFilter, this, &LograyMainWindow::checkDisplayFilter);
+    connect(mainApp, &MainApplication::fieldsChanged, this, &LograyMainWindow::fieldsChanged);
+    connect(mainApp, &MainApplication::reloadLuaPlugins, this, &LograyMainWindow::reloadLuaPlugins);
 
-    connect(main_ui_->mainStack, SIGNAL(currentChanged(int)),
-            this, SLOT(mainStackChanged(int)));
+    connect(main_ui_->mainStack, &QStackedWidget::currentChanged, this, &LograyMainWindow::mainStackChanged);
 
-    connect(welcome_page_, SIGNAL(startCapture(QStringList)),
-            this, SLOT(startCapture(QStringList)));
-    connect(welcome_page_, SIGNAL(recentFileActivated(QString)),
-            this, SLOT(openCaptureFile(QString)));
+    connect(welcome_page_, &WelcomePage::startCapture, this, [this](QStringList) { startCapture(); });
+    connect(welcome_page_, &WelcomePage::recentFileActivated, this, [this](QString cfile) { openCaptureFile(cfile); });
 
     connect(main_ui_->addressEditorFrame, &AddressEditorFrame::redissectPackets,
             this, &LograyMainWindow::redissectPackets);
@@ -600,10 +589,8 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connect(this, &LograyMainWindow::setCaptureFile,
             proto_tree_, &ProtoTree::setCaptureFile);
 
-    connect(mainApp, SIGNAL(zoomMonospaceFont(QFont)),
-            packet_list_, SLOT(setMonospaceFont(QFont)));
-    connect(mainApp, SIGNAL(zoomMonospaceFont(QFont)),
-            proto_tree_, SLOT(setMonospaceFont(QFont)));
+    connect(mainApp, &MainApplication::zoomMonospaceFont, packet_list_, &PacketList::setMonospaceFont);
+    connect(mainApp, &MainApplication::zoomMonospaceFont, proto_tree_, &ProtoTree::setMonospaceFont);
 
     connectFileMenuActions();
     connectEditMenuActions();
@@ -713,7 +700,7 @@ LograyMainWindow::~LograyMainWindow()
 #ifndef Q_OS_MAC
     // Below dialogs inherit GeometryStateDialog
     // For reasons described in geometry_state_dialog.h no parent is set when
-    // instantiating the dialogs and as a resul objects are not automatically
+    // instantiating the dialogs and as a result objects are not automatically
     // freed by its parent. Free then here explicitly to avoid leak and numerous
     // Valgrind complaints.
     delete file_set_dialog_;
@@ -1117,7 +1104,7 @@ void LograyMainWindow::saveWindowGeometry()
 // Our event loop becomes nested whenever we call update_progress_dlg, which
 // includes several places in file.c. The GTK+ UI stays out of trouble by
 // showing a modal progress dialog. We attempt to do the equivalent below by
-// disabling parts of the main window. At a minumum the ProgressFrame in the
+// disabling parts of the main window. At a minimum the ProgressFrame in the
 // main status bar must remain accessible.
 //
 // We might want to do this any time the main status bar progress frame is
@@ -2085,7 +2072,7 @@ void LograyMainWindow::findTextCodecs() {
         // annoying to properly place IBM00858 and IBM00924 in the middle of
         // code page numbers not zero padded to 5 digits.
         // We could manipulate the key further to have more commonly used
-        // charsets earlier. IANA MIB ordering would be unxpected:
+        // charsets earlier. IANA MIB ordering would be unexpected:
         // https://www.iana.org/assignments/character-sets/character-sets.xml
         // For data about use in HTTP (other protocols can be quite different):
         // https://w3techs.com/technologies/overview/character_encoding

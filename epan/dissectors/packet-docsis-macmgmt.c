@@ -29,7 +29,7 @@
  * Copyright 2015, Adrian Simionov <daniel.simionov@gmail.com>
  * Copyright 2003, Brian Wheeler <brian.wheeler[AT]arrisi.com>
  *
- * Routines for Intial Ranging Request Message dissection
+ * Routines for Initial Ranging Request Message dissection
  * Copyright 2003, Brian Wheeler <brian.wheeler[AT]arrisi.com>
  *
  * Routines for Baseline Privacy Key Management Attributes dissection
@@ -40,7 +40,7 @@
  * Copyright 2014, Adrian Simionov <adrian.simionov@arrisi.com>
  * Copyright 2007, Bruno Verstuyft <bruno.verstuyft@excentis.com>
  *
- * Routines for DOCSIS 3.0 Bonded Intial Ranging Request Message dissection.
+ * Routines for DOCSIS 3.0 Bonded Initial Ranging Request Message dissection.
  * Copyright 2009, Geoffrey Kimball <gekimbal[AT]cisco.com>
  *
  * Routines for Type 35 UCD - DOCSIS 3.0 only - Message dissection
@@ -3828,6 +3828,7 @@ dissect_uccrsp (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
  * attributes.  It's called recursively, to dissect embedded attributes
  */
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_attrs (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
 {
   guint8 type;
@@ -3839,6 +3840,7 @@ dissect_attrs (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
   tvbuff_t *attr_tvb;
 
   total_len = tvb_reported_length_remaining (tvb, 0);
+  increment_dissection_depth(pinfo);
   while (pos < total_len)
   {
     type = tvb_get_guint8 (tvb, pos);
@@ -4013,6 +4015,7 @@ dissect_attrs (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
 
     pos += length;            /* switch */
   }                           /* while */
+  decrement_dissection_depth(pinfo);
 }
 
 static int

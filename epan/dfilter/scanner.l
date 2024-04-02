@@ -455,7 +455,7 @@ HexExponent		([pP][+-]?[[:digit:]]+)
 	update_location(yyextra, yytext);
 	/* Check if we have a protocol or protocol field, otherwise assume a literal. */
 	/* It is only reasonable to assume a literal here, instead of a
-	 * (possibly non-existant) protocol field, because protocol field filter names
+	 * (possibly non-existent) protocol field, because protocol field filter names
 	 * should not start with a digit (the lexical syntax for numbers). */
 	header_field_info *hfinfo = dfilter_resolve_unparsed(yytext, yyextra->deprecated);
 	if (hfinfo != NULL) {
@@ -484,7 +484,7 @@ HexExponent		([pP][+-]?[[:digit:]]+)
 	update_location(yyextra, yytext);
 	/* Check if we have a protocol or protocol field, otherwise assume a literal. */
 	/* It is only reasonable to assume a literal here, instead of a
-	 * (possibly non-existant) protocol field, because protocol field filter names
+	 * (possibly non-existent) protocol field, because protocol field filter names
 	 * should not start with a digit (the lexical syntax for numbers). */
 	header_field_info *hfinfo = dfilter_resolve_unparsed(yytext, yyextra->deprecated);
 	if (hfinfo != NULL) {
@@ -910,8 +910,8 @@ parse_charconst(dfsyntax_t *dfs, const char *s, unsigned long *valuep)
 					dfilter_fail(dfs, DF_ERROR_GENERIC, dfs->string_loc, "%s isn't a valid character constant.", s);
 					return false;
 				}
+				cp++;
 			}
-			cp++;
 			break;
 
 		case 'u':

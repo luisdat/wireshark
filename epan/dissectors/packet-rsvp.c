@@ -646,7 +646,7 @@ static int rsvp_tap;
 
 /*
  * All RSVP packets belonging to a particular flow  belong to the same
- * conversation. The following structure definitions are for auxillary
+ * conversation. The following structure definitions are for auxiliary
  * structures which have all the relevant flow information to make up the
  * RSVP five-tuple. Note that the values of the five-tuple are determined
  * from the session object and sender template/filter spec for PATH/RESV
@@ -850,7 +850,7 @@ static gint ett_treelist[TT_MAX];
 #define TREE(X) ett_treelist[(X)]
 
 /* Should we dissect bundle messages? */
-static gboolean rsvp_bundle_dissect = TRUE;
+static bool rsvp_bundle_dissect = true;
 
 /* FF: How should we dissect generalized label? */
 static const enum_val_t rsvp_generalized_label_options[] = {
@@ -2913,7 +2913,7 @@ dissect_rsvp_session(packet_info *pinfo, proto_item *ti, proto_tree *rsvp_object
                             hf_rsvp_filter[RSVPF_SESSION_TUNNEL_ID],
                             tvb, offset2+6, 2, ENC_BIG_ENDIAN);
 
-        proto_tree_add_item(rsvp_object_tree, hf_rsvp_extended_tunnel, tvb, offset2+8, 16, ENC_NA);
+        proto_tree_add_item(rsvp_object_tree, hf_rsvp_extended_tunnel_ipv6, tvb, offset2+8, 16, ENC_NA);
         hidden_item = proto_tree_add_item(rsvp_object_tree,
                                    hf_rsvp_filter[RSVPF_SESSION_EXT_TUNNEL_ID_IPV6],
                                    tvb, offset2+8, 16, ENC_NA);
@@ -2969,6 +2969,7 @@ dissect_rsvp_session(packet_info *pinfo, proto_item *ti, proto_tree *rsvp_object
  * (TODO: TLV type 12, 13, 25)
  *------------------------------------------------------------------------------*/
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_rsvp_ifid_tlv(proto_tree *ti, packet_info* pinfo, proto_tree *rsvp_object_tree,
                       tvbuff_t *tvb, int offset, int length,
                       int subtree_type)
@@ -3177,8 +3178,10 @@ dissect_rsvp_ifid_tlv(proto_tree *ti, packet_info* pinfo, proto_tree *rsvp_objec
             proto_tree_add_uint_format_value(rsvp_ifid_subtree, hf_rsvp_type, tvb, offset+tlv_off, 2,
                                 tlv_type, "%d (%s-Exclusions)", tlv_type, tlv_name);
             proto_tree_add_item(rsvp_ifid_subtree, hf_rsvp_ifid_tlv_length, tvb, offset+tlv_off+2, 2, ENC_BIG_ENDIAN);
+            increment_dissection_depth(pinfo);
             dissect_rsvp_ifid_tlv(ti2, pinfo, rsvp_ifid_subtree, tvb, offset+tlv_off+4,
                                   tlv_len-4, TREE(TT_HOP_SUBOBJ));
+            decrement_dissection_depth(pinfo);
             break;
         case 516:
             /* FF: ERROR_STRING TLV, RFC 4783 */
@@ -3800,7 +3803,7 @@ dissect_rsvp_eth_tspec_tlv(proto_item *ti, packet_info* pinfo, proto_tree *rsvp_
         case 0:
         case 1:
 
-        /*case 2: ethernet bandwidth profile accordig to RFC 6003*/
+        /*case 2: ethernet bandwidth profile according to RFC 6003*/
         case 2:
             rsvp_ethspec_subtree = proto_tree_add_subtree_format(rsvp_object_tree, tvb,
                                       offset+tlv_off, tlv_len, subtree_type, NULL,
@@ -7654,6 +7657,7 @@ dissect_rsvp_unknown(proto_tree *ti _U_,
  * Dissect a single RSVP message in a tree
  *------------------------------------------------------------------------------*/
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_rsvp_msg_tree(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                       int tree_mode, rsvp_conversation_info *rsvph, gboolean e2ei)
 {
@@ -7740,7 +7744,9 @@ dissect_rsvp_msg_tree(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 tvbuff_t *tvb_sub;
                 sub_len = tvb_get_ntohs(tvb, len2+6);
                 tvb_sub = tvb_new_subset_length(tvb, len2, sub_len);
+                increment_dissection_depth(pinfo);
                 dissect_rsvp_msg_tree(tvb_sub, pinfo, rsvp_tree, TREE(TT_BUNDLE_COMPMSG), rsvph, e2ei);
+                decrement_dissection_depth(pinfo);
                 len2 += sub_len;
             }
         } else {
@@ -8049,7 +8055,7 @@ dissect_rsvp_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolea
 
     rsvph = wmem_new0(pinfo->pool, rsvp_conversation_info);
 
-    /* Copy over the source and destination addresses from the pinfo strucutre */
+    /* Copy over the source and destination addresses from the pinfo structure */
     set_address(&rsvph->source, pinfo->src.type, pinfo->src.len, pinfo->src.data);
     set_address(&rsvph->destination, pinfo->dst.type, pinfo->dst.len, pinfo->dst.data);
 

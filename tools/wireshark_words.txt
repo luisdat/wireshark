@@ -23,6 +23,7 @@ acknack
 acknowledgement
 acknowledgements
 acp133
+acquirer
 actioned
 activations
 actuator
@@ -60,6 +61,7 @@ alloc
 allocator
 allocators
 alteon
+altsvc
 ampdu
 amperage
 ampere
@@ -81,6 +83,7 @@ append
 apphdr
 appid
 appkey
+applctrl
 applicability
 appset
 arbitrated
@@ -290,11 +293,13 @@ clearallportcounters
 clientkey
 clientout
 clksrc
+cllog
 clopts
 clsfr
 clustermap
 cmake
 cmdcontrol
+cmdmfg
 cmstatus
 codabar
 codebook
@@ -321,6 +326,7 @@ combiner
 combiners
 communication
 compat
+compatibles
 compilable
 compilers
 compr
@@ -329,6 +335,7 @@ comunicaciones
 concatenate
 concatenated
 concatenates
+concatenating
 concatenation
 concentrator
 concurrent
@@ -356,6 +363,7 @@ copycss
 copyfile
 corba
 corosync
+correlator
 corrigendum
 couchbase
 coverity
@@ -378,6 +386,7 @@ csapi
 ctime
 ctrlstat
 ctxinfo
+ctxinst
 ctype
 cumulated
 cumulatively
@@ -444,6 +453,7 @@ delimited
 delimiters
 delimiting
 demodulator
+demultiplex
 demultiplexed
 demultiplexer
 demultiplexers
@@ -476,6 +486,7 @@ desegmentation
 desegmented
 desegmenting
 deselect
+deserialize
 designator
 destip
 destport
@@ -565,6 +576,7 @@ elink
 ellipsoid
 emlsr
 emulates
+emule
 encap
 encaps
 encapsulating
@@ -577,6 +589,7 @@ encodings
 encrypt
 encrypting
 encryptionkey
+encrypts
 endace
 endian
 endianness
@@ -636,6 +649,7 @@ executables
 exflags
 exocet
 expansions
+extapp
 extattr
 extcap
 extensibility
@@ -648,6 +662,7 @@ extpfx
 extractors
 extrainformation
 eyesdn
+f5eth
 facch
 failover
 falco
@@ -661,6 +676,7 @@ featureful
 fhandle
 fiber
 fileset
+filsfils
 firefox
 firewall
 fixme
@@ -673,12 +689,14 @@ flowmod
 flowset
 flowspec
 fmconfig
+foffset
 followup
 foobar
 format0
 fortigate
 fortinet
 fpiur
+fprintf
 fraghdr
 framenum
 framenumber
@@ -717,6 +735,7 @@ getnext
 getopt
 getsetinfo
 getter
+getters
 gidaddr
 gigabit
 gigamon
@@ -818,6 +837,7 @@ implementor
 inactivated
 inband
 incits
+incompatibilities
 inconsistently
 incremented
 incrementing
@@ -846,6 +866,7 @@ initializing
 initiators
 inkey
 inline
+inoage
 inode
 inodes
 inspiron
@@ -915,6 +936,7 @@ jacobson
 jetds
 joiners
 jsonraw
+jupmngr
 k12xx
 kademlia
 kasme
@@ -974,6 +996,7 @@ logout
 logray
 lookups
 loopback
+loran
 lossy
 lscap
 lucent
@@ -1007,6 +1030,7 @@ mbsfn
 mbytes
 mcaal
 mcast
+mcinfo
 mcmemberrecord
 mcptt
 mcsset
@@ -1120,6 +1144,7 @@ namespace
 naptr
 narrowband
 nasdaq
+nbifom
 nbrar
 ndpsm
 nederland
@@ -1158,6 +1183,7 @@ noauth
 nodeid
 nofcs
 nokia
+nolintnextline
 nominals
 non3gpp
 nonask
@@ -1212,6 +1238,7 @@ offloadability
 ofpat
 ofpbac
 ofpbfc
+ofpbic
 ofpbmc
 ofpbrc
 ofpet
@@ -1358,6 +1385,7 @@ preloaded
 prepay
 prepend
 preshared
+prettification
 printf
 prioritised
 prioritising
@@ -1429,6 +1457,7 @@ randomize
 randomizer
 randpkt
 raster
+rctxinfo
 rdpudp
 rdtci
 reachability
@@ -1473,6 +1502,7 @@ reconfirm
 reconfrqst
 reconnection
 recurse
+recurses
 recursively
 redelivered
 redelivery
@@ -1480,7 +1510,9 @@ redir
 redirection
 redirector
 redirects
+redissect
 redissecting
+redissection
 redist
 redistributable
 redistributables
@@ -1490,6 +1522,7 @@ reentry
 reestablishing
 reestablishment
 refactored
+refactoring
 referer
 referrer
 regex
@@ -1521,6 +1554,7 @@ reprogrammable
 reprogramming
 republish
 requester
+requesters
 requestor
 requeue
 reregister
@@ -1554,6 +1588,7 @@ resynchronize
 resynchronized
 retarder
 retrans
+retranslated
 retransmission
 retransmissions
 retransmit
@@ -1611,6 +1646,7 @@ sanitize
 sanitizers
 sapgui
 satisfiable
+saturates
 savvius
 scalability
 scalable
@@ -1638,6 +1674,7 @@ semiautomatic
 sendto
 separability
 separators
+seqlen
 seqno
 seqnr
 seqnum
@@ -1650,6 +1687,7 @@ serialised
 serialization
 serialize
 serialized
+serializes
 servlet
 sessionid
 sessionkey
@@ -1676,6 +1714,7 @@ signaal
 signaling
 signon
 simulcast
+singulation
 sistemas
 sizeof
 skippable
@@ -1718,6 +1757,8 @@ spoofing
 spooled
 sqlwarn
 srbid
+srcdst
+srcip
 srcport
 srtcp
 srvcc
@@ -1748,6 +1789,7 @@ subband
 subcarrier
 subcarriers
 subchannel
+subchannelization
 subcode
 subdevice
 subdissector
@@ -1827,6 +1869,7 @@ Tektronix
 telco
 télécom
 Telecomunicaciones
+telecomunicazioni
 telefonica
 Telefónica
 Teléfonos
@@ -1854,8 +1897,11 @@ timestamp
 timestamps
 timezone
 tipcv
+tlvlen
+tlvtype
 tobago
 toggled
+toggles
 toggling
 toolbar
 toolongfragment
@@ -1930,6 +1976,7 @@ unadvise
 unaligned
 unallocated
 unallowed
+unary
 unassign
 unassoc
 unassociated
@@ -1992,6 +2039,7 @@ unidirectionally
 unignore
 unimplemented
 uninformative
+uninhibit
 uninitialized
 uninstall
 uninstallation
@@ -2022,6 +2070,7 @@ unpaired
 unparsable
 unparseable
 unparsed
+unpersistable
 unprintable
 unprocessable
 unpublish
@@ -2040,6 +2089,7 @@ unresolvable
 unresponded
 unroutable
 unsaved
+unscaled
 unsecure
 unsegmented
 unsequenced
@@ -2091,6 +2141,7 @@ v1310
 v1410
 v1530
 v1610
+validations
 validator
 valstringname
 varint
@@ -2116,6 +2167,7 @@ viavi
 virtex
 virtio
 virtualization
+virtualized
 vlans
 vmware
 vnode
@@ -2155,6 +2207,7 @@ wowlan
 wpcap
 wrepl
 writable
+wsbuglink
 wsbuild
 wscale
 wscbor

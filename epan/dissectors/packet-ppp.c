@@ -5702,7 +5702,7 @@ dissect_cdpcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 /* PPP Multilink Protcol (RFC 1990) and
  * the Multiclass Extension to Multi-Link PPP (RFC 2686)
  */
-static gboolean mp_short_seqno = FALSE; /* Default to long sequence numbers */
+static bool mp_short_seqno = false; /* Default to long sequence numbers */
 static guint mp_max_fragments = 6;
 /* Maximum fragments to try to reassemble. This affects performance and
  * memory use significantly. */
@@ -6136,8 +6136,8 @@ dissect_ppp_usb( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
         next_tvb = tvb_new_subset_remaining(tvb, 1);
         dissect_ppp_hdlc_common(next_tvb, pinfo, tree);
     } else
-        return (FALSE);
-    return (TRUE);
+        return FALSE;
+    return TRUE;
 }
 
 void
@@ -7382,13 +7382,13 @@ proto_register_bcp_ncp(void)
             { "Tinygram-Compression", "bcp_ncp.lcp.tinygram_comp", FT_BOOLEAN, BASE_NONE,
                 TFS(&tfs_enabled_disabled), 0x0, NULL, HFILL } },
        { &hf_bcp_ncp_mac,
-            { "MAC Address", "bcp_ncp.lcp.mac_addres", FT_ETHER, BASE_NONE,
+            { "MAC Address", "bcp_ncp.lcp.mac_address", FT_ETHER, BASE_NONE,
                 NULL, 0x0, NULL, HFILL } },
        { &hf_bcp_ncp_mac_l,
             { "L bit", "bcp_ncp.lcp.mac_l", FT_UINT48, BASE_HEX,
                 NULL, G_GUINT64_CONSTANT(0x0200000000), NULL, HFILL } },
        { &hf_bcp_ncp_mac_m,
-           { "M bit", "bcp_ncp.lcp.mac_addre", FT_UINT48, BASE_HEX,
+           { "M bit", "bcp_ncp.lcp.mac_m", FT_UINT48, BASE_HEX,
                 NULL, G_GUINT64_CONSTANT(0x0100000000), NULL, HFILL } },
        { &hf_bcp_ncp_stp_prot,
            { "Protocol", "bcp_ncp.lcp.stp_protocol", FT_UINT8, BASE_DEC,

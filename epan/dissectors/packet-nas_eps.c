@@ -450,8 +450,8 @@ static expert_field ei_nas_eps_sec_hdr_wrong_pd;
 static expert_field ei_nas_eps_missing_mandatory_elemen;
 
 /* Global variables */
-static gboolean g_nas_eps_dissect_plain = FALSE;
-static gboolean g_nas_eps_null_decipher = TRUE;
+static bool g_nas_eps_dissect_plain = false;
+static bool g_nas_eps_null_decipher = true;
 enum {
     DECODE_USER_DATA_AS_NONE,
     DECODE_USER_DATA_AS_IP,
@@ -6692,7 +6692,7 @@ static const value_string nas_eps_esm_bearer_id_vals[] = {
 
 /*
  * EPS session management messages.
- * A plain NAS message is pased to this function
+ * A plain NAS message is passed to this function
  */
 static void
 dissect_nas_eps_esm_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)

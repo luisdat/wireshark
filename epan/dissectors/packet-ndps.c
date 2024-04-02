@@ -37,12 +37,12 @@ static dissector_handle_t ndps_handle, ndps_tcp_handle;
 static reassembly_table ndps_reassembly_table;
 
 /* desegmentation of ndps */
-static gboolean ndps_defragment = TRUE;
+static bool ndps_defragment = true;
 
 static guint32  tid = 1;
 
 /* Show ID's value */
-static gboolean ndps_show_oids=FALSE;
+static bool ndps_show_oids=FALSE;
 
 /* Global Attribute for evaluation of Values */
 static const char *global_attribute_name=NULL;
@@ -353,7 +353,7 @@ static expert_field ei_ndps_truncated;
 
 
 /* desegmentation of NDPS over TCP */
-static gboolean ndps_desegment = TRUE;
+static bool ndps_desegment = true;
 
 static const value_string true_false[] = {
     { 0x00000000, "Accept" },
@@ -2620,7 +2620,7 @@ server_entry(tvbuff_t* tvb, packet_info* pinfo, proto_tree *ndps_tree, int foffs
 
     atree = proto_tree_add_subtree(ndps_tree, tvb, foffset, -1, ett_ndps, &aitem, "Server Info");
     foffset = ndps_string(tvb, hf_ndps_server_name, ndps_tree, foffset, &server_name);
-    proto_item_append_text(aitem, ": %s", format_text(wmem_packet_scope(), server_name, strlen(server_name)));
+    proto_item_append_text(aitem, ": %s", format_text(pinfo->pool, server_name, strlen(server_name)));
     proto_tree_add_item(atree, hf_ndps_server_type, tvb, foffset, 4, ENC_BIG_ENDIAN);
     foffset += 4;
     foffset = print_address(tvb, atree, foffset);

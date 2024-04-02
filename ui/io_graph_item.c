@@ -31,7 +31,16 @@ int get_io_graph_index(packet_info *pinfo, int interval) {
     if (time_delta.secs<0) {
         return -1;
     }
-    return (int) ((time_delta.secs*1000 + time_delta.nsecs/1000000) / interval);
+    /* XXX - The IOGraph ignores indices over a certain value (or negative),
+     * but in a sufficiently large file this can overflow and so, after a
+     * large gap of ignored values, values can be added to earlier intervals.
+     * That doesn't matter too much for current values but it could matter
+     * if we changed this to allow smaller intervals (with an interval of 1 s
+     * it takes ~49.71 days to overflow, but 1 μs only takes about 72 minutes.)
+     *
+     * To be safe we could just make this a 64 bit value.
+     */
+    return (int) ((time_delta.secs*INT64_C(1000) + time_delta.nsecs/1000000) / interval);
 }
 
 GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_unit_t item_unit)
@@ -132,7 +141,7 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
     double     value = 0;          /* FIXME: loss of precision, visible on the graph for small values */
     int        adv_type;
     const io_graph_item_t *item;
-    guint32    interval;
+    uint32_t   interval;
 
     item = &items_[idx];
 
@@ -170,24 +179,15 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
     case FT_INT48:
     case FT_INT56:
     case FT_INT64:
-    case FT_UINT8:
-    case FT_UINT16:
-    case FT_UINT24:
-    case FT_UINT32:
-    case FT_UINT40:
-    case FT_UINT48:
-    case FT_UINT56:
-    case FT_UINT64:
-    case FT_DOUBLE:
         switch (val_units_) {
         case IOG_ITEM_UNIT_CALC_SUM:
             value = item->double_tot;
             break;
         case IOG_ITEM_UNIT_CALC_MAX:
-            value = item->double_max;
+            value = item->int_max;
             break;
         case IOG_ITEM_UNIT_CALC_MIN:
-            value = item->double_min;
+            value = item->int_min;
             break;
         case IOG_ITEM_UNIT_CALC_AVERAGE:
             if (item->fields) {
@@ -201,20 +201,51 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
         }
         break;
 
-    case FT_FLOAT:
+    case FT_UINT8:
+    case FT_UINT16:
+    case FT_UINT24:
+    case FT_UINT32:
+    case FT_UINT40:
+    case FT_UINT48:
+    case FT_UINT56:
+    case FT_UINT64:
         switch (val_units_) {
         case IOG_ITEM_UNIT_CALC_SUM:
-            value = item->float_tot;
+            value = item->double_tot;
             break;
         case IOG_ITEM_UNIT_CALC_MAX:
-            value = item->float_max;
+            value = item->uint_max;
             break;
         case IOG_ITEM_UNIT_CALC_MIN:
-            value = item->float_min;
+            value = item->uint_min;
             break;
         case IOG_ITEM_UNIT_CALC_AVERAGE:
             if (item->fields) {
-                value = (double)item->float_tot / item->fields;
+                value = item->double_tot / item->fields;
+            } else {
+                value = 0;
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+
+    case FT_DOUBLE:
+    case FT_FLOAT:
+        switch (val_units_) {
+        case IOG_ITEM_UNIT_CALC_SUM:
+            value = item->double_tot;
+            break;
+        case IOG_ITEM_UNIT_CALC_MAX:
+            value = item->double_max;
+            break;
+        case IOG_ITEM_UNIT_CALC_MIN:
+            value = item->double_min;
+            break;
+        case IOG_ITEM_UNIT_CALC_AVERAGE:
+            if (item->fields) {
+                value = item->double_tot / item->fields;
             } else {
                 value = 0;
             }
@@ -247,8 +278,11 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
             // (for response time fields such as smb.time, rpc.time, etc.)
             // This interval is expressed in milliseconds.
             if (idx == cur_idx_ && cap_file) {
-                interval = (guint32)(nstime_to_msec(&cap_file->elapsed_time) + 0.5);
-                interval -= (interval_ * idx);
+                // If this is the last interval, it may not be full width.
+                uint64_t start_ms = (uint64_t)interval_ * idx;
+                nstime_t timediff = { start_ms / 1000, (start_ms % 1000) * 1000000 };
+                nstime_delta(&timediff, &cap_file->elapsed_time, &timediff);
+                interval = (uint32_t)(nstime_to_msec(&timediff) + 0.5);
             } else {
                 interval = interval_;
             }

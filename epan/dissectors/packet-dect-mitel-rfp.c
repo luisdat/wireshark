@@ -14,7 +14,7 @@
 
 /*
  * This is a proprietary protocol deveolped by Mitel for communication
- * inbetween the DECT system management Software (OMM) and the DECT
+ * between the DECT system management Software (OMM) and the DECT
  * base station (RFPs)
  */
 
@@ -1594,7 +1594,7 @@ static int dissect_dect_mitel_rfp(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	guint offset = 0;
 	guint16 message_type, message_length;
 	tvbuff_t *next_tvb;
-	gboolean ip_encapsulated = true;
+	bool ip_encapsulated = true;
 
 	/*** COLUMN DATA ***/
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "MITEL-RFP");

@@ -225,6 +225,23 @@ void SequenceDialog::updateWidgets()
     WiresharkDialog::updateWidgets();
 }
 
+bool SequenceDialog::event(QEvent *event)
+{
+    if (event->type() == QEvent::ToolTip) {
+        QHelpEvent *helpEvent = static_cast<QHelpEvent *>(event);
+        seq_analysis_item_t *sai = seq_diagram_->itemForPosY(helpEvent->pos().y());
+        if (sai && seq_diagram_->inComment(helpEvent->pos()) && (sai->comment != seq_diagram_->elidedComment(sai->comment))) {
+            QToolTip::showText(helpEvent->globalPos(), sai->comment);
+        } else {
+            QToolTip::hideText();
+            event->ignore();
+        }
+
+        return true;
+    }
+    return QWidget::event(event);
+}
+
 void SequenceDialog::showEvent(QShowEvent *)
 {
     QTimer::singleShot(0, this, SLOT(fillDiagram()));
@@ -618,7 +635,7 @@ void SequenceDialog::resetView()
 void SequenceDialog::on_actionGoToPacket_triggered()
 {
     if (!file_closed_ && packet_num_ > 0) {
-        cf_goto_frame(cap_file_.capFile(), packet_num_);
+        cf_goto_frame(cap_file_.capFile(), packet_num_, FALSE);
         seq_diagram_->setSelectedPacket(packet_num_);
     }
 }
@@ -669,7 +686,7 @@ void SequenceDialog::goToAdjacentPacket(bool next)
             }
             sp->yAxis->moveRange(range_offset);
         }
-        cf_goto_frame(cap_file_.capFile(), adjacent_packet);
+        cf_goto_frame(cap_file_.capFile(), adjacent_packet, FALSE);
         seq_diagram_->setSelectedPacket(adjacent_packet);
     }
 }

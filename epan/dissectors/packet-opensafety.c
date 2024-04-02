@@ -268,22 +268,22 @@ static dissector_handle_t opensafety_udpdata_handle = NULL;
 static dissector_handle_t opensafety_mbtcp_handle = NULL;
 static dissector_handle_t opensafety_pnio_handle = NULL;
 
-static gboolean global_display_intergap_data   = FALSE;
-static gboolean global_scm_udid_autoset        = TRUE;
-static gboolean global_udp_frame2_first        = FALSE;
-static gboolean global_siii_udp_frame2_first   = FALSE;
-static gboolean global_mbtcp_big_endian        = FALSE;
+static bool global_display_intergap_data       = false;
+static bool global_scm_udid_autoset            = true;
+static bool global_udp_frame2_first            = false;
+static bool global_siii_udp_frame2_first       = false;
+static bool global_mbtcp_big_endian            = false;
 static guint global_network_udp_port           = OPENSAFETY_UDP_PORT;
 static guint global_network_udp_port_sercosiii = OPENSAFETY_UDP_PORT_SIII;
-static gboolean global_classify_transport      = TRUE;
+static bool global_classify_transport          = true;
 
-static gboolean global_enable_udp    = TRUE;
-static gboolean global_enable_mbtcp  = TRUE;
+static bool global_enable_udp    = true;
+static bool global_enable_mbtcp  = true;
 
-static gboolean global_opensafety_debug_verbose = FALSE;
+static bool global_opensafety_debug_verbose = false;
 
 static const char * global_filter_nodes = "";
-static gboolean global_show_only_node_in_filter = TRUE;
+static bool global_show_only_node_in_filter = true;
 static wmem_list_t * global_filter_list = NULL;
 
 static gboolean heuristic_siii_dissection_enabled = TRUE;
@@ -570,7 +570,7 @@ static gboolean findSafetyFrame ( packet_info *pinfo, tvbuff_t *message_tvb, gui
                  *  bit is set */
                 if ( ( b_ID != 0xFF ) && ( b_ID & 0x80 ) )
                 {
-                    /* The rem_length value might be poluted, due to the else statement of
+                    /* The rem_length value might be polluted, due to the else statement of
                      * above if-decision (frame at end position detection). Therefore we
                      * calculate it here again, to have a sane value */
                     rem_length = tvb_reported_length_remaining(message_tvb, ctr);
@@ -2120,7 +2120,7 @@ opensafety_package_dissector(const gchar *protocolName, const gchar *sub_diss_ha
             break;
 
         /* Resetting packet, to ensure, that findSafetyFrame starts with a fresh frame.
-         * As only packet_scope is used, this will not polute memory too much and get's
+         * As only packet_scope is used, this will not pollute memory too much and get's
          * cleared with the next packet anyway  */
         packet = wmem_new0(pinfo->pool, opensafety_packet_info);
 

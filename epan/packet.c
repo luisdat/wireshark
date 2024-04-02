@@ -342,7 +342,7 @@ init_dissection(void)
 {
 	/*
 	 * Reinitialize resolution information. Don't leak host entries from
-	 * one file to another (e.g. embarassing-host-name.example.com from
+	 * one file to another (e.g. embarrassing-host-name.example.com from
 	 * file1.pcapng into a name resolution block in file2.pcapng).
 	 */
 	host_name_lookup_reset();
@@ -881,13 +881,6 @@ static int
 call_dissector_work_error(dissector_handle_t handle, tvbuff_t *tvb,
 			  packet_info *pinfo_arg, proto_tree *tree, void *);
 
-/*
- * XXX packet_info.curr_layer_num is a guint8 and *_MAX_RECURSION_DEPTH is
- * 100 elsewhere in the code. We should arguably use the same value here,
- * but using that makes suite_wslua.case_wslua.test_wslua_dissector_fpm fail.
- */
-#define PINFO_LAYER_MAX_RECURSION_DEPTH 500
-
 static int
 call_dissector_work(dissector_handle_t handle, tvbuff_t *tvb, packet_info *pinfo,
 		    proto_tree *tree, gboolean add_proto_name, void *data)
@@ -911,12 +904,12 @@ call_dissector_work(dissector_handle_t handle, tvbuff_t *tvb, packet_info *pinfo
 	saved_proto = pinfo->current_proto;
 	saved_can_desegment = pinfo->can_desegment;
 	saved_layers_len = wmem_list_count(pinfo->layers);
-	DISSECTOR_ASSERT(saved_layers_len < PINFO_LAYER_MAX_RECURSION_DEPTH);
+	DISSECTOR_ASSERT(saved_layers_len < prefs.gui_max_tree_depth);
 
 	/*
 	 * can_desegment is set to 2 by anyone which offers the
 	 * desegmentation api/service.
-	 * Then everytime a subdissector is called it is decremented
+	 * Then every time a subdissector is called it is decremented
 	 * by one.
 	 * Thus only the subdissector immediately on top of whoever
 	 * offers this service can use it.
@@ -1002,6 +995,9 @@ call_dissector_work_error(dissector_handle_t handle, tvbuff_t *tvb,
 	address       save_net_dst;
 	address       save_src;
 	address       save_dst;
+	guint32	      save_ptype;
+	guint32	      save_srcport;
+	guint32	      save_destport;
 
 	/*
 	* This isn't a packet being transported inside
@@ -1031,6 +1027,9 @@ call_dissector_work_error(dissector_handle_t handle, tvbuff_t *tvb,
 	copy_address_shallow(&save_net_dst, &pinfo->net_dst);
 	copy_address_shallow(&save_src, &pinfo->src);
 	copy_address_shallow(&save_dst, &pinfo->dst);
+	save_ptype = pinfo->ptype;
+	save_srcport = pinfo->srcport;
+	save_destport = pinfo->destport;
 
 	/* Dissect the contained packet. */
 	TRY {
@@ -1038,7 +1037,7 @@ call_dissector_work_error(dissector_handle_t handle, tvbuff_t *tvb,
 	}
 	CATCH(BoundsError) {
 		/*
-		* Restore the column writability and addresses.
+		* Restore the column writability and addresses and ports.
 		*/
 		col_set_writable(pinfo->cinfo, -1, save_writable);
 		copy_address_shallow(&pinfo->dl_src, &save_dl_src);
@@ -1047,6 +1046,9 @@ call_dissector_work_error(dissector_handle_t handle, tvbuff_t *tvb,
 		copy_address_shallow(&pinfo->net_dst, &save_net_dst);
 		copy_address_shallow(&pinfo->src, &save_src);
 		copy_address_shallow(&pinfo->dst, &save_dst);
+		pinfo->ptype = save_ptype;
+		pinfo->srcport = save_srcport;
+		pinfo->destport = save_destport;
 
 		/*
 		* Restore the current protocol, so any
@@ -1089,6 +1091,9 @@ call_dissector_work_error(dissector_handle_t handle, tvbuff_t *tvb,
 	copy_address_shallow(&pinfo->net_dst, &save_net_dst);
 	copy_address_shallow(&pinfo->src, &save_src);
 	copy_address_shallow(&pinfo->dst, &save_dst);
+	pinfo->ptype = save_ptype;
+	pinfo->srcport = save_srcport;
+	pinfo->destport = save_destport;
 	pinfo->want_pdu_tracking = 0;
 	return len;
 }
@@ -1487,6 +1492,15 @@ dissector_change_uint(const char *name, const guint32 pattern, dissector_handle_
 	 */
 	dtbl_entry = find_uint_dtbl_entry(sub_dissectors, pattern);
 	if (dtbl_entry != NULL) {
+		/*
+		 * If there's no initial value, and the user said not
+		 * to decode it, just remove the entry to save memory.
+		 */
+		if (handle == NULL && dtbl_entry->initial == NULL) {
+			g_hash_table_remove(sub_dissectors->hash_table,
+					    GUINT_TO_POINTER(pattern));
+			return;
+		}
 		dtbl_entry->current = handle;
 		return;
 	}
@@ -1811,6 +1825,15 @@ dissector_change_string(const char *name, const gchar *pattern,
 	 */
 	dtbl_entry = find_string_dtbl_entry(sub_dissectors, pattern);
 	if (dtbl_entry != NULL) {
+		/*
+		 * If there's no initial value, and the user said not
+		 * to decode it, just remove the entry to save memory.
+		 */
+		if (handle == NULL && dtbl_entry->initial == NULL) {
+			g_hash_table_remove(sub_dissectors->hash_table,
+					    pattern);
+			return;
+		}
 		dtbl_entry->current = handle;
 		return;
 	}
@@ -2972,7 +2995,7 @@ dissector_try_heuristic(heur_dissector_list_t sub_dissectors, tvbuff_t *tvb,
 	guint              saved_tree_count = tree ? tree->tree_data->count : 0;
 
 	/* can_desegment is set to 2 by anyone which offers this api/service.
-	   then everytime a subdissector is called it is decremented by one.
+	   then every time a subdissector is called it is decremented by one.
 	   thus only the subdissector immediately ontop of whoever offers this
 	   service can use it.
 	   We save the current value of "can_desegment" for the
@@ -2991,7 +3014,7 @@ dissector_try_heuristic(heur_dissector_list_t sub_dissectors, tvbuff_t *tvb,
 	saved_layers_len = wmem_list_count(pinfo->layers);
 	*heur_dtbl_entry = NULL;
 
-	DISSECTOR_ASSERT(saved_layers_len < PINFO_LAYER_MAX_RECURSION_DEPTH);
+	DISSECTOR_ASSERT(saved_layers_len < prefs.gui_max_tree_depth);
 
 	for (entry = sub_dissectors->dissectors; entry != NULL;
 	    entry = g_slist_next(entry)) {
@@ -3101,6 +3124,7 @@ heur_dissector_table_foreach (const char  *table_name,
 {
 	heur_dissector_foreach_info_t info;
 	heur_dissector_list_t         sub_dissectors = find_heur_dissector_list(table_name);
+	DISSECTOR_ASSERT(sub_dissectors != NULL);
 
 	info.table_name    = table_name;
 	info.caller_func   = func;
@@ -3572,7 +3596,7 @@ void call_heur_dissector_direct(heur_dtbl_entry_t *heur_dtbl_entry, tvbuff_t *tv
 	DISSECTOR_ASSERT(heur_dtbl_entry);
 
 	/* can_desegment is set to 2 by anyone which offers this api/service.
-	   then everytime a subdissector is called it is decremented by one.
+	   then every time a subdissector is called it is decremented by one.
 	   thus only the subdissector immediately ontop of whoever offers this
 	   service can use it.
 	   We save the current value of "can_desegment" for the
@@ -4017,6 +4041,18 @@ prime_epan_dissect_with_postdissector_wanted_hfids(epan_dissect_t *edt)
 			epan_dissect_prime_with_hfid_array(edt,
 			    POSTDISSECTORS(i).wanted_hfids);
 	}
+}
+
+void
+increment_dissection_depth(packet_info *pinfo) {
+	pinfo->dissection_depth++;
+	DISSECTOR_ASSERT(pinfo->dissection_depth < (int)prefs.gui_max_tree_depth);
+}
+
+void
+decrement_dissection_depth(packet_info *pinfo) {
+	pinfo->dissection_depth--;
+	DISSECTOR_ASSERT(pinfo->dissection_depth >= 0);
 }
 
 /*

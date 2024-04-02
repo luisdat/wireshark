@@ -1040,7 +1040,7 @@ static const fragment_items dcerpc_frag_items = {
 };
 
 /* try to desegment big DCE/RPC packets over TCP? */
-static gboolean dcerpc_cn_desegment = TRUE;
+static bool dcerpc_cn_desegment = true;
 
 /* reassemble DCE/RPC fragments */
 /* reassembly of cl dcerpc fragments will not work for the case where ONE frame
@@ -1051,7 +1051,7 @@ static gboolean dcerpc_cn_desegment = TRUE;
    reassembly of co dcerpc fragments will not work for the case where TCP/SMB frames
    are coming in out of sequence, but that will hurt in a lot of other places as well.
 */
-static gboolean dcerpc_reassemble = TRUE;
+static bool dcerpc_reassemble = true;
 static reassembly_table dcerpc_co_reassembly_table;
 static reassembly_table dcerpc_cl_reassembly_table;
 
@@ -2947,7 +2947,7 @@ dissect_ndr_wchar_vstring(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 /* ndr pointer handling */
 /* Should we re-read the size of the list ?
- * Instead of re-calculating the size everytime, use the stored value unless this
+ * Instead of re-calculating the size every time, use the stored value unless this
  * flag is set which means: re-read the size of the list
  */
 static gboolean must_check_size = FALSE;

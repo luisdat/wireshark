@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-spnego.c                                                            */
-/* asn2wrs.py -b -L -p spnego -c ./spnego.cnf -s ./packet-spnego-template -D . -O ../.. spnego.asn */
+/* asn2wrs.py -b -q -L -p spnego -c ./spnego.cnf -s ./packet-spnego-template -D . -O ../.. spnego.asn */
 
 /* packet-spnego-template.c
  * Routines for the simple and protected GSS-API negotiation mechanism
@@ -1437,7 +1437,7 @@ dissect_spnego_krb5_cfx_wrap_base(tvbuff_t *tvb, int offset, packet_info *pinfo,
   proto_tree_add_item(tree, hf_spnego_krb5_cfx_seq, tvb, offset, 8, ENC_BIG_ENDIAN);
   offset += 8;
 
-  if (gssapi_encrypt == NULL) /* Probably shoudn't happen, but just protect ourselves */
+  if (gssapi_encrypt == NULL) /* Probably shouldn't happen, but just protect ourselves */
     return offset;
 
   /* Checksum of plaintext padded data */
@@ -1478,6 +1478,8 @@ dissect_spnego_krb5_cfx_wrap_base(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
     returned_offset = offset;
     gssapi_encrypt->gssapi_wrap_tvb = tvb_new_subset_length(tvb, offset,
+            inner_token_len);
+    gssapi_encrypt->gssapi_decrypted_tvb = tvb_new_subset_length(tvb, offset,
             inner_token_len);
 
     offset += inner_token_len;

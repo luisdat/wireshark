@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ldap.c                                                              */
-/* asn2wrs.py -b -L -p ldap -c ./ldap.cnf -s ./packet-ldap-template -D . -O ../.. Lightweight-Directory-Access-Protocol-V3.asn */
+/* asn2wrs.py -b -q -L -p ldap -c ./ldap.cnf -s ./packet-ldap-template -D . -O ../.. Lightweight-Directory-Access-Protocol-V3.asn */
 
 /* packet-ldap-template.c
  * Routines for ldap packet dissection
@@ -413,7 +413,7 @@ static gboolean ldap_found_in_frame = FALSE;
 #define UDP_PORT_CLDAP                  389
 
 /* desegmentation of LDAP */
-static gboolean ldap_desegment = TRUE;
+static bool ldap_desegment = true;
 static guint global_ldaps_tcp_port = TCP_PORT_LDAPS;
 static guint ssl_port = 0;
 
@@ -1115,7 +1115,6 @@ ldap_match_call_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 static int dissect_ldap_Filter(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
-#define MAX_RECURSION_DEPTH 100 // Arbitrarily chosen.
 
 
 static int
@@ -2174,13 +2173,9 @@ static const ber_choice_t Filter_choice[] = {
 
 static int
 dissect_ldap_Filter(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
-  const unsigned cycle_size = 4;
-  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
-
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
-
+  // Filter -> Filter/and -> Filter/and/_item -> Filter
+  actx->pinfo->dissection_depth += 3;
+  increment_dissection_depth(actx->pinfo);
   proto_tree *tr;
   proto_item *it;
   attributedesc_string=NULL;
@@ -2206,7 +2201,8 @@ dissect_ldap_Filter(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, as
     proto_item_append_text(it, "%s", string_or_null(Filter_string));
 
 
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth);
+  actx->pinfo->dissection_depth -= 3;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
@@ -4053,41 +4049,46 @@ static void
         if(ver_len==0){
           return;
         }
-        if (gssapi_encrypt.gssapi_decrypted_tvb) {
-          tvbuff_t *decr_tvb = gssapi_encrypt.gssapi_decrypted_tvb;
-          proto_tree *enc_tree = NULL;
+        if (gssapi_encrypt.gssapi_data_encrypted) {
+          if (gssapi_encrypt.gssapi_decrypted_tvb) {
+            tvbuff_t *decr_tvb = gssapi_encrypt.gssapi_decrypted_tvb;
+            proto_tree *enc_tree = NULL;
 
-          /*
-           * The LDAP payload (blob) was encrypted and we were able to decrypt it.
-           * The data was signed via a MIC token, sealed (encrypted), and "wrapped"
-           * within the mechanism's "blob." Call dissect_ldap_payload to dissect
-           * one or more LDAPMessages such as searchRequest messages within this
-           * payload.
-           */
-          col_set_str(pinfo->cinfo, COL_INFO, "SASL GSS-API Privacy (decrypted): ");
+            /*
+             * The LDAP payload (blob) was encrypted and we were able to decrypt it.
+             * The data was signed via a MIC token, sealed (encrypted), and "wrapped"
+             * within the mechanism's "blob." Call dissect_ldap_payload to dissect
+             * one or more LDAPMessages such as searchRequest messages within this
+             * payload.
+             */
+            col_set_str(pinfo->cinfo, COL_INFO, "SASL GSS-API Privacy (decrypted): ");
 
-          if (sasl_tree) {
-            guint decr_len = tvb_reported_length(decr_tvb);
+            if (sasl_tree) {
+              guint decr_len = tvb_reported_length(decr_tvb);
 
-            enc_tree = proto_tree_add_subtree_format(sasl_tree, decr_tvb, 0, -1,
-              ett_ldap_payload, NULL, "GSS-API Encrypted payload (%d byte%s)",
-              decr_len, plurality(decr_len, "", "s"));
+              enc_tree = proto_tree_add_subtree_format(sasl_tree, decr_tvb, 0, -1,
+                ett_ldap_payload, NULL, "GSS-API Encrypted payload (%d byte%s)",
+                decr_len, plurality(decr_len, "", "s"));
+            }
+
+            dissect_ldap_payload(decr_tvb, pinfo, enc_tree, ldap_info, is_mscldap);
+          } else {
+            /*
+            * The LDAP message was encrypted but couldn't be decrypted so just display the
+            * encrypted data all of which is found in Packet Bytes.
+            */
+            col_add_fstr(pinfo->cinfo, COL_INFO, "SASL GSS-API Privacy: payload (%d byte%s)",
+              sasl_len-ver_len, plurality(sasl_len-ver_len, "", "s"));
+
+            proto_tree_add_item(sasl_tree, hf_ldap_gssapi_encrypted_payload, gssapi_tvb, ver_len, -1, ENC_NA);
           }
-
-          dissect_ldap_payload(decr_tvb, pinfo, enc_tree, ldap_info, is_mscldap);
-        }
-        else if (gssapi_encrypt.gssapi_data_encrypted) {
-          /*
-          * The LDAP message was encrypted but couldn't be decrypted so just display the
-          * encrypted data all of which is found in Packet Bytes.
-          */
-          col_add_fstr(pinfo->cinfo, COL_INFO, "SASL GSS-API Privacy: payload (%d byte%s)",
-            sasl_len-ver_len, plurality(sasl_len-ver_len, "", "s"));
-
-          proto_tree_add_item(sasl_tree, hf_ldap_gssapi_encrypted_payload, gssapi_tvb, ver_len, -1, ENC_NA);
-        }
-        else {
-          tvbuff_t *plain_tvb = tvb_new_subset_remaining(gssapi_tvb, ver_len);
+        } else {
+          tvbuff_t *plain_tvb;
+          if (gssapi_encrypt.gssapi_decrypted_tvb) {
+            plain_tvb = gssapi_encrypt.gssapi_decrypted_tvb;
+          } else {
+            plain_tvb = tvb_new_subset_remaining(gssapi_tvb, ver_len);
+          }
           proto_tree *plain_tree = NULL;
 
           /*

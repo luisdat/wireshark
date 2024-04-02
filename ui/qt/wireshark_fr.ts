@@ -2158,6 +2158,14 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>…as C Array</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as C Array.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as a Hex Stream</source>
         <translation>…sous forme de flux Hex</translation>
     </message>
@@ -2994,10 +3002,6 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation>Démarrer</translation>
     </message>
     <message>
-        <source>Save</source>
-        <translation>Sauvegarder</translation>
-    </message>
-    <message>
         <source>Default</source>
         <translation>Défaut</translation>
     </message>
@@ -3327,20 +3331,8 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
 <context>
     <name>FolderListModel</name>
     <message>
-        <source>&quot;File&quot; dialogs</source>
-        <translation>&quot;Fichier&quot; dialogues</translation>
-    </message>
-    <message>
-        <source>capture files</source>
-        <translation>capturer des fichiers</translation>
-    </message>
-    <message>
         <source>Temp</source>
         <translation>Temp</translation>
-    </message>
-    <message>
-        <source>untitled capture files</source>
-        <translation>fichiers de capture sans titre</translation>
     </message>
     <message>
         <source>Personal configuration</source>
@@ -3349,14 +3341,6 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
     <message>
         <source>Global configuration</source>
         <translation>Configuration globale</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, ethers, …</source>
-        <translation>dfiltres, préférences, éthers, …</translation>
-    </message>
-    <message>
-        <source>dfilters, preferences, manuf, …</source>
-        <translation>filtres, préférences, fabrication, …</translation>
     </message>
     <message>
         <source>System</source>
@@ -3371,16 +3355,8 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation>Programme</translation>
     </message>
     <message>
-        <source>program files</source>
-        <translation>fichiers de programme</translation>
-    </message>
-    <message>
         <source>Personal Plugins</source>
         <translation>Plugins personnels</translation>
-    </message>
-    <message>
-        <source>binary plugins</source>
-        <translation>plugins binaires</translation>
     </message>
     <message>
         <source>Global Plugins</source>
@@ -3399,11 +3375,35 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>&quot;File&quot; dialog location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Untitled capture files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preferences, profiles, manuf, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Program files</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugins</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Personal Extcap path</source>
         <translation>Chemin d&apos;accès Extcap personnel</translation>
     </message>
     <message>
-        <source>external capture (extcap) plugins</source>
+        <source>External capture (extcap) plugins</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -3671,6 +3671,10 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
     <message>
         <source>Find:</source>
         <translation>Trouver :</translation>
+    </message>
+    <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Sensible à la casse</translation>
     </message>
     <message>
         <source>Find &amp;Next</source>
@@ -11196,6 +11200,10 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation>Trouver :</translation>
     </message>
     <message>
+        <source>Case sensitive</source>
+        <translation type="unfinished">Sensible à la casse</translation>
+    </message>
+    <message>
         <source>Find &amp;Next</source>
         <translation>Rechercher le &amp;suivant</translation>
     </message>
@@ -12087,7 +12095,7 @@ Changer la direction de la connexion (voir le flux inverse).&lt;/p&gt;&lt;/body&
     </message>
     <message>
         <source>Save</source>
-        <translation type="unfinished">Sauvegarder</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>TLS Keylog file</source>
@@ -14178,6 +14186,18 @@ a:hover {
     <message>
         <source>TCP throughput</source>
         <translation>Débit TCP</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Query-Response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DNS Query-Response Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Request Sequences</source>

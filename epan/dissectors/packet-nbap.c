@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-nbap.c                                                              */
-/* asn2wrs.py -L -p nbap -c ./nbap.cnf -s ./packet-nbap-template -D . -O ../.. NBAP-CommonDataTypes.asn NBAP-Constants.asn NBAP-Containers.asn NBAP-IEs.asn NBAP-PDU-Contents.asn NBAP-PDU-Descriptions.asn */
+/* asn2wrs.py -q -L -p nbap -c ./nbap.cnf -s ./packet-nbap-template -D . -O ../.. NBAP-CommonDataTypes.asn NBAP-Constants.asn NBAP-Containers.asn NBAP-IEs.asn NBAP-PDU-Contents.asn NBAP-PDU-Descriptions.asn */
 
 /* packet-nbap-template.c
  * Routines for UMTS Node B Application Part(NBAP) packet dissection
@@ -6531,7 +6531,7 @@ typedef struct
  enum fp_rlc_mode rlc_mode;
 } nbap_common_channel_info_t;
 
-/*Stuff for mapping NodeB-Comuncation Context ID to CRNC Communication Context ID*/
+/*Stuff for mapping NodeB-Communication Context ID to CRNC Communication Context ID*/
 typedef struct com_ctxt_{
   /*guint   nodeb_context;*/
   guint crnc_context;
@@ -10411,7 +10411,7 @@ nbap_hsdsch_channel_info = nbap_private_data->nbap_hsdsch_channel_info;
         return offset;
     }
 
-    /*Find the conversations assoicated with the HS-DSCH flows in this packet and set proper H-RNTI*/
+    /*Find the conversations associated with the HS-DSCH flows in this packet and set proper H-RNTI*/
     clear_address(&null_addr);
     for (i = 0; i < maxNrOfMACdFlows; i++) {
         if (nbap_hsdsch_channel_info[i].crnc_port != 0){
@@ -18476,7 +18476,7 @@ nbap_edch_channel_info = nbap_private_data->nbap_edch_channel_info;
      * MAC-i/is => Type 2
      * The specifications isn't very clear about the indicator for what entity
      * should be used. For now, it seems like the presence of the "Maximum MAC-d PDU Size Extended IE"
-     * indicates MAC-i/is and it's absense means MAC-e/es
+     * indicates MAC-i/is and it's absence means MAC-e/es
      */
     if(nbap_private_data->max_mac_d_pdu_size_ext_ie_present){
         fp_edch_channel_info->edch_type = 1; /* 1 means Type 2 */
@@ -18767,7 +18767,7 @@ nbap_private_data->num_items = 1;
      * MAC-i/is => Type 2
      * The specifications isn't very clear about the indicator for what entity
      * should be used. For now, it seems like the presence of the "Maximum MAC-d PDU Size Extended IE"
-     * indicates MAC-i/is and it's absense means MAC-e/es
+     * indicates MAC-i/is and it's absence means MAC-e/es
      */
     if(nbap_private_data->max_mac_d_pdu_size_ext_ie_present){
         fp_edch_channel_info->edch_type = 1; /* 1 means Type 2 */
@@ -29294,7 +29294,7 @@ nbap_private_data->binding_id_port = 0;
                     expert_add_info(actx->pinfo, NULL, &ei_nbap_no_set_comm_context_id);
                 }
 
-                /* Check if we allready have this context */
+                /* Check if we already have this context */
                 e_dch_macdflow_id = nbap_private_data->e_dch_macdflow_id;
                 if( (old_info = (nbap_edch_port_info_t *)wmem_tree_lookup32(edch_flow_port_map,nbap_private_data->com_context_id)) == NULL ){
                     nbap_edch_port_info_t * nbap_edch_port_info;

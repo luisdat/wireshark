@@ -72,7 +72,7 @@ extern "C" {
 #endif
 
 #ifndef ETHERTYPE_WOL
-#define ETHERTYPE_WOL			0x0842	/* Wake on LAN. Not offically registered. */
+#define ETHERTYPE_WOL			0x0842	/* Wake on LAN. Not officially registered. */
 #endif
 
 #ifndef ETHERTYPE_WMX_M2M
@@ -351,6 +351,10 @@ extern "C" {
 
 #ifndef ETHERTYPE_PROFINET
 #define ETHERTYPE_PROFINET		0x8892	/* PROFIBUS PROFINET protocol */
+#endif
+
+#ifndef ETHERTYPE_FORTINET_FGCP_SESSION  /* Not register https://community.fortinet.com/t5/FortiGate/Technical-Tip-FortiGate-HA-Heartbeat-packet-Ethertypes/ta-p/197807 */
+#define ETHERTYPE_FORTINET_FGCP_SESSION	0x8893	/* Fortinet FGCP HeartBeat */
 #endif
 
 #ifndef ETHERTYPE_REALTEK

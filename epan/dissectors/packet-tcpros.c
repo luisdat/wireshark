@@ -29,7 +29,7 @@ static int proto_tcpros;
 static dissector_handle_t tcpros_handle;
 
 /** desegmentation of TCPROS over TCP */
-static gboolean tcpros_desegment = TRUE;
+static bool tcpros_desegment = true;
 
 
 static int hf_tcpros_connection_header;
@@ -609,7 +609,7 @@ dissect_tcpros_heur_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
 	dissect_tcpros(tvb, pinfo, tree, data);
 
-	return (TRUE);
+	return TRUE;
 }
 
 

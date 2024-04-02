@@ -41,9 +41,9 @@ static const char *const proto_name_bp = "BPv7";
 static const char *const proto_name_bp_admin = "BPv7 Admin";
 
 /// Protocol preferences and defaults
-static gboolean bp_compute_crc = TRUE;
-static gboolean bp_reassemble_payload = TRUE;
-static gboolean bp_payload_try_heur = FALSE;
+static bool bp_compute_crc = true;
+static bool bp_reassemble_payload = true;
+static bool bp_payload_try_heur = false;
 
 /// Protocol handles
 static int proto_bp;
@@ -1467,7 +1467,7 @@ static int dissect_bp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void 
                 const wmem_list_t *seen_list = wmem_map_lookup(bp_history->bundles, bundle->ident);
                 wmem_list_frame_t *seen_it = seen_list ? wmem_list_head(seen_list) : NULL;
                 const bp_bundle_t *seen_first = seen_it ? wmem_list_frame_data(seen_it) : NULL;
-                // show first occurance if not this one
+                // show first occurrence if not this one
                 if (seen_first && (seen_first->frame_num != pinfo->num)) {
                     proto_item *item_seen = proto_tree_add_uint(tree_ident, hf_bundle_first_seen, tvb, 0, 0, seen_first->frame_num);
                     proto_item_set_generated(item_seen);

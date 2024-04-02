@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ranap.c                                                             */
-/* asn2wrs.py -L -p ranap -c ./ranap.cnf -s ./packet-ranap-template -D . -O ../.. RANAP-CommonDataTypes.asn RANAP-Constants.asn RANAP-Containers.asn RANAP-IEs.asn RANAP-PDU-Contents.asn RANAP-PDU-Descriptions.asn */
+/* asn2wrs.py -q -L -p ranap -c ./ranap.cnf -s ./packet-ranap-template -D . -O ../.. RANAP-CommonDataTypes.asn RANAP-Constants.asn RANAP-Containers.asn RANAP-IEs.asn RANAP-PDU-Contents.asn RANAP-PDU-Descriptions.asn */
 
 /* packet-ranap.c
  * Routines for UMTS Node B Application Part(RANAP) packet dissection
@@ -1667,7 +1667,7 @@ static void private_data_set_binding_id_port(asn1_ctx_t *actx, guint16 binding_i
 static guint32 ProcedureCode;
 static guint32 ProtocolIE_ID;
 static guint32 ProtocolExtensionID;
-static gboolean glbl_dissect_container = FALSE;
+static bool glbl_dissect_container = false;
 
 static dissector_handle_t ranap_handle;
 

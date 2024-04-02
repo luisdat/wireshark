@@ -430,7 +430,7 @@ static value_string_ext packet_type_mapping_ext = VALUE_STRING_EXT_INIT(packet_t
 /* Initialize the protocol and registered fields */
 static int proto_adwin;
 
-static int global_adwin_dissect_data  = 1;
+static bool global_adwin_dissect_data = true;
 
 static int hf_adwin_address;
 static int hf_adwin_armVersion;
@@ -1108,7 +1108,7 @@ dissect_adwin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 		dissect_UDPR1(tvb, pinfo, adwin_tree, adwin_debug_tree, &info_string);
 		break;
 	case UDPH2_LENGTH: /* to the best of my knowledge, this struct
-			    * has never been used publically! */
+			    * has never been used publicly! */
 		/* dissect_UDPH2(tvb, pinfo, adwin_tree, adwin_debug_tree); */
 		info_string = wmem_strdup(pinfo->pool, "UDPH2 - UNUSED");
 		break;

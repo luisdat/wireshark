@@ -1289,7 +1289,6 @@ static const value_string file_full_ea_information_flags[] = {
 	{ 0, NULL }
 };
 
-
 static int dissect_windows_sockaddr_storage(tvbuff_t *, packet_info *, proto_tree *, int, int);
 static void dissect_smb2_error_data(tvbuff_t *, packet_info *, proto_tree *, int, int, smb2_info_t *);
 static guint smb2_eo_files_hash(gconstpointer k);
@@ -1512,7 +1511,7 @@ static gboolean seskey_find_sid_key(guint64 sesid, guint8 *out_seskey,
 }
 
 /* ExportObject preferences variable */
-gboolean eosmb2_take_name_as_fid = FALSE ;
+bool eosmb2_take_name_as_fid = false ;
 
 /* unmatched smb_saved_info structures.
    For unmatched smb_saved_info structures we store the smb_saved_info
@@ -4070,6 +4069,7 @@ dissect_smb2_STATUS_STOPPED_ON_SYMLINK(tvbuff_t *tvb, packet_info *pinfo _U_, pr
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_smb2_error_context(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *parent_tree, int offset, smb2_info_t *si _U_)
 {
 	proto_tree *tree;
@@ -4098,6 +4098,7 @@ dissect_smb2_error_context(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pa
  * Assumes it is being called with a sub-tvb (dissects at offsets 0)
  */
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_smb2_error_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *parent_tree,
 			int error_context_count, int error_id,
 			smb2_info_t *si _U_)
@@ -4128,8 +4129,11 @@ dissect_smb2_error_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *paren
 			break;
 		}
 	} else {
-		for (i = 0; i < error_context_count; i++)
+		increment_dissection_depth(pinfo);
+		for (i = 0; i < error_context_count; i++) {
 			offset += dissect_smb2_error_context(tvb, pinfo, tree, offset, si);
+		}
+		decrement_dissection_depth(pinfo);
 	}
 }
 
@@ -4225,7 +4229,7 @@ dissect_smb2_session_setup_response(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 		 */
 		if (si->status != 0) {
 			/*
-			 * Not sucessful means either more req/rsp
+			 * Not successful means either more req/rsp
 			 * processing is required or we reached an
 			 * error, so update hash.
 			 */
@@ -6537,8 +6541,8 @@ smb2_pipe_set_file_id(packet_info *pinfo, smb2_info_t *si)
 	dcerpc_set_transport_salt(persistent, pinfo);
 }
 
-static gboolean smb2_pipe_reassembly = TRUE;
-static gboolean smb2_verify_signatures = FALSE;
+static bool smb2_pipe_reassembly = true;
+static bool smb2_verify_signatures = false;
 static reassembly_table smb2_pipe_reassembly_table;
 
 static int
@@ -6902,7 +6906,7 @@ dissect_smb2_write_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
 out:
 	if (have_tap_listener(smb2_eo_tap) && (data_tvb_len == length)) {
-		if (si->saved && si->eo_file_info) { /* without this data we don't know wich file this belongs to */
+		if (si->saved && si->eo_file_info) { /* without this data we don't know which file this belongs to */
 			feed_eo_smb2(tvb,pinfo,si,dataoffset,length,off);
 		}
 	}
@@ -7460,6 +7464,7 @@ dissect_windows_sockaddr_storage(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 #define NETWORK_INTERFACE_CAP_RDMA 0x00000002
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_smb2_NETWORK_INTERFACE_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree)
 {
 	guint32     next_offset;
@@ -7541,7 +7546,9 @@ dissect_smb2_NETWORK_INTERFACE_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 		next_tvb = tvb_new_subset_remaining(tvb, next_offset);
 
 		/* next extra info */
+		increment_dissection_depth(pinfo);
 		dissect_smb2_NETWORK_INTERFACE_INFO(next_tvb, pinfo, parent_tree);
+		decrement_dissection_depth(pinfo);
 	}
 }
 
@@ -8548,7 +8555,7 @@ dissect_smb2_read_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 	offset += MIN(olb.len, data_tvb_len);
 
 	if (have_tap_listener(smb2_eo_tap) && (data_tvb_len == olb.len)) {
-		if (si->saved && si->eo_file_info) { /* without this data we don't know wich file this belongs to */
+		if (si->saved && si->eo_file_info) { /* without this data we don't know which file this belongs to */
 			feed_eo_smb2(tvb,pinfo,si,olb.off,olb.len,si->saved->file_offset);
 		}
 	}
@@ -9444,6 +9451,7 @@ get_create_context_data_tag_dissectors(const char *tag)
 }
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_smb2_create_extra_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, smb2_info_t *si)
 {
 	offset_length_buffer_t  tag_olb;
@@ -9519,7 +9527,9 @@ dissect_smb2_create_extra_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pa
 		chain_tvb = tvb_new_subset_remaining(tvb, chain_offset);
 
 		/* next extra info */
+		increment_dissection_depth(pinfo);
 		dissect_smb2_create_extra_info(chain_tvb, pinfo, parent_tree, si);
+		decrement_dissection_depth(pinfo);
 	}
 }
 
@@ -11343,6 +11353,7 @@ dissect_smb2_signature(packet_info *pinfo, tvbuff_t *tvb, int offset, proto_tree
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, gboolean first_in_chain)
 {
 	int msg_type;
@@ -11385,6 +11396,8 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, gboolea
 		label = smb_bad_header_label;
 		break;
 	}
+
+	increment_dissection_depth(pinfo);
 
 	/* find which conversation we are part of and get the data for that
 	 * conversation
@@ -11700,6 +11713,7 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, gboolea
 		offset   = dissect_smb2(next_tvb, pinfo, parent_tree, FALSE);
 	}
 
+	decrement_dissection_depth(pinfo);
 	return offset;
 }
 
@@ -13393,12 +13407,12 @@ proto_register_smb2(void)
 		},
 
 		{ &hf_smb2_auth_frame,
-			{ "Authenticated in Frame", "smb2.auth_frame", FT_UINT32, BASE_DEC,
+			{ "Authenticated in Frame", "smb2.auth_frame", FT_FRAMENUM, BASE_NONE,
 			NULL, 0, "Which frame this user was authenticated in", HFILL }
 		},
 
 		{ &hf_smb2_tcon_frame,
-			{ "Connected in Frame", "smb2.tcon_frame", FT_UINT32, BASE_DEC,
+			{ "Connected in Frame", "smb2.tcon_frame", FT_FRAMENUM, BASE_NONE,
 			NULL, 0, "Which frame this share was connected in", HFILL }
 		},
 

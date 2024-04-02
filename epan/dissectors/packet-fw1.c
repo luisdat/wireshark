@@ -66,7 +66,7 @@
  * Additional interpretation of field Chain Position.
  * Show the chain position in the interface list.
  * Support for new format of fw monitor file
- * writen by option -u | -s for UUID/SUUID.
+ * written by option -u | -s for UUID/SUUID.
  * NOTICE: First paket will have UUID == 0 !
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -86,9 +86,9 @@ void proto_register_fw1(void);
 void proto_reg_handoff_fw1(void);
 
 /* Place FW1 summary in proto tree */
-static gboolean fw1_summary_in_tree = TRUE;
-static gboolean fw1_with_uuid = FALSE;
-static gboolean fw1_iflist_with_chain = FALSE;
+static bool fw1_summary_in_tree = true;
+static bool fw1_with_uuid = false;
+static bool fw1_iflist_with_chain = false;
 
 static dissector_handle_t ethertype_handle;
 

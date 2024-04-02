@@ -844,7 +844,7 @@ void WiresharkMainWindow::startCapture() {
     startCapture(QStringList());
 }
 
-void WiresharkMainWindow::startCapture(QStringList interfaces _U_) {
+void WiresharkMainWindow::startCapture(QStringList interfaces) {
 #ifdef HAVE_LIBPCAP
     interface_options *interface_opts;
     guint i;
@@ -984,6 +984,8 @@ DIAG_ON(stringop-overread)
     } else {
         CaptureFile::globalCapFile()->window = NULL;
     }
+#else // HAVE_LIBPCAP
+    Q_UNUSED(interfaces)
 #endif // HAVE_LIBPCAP
 }
 
@@ -1184,7 +1186,7 @@ void WiresharkMainWindow::setEditCommentsMenu()
 
 void WiresharkMainWindow::setMenusForSelectedPacket()
 {
-    gboolean is_ip = FALSE, is_tcp = FALSE, is_udp = FALSE, is_sctp = FALSE, is_tls = FALSE, is_rtp = FALSE, is_lte_rlc = FALSE,
+    bool is_ip = FALSE, is_tcp = FALSE, is_udp = FALSE, is_sctp = FALSE, is_tls = FALSE, is_rtp = FALSE, is_lte_rlc = FALSE,
              is_quic = FALSE, is_exported_pdu = FALSE;
 
     /* Making the menu context-sensitive allows for easier selection of the
@@ -3425,6 +3427,7 @@ void WiresharkMainWindow::connectStatisticsMenuActions()
 
     connect(main_ui_->actionStatisticsCollectd, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("collectd"); });
     connect(main_ui_->actionStatisticsDNS, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("dns"); });
+    connect(main_ui_->actionStatisticsDNS_QR, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("dns_qr"); });
     connect(main_ui_->actionStatisticsHART_IP, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("hart_ip"); });
     connect(main_ui_->actionStatisticsHpfeeds, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("hpfeeds"); });
     connect(main_ui_->actionStatisticsHTTP2, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("http2"); });

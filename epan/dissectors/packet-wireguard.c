@@ -74,7 +74,7 @@ static expert_field ei_wg_keepalive;
 static expert_field ei_wg_decryption_error;
 static expert_field ei_wg_decryption_unsupported;
 
-static gboolean     pref_dissect_packet = TRUE;
+static bool     pref_dissect_packet = true;
 static const char  *pref_keylog_file;
 
 static dissector_handle_t ip_handle;
@@ -1062,7 +1062,7 @@ wg_session_update_address(wg_session_t *session, packet_info *pinfo, gboolean se
 
 /* Finds an initiation message based on the given Receiver ID that was not
  * previously associated with a responder message. Returns the session if a
- * matching initation message can be found or NULL otherwise.
+ * matching initiation message can be found or NULL otherwise.
  */
 static wg_session_t *
 wg_sessions_lookup_initiation(packet_info *pinfo, guint32 receiver_id)

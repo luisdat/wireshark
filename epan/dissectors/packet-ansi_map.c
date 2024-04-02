@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ansi_map.c                                                          */
-/* asn2wrs.py -b -L -p ansi_map -c ./ansi_map.cnf -s ./packet-ansi_map-template -D . -O ../.. ansi_map.asn */
+/* asn2wrs.py -b -q -L -p ansi_map -c ./ansi_map.cnf -s ./packet-ansi_map-template -D . -O ../.. ansi_map.asn */
 
 /* packet-ansi_map.c
  * Routines for ANSI 41 Mobile Application Part (IS41 MAP) dissection
@@ -1132,8 +1132,8 @@ static dissector_table_t is683_dissector_table; /* IS-683-A (OTA) */
 static dissector_table_t is801_dissector_table; /* IS-801 (PLD) */
 static packet_info *g_pinfo;
 static proto_tree *g_tree;
-tvbuff_t *SMS_BearerData_tvb = NULL;
-gint32    ansi_map_sms_tele_id = -1;
+static tvbuff_t *SMS_BearerData_tvb = NULL;
+static gint32    ansi_map_sms_tele_id = -1;
 static gboolean is683_ota;
 static gboolean is801_pld;
 static gboolean ansi_map_is_invoke;

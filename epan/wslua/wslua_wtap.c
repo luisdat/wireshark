@@ -40,7 +40,7 @@ WSLUA_FUNCTION wslua_wtap_file_type_subtype_description(lua_State* LS) {
         /* Too big. */
         lua_pushnil(LS);
     } else {
-        const gchar* str = wtap_file_type_subtype_description((int)filetype);
+        const char* str = wtap_file_type_subtype_description((int)filetype);
         if (str == NULL)
             lua_pushnil(LS);
         else
@@ -63,7 +63,7 @@ WSLUA_FUNCTION wslua_wtap_file_type_subtype_name(lua_State* LS) {
         /* Too big. */
         lua_pushnil(LS);
     } else {
-        const gchar* str = wtap_file_type_subtype_name((int)filetype);
+        const char* str = wtap_file_type_subtype_name((int)filetype);
         if (str == NULL)
             lua_pushnil(LS);
         else
@@ -85,7 +85,7 @@ WSLUA_FUNCTION wslua_wtap_name_to_file_type_subtype(lua_State* LS) {
     if (filetype == -1)
         lua_pushnil(LS);
     else
-        lua_pushnumber(LS,filetype);
+        lua_pushinteger(LS,filetype);
     WSLUA_RETURN(1); /* The filetype value for the file type with that name, or nil if there is no such file type. */
 }
 
@@ -96,7 +96,7 @@ WSLUA_FUNCTION wslua_wtap_pcap_file_type_subtype(lua_State* LS) {
     @since 3.2.12, 3.4.4
     */
     lua_Number filetype = wtap_pcap_file_type_subtype();
-    lua_pushnumber(LS,filetype);
+    lua_pushinteger(LS,filetype);
     WSLUA_RETURN(1); /* The filetype value for pcap files. */
 }
 
@@ -107,7 +107,7 @@ WSLUA_FUNCTION wslua_wtap_pcap_nsec_file_type_subtype(lua_State* LS) {
     @since 3.2.12, 3.4.4
     */
     lua_Number filetype = wtap_pcap_nsec_file_type_subtype();
-    lua_pushnumber(LS,filetype);
+    lua_pushinteger(LS,filetype);
     WSLUA_RETURN(1); /* The filetype value for nanosecond-resolution pcap files. */
 }
 
@@ -118,7 +118,7 @@ WSLUA_FUNCTION wslua_wtap_pcapng_file_type_subtype(lua_State* LS) {
     @since 3.2.12, 3.4.4
     */
     lua_Number filetype = wtap_pcapng_file_type_subtype();
-    lua_pushnumber(LS,filetype);
+    lua_pushinteger(LS,filetype);
     WSLUA_RETURN(1); /* The filetype value for pcapng files. */
 }
 
@@ -135,7 +135,7 @@ extern void wslua_init_wtap_filetypes(lua_State* LS) {
      * so none of the entries will be in a sequence.
      */
     lua_createtable(LS,0,table->len);
-    for (guint i = 0; i < table->len; i++) {
+    for (unsigned i = 0; i < table->len; i++) {
         struct backwards_compatibiliity_lua_name *entry;
 
         entry = &g_array_index(table,
@@ -148,7 +148,7 @@ extern void wslua_init_wtap_filetypes(lua_State* LS) {
          * it.
          */
         lua_pushstring(LS, entry->name);
-        lua_pushnumber(LS, entry->ft);
+        lua_pushinteger(LS, entry->ft);
         /*
          * The -3 is the index, relative to the top of the stack, of
          * the table; the two elements on top of it are the ft and

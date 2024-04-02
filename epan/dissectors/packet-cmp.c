@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-cmp.c                                                               */
-/* asn2wrs.py -b -L -p cmp -c ./cmp.cnf -s ./packet-cmp-template -D . -O ../.. CMP.asn */
+/* asn2wrs.py -b -q -L -p cmp -c ./cmp.cnf -s ./packet-cmp-template -D . -O ../.. CMP.asn */
 
 /* packet-cmp.c
  *
@@ -47,7 +47,7 @@ static dissector_handle_t cmp_tcp_style_http_handle;
 static dissector_handle_t cmp_tcp_handle;
 
 /* desegmentation of CMP over TCP */
-static gboolean cmp_desegment = TRUE;
+static bool cmp_desegment = true;
 
 static guint cmp_alternate_http_port = 0;
 static guint cmp_alternate_tcp_style_http_port = 0;
@@ -277,7 +277,6 @@ static gint ett_cmp_PollRepContent_item;
 /*int dissect_cmp_PKIMessage(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);*/
 
 
-#define MAX_RECURSION_DEPTH 100 // Arbitrarily chosen.
 
 static const value_string cmp_CMPCertificate_vals[] = {
   {   0, "x509v3PKCert" },
@@ -1088,17 +1087,14 @@ static const ber_sequence_t PKIMessage_sequence[] = {
 
 int
 dissect_cmp_PKIMessage(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
-  const unsigned cycle_size = 5;
-  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
-
-  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
-
+  // PKIMessage -> PKIBody -> NestedMessageContent -> PKIMessages -> PKIMessage
+  actx->pinfo->dissection_depth += 4;
+  increment_dissection_depth(actx->pinfo);
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PKIMessage_sequence, hf_index, ett_cmp_PKIMessage);
 
-  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth);
+  actx->pinfo->dissection_depth -= 4;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 

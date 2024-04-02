@@ -14,6 +14,9 @@ import signal
 import glob
 from collections import Counter
 
+from html.parser import HTMLParser
+import urllib.request
+
 # Looks for spelling errors among strings found in source or documentation files.
 # N.B.,
 # - To run this script, you should install pyspellchecker (not spellchecker) using pip.
@@ -54,6 +57,63 @@ spell = SpellChecker()
 spell.word_frequency.load_text_file('./tools/wireshark_words.txt')
 
 
+class TypoSourceDocumentParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.capturing = False
+        self.content = ''
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'pre':
+            self.capturing = True
+
+    def handle_endtag(self, tag):
+        if tag == 'pre':
+            self.capturing = False
+
+    def handle_data(self, data):
+        if self.capturing:
+            self.content += data
+
+
+# Fetch some common mispellings from wikipedia so we will definitely flag them.
+print('Fetching Wikipedia\'s list of common misspellings.')
+req_headers = { 'User-Agent': 'Wireshark check-wikipedia-typos' }
+req = urllib.request.Request('https://en.wikipedia.org/wiki/Wikipedia:Lists_of_common_misspellings/For_machines', headers=req_headers)
+wiki_db = dict()
+try:
+    response = urllib.request.urlopen(req)
+    content = response.read()
+    content = content.decode('UTF-8', 'replace')
+
+    # Extract the "<pre>...</pre>" part of the document.
+    parser = TypoSourceDocumentParser()
+    parser.feed(content)
+    content = parser.content.strip()
+
+    wiki_db = dict(l.lower().split('->', maxsplit=1) for l in content.splitlines())
+    del wiki_db['cmo']      # All false positives.
+    del wiki_db['ect']      # Too many false positives.
+    del wiki_db['thru']     # We'll let that one thru. ;-)
+    del wiki_db['sargeant'] # All false positives.
+
+    # Remove each word from dict
+    removed = 0
+    for word in wiki_db:
+        try:
+            if should_exit:
+                exit(1)
+            spell.word_frequency.remove_words([word])
+            #print('Removed', word)
+            removed += 1
+        except:
+            pass
+
+    print('Removed', removed, 'known bad words')
+except:
+    print('Failed to fetch and/or parse Wikipedia mispellings!')
+
+
 # Track words that were not found.
 missing_words = []
 
@@ -71,6 +131,7 @@ class File:
         self.values = []
 
         filename, extension = os.path.splitext(file)
+        # TODO: add '.lua'?  Would also need to check string and comment formats...
         self.code_file = extension in {'.c', '.cpp'}
 
 
@@ -234,7 +295,9 @@ class File:
                     continue
 
                 if len(word) > 4 and spell.unknown([word]) and not self.checkMultiWords(word) and not self.wordBeforeId(word):
-                    print(self.file, value_index, '/', num_values, '"' + original + '"', bcolors.FAIL + word + bcolors.ENDC,
+                    # Highlight words that appeared in Wikipedia list.
+                    print(bcolors.BOLD if word in wiki_db else '',
+                          self.file, value_index, '/', num_values, '"' + original + '"', bcolors.FAIL + word + bcolors.ENDC,
                           ' -> ', '?')
 
                     # TODO: this can be interesting, but takes too long!
@@ -355,6 +418,9 @@ def isGeneratedFile(filename):
     if filename.endswith('pci-ids.c') or filename.endswith('services-data.c') or filename.endswith('manuf-data.c'):
         return True
 
+    if filename.endswith('packet-woww.c'):
+        return True
+
     # Open file
     f_read = open(os.path.join(filename), 'r', encoding="utf8")
     for line_no,line in enumerate(f_read):
@@ -385,7 +451,8 @@ def isAppropriateFile(filename):
     file, extension = os.path.splitext(filename)
     if filename.find('CMake') != -1:
         return False
-    return extension in { '.adoc', '.c', '.cpp', '.pod', '.txt'} or file.endswith('README')
+    # TODO: add , '.lua' ?
+    return extension in { '.adoc', '.c', '.cpp', '.pod', '.txt' } or file.endswith('README')
 
 
 def findFilesInFolder(folder, recursive=True):
@@ -433,7 +500,7 @@ parser.add_argument('--folder', action='append',
 parser.add_argument('--glob', action='store', default='',
                     help='specify glob to test - should give in "quotes"')
 parser.add_argument('--no-recurse', action='store_true', default='',
-                    help='do not recurse inside chosen folder')
+                    help='do not recurse inside chosen folder(s)')
 parser.add_argument('--commits', action='store',
                     help='last N commits to check')
 parser.add_argument('--open', action='store_true',

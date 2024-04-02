@@ -97,6 +97,7 @@ TapParameterDialog::TapParameterDialog(QWidget &parent, CaptureFile &cf, int hel
         QString filter = ui->displayFilterLineEdit->text();
         emit updateFilter(filter);
     }
+    updateWidgets();
     show_timer_ = new QTimer(this);
     setRetapOnShow(true);
 }
@@ -496,7 +497,7 @@ void TapParameterDialog::updateWidgets()
     bool edit_enable = true;
     bool apply_enable = true;
 
-    if (file_closed_) {
+    if (file_closed_ || !cap_file_.isValid()) {
         edit_enable = false;
         apply_enable = false;
     } else if (!ui->displayFilterLineEdit->checkFilter()) {
@@ -511,7 +512,6 @@ void TapParameterDialog::updateWidgets()
 
 void TapParameterDialog::on_applyFilterButton_clicked()
 {
-    beginRetapPackets();
     if (!ui->displayFilterLineEdit->checkFilter()) {
         return;
     }
@@ -529,7 +529,6 @@ void TapParameterDialog::on_applyFilterButton_clicked()
     fillTree();
     ui->applyFilterButton->setEnabled(af_enabled);
     ui->displayFilterLineEdit->setEnabled(df_enabled);
-    endRetapPackets();
 }
 
 void TapParameterDialog::on_actionCopyToClipboard_triggered()

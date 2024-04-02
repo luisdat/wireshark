@@ -937,7 +937,7 @@ smbstat_packet(void *pss, packet_info *pinfo, epan_dissect_t *edt _U_, const voi
 	if (si->request) {
 		return TAP_PACKET_DONT_REDRAW;
 	}
-	/* if we havnt seen the request, just ignore it */
+	/* if we haven't seen the request, just ignore it */
 	if (!si->sip) {
 		return TAP_PACKET_DONT_REDRAW;
 	}
@@ -1477,12 +1477,12 @@ smb_eo_cleanup(void)
 	offset += len;			\
 	*bcp -= len;
 
-gboolean sid_display_hex = FALSE;
-gboolean sid_name_snooping = FALSE;
+bool sid_display_hex = false;
+bool sid_name_snooping = false;
 
 /* ExportObject preferences variable */
-gboolean eosmb_take_name_as_fid = FALSE ;
-/* Utility to get an str reprensenting ipv4 or ipv6 address */
+bool eosmb_take_name_as_fid = false ;
+/* Utility to get an str representing ipv4 or ipv6 address */
 const gchar *tree_ip_str(packet_info *pinfo, guint16 cmd) {
 	const gchar	*buf;
 
@@ -1582,8 +1582,8 @@ fid_cmp(smb_fid_info_t *fida, smb_fid_info_t *fidb)
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
    These are needed by the reassembly of SMB Transaction payload and DCERPC over SMB
    XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
-static gboolean smb_trans_reassembly = TRUE;
-gboolean smb_dcerpc_reassembly = TRUE;
+static bool smb_trans_reassembly = true;
+bool smb_dcerpc_reassembly = true;
 
 static reassembly_table smb_trans_reassembly_table;
 
@@ -7720,7 +7720,7 @@ dissect_session_setup_andx_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		}
 
 		/* OS
-		 * Eventhough this field should honour the unicode flag
+		 * Even though this field should honour the unicode flag
 		 * some ms clients gets this wrong.
 		 * At least XP SP1 sends this in ASCII
 		 * even when the unicode flag is on.
@@ -7746,7 +7746,7 @@ dissect_session_setup_andx_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		 * suspect that, in practice, nobody ever looks at that field
 		 * because the bug didn't appear to get fixed until NT 5.0....
 		 *
-		 * Eventhough this field should honour the unicode flag
+		 * Even though this field should honour the unicode flag
 		 * some ms clients gets this wrong.
 		 * At least XP SP1 sends this in ASCII
 		 * even when the unicode flag is on.

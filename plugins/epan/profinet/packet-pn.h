@@ -13,7 +13,7 @@
  *
  * Added new structures to packet-pn.h to transfer the gained data of
  * packet-pn-dcp.c and packet-dcerpc-pn-io.c to packet-pn-rtc-one.c for
- * detailled dissection of cyclic PNIO RTC1 dataframes.
+ * detailed dissection of cyclic PNIO RTC1 dataframes.
  *
  */
 
@@ -28,7 +28,7 @@ extern int       proto_pn_dcp;
 extern int proto_pn_io_apdu_status;
 extern int proto_pn_io_time_aware_status;
 
-extern gboolean  pnio_ps_selection;  /* given by pnio preferences */
+extern bool pnio_ps_selection;  /* given by pnio preferences */
 
 /* Structure for general station information */
 typedef struct tagStationInfo {

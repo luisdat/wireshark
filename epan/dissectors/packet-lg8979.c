@@ -142,7 +142,7 @@ static gint ett_lg8979_point;
 static gint ett_lg8979_ts;
 
 /* Globals for L&G 8979 Protocol Preferences */
-static gboolean lg8979_desegment = TRUE;
+static bool lg8979_desegment = true;
 
 #define LG8979_HEADER             0xFF
 
@@ -353,7 +353,7 @@ classify_lg8979_packet(tvbuff_t *tvb)
     guint8 func, len, data_len, flags;
 
     len = tvb_reported_length(tvb);
-    /* If TVB length is equal to 5, this is classifed as a 'short response message' */
+    /* If TVB length is equal to 5, this is classified as a 'short response message' */
     /* and is guaranteed to be RTU->Master only */
     if (len == 5) {
         return LG8979_DIR_RTU_TO_MASTER;

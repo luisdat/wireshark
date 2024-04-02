@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-sv.c                                                                */
-/* asn2wrs.py -b -L -p sv -c ./sv.cnf -s ./packet-sv-template -D . -O ../.. sv.asn */
+/* asn2wrs.py -b -q -L -p sv -c ./sv.cnf -s ./packet-sv-template -D . -O ../.. sv.asn */
 
 /* packet-sv.c
  * Routines for IEC 61850 Sampled Values packet dissection
@@ -128,7 +128,7 @@ static expert_field ei_sv_mal_utctime;
 static expert_field ei_sv_zero_pdu;
 static expert_field ei_sv_mal_gmidentity;
 
-static gboolean sv_decode_data_as_phsmeas = FALSE;
+static bool sv_decode_data_as_phsmeas = false;
 
 static dissector_handle_t sv_handle;
 
