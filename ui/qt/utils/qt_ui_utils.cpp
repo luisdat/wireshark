@@ -14,9 +14,10 @@
 #include <ui/qt/utils/qt_ui_utils.h>
 
 #include <epan/addr_resolv.h>
+#include <epan/guid-utils.h>
 #include <epan/range.h>
 #include <epan/to_str.h>
-#include <epan/value_string.h>
+#include <wsutil/value_string.h>
 
 #include <ui/recent.h>
 #include <ui/util.h>
@@ -68,7 +69,7 @@ QByteArray gchar_free_to_qbytearray(char *glib_string)
 QByteArray gstring_free_to_qbytearray(GString *glib_gstring)
 {
     QByteArray qt_ba(glib_gstring->str);
-    g_string_free(glib_gstring, true);
+    g_string_free(glib_gstring, TRUE);
     return qt_ba;
 }
 
@@ -97,7 +98,7 @@ const QString int_to_qstring(qint64 value, int field_width, int base)
         break;
     }
 
-    int_qstr += QString("%1").arg(value, field_width, base, QChar('0'));
+    int_qstr += QStringLiteral("%1").arg(value, field_width, base, QChar('0'));
     return int_qstr;
 }
 
@@ -128,7 +129,7 @@ const QString address_to_display_qstring(const _address *address)
 const QString val_to_qstring(const uint32_t val, const value_string *vs, const char *fmt)
 {
     QString val_qstr;
-    char* gchar_p = val_to_str_wmem(NULL, val, vs, fmt);
+    char* gchar_p = val_to_str(NULL, val, vs, fmt);
     val_qstr = gchar_p;
     wmem_free(NULL, gchar_p);
 
@@ -138,7 +139,7 @@ const QString val_to_qstring(const uint32_t val, const value_string *vs, const c
 const QString val_ext_to_qstring(const uint32_t val, value_string_ext *vse, const char *fmt)
 {
     QString val_qstr;
-    char* gchar_p = val_to_str_ext_wmem(NULL, val, vse, fmt);
+    char* gchar_p = val_to_str_ext(NULL, val, vse, fmt);
     val_qstr = gchar_p;
     wmem_free(NULL, gchar_p);
 
@@ -149,7 +150,7 @@ const QString range_to_qstring(const range_string *range)
 {
     QString range_qstr = QString();
     if (range) {
-        range_qstr += QString("%1-%2").arg(range->value_min).arg(range->value_max);
+        range_qstr += QStringLiteral("%1-%2").arg(range->value_min).arg(range->value_max);
     }
     return range_qstr;
 }
@@ -171,6 +172,13 @@ const QString time_t_to_qstring(time_t ti_time)
     QDateTime date_time = QDateTime::fromSecsSinceEpoch(qint64(ti_time));
     QString time_str = date_time.toLocalTime().toString("yyyy-MM-dd hh:mm:ss");
     return time_str;
+}
+
+QUuid e_guid_t_to_quuid(const e_guid_t &guid)
+{
+    return QUuid(guid.data1, guid.data2, guid.data3,
+        guid.data4[0], guid.data4[1], guid.data4[2], guid.data4[3],
+        guid.data4[4], guid.data4[5], guid.data4[6], guid.data4[7]);
 }
 
 QString html_escape(const QString plain_string) {
@@ -246,7 +254,14 @@ void desktop_show_in_folder(const QString file_path)
     // If that failed, perhaps we are sandboxed.  Try using Portal Services.
     // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.OpenURI.html
     if (!success) {
-        const int fd = ws_open(QFile::encodeName(file_path), O_CLOEXEC | O_PATH, 0000);
+        const int flags =
+#ifdef O_PATH
+            O_CLOEXEC | O_PATH; /* Get an fd, but refrain from opening the file for I/O. */
+#else
+            O_CLOEXEC | O_RDONLY;
+#endif
+
+        const int fd = ws_open(QFile::encodeName(file_path), flags, 0000);
         if (fd != -1) {
             QDBusUnixFileDescriptor descriptor;
             descriptor.giveFileDescriptor(fd);
@@ -283,17 +298,9 @@ bool rect_on_screen(const QRect &rect)
 
 void set_action_shortcuts_visible_in_context_menu(QList<QAction *> actions)
 {
-#if QT_VERSION < QT_VERSION_CHECK(5, 13, 0)
     // For QT_VERSION >= 5.13.0 we call styleHints()->setShowShortcutsInContextMenus(true)
     // in WiresharkApplication.
-    // QTBUG-71471
-    // QTBUG-61181
-    foreach (QAction *action, actions) {
-        action->setShortcutVisibleInContextMenu(true);
-    }
-#else
     Q_UNUSED(actions)
-#endif
 }
 
 QVector<rtpstream_id_t *>qvector_rtpstream_ids_copy(QVector<rtpstream_id_t *> stream_ids)
@@ -323,7 +330,7 @@ QString make_filter_based_on_rtpstream_id(QVector<rtpstream_id_t *> stream_ids)
 
     foreach(rtpstream_id_t *id, stream_ids) {
         QString ip_proto = id->src_addr.type == AT_IPv6 ? "ipv6" : "ip";
-        stream_filters << QString("(%1.src==%2 && udp.srcport==%3 && %1.dst==%4 && udp.dstport==%5 && rtp.ssrc==0x%6)")
+        stream_filters << QStringLiteral("(%1.src==%2 && udp.srcport==%3 && %1.dst==%4 && udp.dstport==%5 && rtp.ssrc==0x%6)")
                          .arg(ip_proto) // %1
                          .arg(address_to_qstring(&id->src_addr)) // %2
                          .arg(id->src_port) // %3

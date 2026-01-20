@@ -20,6 +20,7 @@
 #include "geometry_state_dialog.h"
 
 class QComboBox;
+class QAbstractButton;
 
 namespace Ui {
 class PreferencesDialog;
@@ -39,11 +40,16 @@ public:
      * to prefs_register_module or a protocol name.
      */
     void setPane(const QString module_name);
+    void enableAggregationOptions(bool);
 
 protected:
+    void keyPressEvent(QKeyEvent *event);
     void showEvent(QShowEvent *evt);
 
 private:
+    void apply();
+    void resizeSplitter();
+
     Ui::PreferencesDialog *pd_ui_;
 
     QHash<QString, QWidget*> prefs_pane_to_item_;
@@ -59,12 +65,16 @@ private:
 
 private slots:
     void selectPane(QString pane);
+    void handleCopyMenu(QPoint);
+    void copyActionTriggered();
+    void copyRowActionTriggered();
     void on_advancedSearchLineEdit_textEdited(const QString &search_re);
     void on_showChangedValuesCheckBox_toggled(bool checked);
 
     void on_buttonBox_accepted();
     void on_buttonBox_rejected();
     void on_buttonBox_helpRequested();
+    void on_buttonBox_clicked(QAbstractButton *button);
 
     /**
      * Update search results from the advancedSearchLineEdit field

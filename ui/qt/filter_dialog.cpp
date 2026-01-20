@@ -9,10 +9,9 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include <wsutil/filter_files.h>
 #include <wsutil/filesystem.h>
+#include <app/application_flavor.h>
 
 #include "filter_dialog.h"
 #include <ui_filter_dialog.h>
@@ -59,7 +58,7 @@ FilterDialog::FilterDialog(QWidget *parent, FilterType filter_type, QString new_
     ui->filterTreeView->setAcceptDrops(true);
     ui->filterTreeView->setDropIndicatorShown(true);
 
-    const gchar * filename = NULL;
+    const char * filename = NULL;
     QString newFilterText;
     switch (filter_type) {
         case CaptureFilter:
@@ -84,18 +83,18 @@ FilterDialog::FilterDialog(QWidget *parent, FilterType filter_type, QString new_
             ws_assert_not_reached();
     }
 
-    if (new_filter_.length() > 0)
-        model_->addFilter(newFilterText, new_filter_);
-
     ui->filterTreeView->setModel(model_);
 
     ui->filterTreeView->setItemDelegate(new FilterTreeDelegate(this, filter_type));
+
+    if (new_filter_.length() > 0)
+        addFilter(newFilterText, new_filter_, true);
 
     ui->filterTreeView->resizeColumnToContents(FilterListModel::ColumnName);
 
     connect(ui->filterTreeView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &FilterDialog::selectionChanged);
 
-    QString abs_path = gchar_free_to_qstring(get_persconffile_path(filename, TRUE));
+    QString abs_path = gchar_free_to_qstring(get_persconffile_path(filename, true, application_configuration_environment_prefix()));
     if (file_exists(abs_path.toUtf8().constData())) {
         ui->pathLabel->setText(abs_path);
         ui->pathLabel->setUrl(QUrl::fromLocalFile(abs_path).toString());
@@ -114,8 +113,11 @@ void FilterDialog::addFilter(QString name, QString filter, bool start_editing)
     if (model_)
     {
         QModelIndex idx = model_->addFilter(name, filter);
+        ui->filterTreeView->scrollTo(idx);
         if (start_editing)
             ui->filterTreeView->edit(idx);
+        else
+            ui->filterTreeView->selectionModel()->select(idx,QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
     }
 }
 

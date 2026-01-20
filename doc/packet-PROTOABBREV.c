@@ -61,7 +61,7 @@ static dissector_handle_t PROTOABBREV_handle;
 static dissector_handle_t PROTOABBREV_tls_handle;
 
 /* Global sample preference ("controls" display of numbers) */
-static bool pref_hex = false;
+static bool pref_hex;
 /* Global sample port preference - real port preferences should generally
  * default to "" (for a range) or 0 (for a single uint) unless there is an
  * IANA-registered (or equivalent) port for your protocol. */
@@ -136,8 +136,7 @@ dissect_PROTOABBREV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
      *
      * If
      * - you may be appending to the column later OR
-     * - you have constructed the string locally OR
-     * - the string was returned from a call to val_to_str()
+     * - you have constructed the string locally
      * then use "col_add_str()" instead, as that takes a copy of the string.
      *
      * The function "col_add_fstr()" can be used instead of "col_add_str()"; it

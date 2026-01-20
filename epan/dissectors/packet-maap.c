@@ -74,7 +74,7 @@ static int ett_maap;
 static int
 dissect_maap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    guint8      maap_msg_type;
+    uint8_t     maap_msg_type;
     proto_item *maap_item     = NULL;
     proto_tree *maap_tree     = NULL;
 
@@ -82,12 +82,12 @@ dissect_maap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     col_clear(pinfo->cinfo, COL_INFO);
 
     /* The maap msg type will be handy in a moment */
-    maap_msg_type = tvb_get_guint8(tvb, MAAP_MSG_TYPE_OFFSET);
+    maap_msg_type = tvb_get_uint8(tvb, MAAP_MSG_TYPE_OFFSET);
     maap_msg_type &= 0x0f;
 
     /* Display the name of the packet type in the info column. */
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s:",
-                val_to_str(maap_msg_type, maap_msg_type_vals,
+                val_to_str(pinfo->pool, maap_msg_type, maap_msg_type_vals,
                             "Unknown Type(0x%02x)"));
 
     /* Now, we'll add the start and conflict addresses and counts to the info column as appropriate */
@@ -183,14 +183,10 @@ proto_register_maap(void)
     }; /* end of static hf_register_info hf[] = */
 
     /* Setup protocol subtree array */
-    static gint *ett[] = { &ett_maap };
+    static int *ett[] = { &ett_maap };
 
     /* Register the protocol name and description */
-    proto_maap = proto_register_protocol (
-        "IEEE 1722 MAAP Protocol", /* name */
-        "MAAP", /* short name */
-        "maap" /* abbrev */
-        );
+    proto_maap = proto_register_protocol ("IEEE 1722 MAAP Protocol", "MAAP", "maap");
 
     /* Required function calls to register the header fields and subtrees used */
     proto_register_field_array(proto_maap, hf, array_length(hf));

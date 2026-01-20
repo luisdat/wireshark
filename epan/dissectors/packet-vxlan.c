@@ -19,7 +19,7 @@
 #include <epan/tfs.h>
 #include "packet-vxlan.h"
 
-#define UDP_PORT_VXLAN  4789
+#define UDP_PORT_VXLAN  "4789,8472" /* The IANA assigned port is 4789, but Linux default is 8472 for compatibility with early adopters */
 #define UDP_PORT_VXLAN_GPE  4790
 
 void proto_register_vxlan(void);
@@ -89,7 +89,7 @@ dissect_vxlan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int is
     proto_item *ti;
     tvbuff_t *next_tvb;
     int offset = 0;
-    guint32 vxlan_next_proto;
+    uint32_t vxlan_next_proto;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "VxLAN");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -137,14 +137,14 @@ dissect_vxlan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int is
 static int
 dissect_vxlan_gpe(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    return dissect_vxlan_common(tvb, pinfo, tree, TRUE);
+    return dissect_vxlan_common(tvb, pinfo, tree, true);
 }
 
 
 static int
 dissect_vxlan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    return dissect_vxlan_common(tvb, pinfo, tree, FALSE);
+    return dissect_vxlan_common(tvb, pinfo, tree, false);
 }
 
 
@@ -170,61 +170,61 @@ proto_register_vxlan(void)
         { &hf_vxlan_flags_reserved,
           { "Reserved(R)", "vxlan.flags_reserved",
             FT_UINT16, BASE_HEX, NULL, 0x77b7,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_gpe_flag_reserved,
           { "Reserved(R)", "vxlan.flags_reserved",
             FT_UINT8, BASE_DEC, NULL, 0xC2,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_flag_g,
           { "GBP Extension", "vxlan.flag_g",
             FT_BOOLEAN, 16, TFS(&tfs_defined_not_defined), 0x8000,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_flag_i,
           { "VXLAN Network ID (VNI)", "vxlan.flag_i",
             FT_BOOLEAN, 16, NULL, 0x0800,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_flag_d,
           { "Don't Learn", "vxlan.flag_d",
             FT_BOOLEAN, 16, NULL, 0x0040,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_flag_a,
           { "Policy Applied", "vxlan.flag_a",
             FT_BOOLEAN, 16, NULL, 0x0008,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_gpe_flag_ver,
           { "Version", "vxlan.ver",
             FT_UINT8, BASE_DEC, NULL, 0x30,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_gpe_flag_i,
           { "Instance", "vxlan.i_bit",
             FT_UINT8, BASE_DEC, NULL, 0x08,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_gpe_flag_p,
           { "Next Protocol Bit", "vxlan.p_bit",
             FT_UINT8, BASE_DEC, NULL, 0x04,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_gpe_flag_o,
           { "OAM bit", "vxlan.o_bit",
             FT_UINT8, BASE_DEC, NULL, 0x01,
-            NULL, HFILL,
+            NULL, HFILL
           },
         },
         { &hf_vxlan_gbp,
@@ -260,7 +260,7 @@ proto_register_vxlan(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_vxlan,
         &ett_vxlan_flags,
     };
@@ -294,7 +294,7 @@ proto_reg_handoff_vxlan(void)
      */
     eth_handle = find_dissector_add_dependency("eth_withoutfcs", proto_vxlan);
 
-    dissector_add_uint_with_preference("udp.port", UDP_PORT_VXLAN, vxlan_handle);
+    dissector_add_uint_range_with_preference("udp.port", UDP_PORT_VXLAN, vxlan_handle);
     dissector_add_uint_with_preference("udp.port", UDP_PORT_VXLAN_GPE, vxlan_gpe_handle);
 }
 

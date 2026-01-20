@@ -45,12 +45,11 @@ set_source_files_properties(
 
 register_plugin_files(plugin.c
 	plugin
-	"Meta Analysis Tracing Engine (MATE)"
 	${DISSECTOR_SRC}
 	${DISSECTOR_SUPPORT_SRC}
 )
 
-add_wireshark_epan_plugin_library(mate)
+add_wireshark_plugin_library(mate epan)
 
 target_link_libraries(mate epan)
 
@@ -71,16 +70,3 @@ CHECKAPI(
 #	  ${LEX_FILES}
 	  ${LEMON_FILES}
 )
-
-#
-# Editor modelines  -  https://www.wireshark.org/tools/modelines.html
-#
-# Local variables:
-# c-basic-offset: 8
-# tab-width: 8
-# indent-tabs-mode: t
-# End:
-#
-# vi: set shiftwidth=8 tabstop=8 noexpandtab:
-# :indentSize=8:tabSize=8:noTabs=false:
-#

@@ -31,7 +31,7 @@ WSLUA_CLASS_DEFINE(FieldInfo,FAIL_ON_NULL_OR_EXPIRED("FieldInfo"));
    or `Field()` before-hand, or it can be called on new fields created by Lua from a `ProtoField`.
  */
 
-static GPtrArray* outstanding_FieldInfo = NULL;
+static GPtrArray* outstanding_FieldInfo;
 
 FieldInfo* push_FieldInfo(lua_State* L, field_info* f) {
     FieldInfo fi = (FieldInfo) g_malloc(sizeof(struct _wslua_field_info));
@@ -241,7 +241,7 @@ static int FieldInfo_get_display(lua_State* L) {
 
     if (!fi->ws_fi->rep) {
         label_ptr = label_str;
-        proto_item_fill_label(fi->ws_fi, label_str);
+        proto_item_fill_label(fi->ws_fi, label_str, NULL);
     } else
         label_ptr = fi->ws_fi->rep->representation;
 
@@ -261,8 +261,6 @@ static int FieldInfo_get_display(lua_State* L) {
 
 /* WSLUA_ATTRIBUTE FieldInfo_type RO The internal field type, a number which
    matches one of the `ftype` values.
-
-   @since 1.99.8
  */
 static int FieldInfo_get_type(lua_State* L) {
     FieldInfo fi = checkFieldInfo(L,1);
@@ -279,8 +277,6 @@ static int FieldInfo_get_type(lua_State* L) {
 
 /* WSLUA_ATTRIBUTE FieldInfo_source RO The source `Tvb` object the `FieldInfo` is derived
     from, or nil if there is none.
-
-   @since 1.99.8
  */
 static int FieldInfo_get_source(lua_State* L) {
     FieldInfo fi = checkFieldInfo(L,1);
@@ -320,10 +316,7 @@ static int FieldInfo_get_generated(lua_State* L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE FieldInfo_hidden RO Whether this field was marked as hidden (boolean).
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE FieldInfo_hidden RO Whether this field was marked as hidden (boolean). */
 static int FieldInfo_get_hidden(lua_State* L) {
     FieldInfo fi = checkFieldInfo(L,1);
 
@@ -331,10 +324,7 @@ static int FieldInfo_get_hidden(lua_State* L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE FieldInfo_is_url RO Whether this field was marked as being a URL (boolean).
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE FieldInfo_is_url RO Whether this field was marked as being a URL (boolean). */
 static int FieldInfo_get_is_url(lua_State* L) {
     FieldInfo fi = checkFieldInfo(L,1);
 
@@ -342,10 +332,7 @@ static int FieldInfo_get_is_url(lua_State* L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE FieldInfo_little_endian RO Whether this field is little-endian encoded (boolean).
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE FieldInfo_little_endian RO Whether this field is little-endian encoded (boolean). */
 static int FieldInfo_get_little_endian(lua_State* L) {
     FieldInfo fi = checkFieldInfo(L,1);
 
@@ -353,10 +340,7 @@ static int FieldInfo_get_little_endian(lua_State* L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE FieldInfo_big_endian RO Whether this field is big-endian encoded (boolean).
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE FieldInfo_big_endian RO Whether this field is big-endian encoded (boolean). */
 static int FieldInfo_get_big_endian(lua_State* L) {
     FieldInfo fi = checkFieldInfo(L,1);
 
@@ -364,10 +348,7 @@ static int FieldInfo_get_big_endian(lua_State* L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE FieldInfo_name RO The filter name of this field.
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE FieldInfo_name RO The filter name of this field. */
 static int FieldInfo_get_name(lua_State* L) {
     /* The filter name of this field. */
     FieldInfo fi = checkFieldInfo(L,1);
@@ -520,8 +501,8 @@ WSLUA_CLASS_DEFINE(Field,FAIL_ON_NULL("Field"));
  */
 
 /* Array of Field (struct _wslua_header_field_info*) pointers.*/
-static GPtrArray* wanted_fields = NULL;
-static dfilter_t* wslua_dfilter = NULL;
+static GPtrArray* wanted_fields;
+static dfilter_t* wslua_dfilter;
 
 /* We use a fake dfilter for Lua field extractors, so that
  * epan_dissect_run() will populate the fields.  This won't happen
@@ -552,7 +533,7 @@ bool wslua_has_field_extractors(void) {
  * after the fields are primed.
  */
 
-static bool fake_tap = false;
+static bool fake_tap;
 void lua_prime_all_fields(proto_tree* tree _U_) {
     GString* fake_tap_filter = g_string_new("frame");
     unsigned i;
@@ -584,13 +565,13 @@ void lua_prime_all_fields(proto_tree* tree _U_) {
 
         if (error) {
             report_failure("while registering lua_fake_tap:\n%s",error->str);
-            g_string_free(error,true);
+            g_string_free(error,TRUE);
         } else if (!dfilter_compile(fake_tap_filter->str, &wslua_dfilter, &df_err)) {
             report_failure("while compiling dfilter \"%s\" for wslua: %s", fake_tap_filter->str, df_err->msg);
             df_error_free(&df_err);
         }
     }
-    g_string_free(fake_tap_filter, true);
+    g_string_free(fake_tap_filter, TRUE);
 }
 
 WSLUA_CONSTRUCTOR Field_new(lua_State *L) {
@@ -624,8 +605,6 @@ WSLUA_CONSTRUCTOR Field_list(lua_State *L) {
     /* Gets a Lua array table of all registered field filter names.
 
        NOTE: This is an expensive operation, and should only be used for troubleshooting.
-
-       @since 1.11.3
      */
     void *cookie, *cookie2;
     int i = -1;
@@ -676,10 +655,7 @@ WSLUA_CONSTRUCTOR Field_list(lua_State *L) {
         lua_pushnil(L)
 
 
-/* WSLUA_ATTRIBUTE Field_name RO The filter name of this field, or nil.
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE Field_name RO The filter name of this field, or nil. */
 static int Field_get_name(lua_State* L) {
     Field f = checkField(L,1);
     header_field_info* hfinfo = NULL;
@@ -689,10 +665,7 @@ static int Field_get_name(lua_State* L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE Field_display RO The full display name of this field, or nil.
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE Field_display RO The full display name of this field, or nil. */
 static int Field_get_display(lua_State* L) {
     Field f = checkField(L,1);
     header_field_info* hfinfo = NULL;
@@ -702,10 +675,7 @@ static int Field_get_display(lua_State* L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE Field_type RO The `ftype` of this field, or nil.
-
-   @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE Field_type RO The `ftype` of this field, or nil. */
 static int Field_get_type(lua_State* L) {
     Field f = checkField(L,1);
     header_field_info* hfinfo = NULL;
@@ -796,9 +766,15 @@ WSLUA_META Field_meta[] = {
 
 int Field_register(lua_State* L) {
 
+    if (wanted_fields != NULL) {
+        g_ptr_array_unref(wanted_fields);
+    }
     wanted_fields = g_ptr_array_new();
 
     WSLUA_REGISTER_CLASS_WITH_ATTRS(Field);
+    if (outstanding_FieldInfo != NULL) {
+        g_ptr_array_unref(outstanding_FieldInfo);
+    }
     outstanding_FieldInfo = g_ptr_array_new();
 
     return 0;

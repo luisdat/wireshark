@@ -9,10 +9,7 @@
 
 #include "config.h"
 
-#include <glib.h>
-
 #include "file.h"
-#include "frame_tvbuff.h"
 
 #include "epan/addr_resolv.h"
 #include "epan/epan_dissect.h"
@@ -105,13 +102,16 @@ void AddressEditorFrame::addAddresses(const ProtoNode& node, QStringList& addres
 void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
 {
     cap_file_ = cf.capFile();
+    wtap_rec    rec;
 
     if (!cap_file_->current_frame) {
         on_buttonBox_rejected();
         return;
     }
 
-    if (!cf_read_current_record(cap_file_)) {
+    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    if (!cf_read_record(cap_file_, cap_file_->current_frame, &rec)) {
+        wtap_rec_cleanup(&rec);
         on_buttonBox_rejected();
         return; // error reading the frame
     }
@@ -127,13 +127,12 @@ void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
     // have one in cap_file_->edt->tree as we have a current frame), but
     // this is only a single frame that's previously been dissected so
     // the performance hit is slight anyway.
-    epan_dissect_init(&edt, cap_file_->epan, TRUE, TRUE);
+    epan_dissect_init(&edt, cap_file_->epan, true, true);
     col_custom_prime_edt(&edt, &cap_file_->cinfo);
 
     epan_dissect_run(&edt, cap_file_->cd_t, &cap_file_->rec,
-        frame_tvbuff_new_buffer(&cap_file_->provider, cap_file_->current_frame, &cap_file_->buf),
         cap_file_->current_frame, &cap_file_->cinfo);
-    epan_dissect_fill_in_columns(&edt, TRUE, TRUE);
+    epan_dissect_fill_in_columns(&edt, true, true);
 
     addAddresses(ProtoNode(edt.tree), addresses);
 
@@ -153,6 +152,7 @@ void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
     }
 
     epan_dissect_cleanup(&edt);
+    wtap_rec_cleanup(&rec);
 
     displayPreviousUserDefinedHostname();
 
@@ -276,7 +276,7 @@ void AddressEditorFrame::on_buttonBox_rejected()
 
 bool AddressEditorFrame::isAddressColumn(epan_column_info *cinfo, int column)
 {
-    if (!cinfo || column < 0 || column >= cinfo->num_cols) return false;
+    if (!cinfo || column < 0 || (unsigned)column >= cinfo->num_cols) return false;
 
     if (((cinfo->columns[column].col_fmt == COL_DEF_SRC) ||
          (cinfo->columns[column].col_fmt == COL_RES_SRC) ||

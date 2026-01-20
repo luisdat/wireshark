@@ -22,7 +22,9 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/xdlc.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
+#include "packet-xdlc.h"
 
 void proto_register_v5dl(void);
 
@@ -52,10 +54,10 @@ static int hf_v5dl_ftype_s_u_ext;
 static int hf_v5dl_checksum;
 static int hf_v5dl_checksum_status;
 #endif
-static gint ett_v5dl;
-static gint ett_v5dl_address;
-static gint ett_v5dl_control;
-/* static gint ett_v5dl_checksum; */
+static int ett_v5dl;
+static int ett_v5dl_address;
+static int ett_v5dl_control;
+/* static int ett_v5dl_checksum; */
 
 static expert_field ei_v5dl_checksum;
 
@@ -123,18 +125,18 @@ dissect_v5dl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	proto_tree	*v5dl_tree, *addr_tree;
 	proto_item	*v5dl_ti, *addr_ti;
 	int		direction;
-	guint		v5dl_header_len;
-	guint16		control;
+	unsigned		v5dl_header_len;
+	uint16_t		control;
 #if 0
 	proto_tree	*checksum_tree;
 	proto_item	*checksum_ti;
-	guint16		checksum, checksum_calculated;
-	guint		checksum_offset;
+	uint16_t		checksum, checksum_calculated;
+	unsigned		checksum_offset;
 #endif
-	guint16		addr, cr, eah, eal, v5addr;
-	gboolean	is_response = 0;
+	uint16_t		addr, cr, eah, eal, v5addr;
+	bool	is_response = 0;
 #if 0
-	guint		length, reported_length;
+	unsigned		length, reported_length;
 #endif
 	tvbuff_t	*next_tvb;
 	const char	*srcname = "?";
@@ -152,12 +154,12 @@ dissect_v5dl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
 	direction = pinfo->p2p_dir;
 	if (pinfo->p2p_dir == P2P_DIR_RECV) {
-	    is_response = cr ? FALSE : TRUE;
+	    is_response = cr ? false : true;
 	    srcname = "Network";
 	    dstname = "User";
 	}
 	else if (pinfo->p2p_dir == P2P_DIR_SENT) {
-	    is_response = cr ? TRUE : FALSE;
+	    is_response = cr ? true : false;
 	    srcname = "User";
 	    dstname = "Network";
 	}
@@ -197,8 +199,8 @@ dissect_v5dl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
 	control = dissect_xdlc_control(tvb, 2, pinfo, v5dl_tree, hf_v5dl_control,
 	    ett_v5dl_control, &v5dl_cf_items, &v5dl_cf_items_ext, NULL, NULL,
-	    is_response, TRUE, FALSE);
-	v5dl_header_len += XDLC_CONTROL_LEN(control, TRUE);
+	    is_response, true, false);
+	v5dl_header_len += XDLC_CONTROL_LEN(control, true);
 
 	if (tree)
 		proto_item_set_len(v5dl_ti, v5dl_header_len);
@@ -228,7 +230,8 @@ dissect_v5dl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	if (length == reported_length) {
 		/*
 		 * There's no snapshot length cutting off any of the
-		 * packet.
+		 * packet. Calculate the checksum and add it to the
+		 * tree.
 		 */
 		checksum_offset = reported_length - 2;
 		checksum_calculated = crc16_ccitt_tvb(tvb, checksum_offset);
@@ -236,39 +239,13 @@ dissect_v5dl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
 		proto_tree_add_checksum(v5dl_tree, tvb, checksum_offset, hf_v5dl_checksum, hf_v5dl_checksum_status, &ei_v5dl_checksum,
 								pinfo, checksum_calculated, ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
-		/*
-		 * Remove the V5DL header *and* the checksum.
-		 */
-		next_tvb = tvb_new_subset_length_caplen(tvb, v5dl_header_len,
-		    tvb_captured_length_remaining(tvb, v5dl_header_len) - 2,
-		    tvb_reported_length_remaining(tvb, v5dl_header_len) - 2);
-	} else {
-		/*
-		 * Some or all of the packet is cut off by a snapshot
-		 * length.
-		 */
-		if (length == reported_length - 1) {
-			/*
-			 * One byte is cut off, so there's only one
-			 * byte of checksum in the captured data.
-			 * Remove that byte from the captured length
-			 * and both bytes from the reported length.
-			 */
-			next_tvb = tvb_new_subset_length_caplen(tvb, v5dl_header_len,
-			    tvb_captured_length_remaining(tvb, v5dl_header_len) - 1,
-			    tvb_reported_length_remaining(tvb, v5dl_header_len) - 2);
-		} else {
-			/*
-			 * Two or more bytes are cut off, so there are
-			 * no bytes of checksum in the captured data.
-			 * Just remove the checksum from the reported
-			 * length.
-			 */
-			next_tvb = tvb_new_subset_length_caplen(tvb, v5dl_header_len,
-			    tvb_captured_length_remaining(tvb, v5dl_header_len),
-			    tvb_reported_length_remaining(tvb, v5dl_header_len) - 2);
-		}
 	}
+	/*
+	 * Remove the checksum from the reported length.
+	 * The captured length is automatically trimmed appropriately.
+	 */
+	next_tvb = tvb_new_subset_length(tvb, v5dl_header_len,
+	    tvb_reported_length_remaining(tvb, v5dl_header_len) - 2);
 #else
 	next_tvb = tvb_new_subset_remaining(tvb, v5dl_header_len);
 #endif
@@ -385,7 +362,7 @@ proto_register_v5dl(void)
 #endif
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_v5dl,
 		&ett_v5dl_address,
 		&ett_v5dl_control,

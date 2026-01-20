@@ -19,11 +19,11 @@
  */
 
 /* DFilter plugins share the name with the function it implements. */
-GSList *dfilter_plugins = NULL;
+GSList *dfilter_plugins;
 
 void dfilter_plugins_register(const dfilter_plugin *plug)
 {
-	dfilter_plugins = g_slist_prepend(dfilter_plugins, (gpointer)plug);
+	dfilter_plugins = g_slist_prepend(dfilter_plugins, (void *)plug);
 }
 
 void dfilter_plugins_init(void)

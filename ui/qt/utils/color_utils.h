@@ -49,6 +49,8 @@ public:
      * @return true if we're running in dark mode, false otherwise.
      */
     static bool themeIsDark();
+
+    static void setScheme(int scheme);
     /**
      * Returns an appropriate link color for the current mode.
      * @return A brush suitable for setting a text color.
@@ -79,6 +81,12 @@ public:
      * @return The background color.
      */
     static const QColor warningBackground();
+
+    /**
+     * Returns an appropriate foreground color for disabled text.
+     * @return The foreground color.
+     */
+    static const QColor disabledForeground();
 
 private:
     static QList<QRgb> graph_colors_;

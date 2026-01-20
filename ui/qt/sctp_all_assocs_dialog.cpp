@@ -51,7 +51,7 @@ void SCTPAllAssocsDialog::fillTable()
     ui->assocList->setColumnHidden(0, true);
 
     sctp_assocs = sctp_stat_get_info();
-    if (sctp_assocs->is_registered == FALSE) {
+    if (sctp_assocs->is_registered == false) {
         register_tap_listener_sctp_stat();
         /*  (redissect all packets) */
         cf_retap_packets(cap_file_);
@@ -133,6 +133,6 @@ void SCTPAllAssocsDialog::on_analyseButton_clicked()
 
 void SCTPAllAssocsDialog::on_setFilterButton_clicked()
 {
-    QString newFilter = QString("sctp.assoc_index==%1").arg(selected_assoc_id);
+    QString newFilter = QStringLiteral("sctp.assoc_index==%1").arg(selected_assoc_id);
     emit filterPackets(newFilter, false);
 }

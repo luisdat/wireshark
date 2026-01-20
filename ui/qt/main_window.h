@@ -18,19 +18,26 @@
 //#include "follow_stream_dialog.h"
 
 
+#include "capture_file.h"
 #include "filter_action.h"
+#include "io_graph_action.h"
 
 #include <QMainWindow>
 #include <QSplitter>
 
+class QMenu;
 class QSplitter;
 class QStackedWidget;
-class ByteViewTab;
+class QTextCodec;
+
+class DataSourceTab;
 class DisplayFilterCombo;
 class FieldInformation;
+class FunnelAction;
 class MainStatusBar;
 class PacketDiagram;
 class PacketList;
+class ProfileSwitcher;
 class ProtoTree;
 class WelcomePage;
 
@@ -42,10 +49,11 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    void setMainWindowTitle(QString title = QString());
     bool hasSelection();
     bool hasUniqueSelection();
     QList<int> selectedRows(bool useFrameNum = false);
-    void insertColumn(QString name, QString abbrev, gint pos = -1);
+    void insertColumn(QString name, QString abbrev, int pos = -1);
     void gotoFrame(int packet_num);
     frame_data* frameDataForRow(int) const;
 
@@ -53,7 +61,7 @@ public:
     MainStatusBar *statusBar();
 
     // Used for managing custom packet menus
-    void appendPacketMenu(QAction* funnel_action);
+    void appendPacketMenu(FunnelAction *funnel_action);
     QList<QAction*> getPacketMenuActions();
     void clearAddedPacketMenus();
     bool addPacketMenus(QMenu * ctx_menu, GPtrArray *finfo_array);
@@ -62,8 +70,11 @@ public slots:
     void setDisplayFilter(QString filter, FilterAction::Action action, FilterAction::ActionType filterType);
     virtual void filterPackets(QString, bool) = 0;
     virtual void showPreferencesDialog(QString module_name) = 0;
+    virtual void showIOGraphDialog(io_graph_item_unit_t, QString) = 0;
+    virtual void showPlotDialog(const QString&, bool) = 0;
     void layoutPanes();
     void applyRecentPaneGeometry();
+    void updateForUnsavedChanges();
 
 protected:
     enum CopySelected {
@@ -74,12 +85,17 @@ protected:
         CopySelectedValue,
         CopyListAsText,
         CopyListAsCSV,
-        CopyListAsYAML
+        CopyListAsYAML,
+        CopyListAsHTML,
     };
 
     void showWelcome();
     void showCapture();
+    void setTitlebarForCaptureInProgress();
+    void setIconForCaptureInProgress(bool capture_in_progress);
+    virtual void setMenusForCaptureFile(bool force_disable = false) = 0;
 
+    CaptureFile capture_file_;
     QList<register_stat_group_t> menu_groups_;
     QWidget* getLayoutWidget(layout_pane_content_e type);
 
@@ -92,14 +108,35 @@ protected:
 
     PacketList *packet_list_;
     ProtoTree *proto_tree_;
-    ByteViewTab *byte_view_tab_;
+    DataSourceTab *data_source_tab_;
     PacketDiagram *packet_diagram_;
     DisplayFilterCombo *df_combo_box_;
     MainStatusBar *main_status_bar_;
+    ProfileSwitcher *profile_switcher_;
+    bool use_capturing_title_;
+    QMap<QString, QTextCodec *> text_codec_map_;
+
+protected slots:
+    void addDisplayFilterTranslationActions(QMenu *copy_menu);
+    void updateDisplayFilterTranslationActions(const QString &df_text);
+    void updateTitlebar();
+
+private:
+    QString replaceWindowTitleVariables(QString title);
+    void findTextCodecs();
+
+    QVector<QAction *> df_translate_actions_;
+    static const char *translator_;
+    static const char *translated_filter_;
+
+private slots:
+    void copyDisplayFilterTranslation(void);
 
 signals:
     void setCaptureFile(capture_file *cf);
+    void captureActive(int);
     void fieldSelected(FieldInformation *);
+    void fieldHighlight(FieldInformation *);
     void framesSelected(QList<int>);
     void filterAction(QString filter, FilterAction::Action action, FilterAction::ActionType type);
     void displayFilterSuccess(bool success);

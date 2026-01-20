@@ -16,6 +16,7 @@
 #include <config.h>
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
 
 #define AMT_UDP_PORT 2268
 
@@ -45,7 +46,7 @@ static int hf_amt_multicast_data;
 static expert_field ei_amt_relay_address_unknown;
 static expert_field ei_amt_unknown;
 
-static gint ett_amt;
+static int ett_amt;
 
 #define RELAY_DISCOVERY         1
 #define RELAY_ADVERTISEMENT     2
@@ -79,8 +80,8 @@ dissect_amt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     proto_item *ti;
     proto_tree *amt_tree;
-    guint       offset = 0;
-    guint32     type;
+    unsigned    offset = 0;
+    uint32_t    type;
     tvbuff_t   *next_tvb;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "AMT");
@@ -91,26 +92,26 @@ dissect_amt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 
     proto_tree_add_item(amt_tree, hf_amt_version, tvb, offset, 1, ENC_NA);
     proto_tree_add_item_ret_uint(amt_tree, hf_amt_type, tvb, offset, 1, ENC_NA, &type);
-    col_add_str(pinfo->cinfo, COL_INFO, val_to_str_const(type, amt_type_vals, "Unknown AMT TYPE"));
+    col_set_str(pinfo->cinfo, COL_INFO, val_to_str_const(type, amt_type_vals, "Unknown AMT TYPE"));
     offset += 1;
 
     switch(type){
         case RELAY_DISCOVERY: /* 1 */
             proto_tree_add_item(amt_tree, hf_amt_reserved, tvb, offset, 3, ENC_NA);
             offset += 3;
-            proto_tree_add_item(amt_tree, hf_amt_discovery_nonce, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_discovery_nonce, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
         break;
         case RELAY_ADVERTISEMENT:{ /* 2 */
-            guint32 relay_length;
+            uint32_t relay_length;
             proto_tree_add_item(amt_tree, hf_amt_reserved, tvb, offset, 3, ENC_NA);
             offset += 3;
-            proto_tree_add_item(amt_tree, hf_amt_discovery_nonce, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_discovery_nonce, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
             relay_length = tvb_reported_length_remaining(tvb, offset);
             switch(relay_length){
                 case 4: /* IPv4 Address */
-                    proto_tree_add_item(amt_tree, hf_amt_relay_address_ipv4, tvb, offset, 4, ENC_NA);
+                    proto_tree_add_item(amt_tree, hf_amt_relay_address_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
                     offset += 4;
                 break;
                 case 16: /* IPv6 Address */
@@ -130,18 +131,18 @@ dissect_amt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
             offset += 1;
             proto_tree_add_item(amt_tree, hf_amt_reserved, tvb, offset, 2, ENC_NA);
             offset += 2;
-            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
         break;
         case MEMBERSHIP_QUERY:{ /* 4 */
-            guint32 flags_g;
+            uint32_t flags_g;
             proto_tree_add_item(amt_tree, hf_amt_membership_query_reserved, tvb, offset, 1, ENC_NA);
             proto_tree_add_item(amt_tree, hf_amt_membership_query_l, tvb, offset, 1, ENC_NA);
             proto_tree_add_item_ret_uint(amt_tree, hf_amt_membership_query_g, tvb, offset, 1, ENC_NA, &flags_g);
             offset += 1;
-            proto_tree_add_item(amt_tree, hf_amt_response_mac, tvb, offset, 6, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_response_mac, tvb, offset, 6, ENC_BIG_ENDIAN);
             offset += 6;
-            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
             next_tvb = tvb_new_subset_remaining(tvb, offset);
             call_dissector(ip_handle, next_tvb, pinfo, amt_tree);
@@ -149,7 +150,7 @@ dissect_amt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
             if(flags_g){
                 offset -= 2;
                 offset -= 16;
-                proto_tree_add_item(amt_tree, hf_amt_gateway_port_number, tvb, offset, 2, ENC_NA);
+                proto_tree_add_item(amt_tree, hf_amt_gateway_port_number, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 proto_tree_add_item(amt_tree, hf_amt_gateway_ip_address, tvb, offset, 16, ENC_NA);
                 offset += 16;
@@ -159,9 +160,9 @@ dissect_amt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
         case MEMBERSHIP_UPDATE: /* 5 */
             proto_tree_add_item(amt_tree, hf_amt_reserved, tvb, offset, 1, ENC_NA);
             offset += 1;
-            proto_tree_add_item(amt_tree, hf_amt_response_mac, tvb, offset, 6, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_response_mac, tvb, offset, 6, ENC_BIG_ENDIAN);
             offset += 6;
-            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
             next_tvb = tvb_new_subset_remaining(tvb, offset);
             call_dissector(ip_handle, next_tvb, pinfo, amt_tree);
@@ -178,18 +179,18 @@ dissect_amt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
         case TEARDOWN:{ /* 7 */
             proto_tree_add_item(amt_tree, hf_amt_reserved, tvb, offset, 1, ENC_NA);
             offset += 1;
-            proto_tree_add_item(amt_tree, hf_amt_response_mac, tvb, offset, 6, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_response_mac, tvb, offset, 6, ENC_BIG_ENDIAN);
             offset += 6;
-            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_request_nonce, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
-            proto_tree_add_item(amt_tree, hf_amt_gateway_port_number, tvb, offset, 2, ENC_NA);
+            proto_tree_add_item(amt_tree, hf_amt_gateway_port_number, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
             proto_tree_add_item(amt_tree, hf_amt_gateway_ip_address, tvb, offset, 16, ENC_NA);
             offset += 16;
         }
         break;
         default:{
-            guint32 len_unknown;
+            uint32_t len_unknown;
             len_unknown = tvb_reported_length_remaining(tvb, offset);
             proto_tree_add_expert(amt_tree, pinfo, &ei_amt_unknown, tvb, offset, len_unknown);
             offset += len_unknown;
@@ -265,6 +266,7 @@ proto_register_amt(void)
             FT_UINT8, BASE_DEC, NULL, 0x01,
             NULL, HFILL }
         },
+        /* TODO: should be FT_ETHER? */
         { &hf_amt_response_mac,
           { "Response MAC", "amt.response_mac",
             FT_UINT48, BASE_HEX, NULL, 0x0,
@@ -287,7 +289,7 @@ proto_register_amt(void)
         },
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_amt
     };
 

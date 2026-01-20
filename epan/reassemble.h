@@ -15,7 +15,13 @@
 #ifndef REASSEMBLE_H
 #define REASSEMBLE_H
 
+#include <epan/packet_info.h>
+#include <epan/proto.h>
 #include "ws_symbol_export.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* only in fd_head: packet is defragmented */
 #define FD_DEFRAGMENTED		0x0001
@@ -49,13 +55,15 @@
  */
 #define FD_DATALEN_SET		0x0400
 
+struct dissector_handle;
+
 typedef struct _fragment_item {
 	struct _fragment_item *next;
-	guint32 frame;			/**< frame number where the fragment is from */
-	guint32	offset;			/**< fragment number for FD_BLOCKSEQUENCE, byte
+	uint32_t frame;			/**< frame number where the fragment is from */
+	uint32_t	offset;			/**< fragment number for FD_BLOCKSEQUENCE, byte
 					 * offset otherwise */
-	guint32	len;			/**< fragment length */
-	guint32 flags;			/**< XXX - do some of these apply only to reassembly
+	uint32_t	len;			/**< fragment length */
+	uint32_t flags;			/**< XXX - do some of these apply only to reassembly
 					 * heads and others only to fragments within
 					 * a reassembly? */
 	tvbuff_t *tvb_data;
@@ -65,28 +73,28 @@ typedef struct _fragment_head {
 	struct _fragment_item *next;
 	struct _fragment_item *first_gap;	/**< pointer to last fragment before first gap.
 					 * NULL if there is no fragment starting at offset 0 */
-	guint ref_count; 		/**< reference count in reassembled_table */
-	guint32 contiguous_len;	/**< contiguous length from head up to first gap */
-	guint32 frame;			/**< maximum of all frame numbers added to reassembly */
-	guint32	len;			/**< When flags&FD_BLOCKSEQUENCE and FD_DEFRAGMENTED
+	unsigned ref_count; 		/**< reference count in reassembled_table */
+	uint32_t contiguous_len;	/**< contiguous length from head up to first gap */
+	uint32_t frame;			/**< maximum of all frame numbers added to reassembly */
+	uint32_t	len;			/**< When flags&FD_BLOCKSEQUENCE and FD_DEFRAGMENTED
 					 * are set, the number of bytes of the full datagram.
 					 * Otherwise not valid. */
-	guint32 fragment_nr_offset;	/**< offset for frame numbering, for sequences, where the
+	uint32_t fragment_nr_offset;	/**< offset for frame numbering, for sequences, where the
 					 * provided fragment number of the first fragment does
 					 * not start with 0 */
-	guint32 datalen;		/**< When flags&FD_BLOCKSEQUENCE is set, the
+	uint32_t datalen;		/**< When flags&FD_BLOCKSEQUENCE is set, the
 					 * index of the last block (segments in
 					 * datagram + 1); otherwise the number of
 					 * bytes of the full datagram. Only valid in
 					 * the first item of the fragments list when
 					 * flags&FD_DATALEN is set.*/
-	guint32 reassembled_in;		/**< frame where this PDU was reassembled,
+	uint32_t reassembled_in;		/**< frame where this PDU was reassembled,
 					 * only valid when FD_DEFRAGMENTED is set */
-	guint8 reas_in_layer_num;	/**< The current "depth" or layer number in the current
+	uint8_t reas_in_layer_num;	/**< The current "depth" or layer number in the current
 					 * frame where reassembly was completed.
 					 * Example: in SCTP there can be several data chunks and
-					 * we want the reassemblied tvb for the final segment only. */
-	guint32 flags;			/**< XXX - do some of these apply only to reassembly
+					 * we want the reassembled tvb for the final segment only. */
+	uint32_t flags;			/**< XXX - do some of these apply only to reassembly
 					 * heads and others only to fragments within
 					 * a reassembly? */
 	tvbuff_t *tvb_data;
@@ -122,15 +130,15 @@ typedef struct _fragment_head {
  *
  * Keys returned by this function are only used within this packet scope.
  */
-typedef gpointer (*fragment_temporary_key)(const packet_info *pinfo,
-    const guint32 id, const void *data);
+typedef void * (*fragment_temporary_key)(const packet_info *pinfo,
+    const uint32_t id, const void *data);
 
 /*
  * Like fragment_temporary_key, but used for identifying reassembled fragments
  * which may persist through multiple packets.
  */
-typedef gpointer (*fragment_persistent_key)(const packet_info *pinfo,
-    const guint32 id, const void *data);
+typedef void * (*fragment_persistent_key)(const packet_info *pinfo,
+    const uint32_t id, const void *data);
 
 /*
  * Data structure to keep track of fragments and reassemblies.
@@ -212,9 +220,9 @@ reassembly_table_destroy(reassembly_table *table);
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add(reassembly_table *table, tvbuff_t *tvb, const int offset,
-	     const packet_info *pinfo, const guint32 id, const void *data,
-	     const guint32 frag_offset, const guint32 frag_data_len,
-	     const gboolean more_frags);
+	     const packet_info *pinfo, const uint32_t id, const void *data,
+	     const uint32_t frag_offset, const uint32_t frag_data_len,
+	     const bool more_frags);
 /*
  * Like fragment_add, except that the fragment may be added to multiple
  * reassembly tables. This is needed when multiple protocol layers try
@@ -223,10 +231,10 @@ fragment_add(reassembly_table *table, tvbuff_t *tvb, const int offset,
 WS_DLL_PUBLIC fragment_head *
 fragment_add_multiple_ok(reassembly_table *table, tvbuff_t *tvb,
 			 const int offset, const packet_info *pinfo,
-			 const guint32 id, const void *data,
-			 const guint32 frag_offset,
-			 const guint32 frag_data_len,
-			 const gboolean more_frags);
+			 const uint32_t id, const void *data,
+			 const uint32_t frag_offset,
+			 const uint32_t frag_data_len,
+			 const bool more_frags);
 
 /*
  * Like fragment_add, except that the fragment may originate from a frame
@@ -245,10 +253,10 @@ fragment_add_multiple_ok(reassembly_table *table, tvbuff_t *tvb,
 WS_DLL_PUBLIC fragment_head *
 fragment_add_out_of_order(reassembly_table *table, tvbuff_t *tvb,
                           const int offset, const packet_info *pinfo,
-                          const guint32 id, const void *data,
-                          const guint32 frag_offset,
-                          const guint32 frag_data_len,
-                          const gboolean more_frags, const guint32 frag_frame);
+                          const uint32_t id, const void *data,
+                          const uint32_t frag_offset,
+                          const uint32_t frag_data_len,
+                          const bool more_frags, const uint32_t frag_frame);
 /*
  * Like fragment_add, but maintains a table for completed reassemblies.
  *
@@ -273,9 +281,9 @@ fragment_add_out_of_order(reassembly_table *table, tvbuff_t *tvb,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
-		   const packet_info *pinfo, const guint32 id,
-		   const void *data, const guint32 frag_offset,
-		   const guint32 frag_data_len, const gboolean more_frags);
+		   const packet_info *pinfo, const uint32_t id,
+		   const void *data, const uint32_t frag_offset,
+		   const uint32_t frag_data_len, const bool more_frags);
 
 /*
  * Like fragment_add_check, but handles retransmissions after reassembly.
@@ -288,10 +296,10 @@ fragment_add_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add_check_with_fallback(reassembly_table *table, tvbuff_t *tvb, const int offset,
-		   const packet_info *pinfo, const guint32 id,
-		   const void *data, const guint32 frag_offset,
-		   const guint32 frag_data_len, const gboolean more_frags,
-		   const guint32 fallback_frame);
+		   const packet_info *pinfo, const uint32_t id,
+		   const void *data, const uint32_t frag_offset,
+		   const uint32_t frag_data_len, const bool more_frags,
+		   const uint32_t fallback_frame);
 
 /*
  * Like fragment_add, but fragments have a block sequence number starting from
@@ -325,9 +333,9 @@ fragment_add_check_with_fallback(reassembly_table *table, tvbuff_t *tvb, const i
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add_seq(reassembly_table *table, tvbuff_t *tvb, const int offset,
-		 const packet_info *pinfo, const guint32 id, const void *data,
-		 const guint32 frag_number, const guint32 frag_data_len,
-		 const gboolean more_frags, const guint32 flags);
+		 const packet_info *pinfo, const uint32_t id, const void *data,
+		 const uint32_t frag_number, const uint32_t frag_data_len,
+		 const bool more_frags, const uint32_t flags);
 
 /*
  * Like fragment_add_seq, but maintains a table for completed reassemblies
@@ -343,10 +351,10 @@ fragment_add_seq(reassembly_table *table, tvbuff_t *tvb, const int offset,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add_seq_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
-		       const packet_info *pinfo, const guint32 id,
+		       const packet_info *pinfo, const uint32_t id,
 		       const void *data,
-		       const guint32 frag_number, const guint32 frag_data_len,
-		       const gboolean more_frags);
+		       const uint32_t frag_number, const uint32_t frag_data_len,
+		       const bool more_frags);
 
 /*
  * Like fragment_add_seq_check, but immediately returns a fragment list for a
@@ -356,9 +364,9 @@ fragment_add_seq_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
 WS_DLL_PUBLIC fragment_head *
 fragment_add_seq_802_11(reassembly_table *table, tvbuff_t *tvb,
 			const int offset, const packet_info *pinfo,
-			const guint32 id, const void *data,
-			const guint32 frag_number, const guint32 frag_data_len,
-			const gboolean more_frags);
+			const uint32_t id, const void *data,
+			const uint32_t frag_number, const uint32_t frag_data_len,
+			const bool more_frags);
 
 /*
  * Like fragment_add_seq_check, but without explicit fragment number. Fragments
@@ -372,9 +380,9 @@ fragment_add_seq_802_11(reassembly_table *table, tvbuff_t *tvb,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add_seq_next(reassembly_table *table, tvbuff_t *tvb, const int offset,
-		      const packet_info *pinfo, const guint32 id,
-		      const void *data, const guint32 frag_data_len,
-		      const gboolean more_frags);
+		      const packet_info *pinfo, const uint32_t id,
+		      const void *data, const uint32_t frag_data_len,
+		      const bool more_frags);
 
 /*
  * Like fragment_add_seq_check, but for protocols like PPP MP with a single
@@ -388,10 +396,10 @@ fragment_add_seq_next(reassembly_table *table, tvbuff_t *tvb, const int offset,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add_seq_single(reassembly_table *table, tvbuff_t *tvb,
-            const int offset, const packet_info *pinfo, const guint32 id,
-            const void* data, const guint32 frag_data_len,
-            const gboolean first, const gboolean last,
-            const guint32 max_frags);
+            const int offset, const packet_info *pinfo, const uint32_t id,
+            const void* data, const uint32_t frag_data_len,
+            const bool first, const bool last,
+            const uint32_t max_frags);
 
 /*
  * A variation on the above that ages off fragments that have not been
@@ -400,10 +408,10 @@ fragment_add_seq_single(reassembly_table *table, tvbuff_t *tvb,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_add_seq_single_aging(reassembly_table *table, tvbuff_t *tvb,
-            const int offset, const packet_info *pinfo, const guint32 id,
-            const void* data, const guint32 frag_data_len,
-            const gboolean first, const gboolean last,
-            const guint32 max_frags, const guint32 max_age);
+            const int offset, const packet_info *pinfo, const uint32_t id,
+            const void* data, const uint32_t frag_data_len,
+            const bool first, const bool last,
+            const uint32_t max_frags, const uint32_t max_age);
 
 /*
  * Start a reassembly, expecting "tot_len" as the number of given fragments (not
@@ -411,8 +419,8 @@ fragment_add_seq_single_aging(reassembly_table *table, tvbuff_t *tvb,
  */
 WS_DLL_PUBLIC void
 fragment_start_seq_check(reassembly_table *table, const packet_info *pinfo,
-			 const guint32 id, const void *data,
-			 const guint32 tot_len);
+			 const uint32_t id, const void *data,
+			 const uint32_t tot_len);
 
 /*
  * Mark end of reassembly and returns the reassembled fragment (if completed).
@@ -423,14 +431,14 @@ fragment_start_seq_check(reassembly_table *table, const packet_info *pinfo,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_end_seq_next(reassembly_table *table, const packet_info *pinfo,
-		      const guint32 id, const void *data);
+		      const uint32_t id, const void *data);
 
 /* To specify the offset for the fragment numbering, the first fragment is added with 0, and
  * afterwards this offset is set. All additional calls to off_seq_check will calculate
  * the number in sequence in regards to the offset */
 WS_DLL_PUBLIC void
-fragment_add_seq_offset(reassembly_table *table, const packet_info *pinfo, const guint32 id,
-                    const void *data, const guint32 fragment_offset);
+fragment_add_seq_offset(reassembly_table *table, const packet_info *pinfo, const uint32_t id,
+                    const void *data, const uint32_t fragment_offset);
 
 /*
  * Sets the expected index for the last block (for fragment_add_seq functions)
@@ -443,7 +451,7 @@ fragment_add_seq_offset(reassembly_table *table, const packet_info *pinfo, const
  */
 WS_DLL_PUBLIC void
 fragment_set_tot_len(reassembly_table *table, const packet_info *pinfo,
-		     const guint32 id, const void *data, const guint32 tot_len);
+		     const uint32_t id, const void *data, const uint32_t tot_len);
 
 /*
  * Similar to fragment_set_tot_len, it sets the expected number of bytes (for
@@ -453,9 +461,9 @@ fragment_set_tot_len(reassembly_table *table, const packet_info *pinfo,
  * If the fragments were previously reassembled, then this state will be
  * cleared, allowing new fragments to extend the reassembled result again.
  */
-void
+WS_DLL_PUBLIC void
 fragment_reset_tot_len(reassembly_table *table, const packet_info *pinfo,
-		       const guint32 id, const void *data, const guint32 tot_len);
+		       const uint32_t id, const void *data, const uint32_t tot_len);
 
 /*
  * Truncates the size of an already defragmented reassembly to tot_len,
@@ -467,17 +475,17 @@ fragment_reset_tot_len(reassembly_table *table, const packet_info *pinfo,
  * Used for continuous streams like TCP, where the length of a segment cannot
  * be determined without first reassembling and handing to a subdissector.
  */
-void
+WS_DLL_PUBLIC void
 fragment_truncate(reassembly_table *table, const packet_info *pinfo,
-		       const guint32 id, const void *data, const guint32 tot_len);
+		       const uint32_t id, const void *data, const uint32_t tot_len);
 
 /*
  * Return the expected index for the last block (for fragment_add_seq functions)
  * or the expected number of bytes (for fragment_add functions).
  */
-WS_DLL_PUBLIC guint32
+WS_DLL_PUBLIC uint32_t
 fragment_get_tot_len(reassembly_table *table, const packet_info *pinfo,
-		     const guint32 id, const void *data);
+		     const uint32_t id, const void *data);
 
 /*
  * This function will set the partial reassembly flag(FD_PARTIAL_REASSEMBLY) for a fh.
@@ -489,7 +497,7 @@ fragment_get_tot_len(reassembly_table *table, const packet_info *pinfo,
  */
 WS_DLL_PUBLIC void
 fragment_set_partial_reassembly(reassembly_table *table,
-				const packet_info *pinfo, const guint32 id,
+				const packet_info *pinfo, const uint32_t id,
 				const void *data);
 
 /* This function is used to check if there is partial or completed reassembly state
@@ -497,12 +505,12 @@ fragment_set_partial_reassembly(reassembly_table *table,
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_get(reassembly_table *table, const packet_info *pinfo,
-	     const guint32 id, const void *data);
+	     const uint32_t id, const void *data);
 
 /* The same for the reassemble table */
 WS_DLL_PUBLIC fragment_head *
 fragment_get_reassembled_id(reassembly_table *table, const packet_info *pinfo,
-			    const guint32 id);
+			    const uint32_t id);
 
 /* This will free up all resources and delete reassembly state for this PDU.
  * Except if the PDU is completely reassembled, then it would NOT deallocate the
@@ -513,7 +521,7 @@ fragment_get_reassembled_id(reassembly_table *table, const packet_info *pinfo,
  */
 WS_DLL_PUBLIC tvbuff_t *
 fragment_delete(reassembly_table *table, const packet_info *pinfo,
-		const guint32 id, const void *data);
+		const uint32_t id, const void *data);
 
 /* This struct holds references to all the tree and field handles used when
  * displaying the reassembled fragment tree in the packet details view. A
@@ -522,8 +530,8 @@ fragment_delete(reassembly_table *table, const packet_info *pinfo,
  * details tree.
  */
 typedef struct _fragment_items {
-    gint       *ett_fragment;
-    gint       *ett_fragments;
+    int        *ett_fragment;
+    int        *ett_fragments;
 
     int        *hf_fragments;                  /* FT_NONE     */
     int        *hf_fragment;                   /* FT_FRAMENUM */
@@ -543,13 +551,13 @@ typedef struct _fragment_items {
 WS_DLL_PUBLIC tvbuff_t *
 process_reassembled_data(tvbuff_t *tvb, const int offset, packet_info *pinfo,
     const char *name, fragment_head *fd_head, const fragment_items *fit,
-    gboolean *update_col_infop, proto_tree *tree);
+    bool *update_col_infop, proto_tree *tree);
 
-WS_DLL_PUBLIC gboolean
+WS_DLL_PUBLIC bool
 show_fragment_tree(fragment_head *ipfd_head, const fragment_items *fit,
     proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, proto_item **fi);
 
-WS_DLL_PUBLIC gboolean
+WS_DLL_PUBLIC bool
 show_fragment_seq_tree(fragment_head *ipfd_head, const fragment_items *fit,
     proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, proto_item **fi);
 
@@ -571,8 +579,8 @@ reassembly_table_cleanup(void);
  *
  * will create global variables:
  *
- *     static gint ett_foo_body_fragment;
- *     static gint ett_foo_body_fragments;
+ *     static int ett_foo_body_fragment;
+ *     static int ett_foo_body_fragments;
  *     static int hf_foo_body_fragment;
  *     static int hf_foo_body_fragments;
  *     static int hf_foo_body_fragment_overlap;
@@ -590,8 +598,8 @@ reassembly_table_cleanup(void);
  *     };
  */
 #define REASSEMBLE_ITEMS_DEFINE(var_prefix, name_prefix) \
-    static gint ett_##var_prefix##_fragment; \
-    static gint ett_##var_prefix##_fragments; \
+    static int ett_##var_prefix##_fragment; \
+    static int ett_##var_prefix##_fragments; \
     static int hf_##var_prefix##_fragments; \
     static int hf_##var_prefix##_fragment; \
     static int hf_##var_prefix##_fragment_overlap; \
@@ -724,7 +732,7 @@ reassembly_table_cleanup(void);
  *
  *     void proto_register_foo(void) {
  *         ...
- *         static gint* ett[] = {
+ *         static int* ett[] = {
  *             &ett_foo_abc,
  *             ...
  *             // Add ett items
@@ -738,7 +746,7 @@ reassembly_table_cleanup(void);
  *
  *     void proto_register_foo(void) {
  *         ...
- *         static gint* ett[] = {
+ *         static int* ett[] = {
  *             &ett_foo_abc,
  *             ...
  *             // Add ett items
@@ -774,7 +782,7 @@ streaming_reassembly_info_new(void);
  * can call reassemble_streaming_data_and_call_subdissector() to help ProtoB dissector to reassemble the
  * PDUs of ProtoB. ProtoB needs to use fields pinfo->can_desegment/desegment_offset/desegment_len to tell
  * its requirements about reassembly (to reassemble_streaming_data_and_call_subdissector()).
- *
+ * <pre>
  * -----            +-- Reassembled ProtoB PDU --+-- Reassembled ProtoB PDU --+-- Reassembled ProtoB PDU --+----------------
  * ProtoB:          | ProtoB header and payload  | ProtoB header and payload  | ProtoB header and payload  |            ...
  *                  +----------------------------+---------+------------------+--------+-------------------+--+-------------
@@ -794,15 +802,18 @@ streaming_reassembly_info_new(void);
  *         +--------+----------------------+---------------+--------+---------------------------+--------+-+----------------
  * TCP:    |          TCP segment          |          TCP segment          |          TCP segment          |            ...
  * -----   +-------------------------------+-------------------------------+-------------------------------+----------------
+ * </pre>
  *
  * The function reassemble_streaming_data_and_call_subdissector() uses fragment_add() and process_reassembled_data()
  * to complete its reassembly task.
  *
  * The reassemble_streaming_data_and_call_subdissector() will handle many cases. The most complicated one is:
- *
+ * <pre>
  * +-------------------------------------- Payload of a ProtoA PDU -----------------------------------------------+
  * | EoMSP: end of a multisegment PDU | OmNFP: one or more non-fragment PDUs | BoMSP: begin of a multisegment PDU |
  * +----------------------------------+--------------------------------------+------------------------------------+
+ * </pre>
+ *
  * Note, we use short name 'MSP' for 'Multisegment PDU', and 'NFP' for 'Non-fragment PDU'.
  *
  * In this case, the payload of a ProtoA PDU contains:
@@ -813,7 +824,7 @@ streaming_reassembly_info_new(void);
  * All of three parts are optional. For example, one ProtoA payload could contain only EoMSP, OmNFP or BoMSP; or contain
  * EoMSP and OmNFP without BoMSP; or contain EoMSP and BoMSP without OmNFP; or contain OmNFP and BoMSP without
  * EoMSP.
- *
+ * <pre>
  *           +---- A ProtoB MSP ---+       +-- A ProtoB MSP --+-- A ProtoB MSP --+          +-- A ProtoB MSP --+
  *           |                     |       |                  |                  |          |                  |
  * +- A ProtoA payload -+  +-------+-------+-------+  +-------+-------+  +-------+-------+  +-------+  +-------+  +-------+
@@ -821,12 +832,13 @@ streaming_reassembly_info_new(void);
  * +---------+----------+  +-------+-------+-------+  +-------+-------+  +-------+-------+  +-------+  +-------+  +-------+
  *           |                     |       |                  |                  |          |                  |
  *           +---------------------+       +------------------+------------------+          +------------------+
+ * </pre>
  *
  * And another case is the entire ProtoA payload is one of middle parts of a multisegment PDU. We call it:
  * - MoMSP: The middle part of a multisegment PDU of ProtoB.
  *
  * Following case shows a multisegment PDU composed of [BoMSP + MoMSP + MoMSP + MoMSP + EoMSP]:
- *
+ * <pre>
  *                 +------------------ A Multisegment PDU of ProtoB ----------------------+
  *                 |                                                                      |
  * +--- ProtoA payload1 ---+   +- payload2 -+  +- Payload3 -+  +- Payload4 -+   +- ProtoA payload5 -+
@@ -834,6 +846,7 @@ streaming_reassembly_info_new(void);
  * +-------+-------+-------+   +------------+  +------------+  +------------+   +---------+---------+
  *                 |                                                                      |
  *                 +----------------------------------------------------------------------+
+ * </pre>
  *
  * The function reassemble_streaming_data_and_call_subdissector() will handle all of the above cases and manage
  * the information used during the reassembly. The caller (ProtoA dissector) only needs to initialize the relevant
@@ -858,7 +871,7 @@ streaming_reassembly_info_new(void);
  * when exiting the subdissector dissect function (such as dissect_proto_b()).
  *
  * Following is sample code of ProtoB which on top of ProtoA mentioned above:
- * <code>
+ * @code
  *     // file packet-proto-b.c
  *     ...
  *
@@ -885,13 +898,13 @@ streaming_reassembly_info_new(void);
  *     	       }
  *             ...
  *             // e.g. length is at offset 4
- *             body_len = (guint)tvb_get_ntohl(tvb, offset + 4);
+ *             body_len = (unsigned)tvb_get_ntohl(tvb, offset + 4);
  *
  *             if (tvb_len - offset - PROTO_B_MESSAGE_HEAD_LEN < body_len) {
  *                 // need X bytes for dissecting a ProtoB message
  *                 if (pinfo->can_desegment) {
  *                     pinfo->desegment_offset = offset;
- *                     // caculate how many additional bytes need to parsing body of a ProtoB message
+ *                     // calculate how many additional bytes need to parsing body of a ProtoB message
  *                     pinfo->desegment_len = body_len - (tvb_len - offset - PROTO_B_MESSAGE_HEAD_LEN);
  *                     // MUST return a length other than 0, if DESEGMENT_ONE_MORE_SEGMENT is used previously.
  *                     return tvb_len;
@@ -906,16 +919,16 @@ streaming_reassembly_info_new(void);
  *         }
  *         return tvb_len; // all bytes of this tvb are parsed
  *     }
- * </code>
+ * @endcode
  *
  * Following is sample code of ProtoA mentioned above:
- * <code>
+ * @code
  *     // file packet-proto-a.c
  *     ...
  *     // reassembly table for streaming chunk mode
  *     static reassembly_table proto_a_streaming_reassembly_table;
  *     ...
- *     // heads for displaying reassembley information
+ *     // heads for displaying reassembly information
  *     static int hf_msg_fragments;
  *     static int hf_msg_fragment;
  *     static int hf_msg_fragment_overlap;
@@ -928,8 +941,8 @@ streaming_reassembly_info_new(void);
  *     static int hf_msg_reassembled_length;
  *     static int hf_msg_body_segment;
  *     ...
- *     static gint ett_msg_fragment;
- *     static gint ett_msg_fragments;
+ *     static int ett_msg_fragment;
+ *     static int ett_msg_fragments;
  *     ...
  *     static const fragment_items msg_frag_items = {
  *         &ett_msg_fragment,
@@ -1022,7 +1035,7 @@ streaming_reassembly_info_new(void);
  *                 FT_BYTES, BASE_NONE, NULL, 0x00, NULL, HFILL } },
  *         }
  *         ...
- *         static gint *ett[] = {
+ *         static int *ett[] = {
  *             ...
  *             &ett_msg_fragment,
  *             &ett_msg_fragments
@@ -1032,10 +1045,10 @@ streaming_reassembly_info_new(void);
  *                                    &addresses_ports_reassembly_table_functions);
  *         ...
  *     }
- * </code>
+ * @endcode
  *
  * Alternatively, the code of ProtoA (packet-proto-a.c) can be made simpler with helper macros:
- * <code>
+ * @code
  *     // file packet-proto-a.c
  *     ...
  *     // reassembly table for streaming chunk mode
@@ -1084,7 +1097,7 @@ streaming_reassembly_info_new(void);
  *             REASSEMBLE_INIT_HF_ITEMS(proto_a_body, "ProtoA Body", "protoa.body")
  *         }
  *         ...
- *         static gint *ett[] = {
+ *         static int *ett[] = {
  *             ...
  *             REASSEMBLE_INIT_ETT_ITEMS(proto_a_body)
  *         }
@@ -1093,7 +1106,7 @@ streaming_reassembly_info_new(void);
  *                                    &addresses_ports_reassembly_table_functions);
  *         ...
  *     }
- * </code>
+ * @endcode
  *
  * @param  tvb            TVB contains (ProtoA) payload which will be passed to subdissector.
  * @param  pinfo          Packet information.
@@ -1122,33 +1135,33 @@ streaming_reassembly_info_new(void);
  *
  * @return Handled data length. Just equal to the length argument now.
  */
-WS_DLL_PUBLIC gint
+WS_DLL_PUBLIC int
 reassemble_streaming_data_and_call_subdissector(
-	tvbuff_t* tvb, packet_info* pinfo, guint offset, gint length,
+	tvbuff_t* tvb, packet_info* pinfo, unsigned offset, int length,
 	proto_tree* segment_tree, proto_tree* reassembled_tree, reassembly_table streaming_reassembly_table,
-	streaming_reassembly_info_t* reassembly_info, guint64 cur_frame_num,
-	dissector_handle_t subdissector_handle, proto_tree* subdissector_tree, void* subdissector_data,
+	streaming_reassembly_info_t* reassembly_info, uint64_t cur_frame_num,
+	struct dissector_handle* subdissector_handle, proto_tree* subdissector_tree, void* subdissector_data,
 	const char* label, const fragment_items* frag_hf_items, int hf_segment_data
 );
 
 /**
  * Return a 64 bits virtual frame number that is identified as follows:
- *
+ * <pre>
  * +--- 32 bits ---+--------- 8 bits -------+----- 24 bits --------------+
  * |  pinfo->num   | pinfo->curr_layer_num  |  tvb->raw_offset + offset  |
  * +---------------------------------------------------------------------+
- *
+ * </pre>
  * This allows for a single virtual frame to be uniquely identified across a capture with the
  * added benefit that the number will always be increasing from the previous virtual frame so
  * we can use "<" and ">" comparisons to determine before and after in time.
  *
  * This frame number similar to HTTP2 frame number.
  */
-static inline guint64
-get_virtual_frame_num64(tvbuff_t* tvb, packet_info* pinfo, gint offset)
+static inline uint64_t
+get_virtual_frame_num64(tvbuff_t* tvb, packet_info* pinfo, int offset)
 {
-	return (((guint64)pinfo->num) << 32) + (((guint64)pinfo->curr_layer_num) << 24)
-		+ ((guint64)tvb_raw_offset(tvb) + offset);
+	return (((uint64_t)pinfo->num) << 32) + (((uint64_t)pinfo->curr_layer_num) << 24)
+		+ ((uint64_t)tvb_raw_offset(tvb) + offset);
 }
 
 /**
@@ -1158,9 +1171,13 @@ get_virtual_frame_num64(tvbuff_t* tvb, packet_info* pinfo, gint offset)
  *         It may also be DESEGMENT_ONE_MORE_SEGMENT.
  *         0 means this reassembly is completed.
  */
-WS_DLL_PUBLIC gint
+WS_DLL_PUBLIC int
 additional_bytes_expected_to_complete_reassembly(streaming_reassembly_info_t* reassembly_info);
 
 /* ========================================================================= */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

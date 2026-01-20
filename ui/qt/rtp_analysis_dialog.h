@@ -12,7 +12,6 @@
 
 #include <config.h>
 
-#include <glib.h>
 #include <mutex>
 
 #include "epan/address.h"
@@ -38,6 +37,9 @@ class RtpAnalysisDialog;
 class QCPGraph;
 class QTemporaryFile;
 class QDialogButtonBox;
+
+class PacketList;
+class RtpBaseDialog;
 
 typedef struct {
     rtpstream_info_t stream;
@@ -67,10 +69,10 @@ public:
     /**
      * Returns singleton
      */
-    static RtpAnalysisDialog *openRtpAnalysisDialog(QWidget &parent, CaptureFile &cf, QObject *packet_list);
+    static RtpAnalysisDialog *openRtpAnalysisDialog(QWidget &parent, CaptureFile &cf, PacketList *packet_list);
 
     /**
-     * Should not be clonnable and assignable
+     * Should not be cloneable and assignable
      */
     RtpAnalysisDialog(RtpAnalysisDialog &other) = delete;
     void operator=(const RtpAnalysisDialog &) = delete;
@@ -80,7 +82,7 @@ public:
      * @param button_box Caller's QDialogButtonBox.
      * @return The new "Analyze" button.
      */
-    static QToolButton *addAnalyzeButton(QDialogButtonBox *button_box, QDialog *dialog);
+    static QToolButton *addAnalyzeButton(QDialogButtonBox *button_box, RtpBaseDialog *dialog);
 
     /** Replace/Add/Remove an RTP streams to analyse.
      * Requires array of rtpstream_id_t.
@@ -118,6 +120,7 @@ private slots:
     void on_actionSaveGraph_triggered();
     void on_buttonBox_helpRequested();
     void showStreamMenu(QPoint pos);
+    void showGraphMenu(const QPoint &pos);
     void graphClicked(QMouseEvent *event);
     void closeTab(int index);
     void rowCheckboxChanged(int checked);
@@ -135,7 +138,7 @@ private:
     int tab_seq;
 
     QVector<tab_info_t *> tabs_;
-    QMultiHash<guint, tab_info_t *> tab_hash_;
+    QMultiHash<unsigned, tab_info_t *> tab_hash_;
 
     QToolButton *player_button_;
 

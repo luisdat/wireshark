@@ -60,13 +60,8 @@
 
 #include "config.h"
 
-#include <assert.h>
 #include <limits.h>
-#include <stddef.h>
-#include <string.h>
-
-#include <stdio.h>
-
+#include <wsutil/array.h>
 #include "wslua.h"
 
 /* WSLUA_MODULE Struct Binary encode/decode support
@@ -91,7 +86,7 @@
   All functions in the Struct library are called as static member functions, not object methods,
   so they are invoked as "Struct.pack(...)" instead of "object:pack(...)".
 
-  The fist argument to several of the `Struct` functions is a format string, which describes
+  The first argument to several of the `Struct` functions is a format string, which describes
   the layout of the structure. The format string is a sequence of conversion elements, which
   respect the current endianness and the current alignment requirements. Initially, the
   current endianness is the machine's native endianness and the current alignment requirement
@@ -131,7 +126,7 @@
     * `++(++' to stop assigning items, and `++)++' start assigning (padding when packing).
     * `++=++' to return the current position / offset.
 
-  [NOTE]
+  [IMPORTANT]
   ====
   Using `i`, `I`, `h`, `H`, `l`, `L`, `f`, and `T` is strongly discouraged, as those sizes
     are system-dependent. Use the explicitly sized variants instead, such as `i4` or `E`.
@@ -141,7 +136,16 @@
     Use `e`/`E` to unpack into a Wireshark `Int64`/`UInt64` object instead.
   ====
 
-  @since 1.11.3
+  [NOTE]
+  ====
+  Lua 5.3 and later provides several built-in functions for struct unpacking and packing:
+  https://www.lua.org/manual/5.4/manual.html#pdf-string.pack[string.pack],
+  https://www.lua.org/manual/5.4/manual.html#pdf-string.packsize[string.packsize], and
+  https://www.lua.org/manual/5.4/manual.html#pdf-string.unpack[string.unpack].
+  You can use those as well, but note that the
+  https://www.lua.org/manual/5.4/manual.html#6.4.2[format string] conversion elements
+  are slightly different, and they do not support the Wireshark `Int64`/`UInt64` objects.
+  ====
  */
 
 
@@ -218,7 +222,7 @@ static int getnum (lua_State *L, const char **fmt, int df) {
 static size_t optsize (lua_State *L, char opt, const char **fmt) {
   switch (opt) {
     case 'B': case 'b': return sizeof(char);
-    case 'H': case 'h': return sizeof(gshort);
+    case 'H': case 'h': return sizeof(short);
     case 'L': case 'l': return sizeof(long);
     case 'E': case 'e': return sizeof(int64_t);
     case 'T': return sizeof(size_t);
@@ -394,7 +398,7 @@ WSLUA_CONSTRUCTOR Struct_pack (lua_State *L) {
         break;
       }
       case '=': {
-        if (poscnt < (int)(sizeof(posBuf)/sizeof(posBuf[0])))
+        if (poscnt < (int)array_length(posBuf))
           posBuf[poscnt++] = (int)totalsize + 1;
         break;
       }
@@ -408,12 +412,8 @@ WSLUA_CONSTRUCTOR Struct_pack (lua_State *L) {
   WSLUA_RETURN(poscnt + 1); /* The packed binary Lua string, plus any positions due to '=' being used in format. */
 }
 
-/* Decodes an integer from a string struct into a Lua number, based on
- * given endianness and size. If the integer type is signed, this makes
- * the Lua number be +/- correctly as well.
- */
-static lua_Integer getinteger (const char *buff, int endian,
-                        int issigned, int size) {
+static Uinttype decodeinteger (const char *buff, int endian, int size)
+{
   Uinttype l = 0;
   int i;
   if (endian == BIG) {
@@ -428,13 +428,38 @@ static lua_Integer getinteger (const char *buff, int endian,
       l |= (Uinttype)(unsigned char)buff[i];
     }
   }
-  if (!issigned)
-    return (lua_Integer)l;
+  return l;
+}
+
+/* Decodes an integer from a string struct into a lua_Integer, if it fits
+ * without truncation, or a lua_Number, based on given endianness and size.
+ * If the integer type is signed, that is handled correctly as well.
+ * Note for large values of size there can be a loss of precision.
+ */
+static void getinteger (lua_State *L, const char *buff, int endian,
+                        int issigned, int size) {
+  Uinttype l = decodeinteger(buff, endian, size);
+  if (!issigned) {
+    if (size < LUA_INTEGER_SIZE) {
+      /* Fits in a lua_Integer (we need a larger size as lua_Integer
+       * is signed.) */
+      lua_pushinteger(L, (lua_Integer)l);
+    } else {
+      /* Does not fit in a lua_Integer */
+      lua_pushnumber(L, (lua_Number)l);
+    }
+  }
   else {  /* signed format */
     Uinttype mask = (Uinttype)(~((Uinttype)0)) << (size*8 - 1);
     if (l & mask)  /* negative value? */
-      l |= mask;  /* signal extension */
-    return (lua_Integer)(Inttype)l;
+      l |= mask;  /* sign extension */
+    if (size <= LUA_INTEGER_SIZE) {
+      /* Fits in a lua_Integer */
+      lua_pushinteger(L, (lua_Integer)(Inttype)l);
+    } else {
+      /* Does not fit in a lua_Integer */
+      lua_pushnumber(L, (lua_Number)(Inttype)l);
+    }
   }
 }
 
@@ -472,8 +497,7 @@ WSLUA_CONSTRUCTOR Struct_unpack (lua_State *L) {
       case 'b': case 'B': case 'h': case 'H':
       case 'l': case 'L': case 'T': case 'i':  case 'I': {  /* integer types */
         int issigned = g_ascii_islower(opt);
-        lua_Integer res = getinteger(data+pos, h.endian, issigned, (int)size);
-        lua_pushinteger(L, res);
+        getinteger(L, data+pos, h.endian, issigned, (int)size);
         break;
       }
       case 'e': {
@@ -505,7 +529,7 @@ WSLUA_CONSTRUCTOR Struct_unpack (lua_State *L) {
         if (size == 0) {
           if (!lua_isnumber(L, -1))
             luaL_error(L, "format `c0' needs a previous size");
-          size = wslua_toguint32(L, -1);
+          size = wslua_touint32(L, -1);
           lua_pop(L, 1);
           luaL_argcheck(L, pos+size <= ld, 2, "data string too short");
         }
@@ -612,7 +636,7 @@ WSLUA_CONSTRUCTOR Struct_tohex (lua_State *L) {
   lowercase = wslua_optbool(L,WSLUA_OPTARG_Struct_tohex_LOWERCASE,false);
   sep = luaL_optstring(L,WSLUA_OPTARG_Struct_tohex_SEPARATOR,NULL);
 
-  wslua_bin2hex(L, s, (unsigned)len, lowercase, sep);
+  wslua_bin2hex(L, (const uint8_t*)s, (unsigned)len, lowercase, sep);
   WSLUA_RETURN(1); /* The Lua hex-ascii string */
 }
 

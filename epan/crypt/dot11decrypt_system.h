@@ -28,8 +28,8 @@
 
 /*	Decryption algorithms fields size definition (bytes)		*/
 #define	DOT11DECRYPT_WPA_NONCE_LEN		         32
-#define	DOT11DECRYPT_WPA_PTK_MAX_LEN			 88	/* TKIP 48, CCMP 64, GCMP-256 88 bytes */
-#define	DOT11DECRYPT_WPA_MICKEY_MAX_LEN			 24
+#define	DOT11DECRYPT_WPA_PTK_MAX_LEN			 96	/* TKIP 48, AKM 18/24/25 96 */
+#define	DOT11DECRYPT_WPA_MICKEY_MAX_LEN			 32
 
 #define	DOT11DECRYPT_WEP_128_KEY_LEN	         16	/* 128 bits	*/
 
@@ -42,7 +42,7 @@
 #define DOT11DECRYPT_TK_LEN                           16
 
 /* Max length of capture data						*/
-#define	DOT11DECRYPT_MAX_CAPLEN			8192
+#define	DOT11DECRYPT_MAX_CAPLEN			(12 * 1024)
 
 #define	DOT11DECRYPT_WEP_IVLEN	3       /* 24bit */
 #define	DOT11DECRYPT_WEP_KIDLEN	1       /* 1 octet */
@@ -73,7 +73,9 @@
 #define	DOT11DECRYPT_TKIP_HEADER	DOT11DECRYPT_RSNA_HEADER
 #define	DOT11DECRYPT_TKIP_TRAILER	DOT11DECRYPT_TKIP_MICLEN + DOT11DECRYPT_WEP_ICV
 
-#define	DOT11DECRYPT_CRC_LEN	4
+#define DOT11DECRYPT_RSNA_MIN_TRAILER 8
+
+#define DOT11DECRYPT_MAX_MLO_LINKS 3 // Is there actually any device supporting this many links?
 
 /************************************************************************/
 /*      File includes                                                   */
@@ -114,8 +116,24 @@ typedef struct _DOT11DECRYPT_SEC_ASSOCIATION {
 		int akm;
 		int cipher;
 		int tmp_group_cipher; /* Keep between HS msg 2 and 3 */
+		int pmk_len;
 		unsigned char ptk[DOT11DECRYPT_WPA_PTK_MAX_LEN]; /* session key used in decryption algorithm */
-	    int ptk_len;
+		int ptk_len;
+
+		/* MLD info */
+		uint8_t mld : 1; /* 1 if both STA and AP MLD MAC set */
+		uint8_t ap_mld_mac_set : 1;
+		uint8_t sta_mld_mac_set : 1;
+		uint8_t ap_mld_mac[DOT11DECRYPT_MAC_LEN];
+		uint8_t sta_mld_mac[DOT11DECRYPT_MAC_LEN];
+		struct DOT11DECRYPT_MLO_LINK_INFO {
+		        uint8_t id_set : 1;
+		        uint8_t sta_mac_set : 1;
+		        uint8_t ap_mac_set : 1;
+			uint8_t id : 4;
+			uint8_t sta_mac[DOT11DECRYPT_MAC_LEN];
+			uint8_t ap_mac[DOT11DECRYPT_MAC_LEN];
+		} mlo_links[DOT11DECRYPT_MAX_MLO_LINKS];
 	} wpa;
 
 
@@ -125,7 +143,7 @@ typedef struct _DOT11DECRYPT_CONTEXT {
 	GHashTable *sa_hash;
 	DOT11DECRYPT_KEY_ITEM keys[DOT11DECRYPT_MAX_KEYS_NR];
 	size_t keys_nr;
-	char pkt_ssid[DOT11DECRYPT_WPA_SSID_MAX_LEN];
+	uint8_t pkt_ssid[DOT11DECRYPT_WPA_SSID_MAX_LEN];
 	size_t pkt_ssid_len;
 } DOT11DECRYPT_CONTEXT, *PDOT11DECRYPT_CONTEXT;
 
@@ -167,6 +185,20 @@ typedef struct _DOT11DECRYPT_EAPOL_PARSED {
 	uint16_t mic_len;
 	uint8_t *gtk;
 	uint16_t gtk_len;
+	uint8_t *mld_mac;
+
+	uint8_t mlo_link_count;
+	struct DOT11DECRYPT_EAPOL_PARSED_MLO_LINK {
+		uint8_t id;
+		uint8_t *mac;
+	} mlo_link[DOT11DECRYPT_MAX_MLO_LINKS];
+
+	uint8_t mlo_gtk_count;
+	struct DOT11DECRYPT_EAPOL_PARSED_MLO_GTK {
+		uint8_t link_id;
+		uint8_t *key;
+		uint8_t len;
+	} mlo_gtk[DOT11DECRYPT_MAX_MLO_LINKS];
 
 	/* For fast bss transition akms */
 	uint8_t *mdid;
@@ -182,6 +214,7 @@ typedef struct _DOT11DECRYPT_ASSOC_PARSED
 	uint8_t *mdid;
 	DOT11DECRYPT_FTE fte;
 	uint8_t* rsne_tag;
+	uint8_t* rsnxe_tag;
 	uint8_t* mde_tag;
 	uint8_t* fte_tag;
 	uint8_t* rde_tag;

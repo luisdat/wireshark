@@ -22,7 +22,7 @@
 #include "stat_tap_ui.h"
 
 struct register_ct {
-    gboolean hide_ports;       /* hide TCP / UDP port columns */
+    bool hide_ports;       /* hide TCP / UDP port columns */
     int proto_id;              /* protocol id (0-indexed) */
     tap_packet_cb conv_func;        /* function to be called for new incoming packets for conversations */
     tap_packet_cb endpoint_func;    /* function to be called for new incoming packets for endpoints */
@@ -30,7 +30,7 @@ struct register_ct {
     endpoint_gui_init_cb endpoint_gui_init; /* GUI specific function to initialize endpoint */
 };
 
-gboolean get_conversation_hide_ports(register_ct_t* ct)
+bool get_conversation_hide_ports(register_ct_t* ct)
 {
     return ct->hide_ports;
 }
@@ -59,10 +59,10 @@ tap_packet_cb get_hostlist_packet_func(register_ct_t* ct)
     return get_endpoint_packet_func(ct);
 }
 
-static wmem_tree_t *registered_ct_tables = NULL;
+static wmem_tree_t *registered_ct_tables;
 
-void
-dissector_conversation_init(const char *opt_arg, void* userdata)
+static bool
+dissector_conversation_init_internal(const char *opt_arg, void* userdata)
 {
     register_ct_t *table = (register_ct_t*)userdata;
     GString *cmd_str = g_string_new("conv,");
@@ -78,10 +78,18 @@ dissector_conversation_init(const char *opt_arg, void* userdata)
 
     if (table->conv_gui_init)
         table->conv_gui_init(table, filter);
+
+    return true;
 }
 
 void
-dissector_endpoint_init(const char *opt_arg, void* userdata)
+dissector_conversation_init(const char* opt_arg, void* userdata)
+{
+    dissector_conversation_init_internal(opt_arg, userdata);
+}
+
+static bool
+dissector_endpoint_init_internal(const char *opt_arg, void* userdata)
 {
     register_ct_t *table = (register_ct_t*)userdata;
     GString *cmd_str = g_string_new("");
@@ -100,6 +108,14 @@ dissector_endpoint_init(const char *opt_arg, void* userdata)
 
     if (table->endpoint_gui_init)
         table->endpoint_gui_init(table, filter);
+
+    return true;
+}
+
+void
+dissector_endpoint_init(const char* opt_arg, void* userdata)
+{
+    dissector_endpoint_init_internal(opt_arg, userdata);
 }
 
 /* For backwards source and binary compatibility */
@@ -119,8 +135,13 @@ register_ct_t* get_conversation_by_proto_id(int proto_id)
     return (register_ct_t*)wmem_tree_lookup_string(registered_ct_tables, proto_get_protocol_short_name(find_protocol_by_id(proto_id)), 0);
 }
 
+void conversation_table_init(void)
+{
+    registered_ct_tables = wmem_tree_new(wmem_epan_scope());
+}
+
 void
-register_conversation_table(const int proto_id, gboolean hide_ports, tap_packet_cb conv_packet_func, tap_packet_cb endpoint_packet_func)
+register_conversation_table(const int proto_id, bool hide_ports, tap_packet_cb conv_packet_func, tap_packet_cb endpoint_packet_func)
 {
     register_ct_t *table;
 
@@ -132,9 +153,6 @@ register_conversation_table(const int proto_id, gboolean hide_ports, tap_packet_
     table->endpoint_func = endpoint_packet_func;
     table->conv_gui_init = NULL;
     table->endpoint_gui_init = NULL;
-
-    if (registered_ct_tables == NULL)
-        registered_ct_tables = wmem_tree_new(wmem_epan_scope());
 
     wmem_tree_insert_string(registered_ct_tables, proto_get_protocol_short_name(find_protocol_by_id(proto_id)), table, 0);
 }
@@ -153,12 +171,12 @@ set_conv_gui_data(const void *key _U_, void *value, void *userdata)
     ui_info.group = REGISTER_STAT_GROUP_CONVERSATION_LIST;
     ui_info.title = NULL;   /* construct this from the protocol info? */
     ui_info.cli_string = g_string_free(conv_cmd_str, FALSE);
-    ui_info.tap_init_cb = dissector_conversation_init;
+    ui_info.tap_init_cb = dissector_conversation_init_internal;
     ui_info.nparams = 0;
     ui_info.params = NULL;
     register_stat_tap_ui(&ui_info, table);
     g_free((char*)ui_info.cli_string);
-    return FALSE;
+    return false;
 }
 
 void conversation_table_set_gui_info(conv_gui_init_cb init_cb)
@@ -177,12 +195,12 @@ set_endpoint_gui_data(const void *key _U_, void *value, void *userdata)
     ui_info.group = REGISTER_STAT_GROUP_ENDPOINT_LIST;
     ui_info.title = NULL;   /* construct this from the protocol info? */
     ui_info.cli_string = ws_strdup_printf("%s,%s", ENDPOINT_TAP_PREFIX, proto_get_protocol_filter_name(table->proto_id));
-    ui_info.tap_init_cb = dissector_endpoint_init;
+    ui_info.tap_init_cb = dissector_endpoint_init_internal;
     ui_info.nparams = 0;
     ui_info.params = NULL;
     register_stat_tap_ui(&ui_info, table);
     g_free((char*)ui_info.cli_string);
-    return FALSE;
+    return false;
 }
 
 void endpoint_table_set_gui_info(endpoint_gui_init_cb init_cb)
@@ -201,22 +219,22 @@ void conversation_table_iterate_tables(wmem_foreach_func func, void* user_data)
     wmem_tree_foreach(registered_ct_tables, func, user_data);
 }
 
-guint conversation_table_get_num(void)
+unsigned conversation_table_get_num(void)
 {
     return wmem_tree_count(registered_ct_tables);
 }
 
 /** Compute the hash value for two given address/port pairs.
- * (Parameter type is gconstpointer for GHashTable compatibility.)
+ * (Parameter type is const void *for GHashTable compatibility.)
  *
  * @param v Conversation Key. MUST point to a conv_key_t struct.
  * @return Computed key hash.
  */
-static guint
-conversation_hash(gconstpointer v)
+static unsigned
+conversation_hash(const void *v)
 {
     const conv_key_t *key = (const conv_key_t *)v;
-    guint hash_val;
+    unsigned hash_val;
 
     hash_val = 0;
     hash_val = add_address_to_hash(hash_val, &key->addr1);
@@ -229,14 +247,14 @@ conversation_hash(gconstpointer v)
 }
 
 /** Compare two conversation keys for an exact match.
- * (Parameter types are gconstpointer for GHashTable compatibility.)
+ * (Parameter types are const void *for GHashTable compatibility.)
  *
  * @param key1 First conversation. MUST point to a conv_key_t struct.
  * @param key2 Second conversation. MUST point to a conv_key_t struct.
- * @return TRUE if conversations are equal, FALSE otherwise.
+ * @return true if conversations are equal, false otherwise.
  */
 static gboolean
-conversation_equal(gconstpointer key1, gconstpointer key2)
+conversation_equal(const void *key1, const void *key2)
 {
     const conv_key_t *ck1 = (const conv_key_t *)key1;
     const conv_key_t *ck2 = (const conv_key_t *)key2;
@@ -272,14 +290,14 @@ reset_conversation_table_data(conv_hash_t *ch)
     }
 
     if (ch->conv_array != NULL) {
-        guint i;
+        unsigned i;
         for(i = 0; i < ch->conv_array->len; i++){
             conv_item_t *conv = &g_array_index(ch->conv_array, conv_item_t, i);
             free_address(&conv->src_address);
             free_address(&conv->dst_address);
         }
 
-        g_array_free(ch->conv_array, TRUE);
+        g_array_free(ch->conv_array, true);
     }
 
     if (ch->hashtable != NULL) {
@@ -297,13 +315,13 @@ void reset_endpoint_table_data(conv_hash_t *ch)
     }
 
     if (ch->conv_array != NULL) {
-        guint i;
+        unsigned i;
         for(i = 0; i < ch->conv_array->len; i++){
             endpoint_item_t *endpoint = &g_array_index(ch->conv_array, endpoint_item_t, i);
             free_address(&endpoint->myaddress);
         }
 
-        g_array_free(ch->conv_array, TRUE);
+        g_array_free(ch->conv_array, true);
     }
 
     if (ch->hashtable != NULL) {
@@ -320,7 +338,7 @@ void reset_hostlist_table_data(conv_hash_t *ch)
     reset_endpoint_table_data(ch);
 }
 
-char *get_conversation_address(wmem_allocator_t *allocator, address *addr, gboolean resolve_names)
+char *get_conversation_address(wmem_allocator_t *allocator, address *addr, bool resolve_names)
 {
     if (resolve_names) {
         return address_to_display(allocator, addr);
@@ -329,7 +347,7 @@ char *get_conversation_address(wmem_allocator_t *allocator, address *addr, gbool
     }
 }
 
-char *get_conversation_port(wmem_allocator_t *allocator, guint32 port, conversation_type ctype, gboolean resolve_names)
+char *get_conversation_port(wmem_allocator_t *allocator, uint32_t port, conversation_type ctype, bool resolve_names)
 {
 
     if(!resolve_names) ctype = CONVERSATION_NONE;
@@ -348,7 +366,7 @@ char *get_conversation_port(wmem_allocator_t *allocator, guint32 port, conversat
     }
 }
 
-char *get_endpoint_port(wmem_allocator_t *allocator, endpoint_item_t *item, gboolean resolve_names)
+char *get_endpoint_port(wmem_allocator_t *allocator, endpoint_item_t *item, bool resolve_names)
 {
     endpoint_type etype = item->etype;
 
@@ -400,7 +418,7 @@ endpoint_get_filter_name(endpoint_item_t *endpoint, conv_filter_type_e filter_ty
 
 /* Convert a port number into a string or NULL */
 static char *
-ct_port_to_str(conversation_type ctype, guint32 port)
+ct_port_to_str(conversation_type ctype, uint32_t port)
 {
     switch(ctype){
     case CONVERSATION_TCP:
@@ -430,14 +448,14 @@ char *get_conversation_filter(conv_item_t *conv_item, conv_direction_e direction
     src_addr = address_to_str(NULL, &conv_item->src_address);
     dst_addr = address_to_str(NULL, &conv_item->dst_address);
 
-    if (conv_item->src_address.type == AT_STRINGZ || conv_item->src_address.type == usb_address_type) {
+    if (!(conv_item->ctype==CONVERSATION_IP) && (conv_item->src_address.type == AT_STRINGZ || conv_item->src_address.type == usb_address_type)) {
         char *new_addr;
 
         new_addr = wmem_strdup_printf(NULL, "\"%s\"", src_addr);
         wmem_free(NULL, src_addr);
         src_addr = new_addr;
     }
-    if (conv_item->dst_address.type == AT_STRINGZ || conv_item->dst_address.type == usb_address_type) {
+    if (!(conv_item->ctype==CONVERSATION_IP) && (conv_item->dst_address.type == AT_STRINGZ || conv_item->dst_address.type == usb_address_type)) {
         char *new_addr;
 
         new_addr = wmem_strdup_printf(NULL, "\"%s\"", dst_addr);
@@ -448,20 +466,38 @@ char *get_conversation_filter(conv_item_t *conv_item, conv_direction_e direction
     switch(direction){
     case CONV_DIR_A_TO_FROM_B:
         /* A <-> B */
-        str = wmem_strdup_printf(NULL, "%s==%s%s%s%s%s && %s==%s%s%s%s%s",
-                              conversation_get_filter_name(conv_item,  CONV_FT_ANY_ADDRESS),
-                              src_addr,
-                              sport?" && ":"",
-                              sport?conversation_get_filter_name(conv_item,  CONV_FT_ANY_PORT):"",
-                              sport?"==":"",
-                              sport?sport:"",
-                              conversation_get_filter_name(conv_item,  CONV_FT_ANY_ADDRESS),
-                              dst_addr,
-                              dport?" && ":"",
-                              dport?conversation_get_filter_name(conv_item,  CONV_FT_ANY_PORT):"",
-                              dport?"==":"",
-                              dport?dport:""
-            );
+        if(strcmp(src_addr, dst_addr)==0) {
+            str = wmem_strdup_printf(NULL, "%s==%s%s%s%s%s && %s==%s%s%s%s%s",
+                                  conversation_get_filter_name(conv_item,  CONV_FT_SRC_ADDRESS),
+                                  src_addr,
+                                  sport?" && ":"",
+                                  sport?conversation_get_filter_name(conv_item,  CONV_FT_ANY_PORT):"",
+                                  sport?"==":"",
+                                  sport?sport:"",
+                                  conversation_get_filter_name(conv_item,  CONV_FT_DST_ADDRESS),
+                                  dst_addr,
+                                  dport?" && ":"",
+                                  dport?conversation_get_filter_name(conv_item,  CONV_FT_ANY_PORT):"",
+                                  dport?"==":"",
+                                  dport?dport:""
+                );
+        }
+        else {
+            str = wmem_strdup_printf(NULL, "%s==%s%s%s%s%s && %s==%s%s%s%s%s",
+                                  conversation_get_filter_name(conv_item,  CONV_FT_ANY_ADDRESS),
+                                  src_addr,
+                                  sport?" && ":"",
+                                  sport?conversation_get_filter_name(conv_item,  CONV_FT_ANY_PORT):"",
+                                  sport?"==":"",
+                                  sport?sport:"",
+                                  conversation_get_filter_name(conv_item,  CONV_FT_ANY_ADDRESS),
+                                  dst_addr,
+                                  dport?" && ":"",
+                                  dport?conversation_get_filter_name(conv_item,  CONV_FT_ANY_PORT):"",
+                                  dport?"==":"",
+                                  dport?dport:""
+                );
+        }
         break;
     case CONV_DIR_A_TO_B:
         /* A --> B */
@@ -623,19 +659,19 @@ char *get_hostlist_filter(endpoint_item_t *endpoint_item)
 }
 
 void
-add_conversation_table_data(conv_hash_t *ch, const address *src, const address *dst, guint32 src_port, guint32 dst_port, int num_frames, int num_bytes,
+add_conversation_table_data(conv_hash_t *ch, const address *src, const address *dst, uint32_t src_port, uint32_t dst_port, int num_frames, int num_bytes,
         nstime_t *ts, nstime_t *abs_ts, ct_dissector_info_t *ct_info, conversation_type ctype)
 {
     add_conversation_table_data_with_conv_id(ch, src, dst, src_port, dst_port, CONV_ID_UNSET, num_frames, num_bytes, ts, abs_ts, ct_info, ctype);
 }
 
-void
+conv_item_t *
 add_conversation_table_data_with_conv_id(
     conv_hash_t *ch,
     const address *src,
     const address *dst,
-    guint32 src_port,
-    guint32 dst_port,
+    uint32_t src_port,
+    uint32_t dst_port,
     conv_id_t conv_id,
     int num_frames,
     int num_bytes,
@@ -645,11 +681,11 @@ add_conversation_table_data_with_conv_id(
     conversation_type ctype)
 {
     conv_item_t *conv_item = NULL;
-    gboolean is_fwd_direction = FALSE; /* direction of any conversation found */
+    bool is_fwd_direction = false; /* direction of any conversation found */
 
     /* if we don't have any entries at all yet */
     if (ch->conv_array == NULL) {
-        ch->conv_array = g_array_sized_new(FALSE, FALSE, sizeof(conv_item_t), 10000);
+        ch->conv_array = g_array_sized_new(false, false, sizeof(conv_item_t), 10000);
 
         ch->hashtable = g_hash_table_new_full(conversation_hash,
                                               conversation_equal, /* key_equal_func */
@@ -659,7 +695,7 @@ add_conversation_table_data_with_conv_id(
     } else { /* try to find it among the existing known conversations */
         /* first, check in the fwd conversations */
         conv_key_t existing_key;
-        gpointer conversation_idx_hash_val;
+        void *conversation_idx_hash_val;
 
         existing_key.addr1 = *src;
         existing_key.addr2 = *dst;
@@ -680,7 +716,7 @@ add_conversation_table_data_with_conv_id(
             }
         } else {
             /* a conversation was found in this same fwd direction */
-            is_fwd_direction = TRUE;
+            is_fwd_direction = true;
         }
     }
 
@@ -732,11 +768,11 @@ add_conversation_table_data_with_conv_id(
         /* update the conversation struct */
         conv_item->tx_frames_total += num_frames;
         conv_item->tx_bytes_total += num_bytes;
-        conv_item->filtered = TRUE;
+        conv_item->filtered = true;
         if (! (ch->flags & TL_DISPLAY_FILTER_IGNORED)) {
             conv_item->tx_frames += num_frames;
             conv_item->tx_bytes += num_bytes;
-            conv_item->filtered = FALSE;
+            conv_item->filtered = false;
         }
     } else {
         /*
@@ -758,7 +794,7 @@ add_conversation_table_data_with_conv_id(
                 conv_item->rx_frames += num_frames;
                 conv_item->rx_bytes += num_bytes;
             }
-            conv_item->filtered = FALSE;
+            conv_item->filtered = false;
         }
     }
 
@@ -770,17 +806,121 @@ add_conversation_table_data_with_conv_id(
             memcpy(&conv_item->start_abs_time, abs_ts, sizeof(conv_item->start_abs_time));
         }
     }
+    return conv_item;
+}
+
+void
+add_conversation_table_data_extended(
+    conv_hash_t *ch,
+    const address *src,
+    const address *dst,
+    uint32_t src_port,
+    uint32_t dst_port,
+    conv_id_t conv_id,
+    int num_frames,
+    int num_bytes,
+    nstime_t *ts,
+    nstime_t *abs_ts,
+    ct_dissector_info_t *ct_info,
+    conversation_type ctype,
+    uint32_t frameid,
+    int (*proto_conv_cb)(conversation_t *) )
+{
+    /* delegate the conversation_table update to the decorated function */
+    conv_item_t *conv_item = add_conversation_table_data_with_conv_id(ch, src, dst, src_port, dst_port, conv_id, num_frames, num_bytes, ts, abs_ts, ct_info, ctype);
+
+    /*
+     * Relies heavily on frameid to identify the conversation.
+     * XXX - Later on, either implement one more find_conversation() function to look for
+     * conv_id in the 'addr/port tuple' Htable, or move the conversation to the convid Htable to
+     * build a quicker identification method.
+     */
+    conversation_t *ct = find_conversation(frameid, src, dst, ctype, src_port, dst_port, 0);
+
+    conv_extension_tcp_t ext_tcp;
+
+    if(ct != NULL) {
+        // invoke the proto callback function which knows how to fill the column(s)
+        ext_tcp.flows = proto_conv_cb(ct);
+    }
+    else {
+        ext_tcp.flows = 0;
+    }
+
+    // update conv_item accordingly
+    memcpy(&conv_item->ext_tcp, &ext_tcp, sizeof(conv_item->ext_tcp));
+}
+
+void
+add_conversation_table_data_ipv4_subnet(
+    conv_hash_t *ch,
+    const address *src,
+    const address *dst,
+    uint32_t src_port,
+    uint32_t dst_port,
+    conv_id_t conv_id,
+    int num_frames,
+    int num_bytes,
+    nstime_t *ts,
+    nstime_t *abs_ts,
+    ct_dissector_info_t *ct_info,
+    conversation_type ctype)
+{
+
+    unsigned addrSRC;
+    memcpy(&addrSRC, src->data, 4);
+    unsigned addrDST;
+    memcpy(&addrDST, dst->data, 4);
+
+    bool is_src_aggregated = false;
+    bool is_dst_aggregated = false;
+
+    hashipv4_t * volatile tpsrc;
+    tpsrc = new_ipv4(addrSRC);
+    is_src_aggregated = fill_dummy_ip4(addrSRC, tpsrc);
+
+    hashipv4_t * volatile tpdst;
+    tpdst = new_ipv4(addrDST);
+    is_dst_aggregated = fill_dummy_ip4(addrDST, tpdst);
+
+    address *aggsrc = NULL;
+    aggsrc = wmem_new(wmem_epan_scope(), address);
+
+    aggsrc->len = (int)strlen(tpsrc->cidr_addr);
+    aggsrc->data = wmem_strdup(wmem_file_scope(), tpsrc->cidr_addr);
+    aggsrc->type = AT_STRINGZ;
+
+    address *aggdst = NULL;
+    aggdst = wmem_new(wmem_epan_scope(), address);
+    aggdst->len = (int)strlen(tpdst->cidr_addr);
+    aggdst->data = wmem_strdup(wmem_file_scope(), tpdst->cidr_addr);
+    aggdst->type = AT_STRINGZ;
+
+    /* add data with subnets if we have any, or actual src & dst
+     * unset the conv_id when dealing with subnets
+     */
+    add_conversation_table_data_with_conv_id(ch, src, dst,
+        src_port, dst_port, conv_id,
+        num_frames, num_bytes, ts, abs_ts, ct_info, ctype);
+    if(is_src_aggregated || is_dst_aggregated) {
+        add_conversation_table_data_with_conv_id(ch,
+            is_src_aggregated?aggsrc:src,
+            is_dst_aggregated?aggdst:dst,
+            src_port, dst_port,
+            (is_src_aggregated||is_dst_aggregated?CONV_ID_UNSET:conv_id),
+            num_frames, num_bytes, ts, abs_ts, ct_info, ctype);
+    }
 }
 
 /*
  * Compute the hash value for a given address/port pair if the match
  * is to be exact.
  */
-static guint
-endpoint_hash(gconstpointer v)
+static unsigned
+endpoint_hash(const void *v)
 {
     const endpoint_key_t *key = (const endpoint_key_t *)v;
-    guint hash_val;
+    unsigned hash_val;
 
     hash_val = 0;
     hash_val = add_address_to_hash(hash_val, &key->myaddress);
@@ -791,8 +931,8 @@ endpoint_hash(gconstpointer v)
 /*
  * Compare two endpoint keys for an exact match.
  */
-static gint
-endpoint_match(gconstpointer v, gconstpointer w)
+static int
+endpoint_match(const void *v, const void *w)
 {
     const endpoint_key_t *v1 = (const endpoint_key_t *)v;
     const endpoint_key_t *v2 = (const endpoint_key_t *)w;
@@ -808,7 +948,7 @@ endpoint_match(gconstpointer v, gconstpointer w)
 }
 
 void
-add_endpoint_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboolean sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype)
+add_endpoint_table_data(conv_hash_t *ch, const address *addr, uint32_t port, bool sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype)
 {
     endpoint_item_t *endpoint_item = NULL;
 
@@ -816,7 +956,7 @@ add_endpoint_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboo
        instead of just one */
     /* if we don't have any entries at all yet */
     if(ch->conv_array==NULL){
-        ch->conv_array=g_array_sized_new(FALSE, FALSE, sizeof(endpoint_item_t), 10000);
+        ch->conv_array=g_array_sized_new(false, false, sizeof(endpoint_item_t), 10000);
         ch->hashtable = g_hash_table_new_full(endpoint_hash,
                                               endpoint_match, /* key_equal_func */
                                               g_free,     /* key_destroy_func */
@@ -825,7 +965,7 @@ add_endpoint_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboo
     else {
         /* try to find it among the existing known conversations */
         endpoint_key_t existing_key;
-        gpointer endpoint_idx_hash_val;
+        void *endpoint_idx_hash_val;
 
         copy_address_shallow(&existing_key.myaddress, addr);
         existing_key.port = port;
@@ -854,8 +994,8 @@ add_endpoint_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboo
         new_endpoint_item.tx_frames_total=0;
         new_endpoint_item.rx_bytes_total=0;
         new_endpoint_item.tx_bytes_total=0;
-        new_endpoint_item.modified = TRUE;
-        new_endpoint_item.filtered = TRUE;
+        new_endpoint_item.modified = true;
+        new_endpoint_item.filtered = true;
 
         g_array_append_val(ch->conv_array, new_endpoint_item);
         endpoint_idx = ch->conv_array->len - 1;
@@ -869,7 +1009,7 @@ add_endpoint_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboo
     }
 
     /* if this is a new endpoint we need to initialize the struct */
-    endpoint_item->modified = TRUE;
+    endpoint_item->modified = true;
 
     /* update the endpoint struct */
     if (! (ch->flags & TL_DISPLAY_FILTER_IGNORED)) {
@@ -880,7 +1020,7 @@ add_endpoint_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboo
             endpoint_item->rx_frames+=num_frames;
             endpoint_item->rx_bytes+=num_bytes;
         }
-        endpoint_item->filtered = FALSE;
+        endpoint_item->filtered = false;
     }
     /* update the endpoint struct for total values */
     if( sender ){
@@ -892,9 +1032,51 @@ add_endpoint_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboo
     }
 }
 
+void
+add_endpoint_table_data_ipv4_subnet(
+    conv_hash_t *ch,
+    const address *addr,
+    uint32_t port,
+    bool sender,
+    int num_frames,
+    int num_bytes,
+    et_dissector_info_t *et_info,
+    endpoint_type etype)
+{
+    unsigned addrSubnetted;
+    memcpy(&addrSubnetted, addr->data, 4);
+
+    bool is_aggregated = false;
+
+    hashipv4_t * volatile tpaddr;
+    tpaddr = new_ipv4(addrSubnetted);
+    is_aggregated = fill_dummy_ip4(addrSubnetted, tpaddr);
+
+    address *aggaddr = NULL;
+    aggaddr = wmem_new(wmem_epan_scope(), address);
+
+    aggaddr->len = (int)strlen(tpaddr->cidr_addr);
+    aggaddr->data = wmem_strdup(wmem_file_scope(), tpaddr->cidr_addr);
+    aggaddr->type = AT_STRINGZ;
+
+    /* add data with subnets if we have any, or actual addr
+     */
+    if(is_aggregated) {
+        add_endpoint_table_data(ch, aggaddr, port, sender, num_frames, num_bytes, et_info, etype);
+
+        // besides, add the original non-aggregated data when asked to
+        if(ch->flags & TL_IP_AGGREGATION_ORI) {
+            add_endpoint_table_data(ch, addr, port, sender, num_frames, num_bytes, et_info, etype);
+        }
+    }
+    else {
+        add_endpoint_table_data(ch, addr, port, sender, num_frames, num_bytes, et_info, etype);
+    }
+}
+
 /* For backwards source and binary compatibility */
 void
-add_hostlist_table_data(conv_hash_t *ch, const address *addr, guint32 port, gboolean sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype)
+add_hostlist_table_data(conv_hash_t *ch, const address *addr, uint32_t port, bool sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype)
 {
     add_endpoint_table_data(ch, addr, port, sender, num_frames, num_bytes, et_info, etype);
 }

@@ -25,7 +25,7 @@ void proto_reg_handoff_aruba_adp(void);
 static dissector_handle_t adp_handle;
 
 static int proto_aruba_adp;
-static gint ett_aruba_adp;
+static int ett_aruba_adp;
 
 static int hf_adp_version;
 static int hf_adp_type;
@@ -45,9 +45,9 @@ dissect_aruba_adp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 {
     proto_tree *ti = NULL;
     proto_tree *aruba_adp_tree = NULL;
-    guint16 type;
-    const gchar *mac_str;
-    const gchar *switchip;
+    uint16_t type;
+    const char *mac_str;
+    const char *switchip;
 
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "ADP");
@@ -62,8 +62,7 @@ dissect_aruba_adp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
     proto_tree_add_item(aruba_adp_tree, hf_adp_version, tvb, 0, 2, ENC_BIG_ENDIAN);
 
 
-    proto_tree_add_item(aruba_adp_tree, hf_adp_type, tvb, 2, 2, ENC_BIG_ENDIAN);
-    type = tvb_get_ntohs(tvb, 2);
+    proto_tree_add_item_ret_uint16(aruba_adp_tree, hf_adp_type, tvb, 2, 2, ENC_BIG_ENDIAN, &type);
 
     proto_tree_add_item(aruba_adp_tree, hf_adp_id, tvb, 4, 2, ENC_BIG_ENDIAN);
 
@@ -121,7 +120,7 @@ proto_register_aruba_adp(void)
 
         };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_aruba_adp,
     };
 

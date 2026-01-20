@@ -14,10 +14,11 @@
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
 #include <epan/capture_dissectors.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 #include "packet-isl.h"
 #include "packet-eth.h"
-#include "packet-tr.h"
 
 void proto_register_isl(void);
 void proto_reg_handoff_isl(void);
@@ -58,8 +59,8 @@ static int hf_isl_fcs_not_incl;
 static int hf_isl_esize;
 static int hf_isl_trailer;
 
-static gint ett_isl;
-static gint ett_isl_dst;
+static int ett_isl;
+static int ett_isl_dst;
 
 #define ISL_HEADER_SIZE 26
 
@@ -79,13 +80,13 @@ static dissector_handle_t tr_handle;
 static capture_dissector_handle_t eth_cap_handle;
 static capture_dissector_handle_t tr_cap_handle;
 
-static gboolean
-capture_isl(const guchar *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_)
+static bool
+capture_isl(const unsigned char *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_)
 {
-  guint8 type;
+  uint8_t type;
 
   if (!BYTES_ARE_IN_FRAME(offset, len, ISL_HEADER_SIZE))
-    return FALSE;
+    return false;
 
   type = (pd[offset+5] >> 4)&0x0F;
 
@@ -98,10 +99,9 @@ capture_isl(const guchar *pd, int offset, int len, capture_packet_info_t *cpinfo
   case TYPE_TR:
     offset += 14+17;    /* skip the header */
     return call_capture_dissector(tr_cap_handle, pd, offset, len, cpinfo, pseudo_header);
-    break;
   }
 
-  return FALSE;
+  return false;
 }
 
 static const value_string type_vals[] = {
@@ -131,9 +131,8 @@ dissect_isl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int fcs_len)
   proto_tree *volatile fh_tree = NULL;
   proto_tree *dst_tree;
   proto_item *ti, *hidden_item;
-  volatile guint8 type;
-  volatile guint16 length;
-  gint captured_length;
+  volatile uint8_t type;
+  volatile uint16_t length;
   tvbuff_t *volatile payload_tvb = NULL;
   tvbuff_t *volatile next_tvb;
   tvbuff_t *volatile trailer_tvb = NULL;
@@ -142,7 +141,7 @@ dissect_isl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int fcs_len)
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "ISL");
   col_clear(pinfo->cinfo, COL_INFO);
 
-  type = (tvb_get_guint8(tvb, 5) >> 4)&0x0F;
+  type = (tvb_get_uint8(tvb, 5) >> 4)&0x0F;
 
   if (tree) {
     ti = proto_tree_add_protocol_format(tree, proto_isl, tvb, 0, ISL_HEADER_SIZE,
@@ -180,29 +179,19 @@ dissect_isl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int fcs_len)
        treat it similarly, by constructing a tvbuff containing only
        the data specified by the length field. */
 
+    payload_tvb = tvb_new_subset_length(tvb, 14, length);
     TRY {
-      payload_tvb = tvb_new_subset_length(tvb, 14, length);
       trailer_tvb = tvb_new_subset_remaining(tvb, 14 + length);
     }
     CATCH_BOUNDS_ERRORS {
-      /* Either:
+      /* This can only happen if the packet has less than "length" bytes worth
+         of captured data left in it, so the offset 14 + length is out of
+         bounds. (If there are exactly "length" bytes left, it will return a
+         zero-length tvbuff, not an exception. XXX - Maybe a NULL trailer_tvb
+         is better in that case?)
 
-          the packet doesn't have "length" bytes worth of
-          captured data left in it - or it may not even have
-          "length" bytes worth of data in it, period -
-          so the "tvb_new_subset_length_caplen()" creating "payload_tvb"
-          threw an exception
-
-         or
-
-          the packet has exactly "length" bytes worth of
-          captured data left in it, so the "tvb_new_subset_remaining()"
-          creating "trailer_tvb" threw an exception.
-
-         In either case, this means that all the data in the frame
-         is within the length value, so we give all the data to the
-         next protocol and have no trailer. */
-      payload_tvb = tvb_new_subset_length_caplen(tvb, 14, -1, length);
+         This means that all the data in the frame is within the length value,
+         so we give all the data to the next protocol and have no trailer. */
       trailer_tvb = NULL;
     }
     ENDTRY;
@@ -244,14 +233,7 @@ dissect_isl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int fcs_len)
          dissecting what's left as an Ethernet frame. */
       length -= 12;
 
-      /* Trim the captured length. */
-      captured_length = tvb_captured_length_remaining(payload_tvb, 12);
-
-      /* Make sure it's not bigger than the actual length. */
-      if (captured_length > length)
-        captured_length = length;
-
-      next_tvb = tvb_new_subset_length_caplen(payload_tvb, 12, captured_length, length);
+      next_tvb = tvb_new_subset_length(payload_tvb, 12, length);
 
       /* Dissect the payload as an Ethernet frame.
 
@@ -384,7 +366,7 @@ proto_register_isl(void)
       { "Trailer",    "isl.trailer", FT_BYTES, BASE_NONE, NULL, 0x0,
         "Ethernet Trailer or Checksum", HFILL }},
   };
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_isl,
     &ett_isl_dst,
   };

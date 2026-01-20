@@ -84,28 +84,28 @@ static int proto_ipmi_trace;
 
 static dissector_table_t proto_dissector_table;
 
-static gint ett_ipmi_trace;
-static gint ett_trace_block_type;
-static gint ett_trace_timestamp;
-static gint ett_trace_protocol_data;
-static gint ett_trace_ipmb_state;
+static int ett_ipmi_trace;
+static int ett_trace_block_type;
+static int ett_trace_timestamp;
+static int ett_trace_protocol_data;
+static int ett_trace_ipmb_state;
 
-static gint hf_trace_block_type;
-static gint hf_trace_channel_num;
-static gint hf_trace_packet_type;
-static gint hf_trace_timestamp;
-static gint hf_trace_timestamp_sec;
-static gint hf_trace_timestamp_msec;
-static gint hf_trace_data_type;
-static gint hf_trace_protocol_data;
-static gint hf_trace_dir;
-static gint hf_trace_ipmb_red_chn;
-static gint hf_trace_ipmb_link_num;
-static gint hf_trace_data_len;
-static gint hf_trace_notify_format;
-static gint hf_trace_ipmb_state;
-static gint hf_trace_ipmb_ovr_state;
-static gint hf_trace_ipmb_loc_state;
+static int hf_trace_block_type;
+static int hf_trace_channel_num;
+static int hf_trace_packet_type;
+static int hf_trace_timestamp;
+static int hf_trace_timestamp_sec;
+static int hf_trace_timestamp_msec;
+static int hf_trace_data_type;
+static int hf_trace_protocol_data;
+static int hf_trace_dir;
+static int hf_trace_ipmb_red_chn;
+static int hf_trace_ipmb_link_num;
+static int hf_trace_data_len;
+static int hf_trace_notify_format;
+static int hf_trace_ipmb_state;
+static int hf_trace_ipmb_ovr_state;
+static int hf_trace_ipmb_loc_state;
 
 static const value_string str_packet_types[] = {
 	{ 0, "IPMI Trace Packet Data" },
@@ -191,7 +191,7 @@ static int * const bits_chn_state_info[] = {
 };
 
 /* HPM.2 Trace Collection tree indices. */
-static int * const ipmi_trace_ett[] = {
+static int * ipmi_trace_ett[] = {
 	&ett_ipmi_trace,
 	&ett_trace_block_type,
 	&ett_trace_timestamp,
@@ -267,7 +267,7 @@ dissect_ipmb_state_notify(tvbuff_t * tvb, proto_tree * tree)
 static int
 dissect_ipmi_trace(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint block_type, chn_num, data_type, tmp;
+	unsigned block_type, chn_num, data_type, tmp;
 	tvbuff_t * next_tvb;
 
 	if (tvb_captured_length(tvb) < 11) {
@@ -277,7 +277,7 @@ dissect_ipmi_trace(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 	}
 
 	/* get first byte */
-	tmp = tvb_get_guint8(tvb, 0);
+	tmp = tvb_get_uint8(tvb, 0);
 
 	/* get block type */
 	block_type = (tmp >> 4) & 3;
@@ -286,12 +286,12 @@ dissect_ipmi_trace(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 	chn_num = tmp & 0xF;
 
 	/* get trace data type */
-	data_type = tvb_get_guint8(tvb, 7);
+	data_type = tvb_get_uint8(tvb, 7);
 
 
 	col_add_fstr(pinfo->cinfo, COL_DEF_SRC, "Channel %d", chn_num);
 	col_add_str(pinfo->cinfo, COL_PROTOCOL,
-			val_to_str(data_type, str_protocol_types,
+			val_to_str(pinfo->pool, data_type, str_protocol_types,
 					"Reserved (0x%02x)"));
 
 	col_clear(pinfo->cinfo, COL_INFO);
@@ -302,14 +302,14 @@ dissect_ipmi_trace(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 		col_set_str(pinfo->cinfo, COL_INFO,
 				"Channel State Change Notification");
 	} else if (block_type == HPM2_EMBED_ASCII_MSG) {
-		gchar *str;
+		char *str;
 
 		/* get data length */
-		guint str_len = tvb_get_guint8(tvb, 10);
+		unsigned str_len = tvb_get_uint8(tvb, 10);
 
 		if (str_len) {
 			/* copy string */
-			str = (gchar *) tvb_get_string_enc(pinfo->pool, tvb, 11, str_len, ENC_ASCII|ENC_NA);
+			str = (char *) tvb_get_string_enc(pinfo->pool, tvb, 11, str_len, ENC_ASCII|ENC_NA);
 
 			/* print the string right inside the column */
 			col_add_str(pinfo->cinfo, COL_INFO, str);
@@ -324,6 +324,7 @@ dissect_ipmi_trace(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 		proto_tree * trace_tree;
 		proto_tree * stamp_tree;
 		nstime_t timestamp;
+		int millisecs;
 
 		/* add protocol label */
 		ti = proto_tree_add_item(tree, proto_ipmi_trace, tvb, 0, -1, ENC_NA);
@@ -340,7 +341,13 @@ dissect_ipmi_trace(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 		timestamp.secs = tvb_get_letohl(tvb, 1);
 
 		/* get milliseconds part */
-		timestamp.nsecs = (int) tvb_get_letohs(tvb, 5) * 1000000;
+		millisecs = tvb_get_letohs(tvb, 5);
+		if (millisecs < 1000) {
+			timestamp.nsecs = millisecs * 1000000;
+		} else {
+			/* invalid */
+			timestamp.nsecs = 0;
+		}
 
 		/* add timestamp */
 		ti = proto_tree_add_time(trace_tree, hf_trace_timestamp, tvb, 1,
@@ -394,10 +401,10 @@ dissect_ipmi_trace(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 		/* setup IPMI protocol argument */
 		arg.context = IPMI_E_NONE;
 		arg.channel = chn_num;
-		arg.flags	= tvb_get_guint8(tvb, 8);
+		arg.flags	= tvb_get_uint8(tvb, 8);
 
-		if (!dissector_try_uint_new(proto_dissector_table,
-				data_type, next_tvb, pinfo, tree, TRUE, &arg)) {
+		if (!dissector_try_uint_with_data(proto_dissector_table,
+				data_type, next_tvb, pinfo, tree, true, &arg)) {
 			call_data_dissector(next_tvb, pinfo, tree);
 		}
 	} else if (block_type == HPM2_CHN_STATE_NOTIFY

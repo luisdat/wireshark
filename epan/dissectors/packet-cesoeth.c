@@ -39,8 +39,8 @@ static int hf_cesoeth_cw_len;
 static int hf_cesoeth_cw_seq;
 static int hf_cesoeth_padding;
 
-static gint ett_cesoeth;
-static gint ett_cesoeth_cw;
+static int ett_cesoeth;
+static int ett_cesoeth_cw;
 
 static expert_field ei_cesoeth_reserved;
 static expert_field ei_cesoeth_length;
@@ -97,7 +97,7 @@ static const value_string l1_m_names[] =
 };
 
 /* Preferences */
-static bool has_rtp_header = false;
+static bool has_rtp_header;
 static bool heuristic_rtp_header = true;
 
 
@@ -108,11 +108,11 @@ dissect_cesoeth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     proto_item  *cesoeth_ti;
     proto_item  *bitmask_ti;
     int         offset = 0;
-    guint32     ecid, reserved;
-    gboolean    l_bit, r_bit;
-    guint8      m_bits, frg;
-    gint        cw_len, padding_len, tail_len, payload_len;
-    guint16     sn;
+    uint32_t    ecid, reserved;
+    bool        l_bit, r_bit;
+    uint8_t     m_bits, frg;
+    int         cw_len, padding_len, tail_len, payload_len;
+    uint16_t    sn;
     tvbuff_t    *next_tvb;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "CESoETH");
@@ -141,9 +141,9 @@ dissect_cesoeth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
      * 15-0  sequence   sequence number
      */
 
-    l_bit  = (tvb_get_guint8(tvb, offset) & 0x08) ? TRUE : FALSE;
-    r_bit  = (tvb_get_guint8(tvb, offset) & 0x04) ? TRUE : FALSE;
-    m_bits = (tvb_get_guint8(tvb, offset) & 0x03);
+    l_bit  = (tvb_get_uint8(tvb, offset) & 0x08) ? true : false;
+    r_bit  = (tvb_get_uint8(tvb, offset) & 0x04) ? true : false;
+    m_bits = (tvb_get_uint8(tvb, offset) & 0x03);
     frg    = tvb_get_bits8(tvb, 40, 2);
     cw_len = tvb_get_bits8(tvb, 42, 6);
     sn     = tvb_get_ntohs(tvb, offset + 2);
@@ -152,10 +152,10 @@ dissect_cesoeth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 
     if (l_bit)
     {
-        bitmask_ti = proto_tree_add_bitmask(cesoeth_tree, tvb, offset, hf_cesoeth_cw, ett_cesoeth_cw, cesoeth_l1_cw, ENC_NA);
+        bitmask_ti = proto_tree_add_bitmask(cesoeth_tree, tvb, offset, hf_cesoeth_cw, ett_cesoeth_cw, cesoeth_l1_cw, ENC_BIG_ENDIAN);
         col_append_sep_fstr(pinfo->cinfo, COL_INFO, NULL, "%s", val_to_str_const(m_bits, l1_m_names, "Unknown"));
     } else {
-        bitmask_ti = proto_tree_add_bitmask(cesoeth_tree, tvb, offset, hf_cesoeth_cw, ett_cesoeth_cw, cesoeth_l0_cw, ENC_NA);
+        bitmask_ti = proto_tree_add_bitmask(cesoeth_tree, tvb, offset, hf_cesoeth_cw, ett_cesoeth_cw, cesoeth_l0_cw, ENC_BIG_ENDIAN);
         if (m_bits)
             col_append_sep_fstr(pinfo->cinfo, COL_INFO, NULL, "%s", val_to_str_const(m_bits, l0_m_names, "Unknown"));
     }
@@ -212,25 +212,32 @@ dissect_cesoeth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         if ((has_rtp_header) ||
             ((heuristic_rtp_header) &&
                 /* Check for RTP version 2, the other fields must be zero */
-                (tvb_get_guint8(tvb, offset) == 0x80) &&
+                (tvb_get_uint8(tvb, offset) == 0x80) &&
                 /* Check the marker is zero. Unfortunately PT is not always from the dynamic range */
-                ((tvb_get_guint8(tvb, offset + 1) & 0x80) == 0) &&
+                ((tvb_get_uint8(tvb, offset + 1) & 0x80) == 0) &&
                 /* The sequence numbers from cw and RTP header must match */
                 (tvb_get_ntohs(tvb, offset + 2) == sn)))
         {
             struct _rtp_info rtp_info;
 
-            gint rtp_header_len = dissect_rtp_shim_header(tvb, offset, pinfo, cesoeth_tree, &rtp_info);
+            int rtp_header_len = dissect_rtp_shim_header(tvb, offset, pinfo, cesoeth_tree, &rtp_info);
 
-            col_set_str(pinfo->cinfo, COL_PROTOCOL, "CESoETH (w RTP)");
-            col_append_sep_fstr(pinfo->cinfo, COL_INFO, NULL, "RTP PT: %u, SSRC: 0x%X, Seq: %u, Time=%u",
-                                rtp_info.info_payload_type,
-                                rtp_info.info_sync_src,
-                                rtp_info.info_seq_num,
-                                rtp_info.info_timestamp
-                               );
+            if (rtp_header_len > 0)
+            {
+                col_set_str(pinfo->cinfo, COL_PROTOCOL, "CESoETH (w RTP)");
+                col_append_sep_fstr(pinfo->cinfo, COL_INFO, NULL, "RTP PT: %u, SSRC: 0x%X, Seq: %u, Time=%u",
+                                    rtp_info.info_payload_type,
+                                    rtp_info.info_sync_src,
+                                    rtp_info.info_seq_num,
+                                    rtp_info.info_timestamp
+                                );
 
-            next_tvb = tvb_new_subset_length(tvb, offset + rtp_header_len, payload_len - rtp_header_len);
+                next_tvb = tvb_new_subset_length(tvb, offset + rtp_header_len, payload_len - rtp_header_len);
+            }
+            else
+            {
+                col_append_sep_str(pinfo->cinfo, COL_INFO, NULL, "RTP header missing");
+            }
         }
 
         call_data_dissector(next_tvb, pinfo, tree);
@@ -293,7 +300,7 @@ proto_register_cesoeth(void)
             NULL, 0x0, NULL, HFILL }}
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_cesoeth,
         &ett_cesoeth_cw
     };

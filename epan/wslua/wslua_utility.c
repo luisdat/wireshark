@@ -11,6 +11,7 @@
  */
 
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 
 /* WSLUA_MODULE Utility Utility Functions */
 
@@ -20,44 +21,23 @@
 #include <epan/prefs.h>
 #include <epan/prefs-int.h>
 
-
 WSLUA_FUNCTION wslua_get_version(lua_State* L) { /* Gets the Wireshark version as a string. */
     const char* str = VERSION;
     lua_pushstring(L,str);
     WSLUA_RETURN(1); /* The version string, e.g. "3.2.5". */
 }
 
-
-static char *current_plugin_version = NULL;
-static char *current_plugin_description = NULL;
-static char *current_plugin_repository = NULL;
-static char *current_plugin_spdx_id = NULL;
+static char* current_plugin_version = NULL;
 
 const char* get_current_plugin_version(void) {
     return current_plugin_version ? current_plugin_version : "";
 }
 
-const char* get_current_plugin_description(void) {
-    return current_plugin_description ? current_plugin_description : "";
-}
-
-const char* get_current_plugin_repository(void) {
-    return current_plugin_repository ? current_plugin_repository : "";
-}
-
-const char* get_current_plugin_spdx_id(void) {
-    return current_plugin_spdx_id ? current_plugin_spdx_id : "";
-}
-
-void clear_current_plugin_info(void) {
-    g_free(current_plugin_version);
-    current_plugin_version = NULL;
-    g_free(current_plugin_description);
-    current_plugin_description = NULL;
-    g_free(current_plugin_repository);
-    current_plugin_repository = NULL;
-    g_free(current_plugin_spdx_id);
-    current_plugin_spdx_id = NULL;
+void clear_current_plugin_version(void) {
+    if (current_plugin_version != NULL) {
+        g_free(current_plugin_version);
+        current_plugin_version = NULL;
+    }
 }
 
 WSLUA_FUNCTION wslua_set_plugin_info(lua_State* L) {
@@ -83,31 +63,27 @@ WSLUA_FUNCTION wslua_set_plugin_info(lua_State* L) {
     local my_info = {
         version = "1.0.1",
         author = "Jane Doe",
-        repository = "https://github.com/octocat/Spoon-Knife",
-        spdx_id = "GPL-2.0-or-later",
-        description = "Spoon-Knives can scoop and cut at the same time"
+        repository = "https://github.com/octocat/Spoon-Knife"
     }
 
     set_plugin_info(my_info)
     ----
-
-    @since 1.99.8
     */
 #define WSLUA_ARG_set_plugin_info_TABLE 1 /* The Lua table of information. */
 
     if ( lua_istable(L,WSLUA_ARG_set_plugin_info_TABLE) ) {
+        int top;
         lua_getfield(L, WSLUA_ARG_set_plugin_info_TABLE, "version");
-        current_plugin_version = g_strdup(lua_tostring(L, -1));
-        if (current_plugin_version == NULL) {
+        top = lua_gettop(L);
+        if (lua_isstring(L, top)) {
+            clear_current_plugin_version();
+            current_plugin_version = g_strdup( luaL_checkstring(L, top) );
+            /* pop the string */
+            lua_pop(L, 1);
+        }
+        else {
             return luaL_error(L,"the Lua table must have a 'version' key entry with a string value");
         }
-        lua_getfield(L, WSLUA_ARG_set_plugin_info_TABLE, "description");
-        current_plugin_description = g_strdup(lua_tostring(L, -1));
-        lua_getfield(L, WSLUA_ARG_set_plugin_info_TABLE, "repository");
-        current_plugin_repository = g_strdup(lua_tostring(L, -1));
-        lua_getfield(L, WSLUA_ARG_set_plugin_info_TABLE, "spdx_id");
-        current_plugin_spdx_id = g_strdup(lua_tostring(L, -1));
-        lua_pop(L, 4);
     } else {
         return luaL_error(L,"a Lua table with at least a 'version' string entry");
     }
@@ -147,7 +123,7 @@ WSLUA_FUNCTION wslua_format_time(lua_State* LS) { /* Formats a relative timestam
 }
 
 WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
-    /* Get a preference value. @since 3.5.0 */
+    /* Get a preference value. */
 #define WSLUA_ARG_get_preference_PREFERENCE 1 /* The name of the preference. */
     const char* preference = luaL_checkstring(L,WSLUA_ARG_get_preference_PREFERENCE);
 
@@ -169,7 +145,7 @@ WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
         switch (prefs_get_type(pref)) {
             case PREF_UINT:
             {
-                unsigned uint_value = prefs_get_uint_value_real(pref, pref_current);
+                unsigned uint_value = prefs_get_uint_value(pref, pref_current);
                 lua_pushinteger(L, uint_value);
                 break;
             }
@@ -214,6 +190,27 @@ WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
                 wmem_free(NULL, range_value);
                 break;
             }
+            case PREF_UAT:
+            {
+                uat_t* get_uat = prefs_get_uat_value(pref);
+                if (get_uat != NULL) {
+                    lua_newtable(L);
+                    for (unsigned int idx = 0; idx < get_uat->user_data->len; idx++) {
+                        lua_pushinteger(L, idx + 1);
+                        lua_newtable(L);
+                        void *rec = UAT_INDEX_PTR(get_uat, idx);
+                        unsigned int colnum;
+                        for(colnum = 0; colnum < get_uat->ncols; colnum++) {
+                            lua_pushinteger(L, colnum + 1);
+                            char *str = uat_fld_tostr(rec, &(get_uat->fields[colnum]));
+                            lua_pushstring(L, str);
+                            lua_settable(L, -3);
+                        }
+                        lua_settable(L, -3);
+                    }
+                }
+                break;
+            }
             default:
                 /* Get not supported for this type. */
                 return luaL_error(L, "preference type %d is not supported.", prefs_get_type(pref));
@@ -227,7 +224,7 @@ WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
 }
 
 WSLUA_FUNCTION wslua_set_preference(lua_State *L) {
-    /* Set a preference value. @since 3.5.0 */
+    /* Set a preference value. */
 #define WSLUA_ARG_set_preference_PREFERENCE 1 /* The name of the preference. */
 #define WSLUA_ARG_set_preference_VALUE 2 /* The preference value to set. */
     const char* preference = luaL_checkstring(L,WSLUA_ARG_set_preference_PREFERENCE);
@@ -315,7 +312,7 @@ WSLUA_FUNCTION wslua_set_preference(lua_State *L) {
 }
 
 WSLUA_FUNCTION wslua_reset_preference(lua_State *L) {
-    /* Reset a preference to default value. @since 3.5.0 */
+    /* Reset a preference to default value. */
 #define WSLUA_ARG_reset_preference_PREFERENCE 1 /* The name of the preference. */
     const char* preference = luaL_checkstring(L,WSLUA_ARG_reset_preference_PREFERENCE);
 
@@ -345,9 +342,9 @@ WSLUA_FUNCTION wslua_reset_preference(lua_State *L) {
 }
 
 WSLUA_FUNCTION wslua_apply_preferences(lua_State *L) {
-    /* Write preferences to file and apply changes. @since 3.5.0 */
+    /* Write preferences to file and apply changes. */
     char *pf_path = NULL;
-    int err = write_prefs(&pf_path);
+    int err = write_prefs(lua_app_env_var_prefix, &pf_path);
 
     if (err) {
         /* Make a copy of pf_path because luaL_error() will return */
@@ -395,7 +392,7 @@ char* wslua_get_actual_filename(const char* fname) {
         return g_strdup(fname_clean);
     }
 
-    filename = get_persconffile_path(fname_clean,false);
+    filename = get_persconffile_path(fname_clean,false,lua_app_env_var_prefix);
 
     if ( file_exists(filename) ) {
         return filename;
@@ -407,7 +404,7 @@ char* wslua_get_actual_filename(const char* fname) {
      * installations. For executions from the build dir, it will look for files
      * copied to DATAFILE_DIR.
      */
-    filename = get_datafile_path(fname_clean);
+    filename = get_datafile_path(fname_clean,lua_app_env_var_prefix);
     if ( file_exists(filename) ) {
         return filename;
     }
@@ -416,10 +413,48 @@ char* wslua_get_actual_filename(const char* fname) {
     return NULL;
 }
 
+WSLUA_FUNCTION wslua_dofile(lua_State* L) {
+    /*
+    Loads a Lua file and executes it as a Lua chunk, similar to the standard
+    https://www.lua.org/manual/5.4/manual.html#pdf-dofile[dofile]
+    but searches additional directories.
+    The search order is the current directory, followed by the user's
+    https://www.wireshark.org/docs/wsug_html_chunked/ChAppFilesConfigurationSection.html[personal configuration]
+    directory, and finally the
+    https://www.wireshark.org/docs/wsug_html_chunked/ChAppFilesConfigurationSection.html[global configuration]
+    directory.
+
+    [TIP]
+    .The configuration directories are not the plugin directories.
+    ====
+    The configuration directories searched are not the global and personal plugin
+    directories. All Lua files in the plugin directories are loaded at startup;
+    `dofile` is for loading files from additional locations.
+    The file path can be absolute or relative to one of the search directories.
+    ====
+
+    */
+#define WSLUA_ARG_dofile_FILENAME 1 /* Name of the file to be run. If the file does not exist in the current directory, the user and system directories are searched. */
+    const char *given_fname = luaL_checkstring(L, WSLUA_ARG_dofile_FILENAME);
+    char* filename = wslua_get_actual_filename(given_fname);
+    int n;
+
+    if (!filename) {
+        WSLUA_ARG_ERROR(dofile,FILENAME,"file does not exist");
+        return 0;
+    }
+
+    n = lua_gettop(L);
+    if (luaL_loadfile(L, filename) != 0) lua_error(L);
+    g_free(filename);
+    lua_call(L, 0, LUA_MULTRET);
+    return lua_gettop(L) - n;
+}
+
 WSLUA_FUNCTION wslua_loadfile(lua_State* L) {
     /*
     Loads a Lua file and compiles it into a Lua chunk, similar to the standard
-    https://www.lua.org/manual/5.1/manual.html#pdf-loadfile[loadfile]
+    https://www.lua.org/manual/5.4/manual.html#pdf-loadfile[loadfile]
     but searches additional directories.
     The search order is the current directory, followed by the user's
     https://www.wireshark.org/docs/wsug_html_chunked/ChAppFilesConfigurationSection.html[personal configuration]
@@ -463,35 +498,6 @@ WSLUA_FUNCTION wslua_loadfile(lua_State* L) {
     }
 }
 
-WSLUA_FUNCTION wslua_dofile(lua_State* L) {
-    /*
-    Loads a Lua file and executes it as a Lua chunk, similar to the standard
-    https://www.lua.org/manual/5.1/manual.html#pdf-dofile[dofile]
-    but searches additional directories.
-    The search order is the current directory, followed by the user's
-    https://www.wireshark.org/docs/wsug_html_chunked/ChAppFilesConfigurationSection.html[personal configuration]
-    directory, and finally the
-    https://www.wireshark.org/docs/wsug_html_chunked/ChAppFilesConfigurationSection.html[global configuration]
-    directory.
-    */
-#define WSLUA_ARG_dofile_FILENAME 1 /* Name of the file to be run. If the file does not exist in the current directory, the user and system directories are searched. */
-    const char *given_fname = luaL_checkstring(L, WSLUA_ARG_dofile_FILENAME);
-    char* filename = wslua_get_actual_filename(given_fname);
-    int n;
-
-    if (!filename) {
-        WSLUA_ARG_ERROR(dofile,FILENAME,"file does not exist");
-        return 0;
-    }
-
-    n = lua_gettop(L);
-    if (luaL_loadfile(L, filename) != 0) lua_error(L);
-    g_free(filename);
-    lua_call(L, 0, LUA_MULTRET);
-    return lua_gettop(L) - n;
-}
-
-
 typedef struct _statcmd_t {
     lua_State* L;
     int func_ref;
@@ -501,7 +507,7 @@ static int statcmd_init_cb_error_handler(lua_State* L _U_) {
     return 0;
 }
 
-static void statcmd_init(const char *opt_arg, void* userdata) {
+static bool statcmd_init(const char *opt_arg, void* userdata) {
     statcmd_t* sc = (statcmd_t *)userdata;
     lua_State* L = sc->L;
 
@@ -528,6 +534,7 @@ static void statcmd_init(const char *opt_arg, void* userdata) {
             break;
     }
 
+    return true;
 }
 
 WSLUA_FUNCTION wslua_register_stat_cmd_arg(lua_State* L) {

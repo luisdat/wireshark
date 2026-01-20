@@ -39,7 +39,7 @@ typedef struct _fileset {
  *
  * XXX This should probably be per-main-window instead of global.
  */
-static fileset set = { NULL, NULL};
+static fileset set;
 
 /*
  * Given a stat structure, get the creation time of the file if available,
@@ -68,14 +68,17 @@ fileset_filename_match_pattern(const char *fname, char **prefix, char **suffix, 
     fileset_match_t ret = FILESET_NO_MATCH;
     static char *pattern = "(?P<prefix>.*)_\\d{5}_(?P<time>\\d{14})$";
     static char *pattern2 = "(?P<prefix>.*)_(?P<time>\\d{14})_\\d{5}$";
+    // Falco capture recordings: "falco_" +  nanoseconds + "_" + event number + ".scap"
+    static char *pattern3 = "(?P<prefix>.*)_(?P<time>\\d{14})\\d{6}_\\d{20}$";
     static GRegex *regex = NULL;
     static GRegex *regex2 = NULL;
+    static GRegex *regex3 = NULL;
 
     if (regex == NULL) {
         GError *gerr = NULL;
         regex = g_regex_new(pattern,
                         (GRegexCompileFlags)(G_REGEX_OPTIMIZE | G_REGEX_ANCHORED),
-                        G_REGEX_MATCH_ANCHORED, NULL);
+                        G_REGEX_MATCH_ANCHORED, &gerr);
         if (gerr) {
                 ws_warning("failed to compile regex: %s", gerr->message);
                 g_error_free(gerr);
@@ -88,11 +91,24 @@ fileset_filename_match_pattern(const char *fname, char **prefix, char **suffix, 
         GError *gerr = NULL;
         regex2 = g_regex_new(pattern2,
                         (GRegexCompileFlags)(G_REGEX_OPTIMIZE | G_REGEX_ANCHORED),
-                        G_REGEX_MATCH_ANCHORED, NULL);
+                        G_REGEX_MATCH_ANCHORED, &gerr);
         if (gerr) {
                 ws_warning("failed to compile regex: %s", gerr->message);
                 g_error_free(gerr);
                 regex2 = NULL;
+                return ret;
+        }
+    }
+
+    if (regex3 == NULL) {
+        GError *gerr = NULL;
+        regex3 = g_regex_new(pattern3,
+                        (GRegexCompileFlags)(G_REGEX_OPTIMIZE | G_REGEX_ANCHORED),
+                        G_REGEX_MATCH_ANCHORED, &gerr);
+        if (gerr) {
+                ws_warning("failed to compile regex: %s", gerr->message);
+                g_error_free(gerr);
+                regex3 = NULL;
                 return ret;
         }
     }
@@ -104,7 +120,7 @@ fileset_filename_match_pattern(const char *fname, char **prefix, char **suffix, 
     sfx = strrchr(filename, '.');
     if (sfx != NULL) {
         *sfx = '\0';
-        GSList *compression_type_extensions = wtap_get_all_compression_type_extensions_list();
+        GSList *compression_type_extensions = ws_get_all_compression_type_extensions_list();
         char *ext = g_ascii_strdown(sfx + 1, -1);
         for (GSList *compression_extension = compression_type_extensions;
                 compression_extension != NULL;
@@ -143,6 +159,23 @@ fileset_filename_match_pattern(const char *fname, char **prefix, char **suffix, 
 
     if (ret == FILESET_NO_MATCH) {
         g_regex_match(regex2, filename, 0, &match_info);
+        if (g_match_info_matches(match_info)) {
+            if (prefix) {
+                *prefix = g_match_info_fetch_named(match_info, "prefix");
+            }
+            if (time) {
+                *time = g_match_info_fetch_named(match_info, "time");
+            }
+            if (suffix) {
+                *suffix = g_strdup(sfx);
+            }
+            ret = FILESET_TIME_NUM;
+        }
+        g_match_info_free(match_info);
+    }
+
+    if (ret == FILESET_NO_MATCH) {
+        g_regex_match(regex3, filename, 0, &match_info);
         if (g_match_info_matches(match_info)) {
             if (prefix) {
                 *prefix = g_match_info_fetch_named(match_info, "prefix");
@@ -199,7 +232,7 @@ fileset_is_file_in_set(const char *fname1, const char *fname2)
 
 /* GCompareFunc helper for g_list_find_custom() */
 static int
-fileset_find_by_path(gconstpointer a, gconstpointer b)
+fileset_find_by_path(const void *a, const void *b)
 {
     const fileset_entry *entry;
     const char *path;
@@ -285,7 +318,7 @@ fileset_add_file(const char *dirname, const char *fname, bool current)
 
 /* compare two list entries by creation date/time (through filename) */
 static int
-fileset_sort_compare(gconstpointer a, gconstpointer b)
+fileset_sort_compare(const void *a, const void *b)
 {
     const fileset_entry *entry_a = (const fileset_entry *)a;
     const fileset_entry *entry_b = (const fileset_entry *)b;
@@ -349,7 +382,7 @@ fileset_add_dir(const char *fname, void *window)
         /* don't add the file to the dialog here, this will be done in fileset_update_dlg() below */
     }
 
-    g_string_free(dirname, true /* free_segment */);
+    g_string_free(dirname, TRUE /* free_segment */);
 
     /* sort entries by creation time */
     set.entries = g_list_sort(set.entries, fileset_sort_compare);

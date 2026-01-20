@@ -24,7 +24,7 @@
 /*
  * Generic error message.
  */
-void
+static void
 failure_message(const char *msg_format, va_list ap)
 {
     vcmdarg_err(msg_format, ap);
@@ -37,7 +37,7 @@ failure_message(const char *msg_format, va_list ap)
  * to be a UNIX-style errno; "for_writing" is true if we're opening
  * the file for writing and false if we're opening it for reading.
  */
-void
+static void
 open_failure_message(const char *filename, int err, bool for_writing)
 {
     cmdarg_err(file_open_error_message(err, for_writing), filename);
@@ -49,7 +49,7 @@ open_failure_message(const char *filename, int err, bool for_writing)
  * "filename" is the name of the file being read from; "err" is assumed
  * to be a UNIX-style errno.
  */
-void
+static void
 read_failure_message(const char *filename, int err)
 {
     cmdarg_err("An error occurred while reading from the file \"%s\": %s.",
@@ -62,11 +62,26 @@ read_failure_message(const char *filename, int err)
  * "filename" is the name of the file being written to; "err" is assumed
  * to be a UNIX-style errno.
  */
-void
+static void
 write_failure_message(const char *filename, int err)
 {
     cmdarg_err("An error occurred while writing to the file \"%s\": %s.",
                filename, g_strerror(err));
+}
+
+/*
+ * Error message for a failed attempt to rename a file other than
+ * a capture file.
+ * "old_filename" is the name of the file being renamed; "new_filename"
+ * is the name to which it's being renamed; "err" is assumed to be a
+ * UNIX-style errno.
+ */
+static void
+rename_failure_message(const char *old_filename, const char *new_filename,
+                       int err)
+{
+    cmdarg_err("An error occurred while renaming the file \"%s\" to \"%s\": %s.",
+               old_filename, new_filename, g_strerror(err));
 }
 
 static char *
@@ -105,7 +120,7 @@ output_file_description(const char *fname)
  * to be a UNIX-style errno or a WTAP_ERR_ value; "err_info" is assumed
  * to be a string giving further information for some WTAP_ERR_ values.
  */
-void
+static void
 cfile_open_failure_message(const char *filename, int err, char *err_info)
 {
     if (err < 0) {
@@ -187,6 +202,14 @@ cfile_open_failure_message(const char *filename, int err, char *err_info)
             g_free(err_info);
             break;
 
+        case WTAP_ERR_REC_MALFORMED:
+            cmdarg_err("%s contains a malformed record.\n"
+                "(%s)",
+                file_description,
+                err_info != NULL ? err_info : "no information supplied");
+            g_free(err_info);
+            break;
+
         default:
             cmdarg_err("The %s could not be opened: %s.",
                        file_description,
@@ -206,7 +229,7 @@ cfile_open_failure_message(const char *filename, int err, char *err_info)
  * "file_type_subtype" is a WTAP_FILE_TYPE_SUBTYPE_ value for the type
  * and subtype of file being opened.
  */
-void
+static void
 cfile_dump_open_failure_message(const char *filename, int err, char *err_info,
                                 int file_type_subtype)
 {
@@ -284,7 +307,7 @@ cfile_dump_open_failure_message(const char *filename, int err, char *err_info,
  * to be a UNIX-style errno or a WTAP_ERR_ value; "err_info" is assumed
  * to be a string giving further information for some WTAP_ERR_ values.
  */
-void
+static void
 cfile_read_failure_message(const char *filename, int err, char *err_info)
 {
     char *file_string;
@@ -338,6 +361,14 @@ cfile_read_failure_message(const char *filename, int err, char *err_info)
         g_free(err_info);
         break;
 
+    case WTAP_ERR_REC_MALFORMED:
+        cmdarg_err("%s contains a malformed record.\n"
+            "(%s)",
+            file_string,
+            err_info != NULL ? err_info : "no information supplied");
+        g_free(err_info);
+        break;
+
     default:
         cmdarg_err("An error occurred while reading the %s: %s.",
                    file_string, wtap_strerror(err));
@@ -357,10 +388,10 @@ cfile_read_failure_message(const char *filename, int err, char *err_info)
  * occurred; "file_type_subtype" is a WTAP_FILE_TYPE_SUBTYPE_ value
  * for the type and subtype of file being written.
  */
-void
+static void
 cfile_write_failure_message(const char *in_filename, const char *out_filename,
                             int err, char *err_info,
-                            uint32_t framenum, int file_type_subtype)
+                            uint64_t framenum, int file_type_subtype)
 {
     char *in_file_string;
     char *in_frame_string;
@@ -371,7 +402,7 @@ cfile_write_failure_message(const char *in_filename, const char *out_filename,
         in_frame_string = g_strdup("");
     } else {
         in_file_string = input_file_description(in_filename);
-        in_frame_string = ws_strdup_printf(" %u of %s", framenum,
+        in_frame_string = ws_strdup_printf(" %" PRIu64 " of %s", framenum,
                                           in_file_string);
         g_free(in_file_string);
     }
@@ -420,9 +451,12 @@ cfile_write_failure_message(const char *in_filename, const char *out_filename,
          * and the file type and subtype we're writing; note that,
          * and report the record number and file type/subtype.
          */
-        cmdarg_err("Record%s has a record type that can't be saved in a \"%s\" file.",
+        cmdarg_err("Record%s has a record type that can't be saved in a \"%s\" file.\n"
+                   "(%s)",
                    in_frame_string,
-                   wtap_file_type_subtype_name(file_type_subtype));
+                   wtap_file_type_subtype_name(file_type_subtype),
+                   err_info != NULL ? err_info : "no information supplied");
+        g_free(err_info);
         break;
 
     case WTAP_ERR_UNWRITABLE_REC_DATA:
@@ -437,6 +471,11 @@ cfile_write_failure_message(const char *in_filename, const char *out_filename,
                    wtap_file_type_subtype_name(file_type_subtype),
                    err_info != NULL ? err_info : "no information supplied");
         g_free(err_info);
+        break;
+
+    case WTAP_ERR_SHORT_WRITE:
+        cmdarg_err("A full write couldn't be done to the %s.",
+                   out_file_string);
         break;
 
     case WTAP_ERR_INTERNAL:
@@ -459,11 +498,6 @@ cfile_write_failure_message(const char *in_filename, const char *out_filename,
                    out_file_string);
   break;
 #endif
-
-    case WTAP_ERR_SHORT_WRITE:
-        cmdarg_err("A full write couldn't be done to the %s.",
-                   out_file_string);
-        break;
 
     default:
         cmdarg_err("An error occurred while writing to the %s: %s.",
@@ -498,7 +532,7 @@ cfile_write_failure_message(const char *in_filename, const char *out_filename,
  *
  * so we have to check for write errors here.
  */
-void
+static void
 cfile_close_failure_message(const char *filename, int err, char *err_info)
 {
     char *file_string;
@@ -507,20 +541,6 @@ cfile_close_failure_message(const char *filename, int err, char *err_info)
     file_string = output_file_description(filename);
 
     switch (err) {
-
-    case ENOSPC:
-        cmdarg_err("Not all the packets could be written to the %s because there is "
-                   "no space left on the file system.",
-                   file_string);
-    break;
-
-#ifdef EDQUOT
-    case EDQUOT:
-        cmdarg_err("Not all the packets could be written to the %s because you are "
-                   "too close to, or over your disk quota.",
-                   file_string);
-  break;
-#endif
 
     case WTAP_ERR_CANT_CLOSE:
         cmdarg_err("The %s couldn't be closed for some unknown reason.",
@@ -540,10 +560,47 @@ cfile_close_failure_message(const char *filename, int err, char *err_info)
         g_free(err_info);
         break;
 
+    case ENOSPC:
+        cmdarg_err("Not all the packets could be written to the %s because there is "
+                   "no space left on the file system.",
+                   file_string);
+    break;
+
+#ifdef EDQUOT
+    case EDQUOT:
+        cmdarg_err("Not all the packets could be written to the %s because you are "
+                   "too close to, or over your disk quota.",
+                   file_string);
+    break;
+#endif
+
     default:
         cmdarg_err("An error occurred while closing the file %s: %s.",
                    file_string, wtap_strerror(err));
         break;
     }
     g_free(file_string);
+}
+
+/*
+ * Register these routines with the report_message mechanism.
+ */
+void
+init_report_failure_message(const char *friendly_program_name)
+{
+    static const struct report_message_routines report_failure_routines = {
+        failure_message,
+        failure_message,
+        open_failure_message,
+        read_failure_message,
+        write_failure_message,
+        rename_failure_message,
+        cfile_open_failure_message,
+        cfile_dump_open_failure_message,
+        cfile_read_failure_message,
+        cfile_write_failure_message,
+        cfile_close_failure_message
+    };
+
+    init_report_message(friendly_program_name, &report_failure_routines);
 }

@@ -22,6 +22,7 @@
 #include <epan/expert.h>
 #include <epan/prefs.h>
 #include <epan/addr_resolv.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-acse.h"
@@ -119,16 +120,16 @@ static int ett_gmidentity;
 static int ett_reserve1;
 
 
-static gint ett_sv_SampledValues;
-static gint ett_sv_SavPdu;
-static gint ett_sv_SEQUENCE_OF_ASDU;
-static gint ett_sv_ASDU;
+static int ett_sv_SampledValues;
+static int ett_sv_SavPdu;
+static int ett_sv_SEQUENCE_OF_ASDU;
+static int ett_sv_ASDU;
 
 static expert_field ei_sv_mal_utctime;
 static expert_field ei_sv_zero_pdu;
 static expert_field ei_sv_mal_gmidentity;
 
-static bool sv_decode_data_as_phsmeas = false;
+static bool sv_decode_data_as_phsmeas;
 
 static dissector_handle_t sv_handle;
 
@@ -159,14 +160,14 @@ static const value_string sv_q_source_vals[] = {
 static int
 dissect_PhsMeas1(bool implicit_tag, packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, int hf_id _U_)
 {
-	gint8 ber_class;
+	int8_t ber_class;
 	bool pc;
-	gint32 tag;
-	guint32 len;
+	int32_t tag;
+	uint32_t len;
 	proto_tree *subtree;
-	gint32 value;
-	guint32 qual;
-	guint32 i;
+	int32_t value;
+	uint32_t qual;
+	uint32_t i;
 
 	static int * const q_flags[] = {
 		&hf_sv_phsmeas_q_validity,
@@ -218,18 +219,18 @@ dissect_PhsMeas1(bool implicit_tag, packet_info *pinfo, proto_tree *tree, tvbuff
 
 
 
-static int
-dissect_sv_INTEGER_0_65535(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                NULL);
+static unsigned
+dissect_sv_INTEGER_0_65535(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_constrained_integer(implicit_tag, actx, tree, tvb, offset,
+                                                            0U, 65535U, hf_index, NULL);
 
   return offset;
 }
 
 
 
-static int
-dissect_sv_VisibleString(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_sv_VisibleString(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_VisibleString,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -239,11 +240,11 @@ dissect_sv_VisibleString(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 
 
 
-static int
-dissect_sv_T_smpCnt(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint32 value;
-  offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                &value);
+static unsigned
+dissect_sv_T_smpCnt(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	uint32_t value;
+  offset = dissect_ber_constrained_integer(implicit_tag, actx, tree, tvb, offset,
+                                                            0U, 65535U, hf_index, &value);
 
 	sv_data.smpCnt = value;
 
@@ -252,24 +253,24 @@ dissect_sv_T_smpCnt(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, as
 
 
 
-static int
-dissect_sv_INTEGER_0_4294967295(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                NULL);
+static unsigned
+dissect_sv_INTEGER_0_4294967295(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_constrained_integer(implicit_tag, actx, tree, tvb, offset,
+                                                            0U, 4294967295U, hf_index, NULL);
 
   return offset;
 }
 
 
 
-static int
-dissect_sv_UtcTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint32 len;
-	guint32 seconds;
-	guint32	fraction;
-	guint32 nanoseconds;
+static unsigned
+dissect_sv_UtcTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	uint32_t len;
+	uint32_t seconds;
+	uint32_t	fraction;
+	uint32_t nanoseconds;
 	nstime_t ts;
-	gchar *	ptime;
+	char *	ptime;
 
 	len = tvb_reported_length_remaining(tvb, offset);
 
@@ -286,12 +287,12 @@ dissect_sv_UtcTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn
 
 	seconds = tvb_get_ntohl(tvb, offset);
 	fraction = tvb_get_ntoh24(tvb, offset+4) * 0x100; /* Only 3 bytes are recommended */
-	nanoseconds = (guint32)( ((guint64)fraction * G_GUINT64_CONSTANT(1000000000)) / G_GUINT64_CONSTANT(0x100000000) ) ;
+	nanoseconds = (uint32_t)( ((uint64_t)fraction * UINT64_C(1000000000)) / UINT64_C(0x100000000) ) ;
 
 	ts.secs = seconds;
 	ts.nsecs = nanoseconds;
 
-	ptime = abs_time_to_str(actx->pinfo->pool, &ts, ABSOLUTE_TIME_UTC, TRUE);
+	ptime = abs_time_to_str(actx->pinfo->pool, &ts, ABSOLUTE_TIME_UTC, true);
 
 	if(hf_index > 0)
 	{
@@ -311,9 +312,9 @@ static const value_string sv_T_smpSynch_vals[] = {
 };
 
 
-static int
-dissect_sv_T_smpSynch(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint32 value;
+static unsigned
+dissect_sv_T_smpSynch(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	uint32_t value;
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &value);
 
@@ -324,8 +325,8 @@ dissect_sv_T_smpSynch(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, 
 
 
 
-static int
-dissect_sv_Data(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_sv_Data(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 	if (sv_decode_data_as_phsmeas) {
 		offset = dissect_PhsMeas1(implicit_tag, actx->pinfo, tree, tvb, offset, hf_index);
 	} else {
@@ -344,9 +345,9 @@ static const value_string sv_T_smpMod_vals[] = {
 };
 
 
-static int
-dissect_sv_T_smpMod(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint32 value;
+static unsigned
+dissect_sv_T_smpMod(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	uint32_t value;
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &value);
 
@@ -357,12 +358,12 @@ dissect_sv_T_smpMod(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, as
 
 
 
-static int
-dissect_sv_GmidData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint32 len;
+static unsigned
+dissect_sv_GmidData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	uint32_t len;
 	proto_item  *gmidentity_ti;
 	proto_tree  *gmidentity_tree;
-	const gchar *manuf_name;
+	const char *manuf_name;
 
 	len = tvb_reported_length_remaining(tvb, offset);
 
@@ -407,8 +408,8 @@ static const ber_sequence_t ASDU_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_sv_ASDU(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_sv_ASDU(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ASDU_sequence, hf_index, ett_sv_ASDU);
 
@@ -420,8 +421,8 @@ static const ber_sequence_t SEQUENCE_OF_ASDU_sequence_of[1] = {
   { &hf_sv_seqASDU_item     , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_sv_ASDU },
 };
 
-static int
-dissect_sv_SEQUENCE_OF_ASDU(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_sv_SEQUENCE_OF_ASDU(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_ASDU_sequence_of, hf_index, ett_sv_SEQUENCE_OF_ASDU);
 
@@ -435,8 +436,8 @@ static const ber_sequence_t SavPdu_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_sv_SavPdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_sv_SavPdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SavPdu_sequence, hf_index, ett_sv_SavPdu);
 
@@ -449,8 +450,8 @@ static const ber_choice_t SampledValues_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_sv_SampledValues(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_sv_SampledValues(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  SampledValues_choice, hf_index, ett_sv_SampledValues,
                                  NULL);
@@ -465,9 +466,9 @@ dissect_sv_SampledValues(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 static int
 dissect_sv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
-	int offset = 0;
-	int old_offset;
-	guint sv_length = 0;
+	unsigned offset = 0;
+	unsigned old_offset;
+	unsigned sv_length = 0;
 	proto_item *item;
 	proto_tree *tree;
 
@@ -478,7 +479,7 @@ dissect_sv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
 
 	asn1_ctx_t asn1_ctx;
 
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 	item = proto_tree_add_item(parent_tree, proto_sv, tvb, 0, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_sv);
@@ -504,9 +505,9 @@ dissect_sv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
 	set_actual_length(tvb, sv_length);
 	while (tvb_reported_length_remaining(tvb, offset) > 0) {
 		old_offset = offset;
-		offset = dissect_sv_SampledValues(FALSE, tvb, offset, &asn1_ctx , tree, -1);
+		offset = dissect_sv_SampledValues(false, tvb, offset, &asn1_ctx , tree, -1);
 		if (offset == old_offset) {
-			proto_tree_add_expert(tree, pinfo, &ei_sv_zero_pdu, tvb, offset, -1);
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_sv_zero_pdu, tvb, offset);
 			break;
 		}
 	}
@@ -648,7 +649,7 @@ void proto_register_sv(void) {
 	};
 
 	/* List of subtrees */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_sv,
 		&ett_phsmeas,
 		&ett_phsmeas_q,

@@ -9,7 +9,6 @@
 
 #include <config.h>
 
-#include <glib.h>
 #include <epan/packet_info.h>
 #include <epan/proto_data.h>
 #include <epan/packet.h>
@@ -24,6 +23,6 @@ FollowStreamAction::FollowStreamAction(QObject *parent, register_follow_t *follo
     follow_(follow)
 {
     if (follow_) {
-          setText(QString(tr("%1 Stream").arg(proto_get_protocol_short_name(find_protocol_by_id(get_follow_proto_id(follow))))));
+          setText(tr("%1 Stream").arg(proto_get_protocol_short_name(find_protocol_by_id(get_follow_proto_id(follow)))));
     }
 }

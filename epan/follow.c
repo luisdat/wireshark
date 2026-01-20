@@ -32,7 +32,12 @@ struct register_follow {
     follow_sub_stream_id_func sub_stream_id; /* sub-stream id, used for UI */
 };
 
-static wmem_tree_t *registered_followers = NULL;
+static wmem_tree_t *registered_followers;
+
+void follow_init(void)
+{
+    registered_followers = wmem_tree_new(wmem_epan_scope());
+}
 
 void register_follow_stream(const int proto_id, const char* tap_listener,
                             follow_conv_filter_func conv_filter, follow_index_filter_func index_filter, follow_address_filter_func address_filter,
@@ -58,9 +63,6 @@ void register_follow_stream(const int proto_id, const char* tap_listener,
   follower->tap_handler    = tap_handler;
   follower->stream_count   = stream_count;
   follower->sub_stream_id  = sub_stream_id;
-
-  if (registered_followers == NULL)
-    registered_followers = wmem_tree_new(wmem_epan_scope());
 
   wmem_tree_insert_string(registered_followers, proto_get_protocol_short_name(find_protocol_by_id(proto_id)), follower, 0);
 }
@@ -131,12 +133,12 @@ register_follow_t* get_follow_by_proto_id(const int proto_id)
   return (register_follow_t*)wmem_tree_lookup_string(registered_followers, proto_get_protocol_short_name(protocol), 0);
 }
 
-void follow_iterate_followers(wmem_foreach_func func, gpointer user_data)
+void follow_iterate_followers(wmem_foreach_func func, void *user_data)
 {
     wmem_tree_foreach(registered_followers, func, user_data);
 }
 
-gchar* follow_get_stat_tap_string(register_follow_t* follower)
+char* follow_get_stat_tap_string(register_follow_t* follower)
 {
     GString *cmd_str = g_string_new("follow,");
     g_string_append(cmd_str, proto_get_protocol_filter_name(follower->proto_id));
@@ -162,7 +164,7 @@ follow_reset_stream(follow_info_t* info)
     for (cur = info->payload; cur; cur = g_list_next(cur)) {
         follow_record = (follow_record_t *)cur->data;
         if(follow_record->data)
-            g_byte_array_free(follow_record->data, TRUE);
+            g_byte_array_free(follow_record->data, true);
 
         g_free(follow_record);
     }
@@ -173,14 +175,14 @@ follow_reset_stream(follow_info_t* info)
     for (cur = info->fragments[0]; cur; cur = g_list_next(cur)) {
         follow_record = (follow_record_t *)cur->data;
         if(follow_record->data) {
-            g_byte_array_free(follow_record->data, TRUE);
+            g_byte_array_free(follow_record->data, true);
         }
         g_free(follow_record);
     }
     for (cur = info->fragments[1]; cur; cur = g_list_next(cur)) {
         follow_record = (follow_record_t *)cur->data;
         if(follow_record->data) {
-            g_byte_array_free(follow_record->data, TRUE);
+            g_byte_array_free(follow_record->data, true);
         }
         g_free(follow_record);
     }
@@ -216,10 +218,11 @@ follow_tvb_tap_listener(void *tapdata, packet_info *pinfo,
 
     follow_record = g_new(follow_record_t,1);
 
-    follow_record->data = g_byte_array_sized_new(tvb_captured_length(next_tvb));
+    unsigned length = tvb_captured_length(next_tvb);
+    follow_record->data = g_byte_array_sized_new(length);
     follow_record->data = g_byte_array_append(follow_record->data,
-                                              tvb_get_ptr(next_tvb, 0, -1),
-                                              tvb_captured_length(next_tvb));
+                                              tvb_get_ptr(next_tvb, 0, length),
+                                              length);
     follow_record->packet_num = pinfo->fd->num;
     follow_record->abs_ts = pinfo->fd->abs_ts;
 
@@ -231,9 +234,9 @@ follow_tvb_tap_listener(void *tapdata, packet_info *pinfo,
     }
 
     if (addresses_equal(&follow_info->client_ip, &pinfo->src) && follow_info->client_port == pinfo->srcport)
-        follow_record->is_server = FALSE;
+        follow_record->is_server = false;
     else
-        follow_record->is_server = TRUE;
+        follow_record->is_server = true;
 
     /* update stream counter */
     follow_info->bytes_written[follow_record->is_server] += follow_record->data->len;

@@ -5,7 +5,7 @@
 /*import "lsa.idl", "security.idl",*/
 import "misc/misc.idl";
 
-[ 
+[
   uuid("338cd001-2244-31f1-aaaa-900038001003"),
   version(1.0),
   endpoint("ncacn_np:[\\pipe\\winreg]","ncacn_ip_tcp:","ncalrpc:"),
@@ -20,14 +20,14 @@ import "misc/misc.idl";
 	 */
 
 	typedef [bitmap32bit] bitmap {
-		KEY_QUERY_VALUE 		= 0x00001,
-		KEY_SET_VALUE 			= 0x00002,
-		KEY_CREATE_SUB_KEY 		= 0x00004,
-		KEY_ENUMERATE_SUB_KEYS		= 0x00008,
-		KEY_NOTIFY			= 0x00010,
-		KEY_CREATE_LINK 		= 0x00020,
-		KEY_WOW64_64KEY 		= 0x00100,
-		KEY_WOW64_32KEY 		= 0x00200
+                KEY_QUERY_VALUE 		= 0x00000001,
+                KEY_SET_VALUE 			= 0x00000002,
+                KEY_CREATE_SUB_KEY 		= 0x00000004,
+                KEY_ENUMERATE_SUB_KEYS		= 0x00000008,
+                KEY_NOTIFY			= 0x00000010,
+                KEY_CREATE_LINK 		= 0x00000020,
+                KEY_WOW64_64KEY 		= 0x00000100,
+                KEY_WOW64_32KEY 		= 0x00000200
 	} winreg_AccessMask;
 
 	const int REG_KEY_READ = (	STANDARD_RIGHTS_READ_ACCESS	|
@@ -159,7 +159,7 @@ import "misc/misc.idl";
 		   amount of space the server is allowed to use for this
 		   string in the reply, not its current size */
 		uint16 size;
-		[size_is(size/2),length_is(length/2),charset(UTF16)] uint16 *name;
+		[size_is(size/2),length_is(length/2),string,charset(UTF16)] uint16 *name;
 	} winreg_StringBuf;
 
 	/******************/
@@ -178,7 +178,7 @@ import "misc/misc.idl";
 		   amount of space the server is allowed to use for this
 		   string in the reply, not its current size */
 		uint16 size;
-		[size_is(size/2),length_is(length/2),charset(UTF16)] uint16 *name;
+		[size_is(size/2),length_is(length/2),string,charset(UTF16)] uint16 *name;
 	} winreg_ValNameBuf;
 
 	/******************/
@@ -389,7 +389,7 @@ import "misc/misc.idl";
 	/******************/
 	/* Function: 0x1d */
 	[public] WERROR winreg_QueryMultipleValues(
-		[in,ref] policy_handle *key_handle, 
+		[in,ref] policy_handle *key_handle,
 		[in,ref,size_is(num_values),length_is(num_values)] QueryMultipleValue *values_in,
 		[out,ref,size_is(num_values),length_is(num_values)] QueryMultipleValue *values_out,
 		[in] uint32 num_values,

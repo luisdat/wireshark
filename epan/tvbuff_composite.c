@@ -16,13 +16,49 @@
 #include "proto.h"	/* XXX - only used for DISSECTOR_ASSERT, probably a new header file? */
 
 typedef struct {
-	GSList		*tvbs;
-
+	tvbuff_t *tvb;
 	/* Used for quick testing to see if this
 	 * is the tvbuff that a COMPOSITE is
 	 * interested in. */
-	guint		*start_offsets;
-	guint		*end_offsets;
+	unsigned start_offset;
+	unsigned end_offset;
+} tvb_comp_member_t;
+
+static int
+tvb_comp_off_compare(const void *a, const void *b, void *user_data)
+{
+	tvb_comp_member_t* off_a = (tvb_comp_member_t*)a;
+	tvb_comp_member_t* off_b = (tvb_comp_member_t*)b;
+	tvb_comp_member_t* key = (tvb_comp_member_t*)user_data;
+
+	if (off_a->end_offset < off_b->end_offset)
+		return -1;
+	else if (off_a->end_offset > off_b->end_offset)
+		return 1;
+
+	/* This is a hack to ensure that in cases of ties, key is always
+	 * sorted first. This ensures that g_sequence_search returns an
+	 * iterator pointing to the tvb in the sequence with a matching
+	 * offset instead of the node after it. (It would be simpler but
+	 * somewhat slower to have the natural comparison function and
+	 * call g_sequence_lookup followed by g_sequence_search in case
+	 * of failure.)
+	 *
+	 * If we allowed zero length TVBs to be part of the composite,
+	 * we might have to search through all the TVBs with the same
+	 * end_offset to find the right one. (Or maybe we could just
+	 * no-op and not add the zero length TVBs?)
+	 */
+	if (off_a == key) {
+		return -1;
+	} else if (off_b == key) {
+		return 1;
+	}
+	return 0;
+}
+
+typedef struct {
+	GSequence	*tvbs;
 
 } tvb_comp_t;
 
@@ -38,51 +74,44 @@ composite_free(tvbuff_t *tvb)
 	struct tvb_composite *composite_tvb = (struct tvb_composite *) tvb;
 	tvb_comp_t *composite = &composite_tvb->composite;
 
-	g_slist_free(composite->tvbs);
+	g_sequence_free(composite->tvbs);
 
-	g_free(composite->start_offsets);
-	g_free(composite->end_offsets);
-	g_free((gpointer)tvb->real_data);
+	g_free((void *)tvb->real_data);
 }
 
-static guint
-composite_offset(const tvbuff_t *tvb _U_, const guint counter)
+static unsigned
+composite_offset(const tvbuff_t *tvb _U_, const unsigned counter)
 {
 	return counter;
 }
 
-static const guint8*
-composite_get_ptr(tvbuff_t *tvb, guint abs_offset, guint abs_length)
+static const uint8_t*
+composite_get_ptr(tvbuff_t *tvb, unsigned abs_offset, unsigned abs_length)
 {
 	struct tvb_composite *composite_tvb = (struct tvb_composite *) tvb;
-	guint	    i, num_members;
 	tvb_comp_t *composite;
+	tvb_comp_member_t *member = NULL;
 	tvbuff_t   *member_tvb = NULL;
-	guint	    member_offset;
-	GSList	   *slist;
+	unsigned	member_offset;
 
 	/* DISSECTOR_ASSERT(tvb->ops == &tvb_composite_ops); */
 
 	/* Maybe the range specified by offset/length
 	 * is contiguous inside one of the member tvbuffs */
 	composite = &composite_tvb->composite;
-	num_members = g_slist_length(composite->tvbs);
 
-	for (i = 0; i < num_members; i++) {
-		if (abs_offset <= composite->end_offsets[i]) {
-			slist = g_slist_nth(composite->tvbs, i);
-			member_tvb = (tvbuff_t *)slist->data;
-			break;
-		}
-	}
+	tvb_comp_member_t key = { .end_offset = abs_offset };
+	GSequenceIter *iter = g_sequence_search(composite->tvbs, &key, tvb_comp_off_compare, &key);
 
 	/* special case */
-	if (!member_tvb) {
+	if (g_sequence_iter_is_end(iter)) {
 		DISSECTOR_ASSERT(abs_offset == tvb->length && abs_length == 0);
-		return "";
+		return (const uint8_t*)"";
 	}
 
-	member_offset = abs_offset - composite->start_offsets[i];
+	member = (tvb_comp_member_t *)g_sequence_get(iter);
+	member_tvb = member->tvb;
+	member_offset = abs_offset - member->start_offset;
 
 	if (tvb_bytes_exist(member_tvb, member_offset, abs_length)) {
 		/*
@@ -95,7 +124,7 @@ composite_get_ptr(tvbuff_t *tvb, guint abs_offset, guint abs_length)
 		/* Use a temporary variable as tvb_memcpy is also checking tvb->real_data pointer */
 		void *real_data = g_malloc(tvb->length);
 		tvb_memcpy(tvb, real_data, 0, tvb->length);
-		tvb->real_data = (const guint8 *)real_data;
+		tvb->real_data = (const uint8_t *)real_data;
 		return tvb->real_data + abs_offset;
 	}
 
@@ -103,39 +132,34 @@ composite_get_ptr(tvbuff_t *tvb, guint abs_offset, guint abs_length)
 }
 
 static void *
-composite_memcpy(tvbuff_t *tvb, void* _target, guint abs_offset, guint abs_length)
+composite_memcpy(tvbuff_t *tvb, void* _target, unsigned abs_offset, unsigned abs_length)
 {
 	struct tvb_composite *composite_tvb = (struct tvb_composite *) tvb;
-	guint8 *target = (guint8 *) _target;
+	uint8_t *target = (uint8_t *) _target;
 
-	guint	    i, num_members;
 	tvb_comp_t *composite;
+	tvb_comp_member_t *member = NULL;
 	tvbuff_t   *member_tvb = NULL;
-	guint	    member_offset, member_length;
-	GSList	   *slist;
+	unsigned	    member_offset, member_length;
 
 	/* DISSECTOR_ASSERT(tvb->ops == &tvb_composite_ops); */
 
 	/* Maybe the range specified by offset/length
 	 * is contiguous inside one of the member tvbuffs */
 	composite   = &composite_tvb->composite;
-	num_members = g_slist_length(composite->tvbs);
 
-	for (i = 0; i < num_members; i++) {
-		if (abs_offset <= composite->end_offsets[i]) {
-			slist = g_slist_nth(composite->tvbs, i);
-			member_tvb = (tvbuff_t *)slist->data;
-			break;
-		}
-	}
+	tvb_comp_member_t key = { .end_offset = abs_offset };
+	GSequenceIter *iter = g_sequence_search(composite->tvbs, &key, tvb_comp_off_compare, &key);
 
 	/* special case */
-	if (!member_tvb) {
+	if (g_sequence_iter_is_end(iter)) {
 		DISSECTOR_ASSERT(abs_offset == tvb->length && abs_length == 0);
 		return target;
 	}
 
-	member_offset = abs_offset - composite->start_offsets[i];
+	member = (tvb_comp_member_t *)g_sequence_get(iter);
+	member_tvb = member->tvb;
+	member_offset = abs_offset - member->start_offset;
 
 	if (tvb_bytes_exist(member_tvb, member_offset, abs_length)) {
 		DISSECTOR_ASSERT(!tvb->real_data);
@@ -147,18 +171,32 @@ composite_memcpy(tvbuff_t *tvb, void* _target, guint abs_offset, guint abs_lengt
 		 * then iterate across the other member tvb's, copying their portions
 		 * until we have copied all data.
 		 */
-		member_length = tvb_captured_length_remaining(member_tvb, member_offset);
 
-		/* composite_memcpy() can't handle a member_length of zero. */
-		DISSECTOR_ASSERT(member_length > 0);
+		unsigned target_offset = 0;
+		while (abs_length) {
 
-		tvb_memcpy(member_tvb, target, member_offset, member_length);
-		abs_offset	+= member_length;
-		abs_length	-= member_length;
+			member_length = tvb_captured_length_remaining(member_tvb, member_offset);
 
-		/* Recurse */
-		if (abs_length > 0) {
-			composite_memcpy(tvb, target + member_length, abs_offset, abs_length);
+			/* composite_memcpy() can't handle a member_length of zero. */
+			DISSECTOR_ASSERT(member_length > 0);
+
+			member_length = MIN(member_length, abs_length);
+
+			tvb_memcpy(member_tvb, target + target_offset, member_offset, member_length);
+			target_offset   += member_length;
+			abs_offset	+= member_length;
+			abs_length	-= member_length;
+
+			if (!abs_length)
+				break;
+			iter = g_sequence_iter_next(iter);
+			/* tvb_memcpy calls check_offset_length and so there
+			 * should be enough captured length to copy. */
+			DISSECTOR_ASSERT(!g_sequence_iter_is_end(iter));
+
+			member = (tvb_comp_member_t *)g_sequence_get(iter);
+			member_tvb = member->tvb;
+			member_offset = 0;
 		}
 
 		return target;
@@ -174,8 +212,10 @@ static const struct tvb_ops tvb_composite_ops = {
 	composite_offset,     /* offset */
 	composite_get_ptr,    /* get_ptr */
 	composite_memcpy,     /* memcpy */
-	NULL,                 /* find_guint8 XXX */
-	NULL,                 /* pbrk_guint8 XXX */
+	/* XXX - The generic find routines work, but specialized ones
+	 * might be able to avoid some memcpys */
+	NULL,                 /* find_uint8 XXX */
+	NULL,                 /* pbrk_uint8 XXX */
 	NULL,                 /* clone */
 };
 
@@ -198,9 +238,7 @@ tvb_new_composite(void)
 	struct tvb_composite *composite_tvb = (struct tvb_composite *) tvb;
 	tvb_comp_t *composite = &composite_tvb->composite;
 
-	composite->tvbs		 = NULL;
-	composite->start_offsets = NULL;
-	composite->end_offsets	 = NULL;
+	composite->tvbs		 = g_sequence_new(g_free);
 
 	return tvb;
 }
@@ -219,12 +257,15 @@ tvb_composite_append(tvbuff_t *tvb, tvbuff_t *member)
 	 */
 	if (member && member->length) {
 		composite       = &composite_tvb->composite;
-		composite->tvbs = g_slist_append(composite->tvbs, member);
-
 		/* Attach the composite TVB to the first TVB only. */
-		if (!composite->tvbs->next) {
-			tvb_add_to_chain((tvbuff_t *)composite->tvbs->data, tvb);
+		if (g_sequence_is_empty(composite->tvbs)) {
+			tvb_add_to_chain(member, tvb);
 		}
+		tvb_comp_member_t *new_member = g_new(tvb_comp_member_t, 1);
+		new_member->tvb = member;
+		new_member->start_offset = 0;
+		new_member->end_offset = 0;
+		g_sequence_append(composite->tvbs, new_member);
 	}
 }
 
@@ -242,12 +283,15 @@ tvb_composite_prepend(tvbuff_t *tvb, tvbuff_t *member)
 	 */
 	if (member && member->length) {
 		composite       = &composite_tvb->composite;
-		composite->tvbs = g_slist_prepend(composite->tvbs, member);
-
 		/* Attach the composite TVB to the first TVB only. */
-		if (!composite->tvbs->next) {
-			tvb_add_to_chain((tvbuff_t *)composite->tvbs->data, tvb);
+		if (g_sequence_is_empty(composite->tvbs)) {
+			tvb_add_to_chain(member, tvb);
 		}
+		tvb_comp_member_t *new_member = g_new(tvb_comp_member_t, 1);
+		new_member->tvb = member;
+		new_member->start_offset = 0;
+		new_member->end_offset = 0;
+		g_sequence_prepend(composite->tvbs, new_member);
 	}
 }
 
@@ -255,11 +299,12 @@ void
 tvb_composite_finalize(tvbuff_t *tvb)
 {
 	struct tvb_composite *composite_tvb = (struct tvb_composite *) tvb;
-	GSList	   *slist;
-	guint	    num_members;
+
+	unsigned	num_members;
+	tvb_comp_member_t *member;
 	tvbuff_t   *member_tvb;
 	tvb_comp_t *composite;
-	int	    i = 0;
+	unsigned	i;
 
 	DISSECTOR_ASSERT(tvb && !tvb->initialized);
 	DISSECTOR_ASSERT(tvb->ops == &tvb_composite_ops);
@@ -268,29 +313,37 @@ tvb_composite_finalize(tvbuff_t *tvb)
 	DISSECTOR_ASSERT(tvb->contained_length == 0);
 
 	composite   = &composite_tvb->composite;
-	num_members = g_slist_length(composite->tvbs);
+
+	num_members = g_sequence_get_length(composite->tvbs);
 
 	/* Dissectors should not create composite TVBs if they're not going to
 	 * put at least one TVB in them.
 	 * (Without this check--or something similar--we'll seg-fault below.)
+	 * (XXX - Now with a GSequence we shouldn't segfault, we'll get the
+	 * end iterator and it should work, so we could remove this and some
+	 * checks in dissectors to simplify their code.)
 	 */
 	DISSECTOR_ASSERT(num_members);
 
-	composite->start_offsets = g_new(guint, num_members);
-	composite->end_offsets = g_new(guint, num_members);
-
-	for (slist = composite->tvbs; slist != NULL; slist = slist->next) {
-		DISSECTOR_ASSERT((guint) i < num_members);
-		member_tvb = (tvbuff_t *)slist->data;
-		composite->start_offsets[i] = tvb->length;
+	/* Record the offsets - we have to do that now because it's possible
+	 * to prepend TVBs. Note that the GSequence is already sorted according
+	 * to these offsets, we're just noting them, so we don't need to sort.
+	 */
+	GSequenceIter *iter = g_sequence_get_begin_iter(composite->tvbs);
+	for (i=0; i < num_members; i++, iter=g_sequence_iter_next(iter)) {
+		member = (tvb_comp_member_t *)g_sequence_get(iter);
+		member_tvb = member->tvb;
+		member->start_offset = tvb->length;
 		tvb->length += member_tvb->length;
+		/* XXX - What does it mean to make a composite TVB out of
+		 * TVBs with length shorter than their reported length?
+		 */
 		tvb->reported_length += member_tvb->reported_length;
 		tvb->contained_length += member_tvb->contained_length;
-		composite->end_offsets[i] = tvb->length - 1;
-		i++;
+		member->end_offset = tvb->length - 1;
 	}
 
-	tvb->initialized = TRUE;
+	tvb->initialized = true;
 	tvb->ds_tvb = tvb;
 }
 

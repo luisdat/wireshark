@@ -23,6 +23,7 @@
 #include <epan/asn1.h>
 #include <epan/expert.h>
 
+#include <wsutil/array.h>
 #include <wsutil/str_util.h>
 
 #include "packet-ber.h"
@@ -41,10 +42,10 @@ void proto_reg_handoff_rtse(void);
 /* Initialize the protocol and registered fields */
 static int proto_rtse;
 
-static gboolean open_request=FALSE;
-static guint32 app_proto=0;
+static bool open_request=false;
+static uint32_t app_proto=0;
 
-static proto_tree *top_tree=NULL;
+static proto_tree *top_tree;
 
 /* Preferences */
 static bool rtse_reassemble = true;
@@ -75,23 +76,23 @@ static int hf_rtse_t61String;                     /* T_t61String */
 static int hf_rtse_octetString;                   /* T_octetString */
 
 /* Initialize the subtree pointers */
-static gint ett_rtse;
-static gint ett_rtse_RTSE_apdus;
-static gint ett_rtse_RTORQapdu;
-static gint ett_rtse_RTOACapdu;
-static gint ett_rtse_RTORJapdu;
-static gint ett_rtse_RTABapdu;
-static gint ett_rtse_ConnectionData;
-static gint ett_rtse_SessionConnectionIdentifier;
-static gint ett_rtse_CallingSSuserReference;
+static int ett_rtse;
+static int ett_rtse_RTSE_apdus;
+static int ett_rtse_RTORQapdu;
+static int ett_rtse_RTOACapdu;
+static int ett_rtse_RTORJapdu;
+static int ett_rtse_RTABapdu;
+static int ett_rtse_ConnectionData;
+static int ett_rtse_SessionConnectionIdentifier;
+static int ett_rtse_CallingSSuserReference;
 
 static expert_field ei_rtse_dissector_oid_not_implemented;
 static expert_field ei_rtse_unknown_rtse_pdu;
 static expert_field ei_rtse_abstract_syntax;
 
-static dissector_table_t rtse_oid_dissector_table=NULL;
-static dissector_handle_t rtse_handle = NULL;
-static gint ett_rtse_unknown;
+static dissector_table_t rtse_oid_dissector_table;
+static dissector_handle_t rtse_handle;
+static int ett_rtse_unknown;
 
 static reassembly_table rtse_reassembly_table;
 
@@ -107,8 +108,8 @@ static int hf_rtse_fragment_count;
 static int hf_rtse_reassembled_in;
 static int hf_rtse_reassembled_length;
 
-static gint ett_rtse_fragment;
-static gint ett_rtse_fragments;
+static int ett_rtse_fragment;
+static int ett_rtse_fragments;
 
 static const fragment_items rtse_frag_items = {
     /* Fragment subtrees */
@@ -134,7 +135,7 @@ static const fragment_items rtse_frag_items = {
 };
 
 void
-register_rtse_oid_dissector_handle(const char *oid, dissector_handle_t dissector, int proto, const char *name, gboolean uses_ros)
+register_rtse_oid_dissector_handle(const char *oid, dissector_handle_t dissector, int proto, const char *name, bool uses_ros)
 {
 /* XXX: Note that this fcn is called from proto_reg_handoff in *other* dissectors ... */
 
@@ -152,7 +153,7 @@ register_rtse_oid_dissector_handle(const char *oid, dissector_handle_t dissector
 
     /* and then tell ROS how to dissect the AS*/
     if (dissector != NULL)
-      register_ros_oid_dissector_handle(oid, dissector, proto, name, TRUE);
+      register_ros_oid_dissector_handle(oid, dissector, proto, name, true);
 
   } else {
     /* otherwise we just remember how to dissect the AS */
@@ -168,7 +169,7 @@ call_rtse_oid_callback(const char *oid, tvbuff_t *tvb, int offset, packet_info *
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
 
-    if ((len = dissector_try_string(rtse_oid_dissector_table, oid, next_tvb, pinfo, tree, data)) == 0) {
+    if ((len = dissector_try_string_with_data(rtse_oid_dissector_table, oid, next_tvb, pinfo, tree, true, data)) == 0) {
         proto_item *item;
         proto_tree *next_tree;
 
@@ -185,8 +186,8 @@ call_rtse_oid_callback(const char *oid, tvbuff_t *tvb, int offset, packet_info *
     return offset;
 }
 
-static int
-call_rtse_external_type_callback(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_)
+static unsigned
+call_rtse_external_type_callback(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_)
 {
     const char    *oid = NULL;
 
@@ -209,8 +210,8 @@ call_rtse_external_type_callback(bool implicit_tag _U_, tvbuff_t *tvb, int offse
 
 
 
-static int
-dissect_rtse_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -225,8 +226,8 @@ static const value_string rtse_T_dialogueMode_vals[] = {
 };
 
 
-static int
-dissect_rtse_T_dialogueMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_T_dialogueMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -235,8 +236,8 @@ dissect_rtse_T_dialogueMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset
 
 
 
-static int
-dissect_rtse_T_open(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_T_open(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
         struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE*)actx->private_data;
         const char *oid = NULL;
@@ -270,8 +271,8 @@ dissect_rtse_T_open(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, as
 
 
 
-static int
-dissect_rtse_T_t61String(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_T_t61String(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   tvbuff_t *string = NULL;
     offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_TeletexString,
                                             actx, tree, tvb, offset, hf_index,
@@ -287,8 +288,8 @@ dissect_rtse_T_t61String(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 
 
 
-static int
-dissect_rtse_T_octetString(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_T_octetString(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   tvbuff_t *string = NULL;
     offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        &string);
@@ -313,8 +314,8 @@ static const ber_choice_t CallingSSuserReference_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_rtse_CallingSSuserReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_CallingSSuserReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  CallingSSuserReference_choice, hf_index, ett_rtse_CallingSSuserReference,
                                  NULL);
@@ -324,13 +325,13 @@ dissect_rtse_CallingSSuserReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, in
 
 
 
-static int
-dissect_rtse_CommonReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  tvbuff_t *string = NULL;
-    offset = dissect_ber_UTCTime(implicit_tag, actx, tree, tvb, offset, hf_index, NULL, NULL);
+static unsigned
+dissect_rtse_CommonReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  char *string = NULL;
+    offset = dissect_ber_UTCTime(implicit_tag, actx, tree, tvb, offset, hf_index, &string, NULL);
 
   if(open_request && string)
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", tvb_format_text(actx->pinfo->pool, string, 0, tvb_reported_length(string)));
+    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", string);
 
 
   return offset;
@@ -338,8 +339,8 @@ dissect_rtse_CommonReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offse
 
 
 
-static int
-dissect_rtse_AdditionalReferenceInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_AdditionalReferenceInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_TeletexString,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -355,8 +356,8 @@ static const ber_sequence_t SessionConnectionIdentifier_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_rtse_SessionConnectionIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_SessionConnectionIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   if(open_request){
     col_append_str(actx->pinfo->cinfo, COL_INFO, "Recover");
   }
@@ -381,8 +382,8 @@ static const ber_choice_t ConnectionData_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_rtse_ConnectionData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_ConnectionData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ConnectionData_choice, hf_index, ett_rtse_ConnectionData,
                                  NULL);
@@ -398,10 +399,10 @@ static const value_string rtse_T_applicationProtocol_vals[] = {
 };
 
 
-static int
-dissect_rtse_T_applicationProtocol(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_T_applicationProtocol(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
-  offset = dissect_ber_integer(TRUE, actx, tree, tvb, offset, hf_index, &app_proto);
+  offset = dissect_ber_integer(true, actx, tree, tvb, offset, hf_index, &app_proto);
 
 
   return offset;
@@ -417,17 +418,17 @@ static const ber_sequence_t RTORQapdu_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-int
-dissect_rtse_RTORQapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+unsigned
+dissect_rtse_RTORQapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE*)actx->private_data;
 
   if(session != NULL)
         session->ros_op = (ROS_OP_BIND | ROS_OP_ARGUMENT);
-  open_request=TRUE;
+  open_request=true;
     offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               RTORQapdu_set, hf_index, ett_rtse_RTORQapdu);
 
-  open_request=FALSE;
+  open_request=false;
 
 
   return offset;
@@ -441,8 +442,8 @@ static const ber_sequence_t RTOACapdu_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-int
-dissect_rtse_RTOACapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+unsigned
+dissect_rtse_RTOACapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE*)actx->private_data;
 
   if(session != NULL)
@@ -466,16 +467,15 @@ static const value_string rtse_RefuseReason_vals[] = {
 };
 
 
-static int
-dissect_rtse_RefuseReason(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int reason = -1;
+static unsigned
+dissect_rtse_RefuseReason(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  int32_t reason;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                &reason);
+                                                (uint32_t*)&reason);
 
 
-  if(reason != -1)
-   col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%s)", val_to_str(reason, rtse_RefuseReason_vals, "reason(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%s)", val_to_str(actx->pinfo->pool, reason, rtse_RefuseReason_vals, "reason(%d)"));
 
 
   return offset;
@@ -483,8 +483,8 @@ dissect_rtse_RefuseReason(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _
 
 
 
-static int
-dissect_rtse_T_userDataRJ(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_T_userDataRJ(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
     struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE*)actx->private_data;
         const char *oid = NULL;
 
@@ -522,8 +522,8 @@ static const ber_sequence_t RTORJapdu_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-int
-dissect_rtse_RTORJapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+unsigned
+dissect_rtse_RTORJapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   col_append_str(actx->pinfo->cinfo, COL_INFO, "Refuse");
 
     offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
@@ -536,18 +536,17 @@ dissect_rtse_RTORJapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_,
 
 
 
-static int
-dissect_rtse_RTTPapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int priority = -1;
+static unsigned
+dissect_rtse_RTTPapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  int32_t priority;
 
   col_append_str(actx->pinfo->cinfo, COL_INFO, "Turn-Please");
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                &priority);
+                                                (uint32_t*)&priority);
 
 
-  if(priority != -1)
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%d)", priority);
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%d)", priority);
 
 
   return offset;
@@ -555,12 +554,12 @@ dissect_rtse_RTTPapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, 
 
 
 
-static int
-dissect_rtse_RTTRapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_RTTRapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
         tvbuff_t *next_tvb = NULL;
     struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE*)actx->private_data;
 
-        offset = dissect_ber_octet_string(FALSE, actx, tree, tvb, offset, hf_index, &next_tvb);
+        offset = dissect_ber_octet_string(false, actx, tree, tvb, offset, hf_index, &next_tvb);
 
         if(next_tvb) {
 
@@ -570,7 +569,7 @@ dissect_rtse_RTTRapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, 
                 if(session)
                         session->ros_op = (ROS_OP_INVOKE | ROS_OP_ARGUMENT);
 
-                offset = dissect_ber_external_type(FALSE, tree, next_tvb, 0, actx,  -1, call_rtse_external_type_callback);
+                offset = dissect_ber_external_type(false, tree, next_tvb, 0, actx,  -1, call_rtse_external_type_callback);
         }
 
 
@@ -592,16 +591,15 @@ static const value_string rtse_AbortReason_vals[] = {
 };
 
 
-static int
-dissect_rtse_AbortReason(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int reason = -1;
+static unsigned
+dissect_rtse_AbortReason(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  int32_t reason = -1;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                &reason);
+                                                (uint32_t*)&reason);
 
 
-  if(reason != -1)
-   col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%s)", val_to_str(reason, rtse_AbortReason_vals, "reason(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%s)", val_to_str(actx->pinfo->pool, reason, rtse_AbortReason_vals, "reason(%d)"));
 
 
   return offset;
@@ -609,8 +607,8 @@ dissect_rtse_AbortReason(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 
 
 
-static int
-dissect_rtse_BIT_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_BIT_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     NULL, 0, hf_index, -1,
                                     NULL);
@@ -620,8 +618,8 @@ dissect_rtse_BIT_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_
 
 
 
-static int
-dissect_rtse_T_userdataAB(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_T_userdataAB(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 /*XXX not implemented yet */
 
 
@@ -636,8 +634,8 @@ static const ber_sequence_t RTABapdu_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-int
-dissect_rtse_RTABapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+unsigned
+dissect_rtse_RTABapdu(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   col_append_str(actx->pinfo->cinfo, COL_INFO, "Abort");
 
     offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
@@ -659,8 +657,8 @@ static const ber_choice_t RTSE_apdus_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_rtse_RTSE_apdus(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_rtse_RTSE_apdus(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  RTSE_apdus_choice, hf_index, ett_rtse_RTSE_apdus,
                                  NULL);
@@ -683,13 +681,13 @@ dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
     tvbuff_t *next_tvb = NULL;
     tvbuff_t *data_tvb = NULL;
     fragment_head *frag_msg = NULL;
-    guint32 fragment_length;
-    guint32 rtse_id = 0;
-    gboolean data_handled = FALSE;
+    uint32_t fragment_length;
+    uint32_t rtse_id = 0;
+    bool data_handled = false;
     struct SESSION_DATA_STRUCTURE* session;
     conversation_t *conversation = NULL;
     asn1_ctx_t asn1_ctx;
-    asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+    asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
     /* do we have application context from the acse dissector? */
     if (data == NULL)
@@ -727,7 +725,7 @@ dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 
     if (rtse_reassemble && session->spdu_type == SES_DATA_TRANSFER) {
         /* strip off the OCTET STRING encoding - including any CONSTRUCTED OCTET STRING */
-        dissect_ber_octet_string(FALSE, &asn1_ctx, tree, tvb, offset, hf_rtse_segment_data, &data_tvb);
+        dissect_ber_octet_string(false, &asn1_ctx, tree, tvb, offset, hf_rtse_segment_data, &data_tvb);
 
         if (data_tvb) {
             fragment_length = tvb_captured_length_remaining (data_tvb, 0);
@@ -736,14 +734,14 @@ dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
             frag_msg = fragment_add_seq_next (&rtse_reassembly_table,
                               data_tvb, 0, pinfo,
                               rtse_id, NULL,
-                              fragment_length, TRUE);
+                              fragment_length, true);
             if (frag_msg && pinfo->num != frag_msg->reassembled_in) {
                 /* Add a "Reassembled in" link if not reassembled in this frame */
                 proto_tree_add_uint (tree, *(rtse_frag_items.hf_reassembled_in),
                              data_tvb, 0, 0, frag_msg->reassembled_in);
             }
-            pinfo->fragmented = TRUE;
-            data_handled = TRUE;
+            pinfo->fragmented = true;
+            data_handled = true;
         } else {
             fragment_length = tvb_captured_length_remaining (tvb, offset);
         }
@@ -754,21 +752,21 @@ dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
         if (next_tvb) {
             /* ROS won't do this for us */
             session->ros_op = (ROS_OP_INVOKE | ROS_OP_ARGUMENT);
-            /*offset=*/dissect_ber_external_type(FALSE, tree, next_tvb, 0, &asn1_ctx, -1, call_rtse_external_type_callback);
+            /*offset=*/dissect_ber_external_type(false, tree, next_tvb, 0, &asn1_ctx, -1, call_rtse_external_type_callback);
             top_tree = NULL;
             /* Return other than 0 to indicate that we handled this packet */
             return 1;
         } else {
             offset = tvb_captured_length (tvb);
         }
-        pinfo->fragmented = FALSE;
-        data_handled = TRUE;
+        pinfo->fragmented = false;
+        data_handled = true;
     }
 
     if (!data_handled) {
         while (tvb_reported_length_remaining(tvb, offset) > 0) {
             old_offset=offset;
-            offset=dissect_rtse_RTSE_apdus(TRUE, tvb, offset, &asn1_ctx, tree, -1);
+            offset=dissect_rtse_RTSE_apdus(true, tvb, offset, &asn1_ctx, tree, -1);
             if (offset == old_offset) {
                 next_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
                                 ett_rtse_unknown, &item, "Unknown RTSE PDU");
@@ -925,7 +923,7 @@ void proto_register_rtse(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_rtse,
     &ett_rtse_unknown,
     &ett_rtse_fragment,

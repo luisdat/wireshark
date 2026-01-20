@@ -2,8 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import pytest
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
 class TestDfilterInteger:
@@ -155,6 +154,10 @@ class TestDfilterInteger:
         dfilter = "ntp.precision <= -10"
         checkDFilterCount(dfilter, 1)
 
+    def test_s_chained(self, checkDFilterCount):
+        dfilter = "-12 < ntp.precision < -2 < ntp.ppoll < 8"
+        checkDFilterCount(dfilter, 1)
+
     def test_bool_eq_1(self, checkDFilterCount):
         dfilter = "ip.flags.df == 0"
         checkDFilterCount(dfilter, 1)
@@ -170,6 +173,11 @@ class TestDfilterInteger:
     def test_bool_ne_2(self, checkDFilterCount):
         dfilter = "ip.flags.df != 0"
         checkDFilterCount(dfilter, 0)
+
+    def test_mixed_gt_1(self, checkDFilterCount):
+        # Compare an unsigned integer to a signed integer.
+        dfilter = "ip.version > ntp.precision"
+        checkDFilterCount(dfilter, 1)
 
 class TestDfilterInteger1Byte:
 
@@ -188,8 +196,15 @@ class TestDfilterUint64:
 
     def test_uint64_1(self, checkDFilterCount):
         dfilter = "nfs.fattr3.size == 264032"
-        checkDFilterCount(dfilter, 1)
+        checkDFilterCount(dfilter, 2)
 
     def test_uint64_2(self, checkDFilterCount):
         dfilter = "nfs.fattr3.size == 264000"
         checkDFilterCount(dfilter, 0)
+
+class TestDfilterCustom:
+    trace_file = "dhcp.pcapng"
+
+    def test_base_custom_1(self, checkDFilterCount):
+        dfilter = 'dhcp.option.renewal_time_value == "30 minutes (1800)"'
+        checkDFilterCount(dfilter, 2)

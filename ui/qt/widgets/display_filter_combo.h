@@ -23,6 +23,7 @@ public:
     void updateStyleSheet();
 
 protected:
+    void rowsInserted(const QModelIndex&, int, int);
     virtual bool event(QEvent *event);
 
 private:
@@ -34,7 +35,7 @@ public slots:
 
 private slots:
     void updateMaxCount();
-    void onActivated(int index);
+    void filterApplied(QString filter, bool force);
 };
 
 #endif // DISPLAY_FILTER_COMBO_H

@@ -8,7 +8,7 @@
  * Copyright 1998 Gerald Combs
  *
  * The TIFF 6 specification can be found at:
- * https://www.adobe.io/content/dam/udp/en/open/standards/tiff/TIFF6.pdf
+ * https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -16,6 +16,8 @@
 #include "config.h"
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 void proto_reg_handoff_tiff(void);
 void proto_register_tiff(void);
@@ -44,9 +46,9 @@ static expert_field ei_tiff_bad_entry;
 static expert_field ei_tiff_zero_denom;
 
 
-static gint ett_tiff;
-static gint ett_ifd;
-static gint ett_t6;
+static int ett_tiff;
+static int ett_ifd;
+static int ett_t6;
 
 #define TIFF_TAG_NEW_SUBFILE_TYPE 254
 // Fields TBD
@@ -154,7 +156,7 @@ static int hf_tiff_gray_response_unit;
 #define TIFF_TAG_T6_OPTIONS 293
 static int hf_tiff_t6_options;
 static int hf_tiff_t6_unused;
-static int hf_tiff_t6_allow_uncompresed;
+static int hf_tiff_t6_allow_uncompressed;
 
 #define TIFF_TAG_RESOLUTION_UNIT 296
 static int hf_tiff_resolution_unit;
@@ -453,12 +455,6 @@ static const value_string tiff_gray_response_unit_names[] = {
     { 0, NULL },
 };
 
-static const value_string tiff_allow_uncompressed_names[] = {
-    { 0, "Not Allowed" },
-    { 1, "Allowed" },
-    { 0, NULL },
-};
-
 static const value_string tiff_resolution_unit_names[] = {
     { 1, "None" },
     { 2, "Inch" },
@@ -481,8 +477,8 @@ static const value_string tiff_ink_set_names[] = {
 // Return the length of the given data type.
 //
 // If the type isn't known, return -1.
-static gint
-tiff_type_len(const guint16 type) {
+static int
+tiff_type_len(const uint16_t type) {
     switch (type) {
     case TIFF_TYPE_BYTE: return 1;
     case TIFF_TYPE_ASCII: return 1;
@@ -504,21 +500,21 @@ tiff_type_len(const guint16 type) {
 // Return the length of the given array of data.
 //
 // If the type isn't known, return -1.
-static gint
-tiff_data_len(const guint16 type, const guint32 count) {
-    const gint field = tiff_type_len(type);
+static int
+tiff_data_len(const uint16_t type, const uint32_t count) {
+    const int field = tiff_type_len(type);
     if (field < 0) return -1;
     else return field * count;
 }
 
 static void
-dissect_tiff_tag_unknown(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset, guint16 type, guint32 count, gint encoding _U_)
+dissect_tiff_tag_unknown(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, uint16_t type, uint32_t count, int encoding _U_)
 {
-    const gint len = tiff_data_len(type, count);
+    const int len = tiff_data_len(type, count);
 
     expert_add_info(pinfo, tree, &ei_tiff_unknown_tag);
 
-    guint32 item_offset;
+    uint32_t item_offset;
     if (len <= 0) {
         // If we can't determine the length, that's an issue
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Could not determine length of entry");
@@ -535,7 +531,7 @@ dissect_tiff_tag_unknown(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 }
 
 static void
-dissect_tiff_single_uint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset, guint16 type, guint32 count, gint encoding, int hfindex) {
+dissect_tiff_single_uint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, uint16_t type, uint32_t count, int encoding, int hfindex) {
     if (count != 1) {
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Expected a single item; found %d items", count);
         return;
@@ -553,7 +549,7 @@ dissect_tiff_single_uint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 }
 
 static void
-dissect_tiff_array_uint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset, guint16 type, guint32 count, gint encoding, int hfindex) {
+dissect_tiff_array_uint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, uint16_t type, uint32_t count, int encoding, int hfindex) {
     if (!(type == TIFF_TYPE_BYTE || type == TIFF_TYPE_SHORT || type == TIFF_TYPE_LONG)) {
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Expected an unsigned integer, found type %s", val_to_str_const(type, tiff_type_names, "Unknown"));
         return;
@@ -564,10 +560,10 @@ dissect_tiff_array_uint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
         return;
     }
 
-    const gint item_len = tiff_type_len(type);
-    const gint len = tiff_data_len(type, count);
+    const int item_len = tiff_type_len(type);
+    const int len = tiff_data_len(type, count);
 
-    guint32 item_offset;
+    uint32_t item_offset;
     if (len <= 0 || item_len <= 0) {
         // If we can't determine the length, that's an issue
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Could not determine length of entry");
@@ -581,19 +577,19 @@ dissect_tiff_array_uint(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
     }
 
     // Add each item
-    for (guint32 i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         proto_tree_add_item(tree, hfindex, tvb, item_offset + item_len * i, item_len, encoding);
     }
 }
 
 static void
-dissect_tiff_single_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint16 type, guint32 count, gint encoding, int hfindex) {
+dissect_tiff_single_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t type, uint32_t count, int encoding, int hfindex) {
     if (type != TIFF_TYPE_ASCII) {
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Expected an ASCII string");
         return;
     }
 
-    guint32 item_offset;
+    uint32_t item_offset;
     if (count == 0) {
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Expected at least one byte for an ASCII string; got zero");
         return;
@@ -609,7 +605,7 @@ dissect_tiff_single_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 }
 
 static void
-dissect_tiff_single_urational(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint16 type, guint32 count, gint encoding, int hfnumer, int hfdenom, int hfapprox) {
+dissect_tiff_single_urational(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t type, uint32_t count, int encoding, int hfnumer, int hfdenom, int hfapprox) {
     if (count != 1) {
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Expected a single item; found %d items", count);
         return;
@@ -620,11 +616,11 @@ dissect_tiff_single_urational(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         return;
     }
 
-    guint32 item_offset;
+    uint32_t item_offset;
     proto_tree_add_item_ret_uint(tree, hf_tiff_entry_offset, tvb, offset, 4, encoding, &item_offset);
 
-    guint32 numer = 0;
-    guint32 denom = 0;
+    uint32_t numer = 0;
+    uint32_t denom = 0;
     proto_tree_add_item_ret_uint(tree, hfnumer, tvb, item_offset, 4, encoding, &numer);
     proto_item *denom_ti = proto_tree_add_item_ret_uint(tree, hfdenom, tvb, item_offset + 4, 4, encoding, &denom);
 
@@ -633,12 +629,12 @@ dissect_tiff_single_urational(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         proto_item_set_generated(approx_item);
     }
     else {
-        expert_add_info_format(pinfo, denom_ti, &ei_tiff_zero_denom, "Denominator is zero");
+        expert_add_info(pinfo, denom_ti, &ei_tiff_zero_denom);
     }
 }
 
 static void
-dissect_tiff_t6_options(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint16 type, guint32 count, gint encoding) {
+dissect_tiff_t6_options(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t type, uint32_t count, int encoding) {
     if (count != 1) {
         expert_add_info_format(pinfo, tree, &ei_tiff_bad_entry, "Expected a single item; found %d items", count);
         return;
@@ -652,19 +648,19 @@ dissect_tiff_t6_options(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
     proto_item *t6_ti = proto_tree_add_item(tree, hf_tiff_t6_options, tvb, offset, 4, encoding);
     proto_tree *t6_tree = proto_item_add_subtree(t6_ti, ett_t6);
     proto_tree_add_item(t6_tree, hf_tiff_t6_unused, tvb, offset, 4, encoding);
-    proto_tree_add_item(t6_tree, hf_tiff_t6_allow_uncompresed, tvb, offset, 4, encoding);
+    proto_tree_add_item(t6_tree, hf_tiff_t6_allow_uncompressed, tvb, offset, 4, encoding);
 }
 
 static void
-dissect_tiff_entry(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset, gint encoding) {
-    const guint16 tag = tvb_get_guint16(tvb, offset, encoding);
+dissect_tiff_entry(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, int encoding) {
+    const uint16_t tag = tvb_get_uint16(tvb, offset, encoding);
 
     proto_tree *entry_tree = proto_tree_add_subtree_format(tree, tvb, offset, 12, ett_ifd, NULL, "%s", val_to_str_const(tag, tiff_tag_names, "Unknown Entry"));
 
     proto_tree_add_item(entry_tree, hf_tiff_entry_tag, tvb, offset, 2, encoding);
 
-    guint32 type = 0;
-    guint32 count = 0;
+    uint32_t type = 0;
+    uint32_t count = 0;
     proto_tree_add_item_ret_uint(entry_tree, hf_tiff_entry_type, tvb, offset + 2, 2, encoding, &type);
     proto_tree_add_item_ret_uint(entry_tree, hf_tiff_entry_count, tvb, offset + 4, 4, encoding, &count);
 
@@ -785,23 +781,23 @@ dissect_tiff_entry(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 
 // Dissect an IFD with all of its fields, starting at the given offset
 //
 // Return the offset of the next IFD, or 0 if there isn't one
-static guint32
-dissect_tiff_ifd(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint32 offset, gint encoding) {
-    guint16 ifd_count = tvb_get_guint16(tvb, offset, encoding);
-    gint ifd_length = 2 + (ifd_count * 12) + 4;
+static uint32_t
+dissect_tiff_ifd(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, uint32_t offset, int encoding) {
+    uint16_t ifd_count = tvb_get_uint16(tvb, offset, encoding);
+    int ifd_length = 2 + (ifd_count * 12) + 4;
 
     proto_tree *ifd_tree = proto_tree_add_subtree(tree, tvb, offset, ifd_length, ett_ifd, NULL, "Image File Directory");
 
     proto_tree_add_item(ifd_tree, hf_tiff_ifd_count, tvb, offset, 2, encoding);
     offset += 2;
 
-    for (gint i = 0; i < ifd_count; i++) {
+    for (int i = 0; i < ifd_count; i++) {
         dissect_tiff_entry(tvb, pinfo, ifd_tree, offset, encoding);
         offset += 12;
     }
 
     proto_tree_add_item(ifd_tree, hf_tiff_ifd_next, tvb, offset, 4, encoding);
-    guint32 ifd_next = tvb_get_guint32(tvb, offset, encoding);
+    uint32_t ifd_next = tvb_get_uint32(tvb, offset, encoding);
 
     return ifd_next;
 }
@@ -816,9 +812,9 @@ dissect_tiff(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     }
 
     // Figure out if we're big-endian or little endian
-    guint16 raw_encoding = tvb_get_ntohs(tvb, 0);
-    guint16 magic;
-    guint32 ifd_offset;
+    uint16_t raw_encoding = tvb_get_ntohs(tvb, 0);
+    uint16_t magic;
+    uint32_t ifd_offset;
     if (raw_encoding == 0x4949) {
         encoding = ENC_LITTLE_ENDIAN;
     } else if (raw_encoding == 0x4D4D) {
@@ -828,7 +824,7 @@ dissect_tiff(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
         return 0;
     }
 
-    magic = tvb_get_guint16(tvb, 2, encoding);
+    magic = tvb_get_uint16(tvb, 2, encoding);
 
     // If the magic number isn't 42, abort with nothing decoded
     if (magic != 42) {
@@ -1050,9 +1046,9 @@ proto_register_tiff(void)
             FT_UINT32, BASE_HEX, NULL,
             0xFFFFFFFD, NULL, HFILL }
         },
-        { &hf_tiff_t6_allow_uncompresed,
+        { &hf_tiff_t6_allow_uncompressed,
             { "Allow Uncompressed", "tiff.t6.allow_uncompressed",
-            FT_UINT32, BASE_HEX, VALS(tiff_allow_uncompressed_names),
+            FT_BOOLEAN, 32, TFS(&tfs_allowed_not_allowed),
             0x00000002, NULL, HFILL }
         },
         { &hf_tiff_resolution_unit,
@@ -1117,7 +1113,7 @@ proto_register_tiff(void)
         }
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_tiff,
         &ett_ifd,
         &ett_t6,
@@ -1134,7 +1130,7 @@ proto_register_tiff(void)
         },
         { &ei_tiff_zero_denom,
             { "tiff.zero_denom", PI_PROTOCOL, PI_WARN,
-            "Zero denominator", EXPFILL }
+            "Denominator is zero", EXPFILL }
         },
 
     };
@@ -1149,10 +1145,10 @@ proto_register_tiff(void)
     expert_register_field_array(expert_tiff, ei, array_length(ei));
 }
 
-static gboolean
-dissect_tiff_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+static bool
+dissect_tiff_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    return dissect_tiff(tvb, pinfo, tree, NULL) > 0;
+    return dissect_tiff(tvb, pinfo, tree, data) > 0;
 }
 
 void

@@ -11,8 +11,8 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/llcsaps.h>
 #include "packet-hpext.h"
+#include "packet-llc.h"
 
 void proto_register_hpext(void);
 void proto_reg_handoff_hpext(void);
@@ -35,14 +35,14 @@ static int hf_hpext_dxsap;
 static int hf_hpext_reserved;
 static int hf_hpext_sxsap;
 
-static gint ett_hpext;
+static int ett_hpext;
 
 static int
 dissect_hpext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_tree	*hpext_tree = NULL;
 	proto_item	*ti = NULL;
-	guint16		dxsap, sxsap;
+	uint16_t		dxsap, sxsap;
 	tvbuff_t	*next_tvb;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "HPEXT");
@@ -53,7 +53,7 @@ dissect_hpext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 	if (tree) {
 		ti = proto_tree_add_item(tree, proto_hpext, tvb, 0, 7, ENC_NA);
 		hpext_tree = proto_item_add_subtree(ti, ett_hpext);
-		proto_tree_add_item(hpext_tree, hf_hpext_reserved, tvb, 0, 3, ENC_NA);
+		proto_tree_add_item(hpext_tree, hf_hpext_reserved, tvb, 0, 3, ENC_BIG_ENDIAN);
 		proto_tree_add_uint(hpext_tree, hf_hpext_dxsap, tvb, 3,
 			2, dxsap);
 		proto_tree_add_uint(hpext_tree, hf_hpext_sxsap, tvb, 5,
@@ -62,8 +62,8 @@ dissect_hpext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 
 	col_append_fstr(pinfo->cinfo, COL_INFO,
 		    "; HPEXT; DXSAP %s, SXSAP %s",
-		    val_to_str(dxsap, xsap_vals, "%04x"),
-		    val_to_str(sxsap, xsap_vals, "%04x"));
+		    val_to_str(pinfo->pool, dxsap, xsap_vals, "%04x"),
+		    val_to_str(pinfo->pool, sxsap, xsap_vals, "%04x"));
 
 	if (tvb_reported_length_remaining(tvb, 7) > 0) {
 		next_tvb = tvb_new_subset_remaining(tvb, 7);
@@ -96,7 +96,7 @@ proto_register_hpext(void)
 		},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_hpext
 	};
 

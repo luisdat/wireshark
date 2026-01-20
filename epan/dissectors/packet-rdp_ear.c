@@ -19,11 +19,13 @@
 #include <epan/prefs.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
-#include <epan/value_string.h>
 #include <epan/asn1.h>
 
+#include "packet-rdpudp.h"
 #include "packet-gssapi.h"
 #include "packet-ber.h"
+#include "packet-dcerpc.h"
+#include "packet-dcerpc-rcg.h"
 
 
 #define PNAME  "RDP authentication redirection virtual channel Protocol"
@@ -47,26 +49,103 @@ static int hf_rdpear_packet_version;
 static int hf_rdpear_packet_packageName;
 static int hf_rdpear_packet_buffer;
 
+static int hf_rdpear_package_reservedHeader;
+static int hf_rdpear_package_command;
+
 static int ett_rdp_ear;
 static int ett_rdp_ear_innerPacket;
 
 static dissector_handle_t gssapi_wrap_handle;
 
-static int
-dissect_rdpear_ber_VERSION(bool implicit_tag, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index) {
+typedef enum {
+	RCG_PACKAGE_KERBEROS,
+	RCG_PACKAGE_NTLM,
+	RCG_PACKAGE_UNKNOWN = 1,
+} RcgPackageType;
+
+typedef struct {
+	RcgPackageType lastPackage;
+} RcgContext;
+
+static unsigned
+dissect_rdpear_ber_VERSION(bool implicit_tag, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index) {
 	offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 	return offset;
 }
 
-static int
-dissect_rdpear_ber_packageName(bool implicit_tag, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index) {
-	offset = dissect_ber_octet_string_with_encoding(implicit_tag, actx, tree, tvb, offset, hf_index, NULL, ENC_UTF_16|ENC_LITTLE_ENDIAN);
+static unsigned
+dissect_rdpear_ber_packageName(bool implicit_tag, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index) {
+	RcgContext *rcg = (RcgContext*)actx->private_data;
+
+	tvbuff_t *packageName = NULL;
+	offset = dissect_ber_octet_string_with_encoding(implicit_tag, actx, tree, tvb, offset, hf_index, &packageName, ENC_UTF_16|ENC_LITTLE_ENDIAN);
+
+	rcg->lastPackage = RCG_PACKAGE_UNKNOWN;
+	if (packageName) {
+		uint8_t kerb[] = {'K', 0, 'e', 0, 'r', 0, 'b', 0, 'e', 0, 'r', 0, 'o', 0, 's', 0 };
+		uint8_t ntlm[] = {'N', 0, 'T', 0, 'L', 0, 'M', 0 };
+
+		if (tvb_memeql(packageName, 0, kerb, sizeof(kerb)) == 0)
+			rcg->lastPackage = RCG_PACKAGE_KERBEROS;
+		else if (tvb_memeql(packageName, 0, ntlm, sizeof(ntlm)) == 0)
+			rcg->lastPackage = RCG_PACKAGE_NTLM;
+	}
+
 	return offset;
 }
 
+
 static int
-dissect_rdpear_ber_packetBuffer(bool implicit_tag, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index) {
-	offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
+dissect_rdpear_packagePayload(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, RcgPackageType package)
+{
+	int offset = 0;
+	gboolean isServerTarget = rdp_isServerAddressTarget(pinfo);
+
+	proto_tree_add_item(tree, hf_rdpear_package_reservedHeader, tvb, offset, 16, ENC_NA);
+	offset += 16;
+
+	dcerpc_info di = { 0 };
+	uint8_t drep[4] = { 0x10, 0x00, 0x00, 0x00};
+
+	dcerpc_call_value call_data = { 0 };
+	di.conformant_run = 0;
+	di.call_data = &call_data;
+	init_ndr_pointer_list(&di);
+
+	switch (package) {
+	case RCG_PACKAGE_KERBEROS:
+		// NDR headers
+		offset += 24;
+		if (isServerTarget)
+			offset = rcg_dissect_struct_KerbCredIsoRemoteOutput(tvb, offset, pinfo, tree, &di, drep, hf_rdpear_package_command, 0);
+		else
+			offset = rcg_dissect_struct_KerbCredIsoRemoteInput(tvb, offset, pinfo, tree, &di, drep, hf_rdpear_package_command, 0);
+
+		break;
+	case RCG_PACKAGE_NTLM:
+		// NDR headers
+		offset += 20;
+
+		if (isServerTarget)
+			offset = rcg_dissect_struct_NtlmCredIsoRemoteOutput(tvb, offset, pinfo, tree, &di, drep, hf_rdpear_package_command, 0);
+		else
+			offset = rcg_dissect_struct_NtlmCredIsoRemoteInput(tvb, offset, pinfo, tree, &di, drep, hf_rdpear_package_command, 0);
+		break;
+	default:
+		break;
+	}
+
+	return offset;
+}
+
+
+static unsigned
+dissect_rdpear_ber_packetBuffer(bool implicit_tag, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index) {
+	RcgContext *rcg = (RcgContext*)actx->private_data;
+	tvbuff_t *packageData = NULL;
+	offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index, &packageData);
+	if (packageData)
+		dissect_rdpear_packagePayload(tree, actx->pinfo, packageData, rcg->lastPackage);
 	return offset;
 }
 
@@ -79,12 +158,14 @@ static const ber_sequence_t TSRemoteGuardInnerPacket_sequence[] = {
 };
 
 
-static int dissect_rcg_payload(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset)
+static unsigned dissect_rcg_payload(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, unsigned offset)
 {
+	RcgContext rcg = { RCG_PACKAGE_UNKNOWN };
 	asn1_ctx_t asn1_ctx;
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+	asn1_ctx.private_data = &rcg;
 
-	offset = dissect_ber_sequence(FALSE, &asn1_ctx, tree, tvb, offset,
+	offset = dissect_ber_sequence(false, &asn1_ctx, tree, tvb, offset,
 			TSRemoteGuardInnerPacket_sequence, hf_rdpear_payload, ett_rdp_ear_innerPacket);
 
 	return offset;
@@ -97,15 +178,15 @@ dissect_rdp_ear(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void
 	tvbuff_t *decr_tvb = NULL;
 	gssapi_encrypt_info_t gssapi_encrypt;
 	proto_item *item;
-	gint nextOffset, offset = 0;
-	guint32 pduLength;
+	int nextOffset, offset = 0;
+	uint32_t pduLength;
 	proto_tree *tree;
 
 	parent_tree = proto_tree_get_root(parent_tree);
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "RDPEAR");
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	pduLength = tvb_get_guint32(tvb, offset + 4, ENC_LITTLE_ENDIAN) + 24;
+	pduLength = tvb_get_uint32(tvb, offset + 4, ENC_LITTLE_ENDIAN) + 24;
 	nextOffset = offset + pduLength;
 
 	item = proto_tree_add_item(parent_tree, proto_rdp_ear, tvb, offset, pduLength, ENC_NA);
@@ -181,9 +262,18 @@ void proto_register_rdp_ear(void) {
 			{ "Buffer", "rdp_ear.payload.buffer",
 				FT_BYTES, BASE_NONE, NULL, 0,
 				NULL, HFILL }},
+		{ &hf_rdpear_package_reservedHeader,
+			{ "Reserved", "rdp_ear.package.reservedheader",
+				FT_BYTES, BASE_NONE, NULL, 0,
+				NULL, HFILL }},
+		{ &hf_rdpear_package_command,
+			{ "Command", "rdp_ear.package.command",
+				FT_BYTES, BASE_NONE, NULL, 0,
+				NULL, HFILL }},
+
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_rdp_ear,
 		&ett_rdp_ear_innerPacket,
 	};

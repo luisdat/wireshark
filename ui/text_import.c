@@ -67,7 +67,7 @@
  * capturing groups like so:
  * (?<seqno>\d+)\s*(?<dir><|>)\s*(?<time>\d+:\d\d:\d\d.\d+)\s+(?<data>[0-9a-fA-F]+)\\s+
  *
- * Fields are decoded using a leanient parser, but only one attempt is made.
+ * Fields are decoded using a lenient parser, but only one attempt is made.
  * Except for in data invalid values will be replaced by default ones.
  * data currently only accepts plain HEX, OCT or BIN encoded data.
  * common field separators are ignored. Note however that 0x or 0b prefixing is
@@ -75,6 +75,7 @@
  */
 
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_MAIN
 #include "text_import.h"
 
 #include <stdio.h>
@@ -97,6 +98,7 @@
 #include <wsutil/exported_pdu_tlvs.h>
 
 #include <wsutil/nstime.h>
+#include <wsutil/str_util.h>
 #include <wsutil/time_util.h>
 #include <wsutil/ws_strptime.h>
 
@@ -116,76 +118,76 @@
 static text_import_info_t *info_p;
 
 /* Dummy Ethernet header */
-static bool hdr_ethernet = false;
-static uint8_t hdr_eth_dest_addr[6] = {0x20, 0x52, 0x45, 0x43, 0x56, 0x00};
-static uint8_t hdr_eth_src_addr[6]  = {0x20, 0x53, 0x45, 0x4E, 0x44, 0x00};
-static uint32_t hdr_ethernet_proto = 0;
+static bool hdr_ethernet;
+static const uint8_t hdr_eth_dest_addr[6] = {0x20, 0x52, 0x45, 0x43, 0x56, 0x00};
+static const uint8_t hdr_eth_src_addr[6]  = {0x20, 0x53, 0x45, 0x4E, 0x44, 0x00};
+static uint32_t hdr_ethernet_proto;
 
 /* Dummy IP header */
-static bool hdr_ip = false;
-static bool hdr_ipv6 = false;
-static unsigned hdr_ip_proto = 0;
+static bool hdr_ip;
+static bool hdr_ipv6;
+static unsigned hdr_ip_proto;
 
 /* Destination and source addresses for IP header */
-static ws_in6_addr NO_IPv6_ADDRESS    = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+static const ws_in6_addr NO_IPv6_ADDRESS = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
 /* These IPv6 default addresses are unique local addresses generated using
  * the pseudo-random method from Section 3.2.2 of RFC 4193
  */
-static ws_in6_addr IPv6_SRC = {{0xfd, 0xce, 0xd8, 0x62, 0x14, 0x1b, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}};
-static ws_in6_addr IPv6_DST = {{0xfd, 0xce, 0xd8, 0x62, 0x14, 0x1b, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}};
+static const ws_in6_addr IPv6_SRC = {{0xfd, 0xce, 0xd8, 0x62, 0x14, 0x1b, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}};
+static const ws_in6_addr IPv6_DST = {{0xfd, 0xce, 0xd8, 0x62, 0x14, 0x1b, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}};
 
 /* Dummy UDP header */
-static bool hdr_udp = false;
+static bool hdr_udp;
 
 /* Dummy TCP header */
-static bool hdr_tcp = false;
+static bool hdr_tcp;
 
 /* TCP sequence numbers when has_direction is true */
-static uint32_t tcp_in_seq_num = 0;
-static uint32_t tcp_out_seq_num = 0;
+static uint32_t tcp_in_seq_num;
+static uint32_t tcp_out_seq_num;
 
 /* Dummy SCTP header */
-static bool hdr_sctp = false;
+static bool hdr_sctp;
 
 /* Dummy DATA chunk header */
-static bool hdr_data_chunk = false;
-static uint8_t hdr_data_chunk_type = 0;
-static uint8_t hdr_data_chunk_bits = 0;
-static uint32_t hdr_data_chunk_tsn  = 0;
-static uint16_t hdr_data_chunk_sid  = 0;
-static uint16_t hdr_data_chunk_ssn  = 0;
+static bool hdr_data_chunk;
+static uint8_t hdr_data_chunk_type;
+static uint8_t hdr_data_chunk_bits;
+static uint32_t hdr_data_chunk_tsn;
+static uint16_t hdr_data_chunk_sid;
+static uint16_t hdr_data_chunk_ssn;
 
 /* Dummy ExportPdu header */
-static bool hdr_export_pdu = false;
+static bool hdr_export_pdu;
 
 /* Hex+ASCII text dump identification, to handle an edge case where
  * the ASCII representation contains patterns that look like bytes. */
 static uint8_t* pkt_lnstart;
 
-static bool has_direction = false;
+static bool has_direction;
 static uint32_t direction = PACK_FLAGS_RECEPTION_TYPE_UNSPECIFIED;
-static bool has_seqno = false;
-static uint64_t seqno = 0;
+static bool has_seqno;
+static uint64_t seqno;
 /*--- Local data -----------------------------------------------------------------*/
 
 /* This is where we store the packet currently being built */
 static uint8_t *packet_buf;
-static uint32_t curr_offset = 0;
-static uint32_t packet_start = 0;
-static bool offset_warned = false;
+static uint32_t curr_offset;
+static uint32_t packet_start;
+static bool offset_warned;
 static import_status_t start_new_packet(bool);
 
 /* This buffer contains strings present before the packet offset 0 */
 #define PACKET_PREAMBLE_MAX_LEN    2048
 static uint8_t packet_preamble[PACKET_PREAMBLE_MAX_LEN+1];
-static int packet_preamble_len = 0;
+static int packet_preamble_len;
 
 /* Time code of packet, derived from packet_preamble */
-static time_t   ts_sec = 0;
-static uint32_t ts_nsec = 0;
-static bool ts_fmt_iso = false;
+static time_t   ts_sec;
+static uint32_t ts_nsec;
+static bool ts_fmt_iso;
 static struct tm timecode_default;
-static bool timecode_warned = false;
+static bool timecode_warned;
 /* The time delta to add to packets without a valid time code.
  * This can be no smaller than the time resolution of the dump
  * file, so the default is 1000 nanoseconds, or 1 microsecond.
@@ -209,20 +211,23 @@ typedef enum {
 } parser_state_t;
 static parser_state_t state = INIT;
 
-static const char *state_str[] = {"Init",
-                           "Start-of-line",
-                           "Offset",
-                           "Byte",
-                           "Text"
+static const char * const state_str[] = {
+    "Init",
+    "Start-of-line",
+    "Offset",
+    "Byte",
+    "Text"
 };
 
-static const char *token_str[] = {"",
-                           "Byte",
-                           "Offset",
-                           "Directive",
-                           "Text",
-                           "End-of-line",
-                           "End-of-file"
+static const char * const token_str[] = {
+    "",
+    "Byte",
+    "Bytes",
+    "Offset",
+    "Directive",
+    "Text",
+    "End-of-line",
+    "End-of-file"
 };
 
 /* ----- Skeleton Packet Headers --------------------------------------------------*/
@@ -230,7 +235,7 @@ static const char *token_str[] = {"",
 typedef struct {
     uint8_t dest_addr[6];
     uint8_t src_addr[6];
-    uint16_t l3pid;
+    uint16_t ethertype;
 } hdr_ethernet_t;
 
 static hdr_ethernet_t HDR_ETHERNET;
@@ -408,6 +413,42 @@ write_byte(const char *str)
     return IMPORT_SUCCESS;
 }
 
+static import_status_t
+write_bytes(const char *str)
+{
+    uint32_t num;
+
+    if (parse_num(str, false, &num) != IMPORT_SUCCESS)
+        return IMPORT_FAILURE;
+
+    int len = (int)strlen(str);
+    /* There's always extra room in the packet_buf for the dummy headers
+     * compared to max_frame_length, so we could copy all the bytes at
+     * once and then check for overflow afterwards (copying it off).
+     * That would be moderately faster due to optimization on most
+     * compilers (and we could use the routines from wsutil/pint.h)
+     */
+    if (info_p->hexdump.little_endian) {
+        for (int i = 0; i < 4*len; i += 8) {
+            packet_buf[curr_offset] = (uint8_t)(num >> i);
+            curr_offset++;
+            if (curr_offset >= info_p->max_frame_length) /* packet full */
+                if (start_new_packet(true) != IMPORT_SUCCESS)
+                   return IMPORT_FAILURE;
+        }
+    } else {
+        for (int i = 4*len - 8; i >= 0; i -= 8) {
+            packet_buf[curr_offset] = (uint8_t)(num >> i);
+            curr_offset++;
+            if (curr_offset >= info_p->max_frame_length) /* packet full */
+                if (start_new_packet(true) != IMPORT_SUCCESS)
+                   return IMPORT_FAILURE;
+        }
+    }
+
+    return IMPORT_SUCCESS;
+}
+
 /*----------------------------------------------------------------------
  * Remove bytes from the current packet
  */
@@ -500,7 +541,7 @@ write_current_packet(bool cont)
                 memcpy(HDR_ETHERNET.dest_addr, hdr_eth_dest_addr, 6);
                 memcpy(HDR_ETHERNET.src_addr, hdr_eth_src_addr, 6);
             }
-            HDR_ETHERNET.l3pid = g_htons(hdr_ethernet_proto);
+            HDR_ETHERNET.ethertype = g_htons(hdr_ethernet_proto);
             memcpy(&packet_buf[prefix_index], &HDR_ETHERNET, sizeof(HDR_ETHERNET));
             prefix_index += (int)sizeof(HDR_ETHERNET);
         }
@@ -693,17 +734,19 @@ write_current_packet(bool cont)
         HDR_TCP.seq_num = g_ntohl(HDR_TCP.seq_num) + curr_offset;
         HDR_TCP.seq_num = g_htonl(HDR_TCP.seq_num);
 
-        /* Write the packet */
+        /* Write the record */
+        int data_length;
         wtap_rec rec;
         int err;
         char *err_info;
 
-        memset(&rec, 0, sizeof rec);
+        data_length = prefix_length + curr_offset + eth_trailer_length;
+        wtap_rec_init(&rec, data_length);
 
         if (info_p->encapsulation == WTAP_ENCAP_SYSTEMD_JOURNAL) {
-            rec.rec_type = REC_TYPE_SYSTEMD_JOURNAL_EXPORT;
+            wtap_setup_systemd_journal_export_rec(&rec);
             rec.block = wtap_block_create(WTAP_BLOCK_SYSTEMD_JOURNAL_EXPORT);
-            rec.rec_header.systemd_journal_export_header.record_len = prefix_length + curr_offset + eth_trailer_length;
+            rec.rec_header.systemd_journal_export_header.record_len = data_length;
             rec.presence_flags = WTAP_HAS_CAP_LEN|WTAP_HAS_TS;
             /* XXX: Ignore our direction, packet id, and timestamp. For a
              * systemd Journal Export Block the timestamp comes from the
@@ -713,12 +756,11 @@ write_current_packet(bool cont)
              * aren't really used when writing, it doesn't matter.
              */
         } else {
-            rec.rec_type = REC_TYPE_PACKET;
+            wtap_setup_packet_rec(&rec, info_p->encapsulation);
             rec.block = wtap_block_create(WTAP_BLOCK_PACKET);
-            rec.rec_header.packet_header.caplen = rec.rec_header.packet_header.len = prefix_length + curr_offset + eth_trailer_length;
+            rec.rec_header.packet_header.caplen = rec.rec_header.packet_header.len = data_length;
             rec.ts.secs = ts_sec;
             rec.ts.nsecs = ts_nsec;
-            rec.rec_header.packet_header.pkt_encap = info_p->encapsulation;
             rec.presence_flags = WTAP_HAS_CAP_LEN|WTAP_HAS_INTERFACE_ID|WTAP_HAS_TS;
             if (has_direction) {
                 wtap_block_add_uint32_option(rec.block, OPT_PKT_FLAGS, direction);
@@ -728,15 +770,17 @@ write_current_packet(bool cont)
             }
         }
 
-        if (!wtap_dump(info_p->wdh, &rec, packet_buf, &err, &err_info)) {
+        ws_buffer_append(&rec.data, packet_buf, data_length);
+
+        if (!wtap_dump(info_p->wdh, &rec, &err, &err_info)) {
             report_cfile_write_failure(info_p->import_text_filename,
                     info_p->output_filename, err, err_info,
                     info_p->num_packets_read,
                     wtap_dump_file_type_subtype(info_p->wdh));
-            wtap_block_unref(rec.block);
+            wtap_rec_cleanup(&rec);
             return IMPORT_FAILURE;
         }
-        wtap_block_unref(rec.block);
+        wtap_rec_cleanup(&rec);
         info_p->num_packets_written++;
     }
 
@@ -771,12 +815,12 @@ append_to_preamble(char *str)
         if (packet_preamble_len + toklen > PACKET_PREAMBLE_MAX_LEN)
             return IMPORT_SUCCESS;    /* no room to add token to the preamble */
             /* XXX: Just keep going? This is probably not a problem, as above.*/
-        (void) g_strlcpy(&packet_preamble[packet_preamble_len], str, PACKET_PREAMBLE_MAX_LEN);
+        (void) g_strlcpy((char*)&packet_preamble[packet_preamble_len], str, PACKET_PREAMBLE_MAX_LEN);
         packet_preamble_len += (int) toklen;
         if (ws_log_get_level() >= LOG_LEVEL_NOISY) {
             char *c;
             char xs[PACKET_PREAMBLE_MAX_LEN];
-            (void) g_strlcpy(xs, packet_preamble, PACKET_PREAMBLE_MAX_LEN);
+            (void) g_strlcpy(xs, (const char*)packet_preamble, PACKET_PREAMBLE_MAX_LEN);
             while ((c = strchr(xs, '\r')) != NULL) *c=' ';
             ws_noisy("[[append_to_preamble: \"%s\"]]", xs);
         }
@@ -787,12 +831,17 @@ append_to_preamble(char *str)
 
 #define INVALID_VALUE (-1)
 
+/*
+ * This includes not just true whitespace values, but also any other
+ * character silently ignored if part of the data group match, such as
+ * byte separators or the '=' used for padding at the end of Base64.
+ */
 #define WHITESPACE_VALUE (-2)
 
 /*
  * Information on how to parse any plainly encoded binary data
  *
- * one Unit is least_common_mmultiple(bits_per_char, 8) bits.
+ * one Unit is least_common_multiple(bits_per_char, 8) bits.
  */
 struct plain_decoding_data {
     const char* name;
@@ -828,14 +877,14 @@ struct plain_decoding_data {
  * Some compilers warn about initializing the same subobject
  * more than once with designated initializers.
  *
- * We're doing that - INVALID_INIT iniitalizes everything to
+ * We're doing that - INVALID_INIT initializes everything to
  * INVALID_VALUE, but then we override selected elements -
  * but we know what we're doing, so just suppress that
  * warning.
  */
 DIAG_OFF_INIT_TWICE
 
-const struct plain_decoding_data hex_decode_info = {
+static const struct plain_decoding_data hex_decode_info = {
     .chars_per_unit = 2,
     .bytes_per_unit = 1,
     .bits_per_char = 4,
@@ -849,7 +898,7 @@ const struct plain_decoding_data hex_decode_info = {
     }
 };
 
-const struct plain_decoding_data bin_decode_info = {
+static const struct plain_decoding_data bin_decode_info = {
     .chars_per_unit = 8,
     .bytes_per_unit = 1,
     .bits_per_char = 1,
@@ -860,7 +909,7 @@ const struct plain_decoding_data bin_decode_info = {
     }
 };
 
-const struct plain_decoding_data oct_decode_info = {
+static const struct plain_decoding_data oct_decode_info = {
     .chars_per_unit = 8,
     .bytes_per_unit = 3,
     .bits_per_char = 3,
@@ -871,7 +920,7 @@ const struct plain_decoding_data oct_decode_info = {
     }
 };
 
-const struct plain_decoding_data base64_decode_info = {
+static const struct plain_decoding_data base64_decode_info = {
     .chars_per_unit = 4,
     .bytes_per_unit = 3,
     .bits_per_char = 6,
@@ -899,7 +948,7 @@ DIAG_ON_INIT_TWICE
  /**
   * This function parses encoded data according to <encoding> into binary data.
   * It will continue until one of the following conditions is met:
-  *    - src is depletetd
+  *    - src is depleted
   *    - dest cannot hold another full unit of data
   *    - an invalid character is read
   * When this happens any complete bytes will be recovered from the remaining
@@ -927,18 +976,27 @@ static int parse_plain_data(unsigned char** src, const unsigned char* src_end,
     uint64_t val;
     int j;
     if (ws_log_get_level() >= LOG_LEVEL_NOISY) {
-        char* debug_str = wmem_strndup(NULL, *src, (src_end-*src));
+        char* debug_str = wmem_strndup(NULL, (const char*)*src, (src_end-*src));
         ws_noisy("parsing data: %s", debug_str);
         wmem_free(NULL, debug_str);
     }
     while (*src < src_end && *dest + encoding->bytes_per_unit <= dest_end) {
+        /*
+         * XXX - This reads one octet at a time. If the GRegex compile flag
+         * G_REGEX_RAW wasn't given, the match was done using UTF-8 characters.
+         * That's useful, I suppose, if the input file has UTF-8 text (comments,
+         * etc.) that ought to be ignored - but it means that character classes
+         * like \d and \s can match Unicode characters that might (but probably
+         * aren't) in the data. Those will cause an invalid value warning and
+         * abort, which is easier than adding full UTF-8 support here.
+         */
         val = encoding->table[**src];
         switch (val) {
           case INVALID_VALUE:
+            report_failure("Unexpected char %d in data", **src);
             status = -1;
             goto remainder;
           case WHITESPACE_VALUE:
-            ws_warning("Unexpected char %d in data", **src);
             break;
           default:
             c_val = c_val << encoding->bits_per_char | val;
@@ -1038,7 +1096,7 @@ void parse_dir(const unsigned char* start_field, const unsigned char* end_field,
  * leave sec and nsec unchanged and return false.
  */
 static bool
-_parse_time(const unsigned char* start_field, const unsigned char* end_field, const char* _format, time_t* sec, int* nsec) {
+_parse_time(const unsigned char* start_field, const unsigned char* end_field, const char* _format, time_t* sec, unsigned* nsec) {
     struct tm timecode;
     time_t sec_buf;
     int nsec_buf = 0;
@@ -1053,14 +1111,14 @@ _parse_time(const unsigned char* start_field, const unsigned char* end_field, co
     char *p;
     int  i;
 
-    (void) g_strlcpy(field, start_field, MIN(end_field - start_field + 1, PARSE_BUF));
+    (void) g_strlcpy(field, (const char*)start_field, MIN(end_field - start_field + 1, PARSE_BUF));
     if (ts_fmt_iso) {
         nstime_t ts_iso;
         if (!iso8601_to_nstime(&ts_iso, field, ISO8601_DATETIME_AUTO)) {
             return false;
         }
         *sec = ts_iso.secs;
-        *nsec = ts_iso.nsecs;
+        *nsec = (unsigned)ts_iso.nsecs;
     } else {
         (void) g_strlcpy(format, _format, PARSE_BUF);
 
@@ -1073,7 +1131,6 @@ _parse_time(const unsigned char* start_field, const unsigned char* end_field, co
 
         /*
          * %f is for fractions of seconds not supported by strptime
-         * BTW: what is this function name? is this some russian joke?
          */
         subsecs_fmt = g_strrstr(format, "%f");
         if (subsecs_fmt) {
@@ -1131,10 +1188,10 @@ _parse_time(const unsigned char* start_field, const unsigned char* end_field, co
         }
 
         *sec = sec_buf;
-        *nsec = nsec_buf;
+        *nsec = (unsigned)nsec_buf;
     }
 
-    ws_noisy("parsed time %s Format(%s), time(%u), subsecs(%u)\n", field, _format, (uint32_t)*sec, (uint32_t)*nsec);
+    ws_noisy("parsed time %s Format(%s), time(%ju), subsecs(%u)\n", field, _format, (uintmax_t)*sec, (uint32_t)*nsec);
 
     return true;
 }
@@ -1147,7 +1204,7 @@ void parse_time(const unsigned char* start_field, const unsigned char* end_field
 
 void parse_seqno(const unsigned char* start_field, const unsigned char* end_field) {
     char* buf = (char*) g_alloca(end_field - start_field + 1);
-    (void) g_strlcpy(buf, start_field, end_field - start_field + 1);
+    (void) g_strlcpy(buf, (const char*)start_field, end_field - start_field + 1);
     seqno = g_ascii_strtoull(buf, NULL, 10);
 }
 
@@ -1191,8 +1248,8 @@ parse_preamble (void)
     /* Ensure preamble has more than two chars before attempting to parse.
      * This should cover line breaks etc that get counted.
      */
-    if ( info_p->timestamp_format != NULL && strlen(packet_preamble) > 2 ) {
-        got_time = _parse_time(packet_preamble, packet_preamble + strlen(packet_preamble), info_p->timestamp_format, &ts_sec, &ts_nsec);
+    if ( info_p->timestamp_format != NULL && strlen((const char*)packet_preamble) > 2 ) {
+        got_time = _parse_time(packet_preamble, packet_preamble + strlen((const char*)packet_preamble), info_p->timestamp_format, &ts_sec, &ts_nsec);
         if (!got_time) {
             /* Let's only have a possible GUI popup once, other messages to log
              */
@@ -1205,9 +1262,9 @@ parse_preamble (void)
     }
     if (ws_log_get_level() >= LOG_LEVEL_NOISY) {
         char *c;
-        while ((c = strchr(packet_preamble, '\r')) != NULL) *c=' ';
+        while ((c = strchr((const char*)packet_preamble, '\r')) != NULL) *c=' ';
         ws_noisy("[[parse_preamble: \"%s\"]]", packet_preamble);
-        ws_noisy("Format(%s), time(%u), subsecs(%u)", info_p->timestamp_format, (uint32_t)ts_sec, ts_nsec);
+        ws_noisy("Format(%s), time(%ju), subsecs(%u)", info_p->timestamp_format, (uintmax_t)ts_sec, ts_nsec);
     }
 
     if (!got_time) {
@@ -1257,19 +1314,113 @@ process_directive (char *str _U_)
 }
 
 /*----------------------------------------------------------------------
+ * If this is a hex+ASCII dump, after finishing a line of packet bytes,
+ * test if the beginning of the hex portion would produce ASCII that
+ * would be treated as byte tokens (e.g., "61 62 20 ... ab "), and if so,
+ * look for the bytes and remove them from the output.
+ */
+static void
+process_rollback(bool by_eol)
+{
+    int	    rollback = 0;
+    int     pending_rollback = 0;
+    int     line_size;
+    int     i;
+    GString *s2;
+    char    tmp_str[3];
+
+    /* Here a line of pkt bytes reading is finished */
+    rollback = 0;
+    /* s2 is the ASCII string, s1 is the HEX string, e.g, when
+       s2 = "ab ", s1 = "616220"
+       we should find out the largest tail of s1 matches the head
+       of s2, it means the matched part in tail is the ASCII dump
+       of the head byte. Those matched should be rolled back. */
+    line_size = curr_offset-(int)(pkt_lnstart-packet_buf);
+    s2 = g_string_new(NULL);
+    /* gather the possible pattern */
+    /* This is a simplified version of the lexical analysis done by the scanner
+     * and has to produce the same tokens. (Simpler because we only match bytes,
+     * space, and everything else.) Perhaps we should do lexical analysis with
+     * yy_scan_bytes. */
+    /* Note we have the bytes after any swapping of little endian byte groups
+     * has been done. That's what we want; various hexdump programs (hexdump,
+     * od, xxd) always output the ASCII dump in the natural order even if
+     * byte groups are little endian. */
+    i = 0;
+    while (i + 1 + rollback < line_size) {
+        if (pkt_lnstart[i] == ' ') {
+            /* Skip any spaces. We don't skip '\t', because in the ASCII dump
+             * those are converted to '.' and so wouldn't create extra byte
+             * tokens. */
+            i++;
+            continue;
+        }
+        tmp_str[0] = pkt_lnstart[i];
+        tmp_str[1] = pkt_lnstart[i+1];
+        tmp_str[2] = '\0';
+        /* it is a valid convertible string */
+        if (!g_ascii_isxdigit(tmp_str[0]) || !g_ascii_isxdigit(tmp_str[1])) {
+            break;
+        }
+        g_string_append_c(s2, (char)strtoul(tmp_str, (char **)NULL, 16));
+        i += 2;
+        if (by_eol) {
+            rollback++;
+        } else {
+            pending_rollback++;
+            /* If we had a text token before EOL, then without ' ' after the
+             * byte it won't parse as a byte token in the ASCII dump.
+             * If we transitioned straight from T_BYTE to T_EOL, then we already
+             * know the entire ASCII dump parsed as bytes. */
+            if (!(i + rollback < line_size)) {
+                break;
+            }
+            if (pkt_lnstart[i] == ' ') {
+                rollback += pending_rollback;
+                pending_rollback = 0;
+                i++;
+            } else if (pending_rollback >= 4) {
+                break;
+            }
+        }
+    }
+    /* If the packet line start contains a possible byte pattern, the line end
+       should contain the matched pattern if the user gave the -a flag.
+       The line will be considered invalid if the byte pattern cannot find
+       a matched one in the line of packet buffer.
+
+       XXX - We could instead do nothing (or warn) if the pattern isn't found.
+       That's probably better than dropping the entire line if the -a flag was
+       given despite there being no ASCII dump or if there is an ASCII dump but
+       separated by a delimiter like '|' that would prevent detecting it as
+       bytes. It's still better to avoid passing the flag if there is no ASCII
+       dump to avoid the extremely rare false detection where the actual bytes
+       look like a matching ASCII dump.
+        */
+    if (rollback > 0) {
+        if (strncmp((const char*)(pkt_lnstart+line_size-rollback), s2->str, rollback) == 0) {
+            unwrite_bytes(rollback);
+        } else {
+            /* Not matched. This line contains invalid packet bytes, so
+               discard the whole line */
+            /* The GUI only reports identical warnings once to save lots of pop-ups.
+             * Keep the unique information in a console message. */
+            report_warning("Expected ASCII rollback not found. Was ASCII identification enabled unnecessarily?");
+            ws_message("Expected %i byte%s to rollback at the end of line offset 0x%0X in packet %u.", rollback, plurality(rollback, "", "s"), curr_offset - line_size, info_p->num_packets_read);
+            unwrite_bytes(line_size);
+        }
+    }
+    g_string_free(s2, TRUE);
+}
+
+/*----------------------------------------------------------------------
  * Parse a single token (called from the scanner)
  */
 import_status_t
 parse_token(token_t token, char *str)
 {
     uint32_t num;
-    /* Variables for the hex+ASCII identification / lookback */
-    int     by_eol;
-    int	    rollback = 0;
-    int     line_size;
-    int     i;
-    char   *s2;
-    char    tmp_str[3];
     char  **tokens;
 
     /*
@@ -1299,6 +1450,7 @@ parse_token(token_t token, char *str)
             process_directive(str);
             break;
         case T_OFFSET:
+        case T_BYTES:
             if (offset_base == 0) {
                 append_to_preamble(str);
                 /* If we're still in the INIT state, maybe there's something
@@ -1318,21 +1470,38 @@ parse_token(token_t token, char *str)
                 return IMPORT_FAILURE;
             if (num == 0) {
                 /* New packet starts here */
+                /* XXX - This could just be any other run of three or more
+                 * zeros in a preamble. That only creates a problem if followed
+                 * by something that looks like bytes (otherwise a zero length
+                 * packet is ignored.)
+                 */
                 if (start_new_packet(false) != IMPORT_SUCCESS)
                     return IMPORT_FAILURE;
+                packet_start = 0;
                 state = READ_OFFSET;
                 pkt_lnstart = packet_buf + num;
+            } else {
+                /* Not a new packet; assume it's part of a preamble that
+                 * looks like an offset token. (#17140)
+                 */
+                append_to_preamble(str);
             }
             break;
         case T_BYTE:
             if (offset_base == 0) {
+                /* In no offset mode, assume this starts our packet */
                 if (start_new_packet(false) != IMPORT_SUCCESS)
                     return IMPORT_FAILURE;
                 if (write_byte(str) != IMPORT_SUCCESS)
                     return IMPORT_FAILURE;
                 state = READ_BYTE;
                 pkt_lnstart = packet_buf;
+                break;
             }
+            /* Otherwise, this is probably text that looks like a byte,
+             * e.g. a day or month with certain timestamp formats.
+             */
+            append_to_preamble(str);
             break;
         case T_EOF:
             if (write_current_packet(false) != IMPORT_SUCCESS)
@@ -1347,12 +1516,21 @@ parse_token(token_t token, char *str)
     case START_OF_LINE:
         switch(token) {
         case T_TEXT:
-            append_to_preamble(str);
+            /* If the only text allowed on the same line before an offset (other
+             * than the zero offset that begins a packet) were mailfwd ('>') and
+             * blanks, we could ignore those, and and switch back to INIT state
+             * here to decrease ambiguity. (That is, assume that other text at
+             * line start indicates the end of an old packet and start of new.)
+             */
+            if (offset_base != 0) {
+                append_to_preamble(str);
+            }
             break;
         case T_DIRECTIVE:
             process_directive(str);
             break;
         case T_OFFSET:
+        case T_BYTES:
             if (offset_base == 0) {
                 /* After starting the packet there's no point adding it to
                  * the preamble in this mode (we only do one packet.)
@@ -1371,6 +1549,10 @@ parse_token(token_t token, char *str)
                 return IMPORT_FAILURE;
             if (num == 0) {
                 /* New packet starts here */
+                /* XXX - This could just be any other run of three or more
+                 * zeros in a preamble. That only creates a problem if followed
+                 * by something that looks like bytes (otherwise a zero length
+                 * packet is ignored.) */
                 if (start_new_packet(false) != IMPORT_SUCCESS)
                     return IMPORT_FAILURE;
                 packet_start = 0;
@@ -1383,20 +1565,53 @@ parse_token(token_t token, char *str)
                  * of packet data included a number with spaces around
                  * it).  If the offset is less than what we expected,
                  * assume that's the problem, and throw away the putative
-                 * extra byte values.
+                 * extra byte values. (If identify_ascii is true, then
+                 * process_rollback does something similar, except that
+                 * it actually looks at the relevant bytes of the last
+                 * line and works if the mistaken text is on the last
+                 * line with an offset.)
+                 *
+                 * hexdump and od (but not xxd or tcpdump) print an extra
+                 * offset with the total length followed by no bytes. This
+                 * is necessary when those programs print multiple byte
+                 * units instead of individual bytes. They will zero pad
+                 * the last byte group, and the offset on the extra line
+                 * is used to remove the excess null bytes. This also
+                 * works for that case.
+                 *
+                 * In both of the above cases, the true offset should be
+                 * between the previous line offset start and the current
+                 * offset, as we only add bytes when a line started with
+                 * the correct offset (except in no offset mode, where we
+                 * don't get here.)
+                 *
+                 * XXX - It could be part of a preamble. There is a narrow
+                 * window for false detection here, but it's possible if the
+                 * line has, e.g., the packet length for the next packet.
                  */
-                if (num < curr_offset) {
+                if (num < curr_offset && (num >= (uint32_t)(pkt_lnstart - packet_buf))) {
                     unwrite_bytes(curr_offset - num);
                     state = READ_OFFSET;
                 } else {
                     /* Bad offset; switch to INIT state */
-                    ws_message("Inconsistent offset. Expecting %0X, got %0X. Ignoring rest of packet",
-                                curr_offset, num);
+                    report_warning("Inconsistent offset. Ending current packet.");
+                    ws_message("Inconsistent offset. Expecting %0X, got %0X. Ending current packet (%i).",
+                                curr_offset, num, info_p->num_packets_read);
                     if (write_current_packet(false) != IMPORT_SUCCESS)
                         return IMPORT_FAILURE;
+
+                    /* Instead of being an offset, it might be part of the preamble
+                     * that looks like an offset, e.g. a year. (#17140)
+                     */
+                    append_to_preamble(str);
                     state = INIT;
                 }
             } else {
+                /* Continues the previous packet at the correct offset */
+
+                /* Clear Preamble (text in the middle of a packet isn't preamble) */
+                packet_preamble_len = 0;
+
                 state = READ_OFFSET;
             }
             pkt_lnstart = packet_buf + num;
@@ -1407,7 +1622,12 @@ parse_token(token_t token, char *str)
                     return IMPORT_FAILURE;
                 state = READ_BYTE;
                 pkt_lnstart = packet_buf;
+                break;
             }
+            /* Since we expect an offset, assume this is text between packets
+             * that looks like a byte, e.g. a month or day.
+             */
+            append_to_preamble(str);
             break;
         case T_EOF:
             if (write_current_packet(false) != IMPORT_SUCCESS)
@@ -1425,6 +1645,11 @@ parse_token(token_t token, char *str)
             /* Record the byte */
             state = READ_BYTE;
             if (write_byte(str) != IMPORT_SUCCESS)
+                return IMPORT_FAILURE;
+            break;
+        case T_BYTES:
+            state = READ_BYTE;
+            if (write_bytes(str) != IMPORT_SUCCESS)
                 return IMPORT_FAILURE;
             break;
         case T_TEXT:
@@ -1452,62 +1677,22 @@ parse_token(token_t token, char *str)
             if (write_byte(str) != IMPORT_SUCCESS)
                 return IMPORT_FAILURE;
             break;
+        case T_BYTES:
+            if (write_bytes(str) != IMPORT_SUCCESS)
+                return IMPORT_FAILURE;
+            break;
         case T_TEXT:
         case T_DIRECTIVE:
         case T_OFFSET:
-        case T_EOL:
-            by_eol = 0;
             state = READ_TEXT;
-            if (token == T_EOL) {
-                by_eol = 1;
-                state = START_OF_LINE;
-            }
             if (info_p->hexdump.identify_ascii) {
-                /* Here a line of pkt bytes reading is finished
-                   compare the ascii and hex to avoid such situation:
-                   "61 62 20 ab ", when ab is ascii dump then it should
-                   not be treat as byte */
-                rollback = 0;
-                /* s2 is the ASCII string, s1 is the HEX string, e.g, when
-                   s2 = "ab ", s1 = "616220"
-                   we should find out the largest tail of s1 matches the head
-                   of s2, it means the matched part in tail is the ASCII dump
-                   of the head byte. These matched should be rollback */
-                line_size = curr_offset-(int)(pkt_lnstart-packet_buf);
-                s2 = (char*)g_malloc((line_size+1)/4+1);
-                /* gather the possible pattern */
-                for (i = 0; i < (line_size+1)/4; i++) {
-                    tmp_str[0] = pkt_lnstart[i*3];
-                    tmp_str[1] = pkt_lnstart[i*3+1];
-                    tmp_str[2] = '\0';
-                    /* it is a valid convertible string */
-                    if (!g_ascii_isxdigit(tmp_str[0]) || !g_ascii_isxdigit(tmp_str[1])) {
-                        break;
-                    }
-                    s2[i] = (char)strtoul(tmp_str, (char **)NULL, 16);
-                    rollback++;
-                    /* the 3rd entry is not a delimiter, so the possible byte pattern will not shown */
-                    if (!(pkt_lnstart[i*3+2] == ' ')) {
-                        if (by_eol != 1)
-                            rollback--;
-                        break;
-                    }
-                }
-                /* If packet line start contains possible byte pattern, the line end
-                   should contain the matched pattern if the user open the -a flag.
-                   The packet will be possible invalid if the byte pattern cannot find
-                   a matched one in the line of packet buffer.*/
-                if (rollback > 0) {
-                    if (strncmp(pkt_lnstart+line_size-rollback, s2, rollback) == 0) {
-                        unwrite_bytes(rollback);
-                    }
-                    /* Not matched. This line contains invalid packet bytes, so
-                       discard the whole line */
-                    else {
-                        unwrite_bytes(line_size);
-                    }
-                }
-                g_free(s2);
+                process_rollback(false);
+            }
+            break;
+        case T_EOL:
+            state = START_OF_LINE;
+            if (info_p->hexdump.identify_ascii) {
+                process_rollback(true);
             }
             break;
         case T_EOF:
@@ -1784,14 +1969,14 @@ text_import_pre_open(wtap_dump_params * const params, int file_type_subtype, con
         if (info_str->str) {
             wtap_block_add_string_option(shb_hdr, OPT_SHB_HARDWARE, info_str->str, info_str->len);
         }
-        g_string_free(info_str, true);
+        g_string_free(info_str, TRUE);
 
         info_str = g_string_new("");
         get_os_version_info(info_str);
         if (info_str->str) {
             wtap_block_add_string_option(shb_hdr, OPT_SHB_OS, info_str->str, info_str->len);
         }
-        g_string_free(info_str, true);
+        g_string_free(info_str, TRUE);
 
         wtap_block_add_string_option_format(shb_hdr, OPT_SHB_USERAPPL, "%s", get_appname_and_version());
 

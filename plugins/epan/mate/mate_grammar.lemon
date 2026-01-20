@@ -25,13 +25,16 @@
 
 #include "mate.h"
 #include "mate_grammar.h"
+
+#include "ws_attributes.h"
+
 #include <wsutil/file_util.h>
 #include <wsutil/str_util.h>
 
 #define DUMMY void*
 
 typedef struct _extraction {
-	gchar* as;
+	char* as;
 	header_field_info* hfi;
 	struct _extraction* next;
 	struct _extraction* last;
@@ -45,18 +48,18 @@ typedef struct _pdu_criteria_t {
 
 typedef struct _gop_options {
 	gop_tree_mode_t pdu_tree_mode;
-	gboolean drop_unassigned;
-	gboolean show_times;
-	float expiration;
-	float idle_timeout;
-	float lifetime;
+	bool drop_unassigned;
+	bool show_times;
+	double expiration;
+	double idle_timeout;
+	double lifetime;
 	AVPL* start;
 	AVPL* stop;
 	AVPL* extras;
 } gop_options_t;
 
 typedef struct _gog_statements {
-	float expiration;
+	double expiration;
 	gop_tree_mode_t gop_tree_mode;
 	GPtrArray* transform_list;
 	AVPL* extras;
@@ -73,10 +76,11 @@ typedef struct _transf_action_t {
 	AVPL* avpl;
 } transf_action_t;
 
-static void configuration_error(mate_config* mc, const gchar* fmt, ...) {
-	static gchar error_buffer[256];
-	const gchar* incl;
-	gint i;
+WS_NORETURN
+static void configuration_error(mate_config* mc, const char* fmt, ...) {
+	static char error_buffer[256];
+	const char* incl;
+	int i;
 	mate_config_frame* current_frame;
 	va_list list;
 
@@ -84,7 +88,7 @@ static void configuration_error(mate_config* mc, const gchar* fmt, ...) {
 	vsnprintf(error_buffer,sizeof(error_buffer),fmt,list);
 	va_end( list );
 
-	i = (gint) mc->config_stack->len;
+	i = (int) mc->config_stack->len;
 
 	while (i--) {
 
@@ -94,7 +98,7 @@ static void configuration_error(mate_config* mc, const gchar* fmt, ...) {
 			incl = " ";
 		}
 
-		current_frame = (mate_config_frame *)g_ptr_array_index(mc->config_stack,(guint)i);
+		current_frame = (mate_config_frame *)g_ptr_array_index(mc->config_stack,(unsigned)i);
 
 		g_string_append_printf(mc->config_error,"%s%s at line %u",incl, current_frame->filename, current_frame->linenum);
 	}
@@ -120,12 +124,11 @@ static AVPL_Transf* new_transform_elem(AVPL* match, AVPL* replace, avpl_match_mo
 	 return t;
 }
 
-static gchar* recolonize(mate_config* mc, gchar* s) {
+static char* recolonize(mate_config* mc, char* s) {
 	GString* str = g_string_new("");
-	gchar** vec;
-	gchar* r;
-	guint i,v;
-	gchar c;
+	char** vec;
+	unsigned i,v;
+	char c;
 
 	vec = g_strsplit(s,":",0);
 
@@ -163,11 +166,7 @@ static gchar* recolonize(mate_config* mc, gchar* s) {
 
 	g_string_erase(str,0,1);
 
-	r = str->str;
-
-	g_string_free(str,FALSE);
-
-	return r;
+	return g_string_free(str,FALSE);
 }
 
 DIAG_OFF_LEMON()
@@ -181,7 +180,7 @@ DIAG_ON_LEMON()
 
 %token_prefix TOKEN_
 
-%token_type { gchar* }
+%token_type { char* }
 %token_destructor {
 	(void) mc; /* Mark unused, similar to Q_UNUSED */
 	g_free($$);
@@ -190,11 +189,15 @@ DIAG_ON_LEMON()
 %extra_argument { mate_config* mc }
 
 %syntax_error {
-	configuration_error(mc,"Syntax Error before %s",yyminor);
+	if(yyminor == NULL) {
+		configuration_error(mc,"Syntax error detected before end of file.");
+	} else {
+		configuration_error(mc,"Syntax error at or before \"%s\"",yyminor);
+	}
 }
 
 %parse_failure {
-	configuration_error(mc,"Parse Error");
+	configuration_error(mc,"Parse error");
 }
 
 %type   transform_decl  { AVPL_Transf* }
@@ -206,17 +209,17 @@ DIAG_ON_LEMON()
 %type   match_mode { avpl_match_mode }
 %type   action_mode { avpl_replace_mode }
 
-%type gop_name { gchar* }
-%type time_value { float }
-%type pdu_name { gchar* }
+%type gop_name { char* }
+%type time_value { double }
+%type pdu_name { char* }
 %type gop_tree_mode { gop_tree_mode_t }
-%type true_false { gboolean }
+%type true_false { bool }
 
 %type criteria_statement { pdu_criteria_t* }
 %type accept_mode { accept_mode_t }
-%type pdu_drop_unassigned_statement { gboolean }
-%type discard_pdu_data_statement { gboolean }
-%type last_extracted_statement { gboolean }
+%type pdu_drop_unassigned_statement { bool }
+%type discard_pdu_data_statement { bool }
+%type last_extracted_statement { bool }
 
 %type extraction_statement {extraction_t*}
 %type extraction_statements {extraction_t*}
@@ -226,15 +229,15 @@ DIAG_ON_LEMON()
 %type gop_start_statement { AVPL* }
 %type gop_stop_statement { AVPL* }
 %type extra_statement { AVPL* }
-%type gop_drop_unassigned_statement { gboolean }
+%type gop_drop_unassigned_statement { bool }
 %type show_goptree_statement { gop_tree_mode_t }
-%type show_times_statement { gboolean }
-%type gop_expiration_statement { float }
-%type idle_timeout_statement { float }
-%type lifetime_statement { float }
+%type show_times_statement { bool }
+%type gop_expiration_statement { double }
+%type idle_timeout_statement { double }
+%type lifetime_statement { double }
 
 %type gog_statements { gog_statement_t* }
-%type gog_expiration_statement { float }
+%type gog_expiration_statement { double }
 %type gog_goptree_statement { gop_tree_mode_t }
 %type gog_key_statements { LoAL* }
 %type gog_key_statement { AVPL* }
@@ -249,8 +252,8 @@ DIAG_ON_LEMON()
 %type avpl { AVPL* }
 %type avps { AVPL* }
 %type avp { AVP* }
-%type value { gchar* }
-%type avp_oneoff { gchar* }
+%type value { char* }
+%type avp_oneoff { char* }
 
 
 mate_config ::= decls.
@@ -271,8 +274,8 @@ decl ::= DONE_KW SEMICOLON.
 
 debug_decl ::= DEBUG_KW OPEN_BRACE dbgfile_default dbglevel_default pdu_dbglevel_default gop_dbglevel_default gog_dbglevel_default CLOSE_BRACE SEMICOLON.
 
-dbgfile_default ::= FILENAME_KW QUOTED(Filename) SEMICOLON. { mc->dbg_facility = ws_fopen(Filename,"w"); if (mc->dbg_facility == NULL) report_open_failure(Filename,errno,TRUE); }
-dbgfile_default ::= FILENAME_KW NAME(Filename) SEMICOLON. { mc->dbg_facility = ws_fopen(Filename,"w"); if (mc->dbg_facility == NULL) report_open_failure(Filename,errno,TRUE);  }
+dbgfile_default ::= FILENAME_KW QUOTED(Filename) SEMICOLON. { mc->dbg_facility = ws_fopen(Filename,"w"); if (mc->dbg_facility == NULL) report_open_failure(Filename,errno,true); }
+dbgfile_default ::= FILENAME_KW NAME(Filename) SEMICOLON. { mc->dbg_facility = ws_fopen(Filename,"w"); if (mc->dbg_facility == NULL) report_open_failure(Filename,errno,true);  }
 dbgfile_default ::= .
 
 dbglevel_default ::= LEVEL_KW INTEGER(LevelString) SEMICOLON. { mc->dbg_lvl = (int) strtol(LevelString,NULL,10); }
@@ -352,8 +355,10 @@ transform_decl(A) ::= TRANSFORM_KW NAME(B) transform_body(C) SEMICOLON. {
 	for ( c = C; c; c = c->next )
 		c->name = g_strdup(B);
 
-	g_hash_table_insert(mc->transfs,C->name,C);
-
+	if (C) {
+		g_hash_table_insert(mc->transfs,C->name,C);
+	}
+	g_free(B);
 	A = NULL;
 }
 
@@ -371,6 +376,8 @@ transform_statements(A) ::= transform_statement(B). { A = B; }
 
 transform_statement(A) ::= transform_match(Match) transform_action(Action) SEMICOLON. {
 	A = new_transform_elem(Match->avpl,Action->avpl,Match->match_mode,Action->replace_mode);
+	g_free(Match);
+	g_free(Action);
 }
 
 transform_match(A) ::= MATCH_KW  match_mode(Mode) avpl(Avpl). {
@@ -424,7 +431,7 @@ pdu_decl ::=
 
 	mate_cfg_pdu* cfg  = new_pducfg(mc, Name);
 	extraction_t *extraction, *next_extraction;
-	GPtrArray* transport_stack = g_ptr_array_new();
+	GPtrArray* transport_stack = g_ptr_array_new_with_free_func(g_free);
 	int i;
 
 	if (! cfg ) configuration_error(mc,"could not create Pdu %s.",Name);
@@ -445,7 +452,7 @@ pdu_decl ::=
 		g_ptr_array_add(transport_stack,g_ptr_array_remove_index(Stack,i));
 	}
 
-	g_ptr_array_free(Stack, TRUE);
+	g_ptr_array_free(Stack, true);
 
 	cfg->transport_ranges = transport_stack;
 	cfg->payload_ranges = Payload;
@@ -454,6 +461,7 @@ pdu_decl ::=
 		cfg->criterium = Criteria->criterium_avpl;
 		cfg->criterium_match_mode = Criteria->criterium_match_mode;
 		cfg->criterium_accept_mode = Criteria->criterium_accept_mode;
+		g_free(Criteria);
 	}
 
 	cfg->transforms = Transform;
@@ -465,6 +473,7 @@ pdu_decl ::=
 			configuration_error(mc,"MATE: failed to create extraction rule '%s'",extraction->as);
 		}
 
+		g_free(extraction->as);
 		g_free(extraction);
 	}
 }
@@ -522,6 +531,10 @@ proto_stack(A) ::= field(B). {
 
 field(A) ::= NAME(B). {
 	A = proto_registrar_get_byname(B);
+	if (A == NULL) {
+		configuration_error(mc,"\nUnknown Proto/Transport/field: %s\n",B);
+	};
+	g_free(B);
 }
 
 /******************************************* GOP
@@ -546,7 +559,6 @@ gop_decl(A) ::= GOP_KW NAME(Name) ON_KW pdu_name(PduName) MATCH_KW avpl(Key) OPE
 
 	cfg = new_gopcfg(mc, Name);
 	g_hash_table_insert(mc->gops_by_pduname,PduName,cfg);
-	g_hash_table_insert(mc->gopcfgs,cfg->name,cfg);
 
 	cfg->on_pdu = PduName;
 	cfg->key = Key;
@@ -560,8 +572,8 @@ gop_decl(A) ::= GOP_KW NAME(Name) ON_KW pdu_name(PduName) MATCH_KW avpl(Key) OPE
 	cfg->stop = Stop;
 	cfg->transforms = Transform;
 
-	merge_avpl(cfg->extra,Extra,TRUE);
-	delete_avpl(Extra,TRUE);
+	merge_avpl(cfg->extra,Extra,true);
+	delete_avpl(Extra,true);
 }
 
 gop_drop_unassigned_statement(A) ::= DROP_UNASSIGNED_KW true_false(B) SEMICOLON. { A = B; }
@@ -593,8 +605,8 @@ gop_tree_mode(A) ::= PDU_TREE_KW.	{ A = (gop_tree_mode_t)GOP_PDU_TREE; }
 gop_tree_mode(A) ::= FRAME_TREE_KW.	{ A = (gop_tree_mode_t)GOP_FRAME_TREE; }
 gop_tree_mode(A) ::= BASIC_TREE_KW.	{ A = (gop_tree_mode_t)GOP_BASIC_PDU_TREE; }
 
-true_false(A) ::= TRUE_KW. { A = TRUE; }
-true_false(A) ::= FALSE_KW. { A = FALSE; }
+true_false(A) ::= TRUE_KW. { A = true; }
+true_false(A) ::= FALSE_KW. { A = false; }
 
 pdu_name(A) ::= NAME(B). {
 	mate_cfg_pdu* c;
@@ -603,15 +615,18 @@ pdu_name(A) ::= NAME(B). {
 	} else {
 		configuration_error(mc,"No such Pdu: '%s'",B);
 	}
+	g_free(B);
 }
 
 
 time_value(A) ::= FLOATING(B). {
-	A = (float) g_ascii_strtod(B,NULL);
+	A = g_ascii_strtod(B,NULL);
+	g_free(B);
 }
 
 time_value(A) ::= INTEGER(B). {
-	A = (float) g_ascii_strtod(B,NULL);
+	A = g_ascii_strtod(B,NULL);
+	g_free(B);
 }
 
 /************* GOG
@@ -639,8 +654,8 @@ gog_decl ::= GOG_KW NAME(Name) OPEN_BRACE
 		cfg->keys = Keys;
 		cfg->show_times = ShowTimes;
 
-		merge_avpl(cfg->extra,Extra,TRUE);
-		delete_avpl(Extra,TRUE);
+		merge_avpl(cfg->extra,Extra,true);
+		delete_avpl(Extra,true);
 }
 
 gog_goptree_statement(A) ::= GOP_TREE_KW gop_tree_type(B) SEMICOLON. { A = B; }
@@ -676,6 +691,7 @@ gop_name(A) ::= NAME(B). {
 	} else {
 		configuration_error(mc,"No Gop called '%s' has been already declared",B);
 	}
+	g_free(B);
 }
 /******************************************** GENERAL
 */
@@ -705,6 +721,7 @@ transform(A) ::= NAME(B). {
 	} else {
 		configuration_error(mc,"There's no such Transformation: %s",B);
 	}
+	g_free(B);
 }
 
 avpl(A) ::= OPEN_PARENS avps(B) CLOSE_PARENS. { A = B; }
@@ -713,17 +730,20 @@ avpl(A) ::= OPEN_PARENS CLOSE_PARENS. { A = new_avpl(""); }
 avps(A) ::= avps(B) COMMA avp(C). { A = B; if ( ! insert_avp(B,C) ) delete_avp(C); }
 avps(A) ::= avp(B). { A = new_avpl(""); if ( ! insert_avp(A,B) ) delete_avp(B); }
 
-avp(A) ::= NAME(B) AVP_OPERATOR(C) value(D). { A = new_avp(B,D,*C); }
-avp(A) ::= NAME(B). { A = new_avp(B,"",'?'); }
-avp(A) ::= NAME(B) OPEN_BRACE avp_oneoff(C) CLOSE_BRACE. { A = new_avp(B,C,'|'); }
+avp(A) ::= NAME(B) AVP_OPERATOR(C) value(D). {
+	A = new_avp(B,D,*C); g_free(B); g_free(C); g_free(D); }
+avp(A) ::= NAME(B). { A = new_avp(B,"",'?'); g_free(B); }
+avp(A) ::= NAME(B) OPEN_BRACE avp_oneoff(C) CLOSE_BRACE. {
+	A = new_avp(B,C,'|'); g_free(B); g_free(C); }
 
-avp_oneoff(A) ::= avp_oneoff(B) PIPE value(C). { A = ws_strdup_printf("%s|%s",B,C); }
-avp_oneoff(A) ::= value(B). { A = g_strdup(B); }
+avp_oneoff(A) ::= avp_oneoff(B) PIPE value(C). {
+	A = ws_strdup_printf("%s|%s",B,C); g_free(B); g_free(C); }
+avp_oneoff(A) ::= value(B). { A = B; }
 
-value(A) ::= QUOTED(B). { A = g_strdup(B); }
-value(A) ::= NAME(B). { A = g_strdup(B); }
-value(A) ::= FLOATING(B). { A = g_strdup(B); }
-value(A) ::= INTEGER(B). { A = g_strdup(B); }
-value(A) ::= DOTED_IP(B). { A = g_strdup(B); }
+value(A) ::= QUOTED(B). { A = B; }
+value(A) ::= NAME(B). { A = B; }
+value(A) ::= FLOATING(B). { A = B; }
+value(A) ::= INTEGER(B). { A = B; }
+value(A) ::= DOTED_IP(B). { A = B; }
 value(A) ::= COLONIZED(B). { A = recolonize(mc,B); }
 

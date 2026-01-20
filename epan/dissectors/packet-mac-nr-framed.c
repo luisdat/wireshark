@@ -28,10 +28,10 @@ extern int proto_mac_nr;
 /* Main dissection function. */
 static int dissect_mac_nr_framed(tvbuff_t *tvb, packet_info *pinfo,
                                  proto_tree *tree, void *data _U_) {
-    gint offset = 0;
+    unsigned offset = 0;
     struct mac_nr_info *p_mac_nr_info;
     tvbuff_t *mac_tvb;
-    gboolean infoAlreadySet = FALSE;
+    bool infoAlreadySet = false;
 
     /* Need to find enabled mac-nr dissector */
     dissector_handle_t mac_nr_handle = find_dissector("mac-nr");
@@ -56,7 +56,7 @@ static int dissect_mac_nr_framed(tvbuff_t *tvb, packet_info *pinfo,
         /* Allocate new info struct for this frame */
         p_mac_nr_info = wmem_new0(wmem_file_scope(), struct mac_nr_info);
     } else {
-        infoAlreadySet = TRUE;
+        infoAlreadySet = true;
     }
 
     /* Dissect the fields to populate p_mac_nr */
@@ -82,8 +82,7 @@ static int dissect_mac_nr_framed(tvbuff_t *tvb, packet_info *pinfo,
 
 void proto_register_mac_nr_framed(void) {
     /* Register protocol. */
-    proto_mac_nr_framed = proto_register_protocol(
-        "mac-nr-framed", "MAC-NR-FRAMED", "mac-nr-framed");
+    proto_mac_nr_framed = proto_register_protocol("mac-nr-framed", "MAC-NR-FRAMED", "mac-nr-framed");
 
     /* Allow other dissectors to find this one by name. */
     register_dissector("mac-nr-framed", dissect_mac_nr_framed,

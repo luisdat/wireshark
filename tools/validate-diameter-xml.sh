@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # A small script to run xmllint on the Diameter XML files (after doing some
 # fixups to those files).
@@ -69,6 +69,7 @@ done
 sedopts=${sedopts%?}
 
 cp "$diameter_dir/dictionary.dtd" "$tmpdir" || exit 1
+cp "$diameter_dir/dictionary.ent" "$tmpdir" || exit 1
 for f in "$diameter_dir"/*.xml
 do
         sed "${sedopts}" "$f" > "$tmpdir/${f##*/}" || exit 1

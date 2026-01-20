@@ -25,6 +25,7 @@
 #include <epan/packet.h>
 #include <epan/oids.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 
@@ -49,8 +50,8 @@ static int hf_cbrs_oids_UTF8String_PDU;
 /* Initialize the subtree pointers */
 
 
-static int
-dissect_cbrs_oids_ZONE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_cbrs_oids_ZONE(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -60,8 +61,8 @@ dissect_cbrs_oids_ZONE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_,
 
 
 
-static int
-dissect_cbrs_oids_FREQUENCY(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_cbrs_oids_FREQUENCY(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -71,8 +72,8 @@ dissect_cbrs_oids_FREQUENCY(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset
 
 
 
-static int
-dissect_cbrs_oids_FCCID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_cbrs_oids_FCCID(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -82,8 +83,8 @@ dissect_cbrs_oids_FCCID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_
 
 
 
-static int
-dissect_cbrs_oids_SERIAL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_cbrs_oids_SERIAL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -93,8 +94,8 @@ dissect_cbrs_oids_SERIAL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 
 
 
-static int
-dissect_cbrs_oids_FRN(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_cbrs_oids_FRN(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -104,8 +105,8 @@ dissect_cbrs_oids_FRN(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, 
 
 
 
-static int
-dissect_cbrs_oids_CPIRID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_cbrs_oids_CPIRID(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -115,8 +116,8 @@ dissect_cbrs_oids_CPIRID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 
 
 
-static int
-dissect_cbrs_oids_TEST(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_cbrs_oids_TEST(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -127,52 +128,52 @@ dissect_cbrs_oids_TEST(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_,
 /*--- PDUs ---*/
 
 static int dissect_ZONE_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_cbrs_oids_ZONE(FALSE, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_ZONE_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_cbrs_oids_ZONE(false, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_ZONE_PDU);
   return offset;
 }
 static int dissect_FREQUENCY_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_cbrs_oids_FREQUENCY(FALSE, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_FREQUENCY_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_cbrs_oids_FREQUENCY(false, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_FREQUENCY_PDU);
   return offset;
 }
 static int dissect_FCCID_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_cbrs_oids_FCCID(FALSE, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_FCCID_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_cbrs_oids_FCCID(false, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_FCCID_PDU);
   return offset;
 }
 static int dissect_SERIAL_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_cbrs_oids_SERIAL(FALSE, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_SERIAL_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_cbrs_oids_SERIAL(false, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_SERIAL_PDU);
   return offset;
 }
 static int dissect_FRN_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_cbrs_oids_FRN(FALSE, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_FRN_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_cbrs_oids_FRN(false, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_FRN_PDU);
   return offset;
 }
 static int dissect_CPIRID_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_cbrs_oids_CPIRID(FALSE, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_CPIRID_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_cbrs_oids_CPIRID(false, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_CPIRID_PDU);
   return offset;
 }
 static int dissect_TEST_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_cbrs_oids_TEST(FALSE, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_TEST_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_cbrs_oids_TEST(false, tvb, offset, &asn1_ctx, tree, hf_cbrs_oids_TEST_PDU);
   return offset;
 }
 

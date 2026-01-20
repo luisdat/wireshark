@@ -19,6 +19,7 @@
 #include <wsutil/filesystem.h>
 #include <wsutil/privileges.h>
 #include <wsutil/please_report_bug.h>
+#include <app/application_flavor.h>
 #include <wsutil/wslog.h>
 #include <extcap/ssh-base.h>
 #include <writecap/pcapio.h>
@@ -110,13 +111,13 @@ enum {
 static char prompt_str[SSH_READ_BLOCK_SIZE + 1];
 static int32_t prompt_len = -1;
 CISCO_SW_TYPE global_sw_type = CISCO_UNKNOWN;
-static bool send_output_quit = false;	/* IOS XE 17: send quit during output */
+static bool send_output_quit;	/* IOS XE 17: send quit during output */
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
 	EXTCAP_BASE_OPTIONS,
 	{ "help", ws_no_argument, NULL, OPT_HELP},
 	{ "version", ws_no_argument, NULL, OPT_VERSION},
-	SSH_BASE_OPTIONS,
+	SSH_BASE_PACKET_OPTIONS,
 	{ 0, 0, 0, 0}
 };
 
@@ -162,7 +163,7 @@ static char* interfaces_list_to_filter(GSList* interfaces, unsigned int remote_p
 		g_string_append_printf(filter, ", permit ip any any");
 	}
 
-	return g_string_free(filter, false);
+	return g_string_free(filter, FALSE);
 }
 
 static char* local_interfaces_to_filter(const unsigned int remote_port)
@@ -227,7 +228,7 @@ static int read_output_bytes(ssh_channel channel, int bytes, char* outbuf)
  *   READ_LINE_TIMEOUT - reading ended with timeout, line/len contains \0 terminate prompt
  *   READ_LINE_TOO_LONG - buffer is full with no EOLN nor PROMPT found, line is filled with NOT \0 terminated data
  */
-static int ssh_channel_read_line_timeout(ssh_channel channel, char *line, int *len, int max_len) {
+static int ssh_channel_read_line_timeout(ssh_channel channel, char *line, uint32_t* len, uint32_t max_len) {
 	char chr;
 	int rlen = 0;
 
@@ -414,6 +415,7 @@ static void ciscodump_cleanup_ios(ssh_channel channel, const char* iface, const 
 		if (cfilter) {
 			ssh_channel_printf(channel, "configure terminal\n");
 			ssh_channel_printf(channel, "no ip access-list ex %s\n", WIRESHARK_CAPTURE_ACCESSLIST);
+			ssh_channel_printf(channel, "end\n");
 		}
 
 		read_output_bytes(channel, -1, NULL);
@@ -894,7 +896,7 @@ static int parse_line_asa(uint8_t* packet, unsigned* offset, char* line, uint32_
 }
 
 /* IOS: Reads response and parses buffer till prompt received */
-static int process_buffer_response_ios(ssh_channel channel, uint8_t* packet, FILE* fp, const uint32_t count, uint32_t *processed_packets)
+static int process_buffer_response_ios(ssh_channel channel, uint8_t* packet, ws_cwstream* fp, const uint32_t count, uint32_t *processed_packets)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
 	uint32_t read_packets = 1;
@@ -904,6 +906,7 @@ static int process_buffer_response_ios(ssh_channel channel, uint8_t* packet, FIL
 	time_t pkt_time = 0;
 	uint32_t pkt_usec = 0;
 	uint32_t len = 0;
+	uint64_t bytes_written = 0;
 
 	/* Process response */
 	do {
@@ -918,7 +921,6 @@ static int process_buffer_response_ios(ssh_channel channel, uint8_t* packet, FIL
 					ws_debug("Read packet %d\n", read_packets);
 					if (read_packets > *processed_packets) {
 						int err;
-						uint64_t bytes_written;
 
 						ws_debug("Exporting packet %d\n", *processed_packets);
 						/*  dump the packet to the pcap file */
@@ -928,7 +930,7 @@ static int process_buffer_response_ios(ssh_channel channel, uint8_t* packet, FIL
 							ws_debug("Error in libpcap_write_packet(): %s", g_strerror(err));
 							break;
 						}
-						fflush(fp);
+						ws_cwstream_flush(fp, &err);
 						ws_debug("Dumped packet %u size: %u\n", *processed_packets, packet_size);
 						(*processed_packets)++;
 					}
@@ -958,7 +960,7 @@ static int process_buffer_response_ios(ssh_channel channel, uint8_t* packet, FIL
 }
 
 /* IOS: Queries buffer content and reads it */
-static void ssh_loop_read_ios(ssh_channel channel, FILE* fp, const uint32_t count)
+static void ssh_loop_read_ios(ssh_channel channel, ws_cwstream* fp, const uint32_t count)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
 	uint8_t* packet;
@@ -1016,7 +1018,7 @@ static void ssh_loop_read_ios(ssh_channel channel, FILE* fp, const uint32_t coun
 }
 
 /* IOS-XE 16: Reads response and parses buffer till prompt received */
-static int process_buffer_response_ios_xe_16(ssh_channel channel, uint8_t* packet, FILE* fp, const uint32_t count, uint32_t *processed_packets)
+static int process_buffer_response_ios_xe_16(ssh_channel channel, uint8_t* packet, ws_cwstream* fp, const uint32_t count, uint32_t *processed_packets)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
 	uint32_t read_packets = 1;
@@ -1024,6 +1026,7 @@ static int process_buffer_response_ios_xe_16(ssh_channel channel, uint8_t* packe
 	int loop_end = 0;
 	unsigned packet_size = 0;
 	uint32_t len = 0;
+	uint64_t bytes_written = 0;
 
 	/* Process response */
 	do {
@@ -1038,7 +1041,6 @@ static int process_buffer_response_ios_xe_16(ssh_channel channel, uint8_t* packe
 					if (read_packets > *processed_packets) {
 						int err;
 						int64_t cur_time = g_get_real_time();
-						uint64_t bytes_written = 0;
 
 						ws_debug("Exporting packet %d\n", *processed_packets);
 						/*  dump the packet to the pcap file */
@@ -1048,7 +1050,7 @@ static int process_buffer_response_ios_xe_16(ssh_channel channel, uint8_t* packe
 							ws_debug("Error in libpcap_write_packet(): %s", g_strerror(err));
 							break;
 						}
-						fflush(fp);
+						ws_cwstream_flush(fp, &err);
 						ws_debug("Dumped packet %u size: %u\n", *processed_packets, packet_size);
 						(*processed_packets)++;
 					}
@@ -1078,7 +1080,7 @@ static int process_buffer_response_ios_xe_16(ssh_channel channel, uint8_t* packe
 }
 
 /* IOS-XE 17: Reads response and parses buffer till prompt received */
-static int process_buffer_response_ios_xe_17(ssh_channel channel, uint8_t* packet, FILE* fp, const uint32_t count, uint32_t *processed_packets)
+static int process_buffer_response_ios_xe_17(ssh_channel channel, uint8_t* packet, ws_cwstream* fp, const uint32_t count, uint32_t *processed_packets)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
 	uint32_t read_packets = 1;
@@ -1086,6 +1088,7 @@ static int process_buffer_response_ios_xe_17(ssh_channel channel, uint8_t* packe
 	int loop_end = 0;
 	unsigned packet_size = 0;
 	uint32_t len = 0;
+	uint64_t bytes_written = 0;
 
 	/* Process response */
 	do {
@@ -1112,7 +1115,6 @@ static int process_buffer_response_ios_xe_17(ssh_channel channel, uint8_t* packe
 					if (read_packets > *processed_packets) {
 						int err;
 						int64_t cur_time = g_get_real_time();
-						uint64_t bytes_written;
 
 						ws_debug("Exporting packet %d\n", *processed_packets);
 						/*  dump the packet to the pcap file */
@@ -1122,7 +1124,7 @@ static int process_buffer_response_ios_xe_17(ssh_channel channel, uint8_t* packe
 							ws_debug("Error in libpcap_write_packet(): %s", g_strerror(err));
 							break;
 						}
-						fflush(fp);
+						ws_cwstream_flush(fp, &err);
 						ws_debug("Dumped packet %u size: %u\n", *processed_packets, packet_size);
 						(*processed_packets)++;
 					}
@@ -1146,7 +1148,7 @@ static int process_buffer_response_ios_xe_17(ssh_channel channel, uint8_t* packe
 }
 
 /* IOS-XE 16: Queries buffer content and reads it */
-static void ssh_loop_read_ios_xe_16(ssh_channel channel, FILE* fp, const uint32_t count)
+static void ssh_loop_read_ios_xe_16(ssh_channel channel, ws_cwstream* fp, const uint32_t count)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
 	uint8_t* packet;
@@ -1204,7 +1206,7 @@ static void ssh_loop_read_ios_xe_16(ssh_channel channel, FILE* fp, const uint32_
 }
 
 /* IOS-XE 17: Queries buffer content and reads it */
-static void ssh_loop_read_ios_xe_17(ssh_channel channel, FILE* fp, const uint32_t count)
+static void ssh_loop_read_ios_xe_17(ssh_channel channel, ws_cwstream* fp, const uint32_t count)
 {
 	uint8_t* packet;
 	uint32_t processed_packets = 0;
@@ -1234,13 +1236,14 @@ static void ssh_loop_read_ios_xe_17(ssh_channel channel, FILE* fp, const uint32_
 }
 
 /* ASA: Reads response and parses buffer till prompt end of packet received */
-static int process_buffer_response_asa(ssh_channel channel, uint8_t* packet, FILE* fp, const uint32_t count, uint32_t *processed_packets, uint32_t *current_max)
+static int process_buffer_response_asa(ssh_channel channel, uint8_t* packet, ws_cwstream* fp, const uint32_t count, uint32_t *processed_packets, uint32_t *current_max)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
 	uint32_t read_packets = 1;
 	int status = CISCODUMP_PARSER_STARTING;
 	int loop_end = 0;
 	unsigned packet_size = 0;
+	uint64_t bytes_written = 0;
 
 	do {
 		time_t pkt_time = 0;
@@ -1263,7 +1266,6 @@ static int process_buffer_response_asa(ssh_channel channel, uint8_t* packet, FIL
 					if (status == CISCODUMP_PARSER_END_PACKET) {
 						ws_debug("Read packet %d\n", read_packets);
 						int err;
-						uint64_t bytes_written;
 
 						ws_debug("Exporting packet %d\n", *processed_packets);
 						/*  dump the packet to the pcap file */
@@ -1273,7 +1275,7 @@ static int process_buffer_response_asa(ssh_channel channel, uint8_t* packet, FIL
 							ws_debug("Error in libpcap_write_packet(): %s", g_strerror(err));
 							break;
 						}
-						fflush(fp);
+						ws_cwstream_flush(fp, &err);
 						ws_debug("Dumped packet %u size: %u\n", *processed_packets, packet_size);
 						(*processed_packets)++;
 						packet_size = 0;
@@ -1305,7 +1307,7 @@ static int process_buffer_response_asa(ssh_channel channel, uint8_t* packet, FIL
 }
 
 /* ASA: Queries buffer content and reads it */
-static void ssh_loop_read_asa(ssh_channel channel, FILE* fp, const uint32_t count)
+static void ssh_loop_read_asa(ssh_channel channel, ws_cwstream* fp, const uint32_t count)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
 	uint8_t* packet;
@@ -1357,7 +1359,7 @@ static void ssh_loop_read_asa(ssh_channel channel, FILE* fp, const uint32_t coun
 }
 
 
-static void ssh_loop_read(ssh_channel channel, FILE* fp, const uint32_t count _U_, CISCO_SW_TYPE sw_type)
+static void ssh_loop_read(ssh_channel channel, ws_cwstream* fp, const uint32_t count _U_, CISCO_SW_TYPE sw_type)
 {
 	ws_debug("Starting reading loop");
 	switch (sw_type) {
@@ -1382,7 +1384,7 @@ static void ssh_loop_read(ssh_channel channel, FILE* fp, const uint32_t count _U
 static int detect_host_prompt(ssh_channel channel)
 {
 	char line[SSH_READ_BLOCK_SIZE + 1];
-	int len = 0;
+	uint32_t len = 0;
 	char prompt_2[SSH_READ_BLOCK_SIZE + 1];
 
 	/* Discard any login message */
@@ -1981,7 +1983,7 @@ static bool run_capture_asa(ssh_channel channel, const char* iface, const char* 
 				} else {
 					cmdline = g_strdup_printf("capture %s type isakmp packet-length 32810 interface %s", WIRESHARK_CAPTURE, ifname);
 				}
-				/* Completelly different output
+				/* Completely different output
 				} else if (strstr(iface_one,  "webvpn")) {
 					cmdline = g_strdup_printf("capture %s type webvpn user %s", WIRESHARK_CAPTURE, ifname);
 					process_filter = false;
@@ -2132,7 +2134,7 @@ static int ssh_open_remote_connection(const ssh_params_t* ssh_params, const char
 {
 	ssh_session sshs;
 	ssh_channel channel;
-	FILE* fp = stdout;
+	ws_cwstream* fp;
 	uint64_t bytes_written = 0;
 	int err;
 	int ret = EXIT_FAILURE;
@@ -2140,9 +2142,15 @@ static int ssh_open_remote_connection(const ssh_params_t* ssh_params, const char
 
 	if (g_strcmp0(fifo, "-")) {
 		/* Open or create the output file */
-		fp = fopen(fifo, "wb");
+		fp = ws_cwstream_open(fifo, WS_FILE_UNCOMPRESSED, &err);
 		if (!fp) {
 			ws_warning("Error creating output file: %s", g_strerror(errno));
+			return EXIT_FAILURE;
+		}
+	} else {
+		fp = ws_cwstream_open_stdout(WS_FILE_UNCOMPRESSED, &err);
+		if (!fp) {
+			ws_warning("Error opening standard out: %s", g_strerror(errno));
 			return EXIT_FAILURE;
 		}
 	}
@@ -2152,7 +2160,7 @@ static int ssh_open_remote_connection(const ssh_params_t* ssh_params, const char
 		goto cleanup;
 	}
 
-	fflush(fp);
+	ws_cwstream_flush(fp, &err);
 
 	ws_debug("Create first ssh session");
 	sshs = create_ssh_connection(ssh_params, &err_info);
@@ -2216,8 +2224,7 @@ static int ssh_open_remote_connection(const ssh_params_t* ssh_params, const char
 
 	ret = EXIT_SUCCESS;
 cleanup:
-	if (fp != stdout)
-		fclose(fp);
+	ws_cwstream_close(fp, NULL);
 
 	return ret;
 }
@@ -2296,8 +2303,11 @@ int main(int argc, char *argv[])
 	char* help_url;
 	char* help_header = NULL;
 
+	/* Set the program name. */
+	g_set_prgname("ciscodump");
+
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init("ciscodump");
+	extcap_log_init();
 
 	/*
 	 * Get credential information for later use.
@@ -2308,14 +2318,14 @@ int main(int argc, char *argv[])
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	err_msg = configuration_init(argv[0], NULL);
+	err_msg = configuration_init(argv[0], "wireshark");
 	if (err_msg != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			err_msg);
 		g_free(err_msg);
 	}
 
-	help_url = data_file_url("ciscodump.html");
+	help_url = data_file_url("ciscodump.html", application_configuration_environment_prefix());
 	extcap_base_set_util_info(extcap_conf, argv[0], CISCODUMP_VERSION_MAJOR, CISCODUMP_VERSION_MINOR,
 		CISCODUMP_VERSION_RELEASE, help_url);
 	add_libssh_info(extcap_conf);

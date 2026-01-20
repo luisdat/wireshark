@@ -15,6 +15,7 @@
 #include <epan/packet.h>
 #include <epan/strutil.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-e2ap.h"
 #include "packet-per.h"
@@ -57,7 +58,7 @@ proto_reg_handoff_kpm_v2(void)
 {
 //#include "packet-kpm-v2-dis-tab.c"
 
-    static ran_function_dissector_t kpm_v2 =
+    static const ran_function_dissector_t kpm_v2 =
     { "ORAN-E2SM-KPM", "1.3.6.1.4.1.53148.1.2.2.2", 2, 2,
       {  dissect_E2SM_KPM_RANfunction_Description_PDU,
 
@@ -96,7 +97,7 @@ void proto_register_kpm_v2(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
 #include "packet-kpm-v2-ettarr.c"
   };
 

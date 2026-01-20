@@ -4,7 +4,7 @@
   wkssvc interface definitions
 */
 
-import "srvsvc.idl", "lsa.idl";
+import "../srvsvc/srvsvc.idl", "../lsa/lsa.idl";
 
 [ uuid("6bffd098-a112-3610-9833-46c3f87e345a"),
   version(1.0),
@@ -13,7 +13,11 @@ import "srvsvc.idl", "lsa.idl";
   endpoint("ncacn_np:[\\pipe\\wkssvc]","ncacn_ip_tcp:","ncalrpc:")
 ] interface wkssvc
 {
-	typedef [v1_enum] enum srvsvc_PlatformId srvsvc_PlatformId;
+	/* pidl does not properly compile a typedef where the type specifier
+	   references another type other than a base type or a struct, union,
+	   or enum, so this is handled in the conformance file.
+	typedef [v1_enum] srvsvc_PlatformId srvsvc_PlatformId;
+	*/
 
 #define BOOL uint32
 
@@ -264,7 +268,7 @@ import "srvsvc.idl", "lsa.idl";
 	} wkssvc_NetWkstaInfo;
 
 	WERROR wkssvc_NetWkstaGetInfo(
-		[in]   [string,charset(UTF16)] uint16 *server_name,
+		[in]   [string,charset(UTF16),unique] uint16 *server_name,
 		[in]   uint32 level,
 		[out,switch_is(level),ref]  wkssvc_NetWkstaInfo *info
 		);

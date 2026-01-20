@@ -13,7 +13,7 @@
 /*
   http://wiki.mikrotik.com/wiki/Manual:IP/Neighbor_discovery
   TODO:
-  - Find out about first 4 bytes
+  - Find out about first 4 bytes (are the first 2 simply part of the sequence number?)
   - Find out about additional TLVs
   - Find out about unpack values
  */
@@ -61,25 +61,25 @@ static int hf_mndp_ipv4address;
 
 /* ============= copy/paste/modify from value_string.[hc] ============== */
 typedef struct _ext_value_string {
-	guint32  value;
-	const gchar   *strptr;
+	uint32_t value;
+	const char    *strptr;
 	int* hf_element;
-	int (*specialfunction)(tvbuff_t *, packet_info *, proto_tree *, guint32,
-			       guint32, const struct _ext_value_string *);
+	int (*specialfunction)(tvbuff_t *, packet_info *, proto_tree *, uint32_t,
+			       uint32_t, const struct _ext_value_string *);
 	const struct _ext_value_string *evs;
 } ext_value_string;
 
 
-static const gchar*
-match_strextval_idx(guint32 val, const ext_value_string *vs, gint *idx) {
-	gint i = 0;
+static const char*
+match_strextval_idx(uint32_t val, const ext_value_string *vs, int *idx) {
+	int i = 0;
 
 	if(vs) {
 		while (vs[i].strptr) {
 			if (vs[i].value == val) {
 				if (idx)
 					*idx = i;
-				return(vs[i].strptr);
+				return vs[i].strptr;
 			}
 			i++;
 		}
@@ -90,9 +90,9 @@ match_strextval_idx(guint32 val, const ext_value_string *vs, gint *idx) {
 	return NULL;
 }
 
-static const gchar*
-extval_to_str_idx(wmem_allocator_t *pool, guint32 val, const ext_value_string *vs, gint *idx, const char *fmt) {
-	const gchar *ret;
+static const char*
+extval_to_str_idx(wmem_allocator_t *pool, uint32_t val, const ext_value_string *vs, int *idx, const char *fmt) {
+	const char *ret;
 
 	if (!fmt)
 		fmt="Unknown";
@@ -107,14 +107,14 @@ extval_to_str_idx(wmem_allocator_t *pool, guint32 val, const ext_value_string *v
 
 /* Forward decls needed by mndp_tunnel_tlv_vals et al */
 static int dissect_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *mndp_tree,
-	guint32 offset, guint32 length, const ext_value_string *value_array);
+	uint32_t offset, uint32_t length, const ext_value_string *value_array);
 
 static const ext_value_string mndp_body_tlv_vals[] = {
 	{  1, "MAC-Address",	&hf_mndp_mac,		NULL, NULL },
 	{  5, "Identity",	&hf_mndp_identity,	NULL, NULL },
 	{  7, "Version",	&hf_mndp_version,	NULL, NULL },
 	{  8, "Platform",	&hf_mndp_platform,	NULL, NULL },
-	{ 10, "Uptime",		&hf_mndp_uptime,	NULL, (ext_value_string *)TRUE },
+	{ 10, "Uptime",		&hf_mndp_uptime,	NULL, (ext_value_string *)true },
 	{ 11, "Software-ID",	&hf_mndp_softwareid,	NULL, NULL },
 	{ 12, "Board",		&hf_mndp_board,		NULL, NULL },
 	{ 14, "Unpack",		&hf_mndp_unpack,	NULL, NULL },
@@ -133,19 +133,18 @@ static const value_string mndp_unpack_vals[] = {
 
 static int
 dissect_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *mndp_tree,
-	guint32 offset, guint32 length _U_, const ext_value_string *value_array)
+	uint32_t offset, uint32_t length _U_, const ext_value_string *value_array)
 {
-	guint32     tlv_type;
-	guint32     tlv_length;
+	uint32_t    tlv_type;
+	uint32_t    tlv_length;
 	proto_item *tlv_tree;
 	proto_item *type_item;
 	int         type_index;
-	guint32     tlv_end;
-	guint       encoding_info;
+	uint32_t    tlv_end;
+	unsigned    encoding_info;
 
 	tlv_type = tvb_get_ntohs(tvb, offset);
 	tlv_length = tvb_get_ntohs(tvb, offset + 2);
-	/* DISSECTOR_ASSERT(tlv_length >= 4); */
 	tlv_tree = proto_tree_add_subtree_format(mndp_tree, tvb,
 		offset, tlv_length+4, ett_mndp_tlv_header, NULL,
 		"T %d, L %d: %s",
@@ -163,8 +162,6 @@ dissect_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *mndp_tree,
 		tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset += 2;
 
-	/* tlv_length -= 4; */
-
 	if (tlv_length == 0)
 		return offset;
 
@@ -176,9 +173,9 @@ dissect_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *mndp_tree,
 		 && !value_array[type_index].specialfunction
 		 && value_array[type_index].evs != NULL
 	) {
-		encoding_info = value_array[type_index].evs ? TRUE : FALSE;
+		encoding_info = value_array[type_index].evs ? true : false;
 	} else {
-		encoding_info = FALSE;
+		encoding_info = false;
 	}
 	if ( type_index != -1 && value_array[type_index].hf_element) {
 		proto_tree_add_item(tlv_tree,
@@ -189,7 +186,7 @@ dissect_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *mndp_tree,
 			tvb, offset, tlv_length, ENC_NA);
 	}
 	if ( type_index != -1 && value_array[type_index].specialfunction ) {
-		guint32 newoffset;
+		uint32_t newoffset;
 
 		while (offset < tlv_end) {
 			newoffset = value_array[type_index].specialfunction (
@@ -207,8 +204,8 @@ dissect_mndp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	proto_item *ti;
 	proto_tree *mndp_tree;
-	guint32     offset = 0;
-	guint32     packet_length;
+	uint32_t    offset = 0;
+	uint32_t    packet_length;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_SHORT_NAME);
 
@@ -234,27 +231,57 @@ dissect_mndp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	return offset;
 }
 
-static gboolean
+static bool
 test_mndp(tvbuff_t *tvb)
 {
+	/* Observed captures of MNDP always seem to have port 5678 as both
+	 * the source and destination port, and have a broadcast destination IP
+	 * and destination MAC address (if we have those layers.)
+	 * The TLVs are also transmitted in increasing type order.
+	 * TLV type 1 (MAC-Address) appears to be mandatory (and thus first),
+	 * and always has length 6.
+	 * We could also step through all the TLVs to see if the types and
+	 * lengths are reasonable.
+	 * Any of these could be used to strengthen the heuristic further.
+	 */
+	unsigned offset = 0;
+	unsigned type, length;
 	/* Minimum of 8 bytes, 4 Bytes header + 1 TLV-header */
-	if ( tvb_captured_length(tvb) < 8
-		    || tvb_get_guint8(tvb, 4) != 0
-		    || tvb_get_guint8(tvb, 6) != 0
-	) {
-		return FALSE;
+	if ( tvb_captured_length(tvb) < 8) {
+		return false;
 	}
-	return TRUE;
+	offset += 4;
+	type = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+	if (type != 1) {
+		return false;
+	}
+	offset += 2;
+	length = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+	if (length != 6) {
+		return false;
+	}
+	offset += 2;
+	/* Length does *not* include the type and length fields. */
+	if (tvb_reported_length_remaining(tvb, offset) < length) {
+		return false;
+	}
+	offset += length;
+	/* If there's more data left, it should be another TLV. */
+	if (tvb_reported_length_remaining(tvb, offset) > 0 &&
+	    tvb_reported_length_remaining(tvb, offset) < 4) {
+		return false;
+	}
+	return true;
 }
 
-static gboolean
+static bool
 dissect_mndp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	if ( !test_mndp(tvb) ) {
-		return FALSE;
+		return false;
 	}
 	dissect_mndp(tvb, pinfo, tree);
-	return TRUE;
+	return true;
 }
 
 static int
@@ -339,7 +366,7 @@ proto_register_mndp(void)
 				0x0, NULL, HFILL }},
 
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_mndp,
 		&ett_mndp_tlv_header,
 	};

@@ -8,7 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Ref 3GPP TS 44.031 version 11.0.0 Release 11
+ * Ref 3GPP TS 44.031 version 18.0.0 Release 18
  * http://www.3gpp.org
  */
 
@@ -16,6 +16,7 @@
 
 #include <epan/packet.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-per.h"
@@ -25,12 +26,6 @@
 #define PSNAME "RRLP"
 #define PFNAME "rrlp"
 
-
-
-#ifdef _MSC_VER
-/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
-#pragma warning(disable:4146)
-#endif
 
 void proto_register_rrlp(void);
 void proto_reg_handoff_rrlp(void);
@@ -42,7 +37,7 @@ static int proto_rrlp;
 #include "packet-rrlp-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_rrlp;
+static int ett_rrlp;
 #include "packet-rrlp-ett.c"
 
 /* Include constants */
@@ -62,7 +57,7 @@ void proto_register_rrlp(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
 	  &ett_rrlp,
 #include "packet-rrlp-ettarr.c"
   };

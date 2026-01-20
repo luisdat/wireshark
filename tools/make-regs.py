@@ -75,6 +75,42 @@ const unsigned long dissector_reg_handoff_count = {1};
 
     print("Found {0} registrations and {1} handoffs.".format(len(protos), len(handoffs)))
 
+def make_event_dissectors(outfile, infiles):
+    protos = []
+    protos_regex = r"void\s+(event_register_[\w]+)\s*\(\s*void\s*\)\s*{"
+    handoffs = []
+    handoffs_regex = r"void\s+(event_reg_handoff_[\w]+)\s*\(\s*void\s*\)\s*{"
+
+    scan_files(infiles, [(protos, protos_regex), (handoffs, handoffs_regex)])
+
+    if len(protos) < 1:
+        sys.exit("No protocol registrations found.")
+
+    protos.sort()
+    handoffs.sort()
+
+    output = preamble
+    output += """\
+#include "event-dissectors.h"
+
+const unsigned long event_dissector_reg_proto_count = {0};
+const unsigned long event_dissector_reg_handoff_count = {1};
+
+""".format(len(protos), len(handoffs))
+
+    output += gen_prototypes(protos)
+    output += "\n"
+    output += gen_array(protos, "dissector_reg_t const event_dissector_reg_proto")
+    output += "\n"
+    output += gen_prototypes(handoffs)
+    output += "\n"
+    output += gen_array(handoffs, "dissector_reg_t const event_dissector_reg_handoff")
+
+    with open(outfile, "w") as f:
+        f.write(output)
+
+    print("Found {0} registrations and {1} handoffs.".format(len(protos), len(handoffs)))
+
 def make_wtap_modules(outfile, infiles):
     wtap_modules = []
     wtap_modules_regex = r"void\s+(register_[\w]+)\s*\(\s*void\s*\)\s*{"
@@ -88,6 +124,7 @@ def make_wtap_modules(outfile, infiles):
 
     output = preamble
     output += """\
+#include <glib.h>
 #include "wtap_modules.h"
 
 const unsigned wtap_module_count = {0};
@@ -143,12 +180,14 @@ if __name__ == "__main__":
     outfile = sys.argv[2]
     if sys.argv[3].startswith("@"):
         with open(sys.argv[3][1:]) as f:
-            infiles = [l.strip() for l in f.readlines()]
+            infiles = [line.strip() for line in f.readlines()]
     else:
         infiles = sys.argv[3:]
 
     if mode == "dissectors":
         make_dissectors(outfile, infiles)
+    elif mode == "event_dissectors":
+        make_event_dissectors(outfile, infiles)
     elif mode == "wtap_modules":
         make_wtap_modules(outfile, infiles)
     elif mode == "taps":

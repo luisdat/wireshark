@@ -5,7 +5,7 @@
  * Copyright 2008, Ericsson AB
  * By Balint Reczey <balint.reczey@ericsson.com>
  *
- * most functions are copied from ui/gtk/rtp_stream.c and ui/gtk/rtp_analisys.c
+ * most functions are copied from ui/gtk/rtp_stream.c and ui/gtk/rtp_analysis.c
  * Copyright 2003, Alcatel Business Systems
  * By Lars Ruoff <lars.ruoff@gmx.net>
  *
@@ -89,7 +89,7 @@ void rtpstream_info_free_all(rtpstream_info_t* info);
  *
  * @return -1,0,1
  */
-int rtpstream_info_cmp(gconstpointer aa, gconstpointer bb);
+int rtpstream_info_cmp(const void *aa, const void *bb);
 
 /**
 * Compares the endpoints of two RTP streams.
@@ -155,7 +155,7 @@ void rtpstream_info_analyse_process(rtpstream_info_t *stream_info, const packet_
 /**
  * Get hash key for rtpstream_info_t
  */
-unsigned rtpstream_to_hash(gconstpointer key);
+unsigned rtpstream_to_hash(const void *key);
 
 /**
  * Insert new_stream_info into multihash

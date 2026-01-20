@@ -16,15 +16,16 @@
 #include "rpc_service_response_time_dialog.h"
 
 #include <algorithm>
-#include <stdio.h>
 
 #include <epan/dissectors/packet-dcerpc.h>
 #include <epan/dissectors/packet-rpc.h>
-#include <epan/guid-utils.h>
+#include <epan/uuid_types.h>
+#include <epan/to_str.h>
 #include <epan/srt_table.h>
 
 #include <ui/qt/utils/qt_ui_utils.h>
 
+#include <QUuid>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -44,7 +45,7 @@
 
 extern "C" {
 static void
-dce_rpc_add_program(gpointer key_ptr, gpointer value_ptr, gpointer rsrtd_ptr)
+dce_rpc_add_program(void *key_ptr, void *value_ptr, void *rsrtd_ptr)
 {
     RpcServiceResponseTimeDialog *rsrt_dlg = dynamic_cast<RpcServiceResponseTimeDialog *>((RpcServiceResponseTimeDialog *)rsrtd_ptr);
     if (!rsrt_dlg) return;
@@ -56,7 +57,7 @@ dce_rpc_add_program(gpointer key_ptr, gpointer value_ptr, gpointer rsrtd_ptr)
 }
 
 static void
-dce_rpc_find_versions(gpointer key_ptr, gpointer, gpointer rsrtd_ptr)
+dce_rpc_find_versions(void *key_ptr, void *, void *rsrtd_ptr)
 {
     RpcServiceResponseTimeDialog *rsrt_dlg = dynamic_cast<RpcServiceResponseTimeDialog *>((RpcServiceResponseTimeDialog *)rsrtd_ptr);
     if (!rsrt_dlg) return;
@@ -66,19 +67,19 @@ dce_rpc_find_versions(gpointer key_ptr, gpointer, gpointer rsrtd_ptr)
 }
 
 static void
-onc_rpc_add_program(gpointer prog_ptr, gpointer value_ptr, gpointer rsrtd_ptr)
+onc_rpc_add_program(void *prog_ptr, void *value_ptr, void *rsrtd_ptr)
 {
     RpcServiceResponseTimeDialog *rsrt_dlg = dynamic_cast<RpcServiceResponseTimeDialog *>((RpcServiceResponseTimeDialog *)rsrtd_ptr);
     if (!rsrt_dlg) return;
 
-    guint32 program = GPOINTER_TO_UINT(prog_ptr);
+    uint32_t program = GPOINTER_TO_UINT(prog_ptr);
     rpc_prog_info_value *value = (rpc_prog_info_value *) value_ptr;
 
     rsrt_dlg->addOncRpcProgram(program, value);
 }
 
 static void
-onc_rpc_find_versions(const gchar *, ftenum_t , gpointer rpik_ptr, gpointer, gpointer rsrtd_ptr)
+onc_rpc_find_versions(const char *, ftenum_t , void *rpik_ptr, void *, void *rsrtd_ptr)
 {
     RpcServiceResponseTimeDialog *rsrt_dlg = dynamic_cast<RpcServiceResponseTimeDialog *>((RpcServiceResponseTimeDialog *)rsrtd_ptr);
     if (!rsrt_dlg) return;
@@ -86,17 +87,6 @@ onc_rpc_find_versions(const gchar *, ftenum_t , gpointer rpik_ptr, gpointer, gpo
     rpc_proc_info_key *rpik = (rpc_proc_info_key *)rpik_ptr;
 
     rsrt_dlg->addOncRpcProgramVersion(rpik->prog, rpik->vers);
-}
-
-static void
-onc_rpc_count_procedures(const gchar *, ftenum_t , gpointer rpik_ptr, gpointer, gpointer rsrtd_ptr)
-{
-    RpcServiceResponseTimeDialog *rsrt_dlg = dynamic_cast<RpcServiceResponseTimeDialog *>((RpcServiceResponseTimeDialog *)rsrtd_ptr);
-    if (!rsrt_dlg) return;
-
-    rpc_proc_info_key *rpik = (rpc_proc_info_key *)rpik_ptr;
-
-    rsrt_dlg->updateOncRpcProcedureCount(rpik->prog, rpik->vers, rpik->proc);
 }
 
 } // extern "C"
@@ -120,7 +110,7 @@ RpcServiceResponseTimeDialog::RpcServiceResponseTimeDialog(QWidget &parent, Capt
 
     if (dlg_type == DceRpc) {
         setWindowSubtitle(tr("DCE-RPC Service Response Times"));
-        g_hash_table_foreach(dcerpc_uuids, dce_rpc_add_program, this);
+        uuid_type_foreach("dcerpc", dce_rpc_add_program, this);
         // This is a loooooong list. The GTK+ UI addresses this by making
         // the program combo a tree instead of a list. We might want to add a
         // full-height list to the left of the stats tree instead.
@@ -131,7 +121,7 @@ RpcServiceResponseTimeDialog::RpcServiceResponseTimeDialog(QWidget &parent, Capt
         program_combo_->addItems(programs);
     } else {
         setWindowSubtitle(tr("ONC-RPC Service Response Times"));
-        g_hash_table_foreach(rpc_progs, onc_rpc_add_program, this);
+        uuid_type_foreach("rpc", onc_rpc_add_program, this);
         QStringList programs = onc_name_to_program_.keys();
         std::sort(programs.begin(), programs.end(), qStringCaseLessThan);
         connect(program_combo_, SIGNAL(currentTextChanged(const QString)),
@@ -145,30 +135,14 @@ TapParameterDialog *RpcServiceResponseTimeDialog::createDceRpcSrtDialog(QWidget 
     QString filter;
     bool have_args = false;
     QString program_name;
-    e_guid_t uuid;
+    QUuid uuid;
     int version = 0;
 
     // dcerpc,srt,<uuid>,<major version>.<minor version>[,<filter>]
     QStringList args_l = QString(opt_arg).split(',');
-    if (args_l.length() > 1) {
-        // XXX Switch to QUuid.
-        unsigned d1, d2, d3, d4_0, d4_1, d4_2, d4_3, d4_4, d4_5, d4_6, d4_7;
-        if (sscanf(args_l[0].toUtf8().constData(),
-                  "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-                  &d1, &d2, &d3,
-                  &d4_0, &d4_1, &d4_2, &d4_3, &d4_4, &d4_5, &d4_6, &d4_7) == 11) {
-                  uuid.data1 = d1;
-                  uuid.data2 = d2;
-                  uuid.data3 = d3;
-                  uuid.data4[0] = d4_0;
-                  uuid.data4[1] = d4_1;
-                  uuid.data4[2] = d4_2;
-                  uuid.data4[3] = d4_3;
-                  uuid.data4[4] = d4_4;
-                  uuid.data4[5] = d4_5;
-                  uuid.data4[6] = d4_6;
-                  uuid.data4[7] = d4_7;
-        } else {
+    if (args_l.length() > 1 && !args_l[0].isEmpty()) {
+        uuid = QUuid(args_l[0]);
+        if (uuid.isNull()) {
             program_name = args_l[0];
         }
         version = args_l[1].split('.')[0].toInt();
@@ -181,7 +155,7 @@ TapParameterDialog *RpcServiceResponseTimeDialog::createDceRpcSrtDialog(QWidget 
 
     if (have_args) {
         if (program_name.isEmpty()) {
-            dce_rpc_dlg->setDceRpcUuidAndVersion(&uuid, version);
+            dce_rpc_dlg->setDceRpcUuidAndVersion(uuid, version);
         } else {
             dce_rpc_dlg->setRpcNameAndVersion(program_name, version);
         }
@@ -201,7 +175,7 @@ TapParameterDialog *RpcServiceResponseTimeDialog::createOncRpcSrtDialog(QWidget 
 
     // rpc,srt,<program>,<version>[,<filter>
     QStringList args_l = QString(opt_arg).split(',');
-    if (args_l.length() > 1) {
+    if (args_l.length() > 1 && !args_l[0].isEmpty()) {
         bool ok = false;
         program_num = args_l[0].toInt(&ok);
         if (!ok) {
@@ -241,12 +215,12 @@ void RpcServiceResponseTimeDialog::addDceRpcProgramVersion(_guid_key *key)
     std::sort(versions_.begin(), versions_.end());
 }
 
-void RpcServiceResponseTimeDialog::addOncRpcProgram(guint32 program, _rpc_prog_info_value *value)
+void RpcServiceResponseTimeDialog::addOncRpcProgram(uint32_t program, _rpc_prog_info_value *value)
 {
     onc_name_to_program_.insert(value->progname, program);
 }
 
-void RpcServiceResponseTimeDialog::addOncRpcProgramVersion(guint32 program, guint32 version)
+void RpcServiceResponseTimeDialog::addOncRpcProgramVersion(uint32_t program, uint32_t version)
 {
     if (onc_name_to_program_[program_combo_->currentText()] != program) return;
 
@@ -262,19 +236,11 @@ void RpcServiceResponseTimeDialog::addOncRpcProgramVersion(guint32 program, guin
     }
 }
 
-void RpcServiceResponseTimeDialog::updateOncRpcProcedureCount(guint32 program, guint32 version, int procedure)
-{
-    if (onc_name_to_program_[program_combo_->currentText()] != program) return;
-    if (version_combo_->itemData(version_combo_->currentIndex()).toUInt() != version) return;
-
-    if (procedure > onc_rpc_num_procedures_) onc_rpc_num_procedures_ = procedure;
-}
-
-void RpcServiceResponseTimeDialog::setDceRpcUuidAndVersion(_e_guid_t *uuid, int version)
+void RpcServiceResponseTimeDialog::setDceRpcUuidAndVersion(const QUuid& uuid, int version)
 {
     bool found = false;
     for (int pi = 0; pi < program_combo_->count(); pi++) {
-        if (guid_cmp(uuid, &(dce_name_to_uuid_key_[program_combo_->itemText(pi)]->guid)) == 0) {
+        if (uuid == e_guid_t_to_quuid(dce_name_to_uuid_key_[program_combo_->itemText(pi)]->guid)) {
             program_combo_->setCurrentIndex(pi);
 
             for (int vi = 0; vi < version_combo_->count(); vi++) {
@@ -336,7 +302,7 @@ void RpcServiceResponseTimeDialog::dceRpcProgramChanged(const QString &program_n
 
     if (!dce_name_to_uuid_key_.contains(program_name)) return;
 
-    g_hash_table_foreach(dcerpc_uuids, dce_rpc_find_versions, this);
+    uuid_type_foreach("dcerpc", dce_rpc_find_versions, this);
 
     fillVersionCombo();
 }
@@ -372,51 +338,34 @@ void RpcServiceResponseTimeDialog::fillVersionCombo()
 
 void RpcServiceResponseTimeDialog::provideParameterData()
 {
-    void *tap_data = NULL;
+    char* err;
     const QString program_name = program_combo_->currentText();
-    guint32 max_procs = 0;
 
+    srt_param_handler_cb param = srt_table_get_param_handler_cb(srt_);
+    if (param == NULL)
+        return;     //Sanity check
+
+    //Convert to a string format the SRT functionality can handle
+    QString srtString;
     switch (dlg_type_) {
     case DceRpc:
     {
         if (!dce_name_to_uuid_key_.contains(program_name)) return;
 
         guid_key *dkey = dce_name_to_uuid_key_[program_name];
-        guint16 version = (guint16) version_combo_->itemData(version_combo_->currentIndex()).toUInt();
-        dcerpc_sub_dissector *procs = dcerpc_get_proto_sub_dissector(&(dkey->guid), version);
-        if (!procs) return;
-
-        dcerpcstat_tap_data_t *dtap_data = g_new0(dcerpcstat_tap_data_t, 1);
-        dtap_data->uuid = dkey->guid;
-        dtap_data->ver = version;
-        dtap_data->prog = dcerpc_get_proto_name(&dtap_data->uuid, dtap_data->ver);
-
-        for (int i = 0; procs[i].name; i++) {
-            if (procs[i].num > max_procs) max_procs = procs[i].num;
-        }
-        dtap_data->num_procedures = max_procs + 1;
-
-        tap_data = dtap_data;
+        char* guid_str = guid_to_str(NULL, &dkey->guid);
+        srtString = QString(",%1,%2.0").arg(guid_str).arg(version_combo_->itemData(version_combo_->currentIndex()).toUInt());
+        wmem_free(NULL, guid_str);
         break;
     }
     case OncRpc:
     {
         if (!onc_name_to_program_.contains(program_name)) return;
 
-        rpcstat_tap_data_t *otap_data = g_new0(rpcstat_tap_data_t, 1);
-        otap_data->program = onc_name_to_program_[program_name];
-        otap_data->prog = rpc_prog_name(otap_data->program);
-        otap_data->version = (guint32) version_combo_->itemData(version_combo_->currentIndex()).toUInt();
-
-        onc_rpc_num_procedures_ = -1;
-        dissector_table_foreach ("rpc.call", onc_rpc_count_procedures, this);
-        dissector_table_foreach ("rpc.reply", onc_rpc_count_procedures, this);
-        otap_data->num_procedures = onc_rpc_num_procedures_ + 1;
-
-        tap_data = otap_data;
+        srtString = QString(",%1,%2").arg(onc_name_to_program_[program_name]).arg(version_combo_->itemData(version_combo_->currentIndex()).toUInt());
         break;
     }
     }
 
-    set_srt_table_param_data(srt_, tap_data);
+    param(srt_, srtString.toStdString().c_str(), &err);
 }

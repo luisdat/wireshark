@@ -19,12 +19,12 @@ extern "C" {
 #endif /* __cplusplus */
 
 typedef struct _export_object_entry_t {
-    guint32 pkt_num;
-    gchar *hostname;
-    gchar *content_type;
-    gchar *filename;
+    uint32_t pkt_num;
+    char *hostname;
+    char *content_type;
+    char *filename;
     size_t payload_len;
-    guint8 *payload_data;
+    uint8_t *payload_data;
 } export_object_entry_t;
 
 /** Maximum file name size for the file to which we save an object.
@@ -51,6 +51,10 @@ those data structures. This function is passed to export_object_window
 and called when tap reset or windows closes occurs. If no function is needed
 a NULL value should be passed instead */
 typedef void (*export_object_gui_reset_cb)(void);
+
+/** Initialize the export object system.
+ */
+extern void export_object_init(void);
 
 /** Register the export object handler for the Export Object windows.
  *
@@ -102,7 +106,7 @@ WS_DLL_PUBLIC register_eo_t* get_eo_by_name(const char* name);
  * @param func action to be performed on all Export Objects
  * @param user_data any data needed to help perform function
  */
-WS_DLL_PUBLIC void eo_iterate_tables(wmem_foreach_func func, gpointer user_data);
+WS_DLL_PUBLIC void eo_iterate_tables(wmem_foreach_func func, void *user_data);
 
 /** Find all disallowed characters/bytes and replace them with %xx
  *
@@ -111,7 +115,7 @@ WS_DLL_PUBLIC void eo_iterate_tables(wmem_foreach_func func, gpointer user_data)
  * @param dup return a copy of the massaged string (?)
  * @return massaged string
  */
-WS_DLL_PUBLIC GString *eo_massage_str(const gchar *in_str, gsize maxlen, int dup);
+WS_DLL_PUBLIC GString *eo_massage_str(const char *in_str, size_t maxlen, int dup);
 
 /** Map the content type string to an extension string
  *

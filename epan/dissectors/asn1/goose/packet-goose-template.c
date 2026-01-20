@@ -19,6 +19,7 @@
 #include <epan/proto_data.h>
 #include <epan/etypes.h>
 #include <epan/expert.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-acse.h"
@@ -76,13 +77,14 @@ static int hf_goose_float_value;
 
 /* GOOSE stored data for expert info verifications */
 typedef struct _goose_chk_data{
-	gboolean s_bit;
+	bool s_bit;
 }goose_chk_data_t;
 #define GOOSE_CHK_DATA_LEN	(sizeof(goose_chk_data_t))
 
 static expert_field ei_goose_mal_utctime;
 static expert_field ei_goose_zero_pdu;
 static expert_field ei_goose_invalid_sim;
+static expert_field ei_goose_bogus_length;
 
 #define SINGLE_FLOAT_EXP_BITS	8
 #define FLOAT_ENC_LENGTH		5
@@ -104,7 +106,7 @@ static int ett_expert_inf_sim;
 
 #include "packet-goose-fn.c"
 
-static dissector_handle_t goose_handle = NULL;
+static dissector_handle_t goose_handle;
 
 
 #define OSI_SPDU_TUNNELED 0xA0 /* Tunneled */
@@ -142,15 +144,16 @@ static int
 dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 			  void* data _U_)
 {
-	guint32 offset = 0;
-	guint32 old_offset;
-	guint32 length;
-	guint32 reserve1_val;
+	uint32_t offset = 0;
+	uint32_t old_offset;
+	uint32_t length;
+	uint32_t reserve1_val;
 	proto_item *item = NULL;
+	proto_item *tree_item = NULL;
 	proto_tree *tree = NULL;
 	goose_chk_data_t *data_chk = NULL;
 	asn1_ctx_t asn1_ctx;
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 	static int * const reserve1_flags[] = {
 		&hf_goose_reserve1_s_bit,
@@ -163,8 +166,8 @@ dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, GOOSE_PNAME);
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	item = proto_tree_add_item(parent_tree, proto_goose, tvb, 0, -1, ENC_NA);
-	tree = proto_item_add_subtree(item, ett_goose);
+	tree_item = proto_tree_add_item(parent_tree, proto_goose, tvb, 0, -1, ENC_NA);
+	tree = proto_item_add_subtree(tree_item, ett_goose);
 	add_ber_encoded_label(tvb, pinfo, parent_tree);
 
 
@@ -172,20 +175,25 @@ dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	proto_tree_add_item(tree, hf_goose_appid, tvb, offset, 2, ENC_BIG_ENDIAN);
 
 	/* Length */
-	proto_tree_add_item_ret_uint(tree, hf_goose_length, tvb, offset + 2, 2,
-						ENC_BIG_ENDIAN, &length);
+	item = proto_tree_add_item_ret_uint(tree, hf_goose_length, tvb, offset + 2, 2,
+                                            ENC_BIG_ENDIAN, &length);
+        if (length < 8) {
+            expert_add_info(pinfo, item, &ei_goose_bogus_length);
+        }
+        set_actual_length(tvb, length);
+        proto_item_set_len(tree_item, length);
 
 	/* Reserved 1 */
-	reserve1_val = tvb_get_guint16(tvb, offset + 4, ENC_BIG_ENDIAN);
+	reserve1_val = tvb_get_uint16(tvb, offset + 4, ENC_BIG_ENDIAN);
 	proto_tree_add_bitmask_value(tree, tvb, offset + 4, hf_goose_reserve1, ett_reserve1,
 						reserve1_flags, reserve1_val);
 
 	/* Store the header sim value for later expert info checks */
 	if(data_chk){
 		if(reserve1_val & F_RESERVE1_S_BIT){
-			data_chk->s_bit = TRUE;
+			data_chk->s_bit = true;
 		}else{
-			data_chk->s_bit = FALSE;
+			data_chk->s_bit = false;
 		}
 	}
 
@@ -197,9 +205,9 @@ dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	offset = 8;
 	while (offset < length){
 		old_offset = offset;
-		offset = dissect_goose_GOOSEpdu(FALSE, tvb, offset, &asn1_ctx , tree, -1);
+		offset = dissect_goose_GOOSEpdu(false, tvb, offset, &asn1_ctx , tree, -1);
 		if (offset == old_offset) {
-			proto_tree_add_expert(tree, pinfo, &ei_goose_zero_pdu, tvb, offset, -1);
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_goose_zero_pdu, tvb, offset);
 			break;
 		}
 	}
@@ -208,21 +216,21 @@ dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 }
 
 /*
-* Dissect RGOOSE PDUs inside ISO 8602/X.234 CLTP ConnecteionLess
+* Dissect RGOOSE PDUs inside ISO 8602/X.234 CLTP ConnectionLess
 * Transport Protocol.
 */
 static int
 dissect_rgoose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 			   void* data _U_)
 {
-	guint offset = 0, old_offset = 0;
-	guint32 init_v_length, payload_tag, padding_length, length;
-	guint32 payload_length, apdu_offset = 0, apdu_length, apdu_simulation;
+	unsigned offset = 0, old_offset = 0;
+	uint32_t init_v_length, payload_tag, padding_length, length;
+	uint32_t payload_length, apdu_offset = 0, apdu_length, apdu_simulation;
 	proto_item *item = NULL;
 	proto_tree *tree = NULL, *r_goose_tree = NULL, *sess_user_info_tree = NULL;
 	goose_chk_data_t *data_chk = NULL;
 	asn1_ctx_t asn1_ctx;
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 	asn1_ctx.private_data = wmem_alloc(pinfo->pool, GOOSE_CHK_DATA_LEN);
 	data_chk = (goose_chk_data_t *)asn1_ctx.private_data;
@@ -324,9 +332,9 @@ dissect_rgoose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 		/* Store the header sim value for later expert info checks */
 		if(data_chk){
 			if(apdu_simulation){
-				data_chk->s_bit = TRUE;
+				data_chk->s_bit = true;
 			}else{
-				data_chk->s_bit = FALSE;
+				data_chk->s_bit = false;
 			}
 		}
 
@@ -338,16 +346,16 @@ dissect_rgoose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 		offset += 2;
 
 		old_offset = offset;
-		offset = dissect_goose_GOOSEpdu(FALSE, tvb, offset, &asn1_ctx , tree, -1);
+		offset = dissect_goose_GOOSEpdu(false, tvb, offset, &asn1_ctx , tree, -1);
 		if (offset == old_offset) {
-			proto_tree_add_expert(tree, pinfo, &ei_goose_zero_pdu, tvb, offset, -1);
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_goose_zero_pdu, tvb, offset);
 			break;
 		}
 	}
 
 	/* Check do we have padding bytes */
 	if ((tvb_captured_length(tvb) > offset) &&
-		(tvb_get_guint8(tvb, offset) == 0xAF)) {
+		(tvb_get_uint8(tvb, offset) == 0xAF)) {
 		/* Padding subtree */
 		item = proto_tree_add_item(sess_user_info_tree, hf_goose_padding, tvb,
 								   offset, -1, ENC_NA);
@@ -377,25 +385,25 @@ dissect_rgoose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	return tvb_captured_length(tvb);
 }
 
-static gboolean
+static bool
 dissect_rgoose_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 					void *data)
 {
-	guint8 spdu;
+	uint8_t spdu;
 
 	/* Check do we have at least min size of Session header bytes */
 	if (tvb_captured_length(tvb) < 27) {
-		return FALSE;
+		return false;
 	}
 
 	/* Is it R-GOOSE? */
-	spdu = tvb_get_guint8(tvb, 0);
+	spdu = tvb_get_uint8(tvb, 0);
 	if (spdu != OSI_SPDU_GOOSE) {
-		return FALSE;
+		return false;
 	}
 
 	dissect_rgoose(tvb, pinfo, parent_tree, data);
-	return TRUE;
+	return true;
 }
 
 /*--- proto_register_goose -------------------------------------------*/
@@ -532,7 +540,7 @@ void proto_register_goose(void) {
 	};
 
 	/* List of subtrees */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_r_goose,
 		&ett_session_header,
 		&ett_security_info,
@@ -555,6 +563,9 @@ void proto_register_goose(void) {
 		{ &ei_goose_invalid_sim,
 		{ "goose.invalid_sim", PI_PROTOCOL, PI_WARN,
 		  "Invalid GOOSE: S bit set and Simulation attribute clear", EXPFILL }},
+		{ &ei_goose_bogus_length,
+		{ "goose.bogus_length", PI_PROTOCOL, PI_ERROR,
+		  "GOOSE length must be at least 8 (includes header)", EXPFILL }},
 	};
 
 	expert_module_t* expert_goose;

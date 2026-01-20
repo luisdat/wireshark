@@ -15,13 +15,14 @@
 
 #include <epan/packet.h>
 #include <epan/aftypes.h>
+#include <epan/tfs.h>
+#include "packet-smb-common.h"
 
 /* function declarations */
 void proto_register_dplay(void);
 void proto_reg_handoff_dplay(void);
 
-static void dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
-static gint dissect_type1a_message(proto_tree *tree, tvbuff_t *tvb, gint offset);
+static int dissect_type1a_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset);
 
 static int proto_dplay;
 
@@ -143,6 +144,14 @@ static int hf_dplay_spp_pd_length_type;
 static int hf_dplay_spp_player_count_type;
 static int hf_dplay_spp_have_parent_id;
 static int hf_dplay_spp_shortcut_count_type;
+#define DPLAY_SPP_INF_FLAG_HAVE_SHORT_NAME     0x00000001
+#define DPLAY_SPP_INF_FLAG_HAVE_LONG_NAME      0x00000002
+#define DPLAY_SPP_INF_FLAG_SP_LENGTH_TYPE      0x0000000C
+#define DPLAY_SPP_INF_FLAG_PD_LENGTH_TYPE      0x00000030
+#define DPLAY_SPP_INF_FLAG_PLAYER_COUNT_TYPE   0x000000C0
+#define DPLAY_SPP_INF_FLAG_HAVE_PARENT_ID      0x00000100
+#define DPLAY_SPP_INF_FLAG_SHORTCUT_COUNT_TYPE 0x00000600
+
 static int hf_dplay_spp_dialect;
 static int hf_dplay_spp_sys_player_id;
 static int hf_dplay_spp_short_name;
@@ -265,19 +274,19 @@ static int hf_dplay_type_29_password;
 static int hf_dplay_type_2f_dpid;
 
 /* various */
-static gint ett_dplay;
-static gint ett_dplay_header;
-static gint ett_dplay_sockaddr;
-static gint ett_dplay_data;
-static gint ett_dplay_enc_packet;
-static gint ett_dplay_flags;
-static gint ett_dplay_sess_desc_flags;
-static gint ett_dplay_pp_flags;
-static gint ett_dplay_spp_flags;
-static gint ett_dplay_spp_info_mask;
-static gint ett_dplay_type02_flags;
-static gint ett_dplay_type05_flags;
-static gint ett_dplay_type29_spp;
+static int ett_dplay;
+static int ett_dplay_header;
+static int ett_dplay_sockaddr;
+static int ett_dplay_data;
+static int ett_dplay_enc_packet;
+static int ett_dplay_flags;
+static int ett_dplay_sess_desc_flags;
+static int ett_dplay_pp_flags;
+static int ett_dplay_spp_flags;
+static int ett_dplay_spp_info_mask;
+static int ett_dplay_type02_flags;
+static int ett_dplay_type05_flags;
+static int ett_dplay_type29_spp;
 
 static const value_string dplay_command_val[] = {
     { 0x0001, "Enum Sessions Reply" },
@@ -377,28 +386,13 @@ static const value_string dplay_enc_alg_val[] = {
     { 0     , NULL },
 };
 
-static const value_string yes_no_val[] = {
-    { 0x0, "No" },
-    { 0x1, "Yes" },
-    { 0  , NULL },
+static int* const size_token_flags[] = {
+    &hf_dplay_size,
+    &hf_dplay_token,
+    NULL
 };
 
-
-/* borrowed from epan/dissectors/packets-smb-common.c */
-static gint display_unicode_string(proto_tree *tree, gint hf_index, tvbuff_t *tvb, gint offset)
-{
-    char *str;
-    gint len;
-
-    /* display a unicode string from the tree and return new offset */
-
-    str = tvb_get_stringz_enc(wmem_packet_scope(), tvb, offset, &len, ENC_UTF_16|ENC_LITTLE_ENDIAN);
-    proto_tree_add_string(tree, hf_index, tvb, offset, len, str);
-
-    return  offset+len;
-}
-
-static gint dissect_sockaddr_in(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_sockaddr_in(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     proto_tree *sa_tree;
 
@@ -411,7 +405,7 @@ static gint dissect_sockaddr_in(proto_tree *tree, tvbuff_t *tvb, gint offset)
     return offset;
 }
 
-static gint dissect_session_desc(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_session_desc(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     static int * const flags[] = {
         &hf_dplay_flags_no_sess_desc_changes,
@@ -454,10 +448,9 @@ static gint dissect_session_desc(proto_tree *tree, tvbuff_t *tvb, gint offset)
     return offset;
 }
 
-static gint dissect_packed_player(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_packed_player(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 sn_len, ln_len, sd_len, pd_len, num_players, i;
-    gint size;
+    uint32_t sn_len, ln_len, sd_len, pd_len, num_players, i, size;
     static int * const flags[] = {
         &hf_dplay_pp_flag_sending,
         &hf_dplay_pp_flag_in_group,
@@ -466,22 +459,16 @@ static gint dissect_packed_player(proto_tree *tree, tvbuff_t *tvb, gint offset)
         NULL
     };
 
-    size = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_pp_size, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_pp_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &size); offset += 4;
 
     proto_tree_add_bitmask(tree, tvb, offset, hf_dplay_pp_flags, ett_dplay_pp_flags, flags, ENC_LITTLE_ENDIAN); offset += 4;
     proto_tree_add_item(tree, hf_dplay_pp_id, tvb, offset, 4, ENC_NA); offset += 4;
 
-    sn_len = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_pp_short_name_len, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    ln_len = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_pp_long_name_len, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    sd_len = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_pp_sp_data_size, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    pd_len = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_pp_player_data_size, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    num_players = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_pp_num_players, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_pp_short_name_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &sn_len); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_pp_long_name_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &ln_len); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_pp_sp_data_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &sd_len); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_pp_player_data_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pd_len); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_pp_num_players, tvb, offset, 4, ENC_LITTLE_ENDIAN, &num_players); offset += 4;
 
     proto_tree_add_item(tree, hf_dplay_pp_system_player, tvb, offset, 4, ENC_NA); offset += 4;
     proto_tree_add_item(tree, hf_dplay_pp_fixed_size, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
@@ -489,10 +476,10 @@ static gint dissect_packed_player(proto_tree *tree, tvbuff_t *tvb, gint offset)
     proto_tree_add_item(tree, hf_dplay_pp_unknown_1, tvb, offset, 4, ENC_NA); offset += 4;
 
     if (sn_len)
-        offset = display_unicode_string(tree, hf_dplay_pp_short_name, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_pp_short_name, NULL);
 
     if (ln_len)
-        offset = display_unicode_string(tree, hf_dplay_pp_long_name, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_pp_long_name, NULL);
 
     proto_tree_add_item(tree, hf_dplay_pp_sp_data, tvb, offset, sd_len, ENC_NA);
     offset += sd_len;
@@ -507,23 +494,23 @@ static gint dissect_packed_player(proto_tree *tree, tvbuff_t *tvb, gint offset)
     }
 
     /* Size seems to miss the unknown empty dword */
-    if (size + 4 > offset) {
+    if ((uint32_t)(offset - 4) < size) {
         proto_tree_add_item(tree, hf_dplay_pp_parent_id, tvb, offset, 4, ENC_NA); offset += 4;
     }
 
     return offset;
 }
 
-static gint spp_get_value(guint32 length_type, tvbuff_t *tvb, gint offset, guint32 *value)
+static int spp_get_value(uint32_t length_type, tvbuff_t *tvb, int offset, uint32_t *value)
 {
-    gint len = 0;
+    int len = 0;
 
     *value = 0;
 
     switch (length_type) {
         case 1:
             len = 1;
-            *value = tvb_get_guint8(tvb, offset);
+            *value = tvb_get_uint8(tvb, offset);
             break;
         case 2:
             len = 2;
@@ -538,20 +525,28 @@ static gint spp_get_value(guint32 length_type, tvbuff_t *tvb, gint offset, guint
     return len;
 }
 
-static gint dissect_dplay_super_packed_player(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_dplay_super_packed_player(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 flags, is_sysplayer, info_mask;
-    guint32 have_short_name, have_long_name, sp_length_type, pd_length_type;
-    guint32 player_count_type, have_parent_id, shortcut_count_type;
-    guint32 player_data_length, sp_data_length, player_count, shortcut_count;
-    proto_item *im_item = NULL;
-    proto_tree *im_tree = NULL;
-    gint len;
+    uint32_t flags, is_sysplayer, info_mask;
+    uint32_t sp_length_type, pd_length_type;
+    uint32_t player_count_type, shortcut_count_type;
+    uint32_t player_data_length, sp_data_length, player_count, shortcut_count;
+    int len;
     static int * const ssp_flags[] = {
         &hf_dplay_spp_flags_sending,
         &hf_dplay_spp_flags_in_group,
         &hf_dplay_spp_flags_nameserver,
         &hf_dplay_spp_flags_sysplayer,
+        NULL
+    };
+    static int* const info_mask_flags[] = {
+        &hf_dplay_spp_have_short_name,
+        &hf_dplay_spp_have_long_name,
+        &hf_dplay_spp_sp_length_type,
+        &hf_dplay_spp_pd_length_type,
+        &hf_dplay_spp_player_count_type,
+        &hf_dplay_spp_have_parent_id,
+        &hf_dplay_spp_shortcut_count_type,
         NULL
     };
 
@@ -562,27 +557,14 @@ static gint dissect_dplay_super_packed_player(proto_tree *tree, tvbuff_t *tvb, g
     proto_tree_add_bitmask(tree, tvb, offset, hf_dplay_spp_flags, ett_dplay_spp_flags, ssp_flags, ENC_LITTLE_ENDIAN); offset += 4;
     proto_tree_add_item(tree, hf_dplay_spp_id, tvb, offset, 4, ENC_NA); offset += 4;
 
+    proto_tree_add_bitmask(tree, tvb, offset, hf_dplay_spp_player_info_mask, ett_dplay_spp_info_mask, info_mask_flags, ENC_LITTLE_ENDIAN);
     info_mask = tvb_get_letohl(tvb, offset);
-
-    have_short_name     =  info_mask & 0x00000001;
-    have_long_name      = (info_mask & 0x00000002) >> 1;
-    sp_length_type      = (info_mask & 0x0000000c) >> 2;
-    pd_length_type      = (info_mask & 0x00000030) >> 4;
-    player_count_type   = (info_mask & 0x000000c0) >> 6;
-    have_parent_id      = (info_mask & 0x00000100) >> 8;
-    shortcut_count_type = (info_mask & 0x00000600) >> 9;
-
-    im_item = proto_tree_add_item(tree, hf_dplay_spp_player_info_mask, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-
-    im_tree = proto_item_add_subtree(im_item, ett_dplay_spp_info_mask);
-    proto_tree_add_uint(im_tree, hf_dplay_spp_have_short_name, tvb, offset, 4, have_short_name);
-    proto_tree_add_uint(im_tree, hf_dplay_spp_have_long_name, tvb, offset, 4, have_long_name);
-    proto_tree_add_uint(im_tree, hf_dplay_spp_sp_length_type, tvb, offset, 4, sp_length_type);
-    proto_tree_add_uint(im_tree, hf_dplay_spp_pd_length_type, tvb, offset, 4, pd_length_type);
-    proto_tree_add_uint(im_tree, hf_dplay_spp_player_count_type, tvb, offset, 4, player_count_type);
-    proto_tree_add_uint(im_tree, hf_dplay_spp_have_parent_id, tvb, offset, 4, have_parent_id);
-    proto_tree_add_uint(im_tree, hf_dplay_spp_shortcut_count_type, tvb, offset, 4, shortcut_count_type);
     offset+=4;
+
+    sp_length_type = (info_mask & DPLAY_SPP_INF_FLAG_SP_LENGTH_TYPE) >> 2;
+    pd_length_type = (info_mask & DPLAY_SPP_INF_FLAG_PD_LENGTH_TYPE) >> 4;
+    player_count_type = (info_mask & DPLAY_SPP_INF_FLAG_PLAYER_COUNT_TYPE) >> 6;
+    shortcut_count_type = (info_mask & DPLAY_SPP_INF_FLAG_SHORTCUT_COUNT_TYPE) >> 9;
 
     if (is_sysplayer) {
         proto_tree_add_item(tree, hf_dplay_spp_dialect, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -591,12 +573,12 @@ static gint dissect_dplay_super_packed_player(proto_tree *tree, tvbuff_t *tvb, g
     }
     offset += 4;
 
-    if (have_short_name) {
-        offset = display_unicode_string(tree, hf_dplay_spp_short_name, tvb, offset);
+    if (info_mask & DPLAY_SPP_INF_FLAG_HAVE_SHORT_NAME) {
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_spp_short_name, NULL);
     }
 
-    if (have_long_name) {
-        offset = display_unicode_string(tree, hf_dplay_spp_long_name, tvb, offset);
+    if (info_mask & DPLAY_SPP_INF_FLAG_HAVE_LONG_NAME) {
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_spp_long_name, NULL);
     }
 
     if (pd_length_type) {
@@ -616,7 +598,7 @@ static gint dissect_dplay_super_packed_player(proto_tree *tree, tvbuff_t *tvb, g
     }
 
     if (player_count_type) {
-        guint32 i;
+        uint32_t i;
 
         len = spp_get_value(player_count_type, tvb, offset, &player_count);
         proto_tree_add_item(tree, hf_dplay_spp_player_count, tvb, offset, len, ENC_LITTLE_ENDIAN);
@@ -626,12 +608,12 @@ static gint dissect_dplay_super_packed_player(proto_tree *tree, tvbuff_t *tvb, g
         }
     }
 
-    if (have_parent_id) {
+    if (info_mask & DPLAY_SPP_INF_FLAG_HAVE_PARENT_ID) {
         proto_tree_add_item(tree, hf_dplay_spp_parent_id, tvb, offset, 4, ENC_NA); offset += 4;
     }
 
     if (shortcut_count_type) {
-        guint32 i;
+        uint32_t i;
 
         len = spp_get_value(shortcut_count_type, tvb, offset, &shortcut_count);
         proto_tree_add_item(tree, hf_dplay_spp_shortcut_count, tvb, offset, len, ENC_LITTLE_ENDIAN);
@@ -644,7 +626,7 @@ static gint dissect_dplay_super_packed_player(proto_tree *tree, tvbuff_t *tvb, g
     return offset;
 }
 
-static gint dissect_security_desc(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_security_desc(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     proto_tree_add_item(tree, hf_dplay_sd_size, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
     proto_tree_add_item(tree, hf_dplay_sd_flags, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
@@ -655,16 +637,9 @@ static gint dissect_security_desc(proto_tree *tree, tvbuff_t *tvb, gint offset)
     return offset;
 }
 
-static gint dissect_dplay_header(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_dplay_header(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
-    guint32 mixed, size, token;
-
-    mixed = tvb_get_letohl(tvb, offset);
-    size = mixed & 0x000FFFFF;
-    token = (mixed & 0xFFF00000) >> 20;
-
-    proto_tree_add_uint(tree, hf_dplay_size, tvb, offset, 4, size);
-    proto_tree_add_uint(tree, hf_dplay_token, tvb, offset, 4, token);
+    proto_tree_add_bitmask_list(tree, tvb, offset, 4, size_token_flags, ENC_LITTLE_ENDIAN);
     offset += 4;
     offset = dissect_sockaddr_in(tree, tvb, offset);
     proto_tree_add_item(tree, hf_dplay_play_str, tvb, offset, 4, ENC_ASCII); offset += 4;
@@ -673,23 +648,22 @@ static gint dissect_dplay_header(proto_tree *tree, tvbuff_t *tvb, gint offset)
     return offset;
 }
 
-static gint dissect_type01_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type01_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 name_offset;
+    uint32_t name_offset;
 
     offset = dissect_session_desc(tree, tvb, offset);
-    name_offset = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_01_name_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_01_name_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &name_offset); offset += 4;
 
     if (name_offset != 0) {
-        offset = display_unicode_string(tree, hf_dplay_type_01_game_name, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_01_game_name, NULL);
     }
     return offset;
 }
 
-static gint dissect_type02_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type02_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 passwd_offset;
+    uint32_t passwd_offset;
     static int * const flags[] = {
         &hf_enum_sess_flag_passwd,
         &hf_enum_sess_flag_all,
@@ -704,12 +678,12 @@ static gint dissect_type02_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
     proto_tree_add_bitmask(tree, tvb, offset, hf_dplay_type_02_flags, ett_dplay_type02_flags, flags, ENC_LITTLE_ENDIAN); offset += 4;
 
     if (passwd_offset != 0) {
-        offset = display_unicode_string(tree, hf_dplay_type_02_password, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_02_password, NULL);
     }
     return offset;
 }
 
-static gint dissect_type05_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type05_message(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     static int * const flags[] = {
         &hf_dplay_type_05_secure,
@@ -725,56 +699,52 @@ static gint dissect_type05_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
     return offset;
 }
 
-static gint dissect_type07_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type07_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 sspi_offset, capi_offset;
+    uint32_t sspi_offset, capi_offset;
 
     proto_tree_add_item(tree, hf_dplay_type_07_dpid, tvb, offset, 4, ENC_NA); offset += 4;
     offset = dissect_security_desc(tree, tvb, offset);
 
-    sspi_offset = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_07_sspi_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_07_sspi_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &sspi_offset); offset += 4;
 
-    capi_offset = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_07_capi_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_07_capi_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &capi_offset); offset += 4;
 
     proto_tree_add_item(tree, hf_dplay_type_07_hresult, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
 
     if (sspi_offset) {
-        offset = display_unicode_string(tree, hf_dplay_type_07_sspi, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_07_sspi, NULL);
     }
 
     if (capi_offset) {
-        offset = display_unicode_string(tree, hf_dplay_type_07_capi, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_07_capi, NULL);
     }
     return offset;
 }
 
-static gint dissect_player_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_player_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 pp_ofs;
+    uint32_t pp_ofs;
 
     proto_tree_add_item(tree, hf_dplay_multi_id_to, tvb, offset, 4, ENC_NA); offset += 4;
     proto_tree_add_item(tree, hf_dplay_multi_player_id, tvb, offset, 4, ENC_NA); offset += 4;
     proto_tree_add_item(tree, hf_dplay_multi_group_id, tvb, offset, 4, ENC_NA); offset += 4;
-    pp_ofs = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_multi_create_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_multi_create_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pp_ofs); offset += 4;
     proto_tree_add_item(tree, hf_dplay_multi_password_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
     if (pp_ofs)
-        offset = dissect_packed_player(tree, tvb, offset);
+        offset = dissect_packed_player(tree, pinfo, tvb, offset);
     if (tvb_bytes_exist(tvb, offset, 2))
-        offset = display_unicode_string(tree, hf_dplay_multi_password, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_multi_password, NULL);
     return offset;
 }
 
-static gint dissect_type0f_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type0f_message(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
-    guint32 data_size;
+    uint32_t data_size;
 
     proto_tree_add_item(tree, hf_dplay_type_0f_id_to, tvb, offset, 4, ENC_NA); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_0f_id, tvb, offset, 4, ENC_NA); offset += 4;
-    data_size = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_0f_data_size, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_0f_data_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &data_size); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_0f_data_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_0f_data, tvb, offset, data_size, ENC_NA);
     offset += data_size;
@@ -782,29 +752,27 @@ static gint dissect_type0f_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
     return offset;
 }
 
-static gint dissect_type13_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type13_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 pp_ofs, pw_ofs;
+    uint32_t pp_ofs, pw_ofs;
 
     proto_tree_add_item(tree, hf_dplay_type_13_id_to, tvb, offset, 4, ENC_NA); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_13_player_id, tvb, offset, 4, ENC_NA); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_13_group_id, tvb, offset, 4, ENC_NA); offset += 4;
-    pp_ofs = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_13_create_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    pw_ofs = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_13_password_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_13_create_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pp_ofs); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_13_password_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pw_ofs); offset += 4;
     if (pp_ofs)
-        offset = dissect_packed_player(tree, tvb, offset);
+        offset = dissect_packed_player(tree, pinfo, tvb, offset);
     if (pw_ofs)
-        offset = display_unicode_string(tree, hf_dplay_type_13_password, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_13_password, NULL);
     proto_tree_add_item(tree, hf_dplay_type_13_tick_count, tvb, offset, 4, ENC_NA); offset += 4;
 
     return offset;
 }
 
-static gint dissect_type15_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type15_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint16 second_message_type;
+    uint16_t second_message_type;
     proto_tree *enc_tree;
     second_message_type = tvb_get_letohs(tvb, 72);
 
@@ -837,20 +805,20 @@ static gint dissect_type15_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
         case 0x000d:
         case 0x000e:
         case 0x002e:
-            offset = dissect_player_message(enc_tree, tvb, offset);
+            offset = dissect_player_message(enc_tree, pinfo, tvb, offset);
             break;
         case 0x0013:
-            offset = dissect_type13_message(enc_tree, tvb, offset);
+            offset = dissect_type13_message(enc_tree, pinfo, tvb, offset);
             break;
         case 0x001a:
-            offset = dissect_type1a_message(enc_tree, tvb, offset);
+            offset = dissect_type1a_message(enc_tree, pinfo, tvb, offset);
             break;
     }
 
     return offset;
 }
 
-static gint dissect_ping_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_ping_message(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     proto_tree_add_item(tree, hf_dplay_ping_id_from, tvb, offset, 4, ENC_NA); offset += 4;
     proto_tree_add_item(tree, hf_dplay_ping_tick_count, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
@@ -858,76 +826,70 @@ static gint dissect_ping_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
     return offset;
 }
 
-static gint dissect_type1a_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type1a_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 sn_ofs, pw_ofs;
+    uint32_t sn_ofs, pw_ofs;
 
     proto_tree_add_item(tree, hf_dplay_type_1a_id_to, tvb, offset, 4, ENC_NA); offset += 4;
-    sn_ofs = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_1a_sess_name_ofs, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    pw_ofs = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_1a_password_ofs, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_1a_sess_name_ofs, tvb, offset, 4, ENC_LITTLE_ENDIAN, &sn_ofs); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_1a_password_ofs, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pw_ofs); offset += 4;
     offset = dissect_session_desc(tree, tvb, offset);
 
     if (sn_ofs) {
-        offset = display_unicode_string(tree, hf_dplay_type_1a_session_name, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_1a_session_name, NULL);
     }
 
     if (pw_ofs) {
-        offset = display_unicode_string(tree, hf_dplay_type_1a_password, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_1a_password, NULL);
     }
 
     return offset;
 }
 
-static gint dissect_type29_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type29_message(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset)
 {
-    guint32 password_offset = tvb_get_letohl(tvb, offset + 24);
-    gint player_count, group_count, shortcut_count;
-    gint i;
+    uint32_t password_offset = tvb_get_letohl(tvb, offset + 24);
+    uint32_t player_count, group_count, shortcut_count, i;
 
-    player_count = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_29_player_count, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    group_count = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_29_group_count, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_29_player_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &player_count); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_29_group_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &group_count); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_29_packed_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
-    shortcut_count = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(tree, hf_dplay_type_29_shortcut_count, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
+    proto_tree_add_item_ret_uint(tree, hf_dplay_type_29_shortcut_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &shortcut_count); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_29_description_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_29_name_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
     proto_tree_add_item(tree, hf_dplay_type_29_password_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN); offset += 4;
     offset = dissect_session_desc(tree, tvb, offset);
-    offset = display_unicode_string(tree, hf_dplay_type_29_game_name, tvb, offset);
+    offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_29_game_name, NULL);
 
     if (password_offset != 0) {
-        offset = display_unicode_string(tree, hf_dplay_type_29_password, tvb, offset);
+        offset = display_unicode_string(tvb, pinfo, tree, offset, hf_dplay_type_29_password, NULL);
     }
 
     for (i=0; i < player_count; ++i) {
         proto_tree *spp_tree;
 
         spp_tree = proto_tree_add_subtree_format(tree, tvb, offset, 0, ett_dplay_type29_spp, NULL, "Player %d", i);
-        offset = dissect_dplay_super_packed_player(spp_tree, tvb, offset);
+        offset = dissect_dplay_super_packed_player(spp_tree, pinfo, tvb, offset);
     }
 
     for (i=0; i < group_count; ++i) {
         proto_tree *spp_tree;
 
         spp_tree = proto_tree_add_subtree_format(tree, tvb, offset, 0, ett_dplay_type29_spp, NULL, "Group %d", i);
-        offset = dissect_dplay_super_packed_player(spp_tree, tvb, offset);
+        offset = dissect_dplay_super_packed_player(spp_tree, pinfo, tvb, offset);
     }
 
     for (i=0; i < shortcut_count; ++i) {
         proto_tree *spp_tree;
 
         spp_tree = proto_tree_add_subtree_format(tree, tvb, offset, 0, ett_dplay_type29_spp, NULL, "Shortcut %d", i);
-        offset = dissect_dplay_super_packed_player(spp_tree, tvb, offset);
+        offset = dissect_dplay_super_packed_player(spp_tree, pinfo, tvb, offset);
     }
 
     return offset;
 }
 
-static gint dissect_type2f_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
+static int dissect_type2f_message(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     proto_tree_add_item(tree, hf_dplay_type_2f_dpid, tvb, offset, 4, ENC_NA); offset += 4;
     return offset;
@@ -935,17 +897,17 @@ static gint dissect_type2f_message(proto_tree *tree, tvbuff_t *tvb, gint offset)
 
 static void dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-    guint16 message_type;
-    guint16 second_message_type = G_MAXUINT16;
-    guint16 proto_version;
-    guint32 dplay_id;
-    guint8 play_id[] = {'p','l','a','y'};
+    uint16_t message_type;
+    uint16_t second_message_type = UINT16_MAX;
+    uint16_t proto_version;
+    uint32_t dplay_id;
+    uint8_t play_id[] = {'p','l','a','y'};
 
     dplay_id = tvb_get_letohl(tvb, 20);
     message_type = tvb_get_letohs(tvb, 24);
     proto_version = tvb_get_letohs(tvb, 26);
 
-    if(memcmp(play_id, (guint8 *)&dplay_id, 4) != 0)
+    if(memcmp(play_id, (uint8_t *)&dplay_id, 4) != 0)
     {
         col_set_str(pinfo->cinfo, COL_PROTOCOL, "DPLAY");
         col_set_str(pinfo->cinfo,COL_INFO, "DPlay data packet");
@@ -961,13 +923,13 @@ static void dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
     if(message_type == 0x0015)
         col_add_fstr(pinfo->cinfo,COL_INFO, "%s: %s, holding a %s",
-            val_to_str(proto_version, dplay_proto_dialect_val, "Unknown (0x%04x)"),
-            val_to_str(message_type, dplay_command_val, "Unknown (0x%04x)"),
-            val_to_str(second_message_type, dplay_command_val, "Unknown (0x%04x)"));
+            val_to_str(pinfo->pool, proto_version, dplay_proto_dialect_val, "Unknown (0x%04x)"),
+            val_to_str(pinfo->pool, message_type, dplay_command_val, "Unknown (0x%04x)"),
+            val_to_str(pinfo->pool, second_message_type, dplay_command_val, "Unknown (0x%04x)"));
     else
         col_add_fstr(pinfo->cinfo,COL_INFO, "%s: %s",
-            val_to_str(proto_version, dplay_proto_dialect_val, "Unknown (0x%04x)"),
-            val_to_str(message_type, dplay_command_val, "Unknown (0x%04x)"));
+            val_to_str(pinfo->pool, proto_version, dplay_proto_dialect_val, "Unknown (0x%04x)"),
+            val_to_str(pinfo->pool, message_type, dplay_command_val, "Unknown (0x%04x)"));
 
     if(tree)
     {
@@ -975,7 +937,7 @@ static void dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
         proto_tree *dplay_tree;
         proto_tree *dplay_header;
         proto_tree *dplay_data;
-        gint offset = 0;
+        int offset = 0;
 
         dplay_item = proto_tree_add_item(tree, proto_dplay, tvb, 0, -1, ENC_NA);
         dplay_tree = proto_item_add_subtree(dplay_item, ett_dplay);
@@ -992,16 +954,16 @@ static void dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
         switch(message_type)
         {
             case 0x0001:
-                dissect_type01_message(dplay_data, tvb, offset);
+                dissect_type01_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x0002:
-                dissect_type02_message(dplay_data, tvb, offset);
+                dissect_type02_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x0005:
                 dissect_type05_message(dplay_data, tvb, offset);
                 break;
             case 0x0007:
-                dissect_type07_message(dplay_data, tvb, offset);
+                dissect_type07_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x0008:
             case 0x0009:
@@ -1012,26 +974,26 @@ static void dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
             case 0x000e:
             case 0x002e:
             case 0x0038:
-                dissect_player_message(dplay_data, tvb, offset);
+                dissect_player_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x000f:
                 dissect_type0f_message(dplay_data, tvb, offset);
                 break;
             case 0x0013:
-                dissect_type13_message(dplay_data, tvb, offset);
+                dissect_type13_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x0015:
-                dissect_type15_message(dplay_data, tvb, offset);
+                dissect_type15_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x0016:
             case 0x0017:
                 dissect_ping_message(dplay_data, tvb, offset);
                 break;
             case 0x001a:
-                dissect_type1a_message(dplay_data, tvb, offset);
+                dissect_type1a_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x0029:
-                dissect_type29_message(dplay_data, tvb, offset);
+                dissect_type29_message(dplay_data, pinfo, tvb, offset);
                 break;
             case 0x002f:
                 dissect_type2f_message(dplay_data, tvb, offset);
@@ -1043,8 +1005,6 @@ static void dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
 static void dissect_dplay_player_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-    guint32 mixed, size, token;
-
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "DPLAY");
     col_set_str(pinfo->cinfo,COL_INFO, "DPlay player to player message");
 
@@ -1053,17 +1013,13 @@ static void dissect_dplay_player_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tr
         proto_item *dplay_item;
         proto_tree *dplay_tree;
         proto_tree *data_tree;
-        gint offset = 0;
+        int offset = 0;
 
         dplay_item = proto_tree_add_item(tree, proto_dplay, tvb, offset, -1, ENC_NA);
         dplay_tree = proto_item_add_subtree(dplay_item, ett_dplay);
         data_tree  = proto_tree_add_subtree(dplay_tree, tvb, offset, -1, ett_dplay_data, NULL, "Message content");
-        mixed = tvb_get_letohl(tvb, offset);
-        size = mixed & 0x000FFFFF;
-        token = (mixed & 0xFFF00000) >> 20;
 
-        proto_tree_add_uint(data_tree, hf_dplay_size, tvb, offset, 4, size);
-        proto_tree_add_uint(data_tree, hf_dplay_token, tvb, offset, 4, token);
+        proto_tree_add_bitmask_list(data_tree, tvb, offset, 4, size_token_flags, ENC_LITTLE_ENDIAN);
         offset += 4;
         offset = dissect_sockaddr_in(data_tree, tvb, offset);
         /* Now there's two dplay IDs iff the session desc does not have the
@@ -1072,18 +1028,18 @@ static void dissect_dplay_player_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
     }
 }
-static gboolean heur_dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+static bool heur_dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    guint32 dplay_id, token;
+    uint32_t dplay_id, token;
 
     if(tvb_captured_length(tvb) < 25)
-        return FALSE;
+        return false;
 
     /* The string play = 0x706c6179 */
     dplay_id = tvb_get_ntohl(tvb, 20);
     if( dplay_id == 0x706c6179) {
         dissect_dplay(tvb, pinfo, tree);
-        return TRUE;
+        return true;
     }
 
 
@@ -1095,15 +1051,15 @@ static gboolean heur_dissect_dplay(tvbuff_t *tvb, packet_info *pinfo, proto_tree
       if (tvb_get_letohs(tvb, 4) == WINSOCK_AF_INET) {
         int offset;
         for (offset = 12; offset <= 20; offset++)
-          if (tvb_get_guint8(tvb, offset) != 0)
-            return FALSE;
+          if (tvb_get_uint8(tvb, offset) != 0)
+            return false;
 
         dissect_dplay_player_msg(tvb, pinfo, tree);
-        return TRUE;
+        return true;
       }
     }
 
-    return FALSE;
+    return false;
 }
 
 void proto_register_dplay(void)
@@ -1112,10 +1068,10 @@ void proto_register_dplay(void)
     /* Common data fields */
     { &hf_dplay_size,
         { "DirectPlay package size", "dplay.size", FT_UINT32, BASE_DEC,
-        NULL, 0x0, NULL, HFILL}},
+        NULL, 0x000FFFFF, NULL, HFILL}},
     { &hf_dplay_token,
         { "DirectPlay token", "dplay.token", FT_UINT32, BASE_HEX,
-        VALS(dplay_token_val), 0x0, NULL, HFILL}},
+        VALS(dplay_token_val), 0xFFF00000, NULL, HFILL}},
     { &hf_dplay_saddr_af,
         { "DirectPlay s_addr_in address family", "dplay.saddr.af", FT_UINT16, BASE_HEX,
         VALS(dplay_af_val), 0x0, NULL, HFILL}},
@@ -1156,16 +1112,16 @@ void proto_register_dplay(void)
         NULL, 0x0, NULL, HFILL}},
     { &hf_dplay_flags_no_create_players,
         { "no create players flag", "dplay.flags.no_create_players", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_NO_CREATE_PLAYERS, "No Create Players", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_NO_CREATE_PLAYERS, NULL, HFILL}},
     { &hf_dplay_flags_0002,
         { "unused", "dplay.flags.unused", FT_BOOLEAN, 32,
         TFS(&tfs_present_absent), DPLAY_FLAG_0002, NULL, HFILL}},
     { &hf_dplay_flags_migrate_host,
         { "migrate host flag", "dplay.flags.migrate_host", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_MIGRATE_HOST, "Migrate Host", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_MIGRATE_HOST, NULL, HFILL}},
     { &hf_dplay_flags_short_player_msg,
         { "short player message", "dplay.flags.short_player_msg", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_SHORT_PLAYER_MSG, "Short Player Msg", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_SHORT_PLAYER_MSG, NULL, HFILL}},
     { &hf_dplay_flags_ignored,
         { "ignored", "dplay.ignored", FT_BOOLEAN, 32,
         TFS(&tfs_present_absent), DPLAY_FLAG_IGNORED, NULL, HFILL}},
@@ -1180,25 +1136,25 @@ void proto_register_dplay(void)
         TFS(&tfs_present_absent), DPLAY_FLAG_NO_P_UPD, NULL, HFILL}},
     { &hf_dplay_flags_use_auth,
         { "use authentication", "dplay.flags.use_auth", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_USE_AUTH, "Use Auth", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_USE_AUTH, NULL, HFILL}},
     { &hf_dplay_flags_private_session,
         { "private session", "dplay.flags.priv_sess", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_PRIV_SESS, "Priv Session", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_PRIV_SESS, NULL, HFILL}},
     { &hf_dplay_flags_password_req,
         { "password required", "dplay.flags.pass_req", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_PASS_REQ, "Pass Req", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_PASS_REQ, NULL, HFILL}},
     { &hf_dplay_flags_route,
         { "route via game host", "dplay.flags.route", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_ROUTE, "Route", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_ROUTE, NULL, HFILL}},
     { &hf_dplay_flags_server_player_only,
         { "get server player only", "dplay.flags.srv_p_only", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_SRV_ONLY, "Svr Player Only", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_SRV_ONLY, NULL, HFILL}},
     { &hf_dplay_flags_reliable,
         { "use reliable protocol", "dplay.flags.reliable", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_RELIABLE, "Reliable", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_RELIABLE, NULL, HFILL}},
     { &hf_dplay_flags_preserve_order,
         { "preserve order", "dplay.flags.order", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_FLAG_ORDER, "Order", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_FLAG_ORDER, NULL, HFILL}},
     { &hf_dplay_flags_optimize_latency,
         { "optimize for latency", "dplay.flags.opt_latency", FT_BOOLEAN, 32,
         TFS(&tfs_present_absent), DPLAY_FLAG_OPT_LAT, "Opt Latency", HFILL}},
@@ -1342,26 +1298,26 @@ void proto_register_dplay(void)
         { "SuperPackedPlayer player info mask", "dplay.spp.pim", FT_UINT32, BASE_HEX,
         NULL, 0x0, NULL, HFILL}},
     { &hf_dplay_spp_have_short_name,
-        { "SuperPackedPlayer have short name", "dplay.spp.pim.short_name", FT_UINT32, BASE_HEX,
-        VALS(yes_no_val), 0x0, NULL, HFILL}},
+        { "SuperPackedPlayer have short name", "dplay.spp.pim.short_name", FT_BOOLEAN, 32,
+        TFS(&tfs_yes_no), DPLAY_SPP_INF_FLAG_HAVE_SHORT_NAME, NULL, HFILL}},
     { &hf_dplay_spp_have_long_name,
-        { "SuperPackedPlayer have long name", "dplay.spp.pim.long_name", FT_UINT32, BASE_HEX,
-        VALS(yes_no_val), 0x0, NULL, HFILL}},
+        { "SuperPackedPlayer have long name", "dplay.spp.pim.long_name", FT_BOOLEAN, 32,
+        TFS(&tfs_yes_no), DPLAY_SPP_INF_FLAG_HAVE_LONG_NAME, NULL, HFILL}},
     { &hf_dplay_spp_sp_length_type,
-        { "SuperPackedPlayer service provider length info", "dplay.spp.pim.sp_length", FT_UINT32, BASE_HEX,
-        VALS(dplay_spp_length_val), 0x0, NULL, HFILL}},
+        { "SuperPackedPlayer service provider length info", "dplay.spp.pim.sp_length", FT_UINT32, BASE_DEC,
+        VALS(dplay_spp_length_val), DPLAY_SPP_INF_FLAG_SP_LENGTH_TYPE, NULL, HFILL}},
     { &hf_dplay_spp_pd_length_type,
-        { "SuperPackedPlayer player data length info", "dplay.spp.pim.pd_length", FT_UINT32, BASE_HEX,
-        VALS(dplay_spp_length_val), 0x0, NULL, HFILL}},
+        { "SuperPackedPlayer player data length info", "dplay.spp.pim.pd_length", FT_UINT32, BASE_DEC,
+        VALS(dplay_spp_length_val), DPLAY_SPP_INF_FLAG_PD_LENGTH_TYPE, NULL, HFILL}},
     { &hf_dplay_spp_player_count_type,
-        { "SuperPackedPlayer player count info", "dplay.spp.pim.player_count", FT_UINT32, BASE_HEX,
-        VALS(dplay_spp_length_val), 0x0, NULL, HFILL}},
+        { "SuperPackedPlayer player count info", "dplay.spp.pim.player_count", FT_UINT32, BASE_DEC,
+        VALS(dplay_spp_length_val), DPLAY_SPP_INF_FLAG_PLAYER_COUNT_TYPE, NULL, HFILL}},
     { &hf_dplay_spp_have_parent_id,
-        { "SuperPackedPlayer have parent ID", "dplay.spp.pim.parent_id", FT_UINT32, BASE_HEX,
-        VALS(yes_no_val), 0x0, NULL, HFILL}},
+        { "SuperPackedPlayer have parent ID", "dplay.spp.pim.parent_id", FT_BOOLEAN, 32,
+        TFS(&tfs_yes_no), DPLAY_SPP_INF_FLAG_HAVE_PARENT_ID, NULL, HFILL}},
     { &hf_dplay_spp_shortcut_count_type,
-        { "SuperPackedPlayer shortcut count info", "dplay.spp.pim.shortcut_count", FT_UINT32, BASE_HEX,
-        VALS(dplay_spp_length_val), 0x0, NULL, HFILL}},
+        { "SuperPackedPlayer shortcut count info", "dplay.spp.pim.shortcut_count", FT_UINT32, BASE_DEC,
+        VALS(dplay_spp_length_val), DPLAY_SPP_INF_FLAG_SHORTCUT_COUNT_TYPE, NULL, HFILL}},
     { &hf_dplay_spp_dialect,
         { "SuperPackedPlayer dialect version", "dplay.spp.dialect", FT_UINT32, BASE_HEX,
         VALS(dplay_proto_dialect_val), 0x0, NULL, HFILL}},
@@ -1445,13 +1401,13 @@ void proto_register_dplay(void)
         NULL, 0x0, NULL, HFILL}},
     { &hf_enum_sess_flag_join,
         { "Enumerate joinable sessions", "dplay.type02.joinable", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_ENUM_SESS_FLAG_JOIN, "Joinable", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_ENUM_SESS_FLAG_JOIN, NULL, HFILL}},
     { &hf_enum_sess_flag_all,
         { "Enumerate all sessions", "dplay.type02.all", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_ENUM_SESS_FLAG_ALL, "All", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_ENUM_SESS_FLAG_ALL, NULL, HFILL}},
     { &hf_enum_sess_flag_passwd,
         { "Enumerate sessions requiring a password", "dplay.type02.pw_req", FT_BOOLEAN, 32,
-        TFS(&tfs_present_absent), DPLAY_ENUM_SESS_FLAG_PASSWD, "Password", HFILL}},
+        TFS(&tfs_present_absent), DPLAY_ENUM_SESS_FLAG_PASSWD, NULL, HFILL}},
 
     /* Data fields for message type 0x0005 */
     { &hf_dplay_type_05_flags,
@@ -1637,7 +1593,7 @@ void proto_register_dplay(void)
         NULL, 0x0, NULL, HFILL}},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_dplay,
         &ett_dplay_header,
         &ett_dplay_sockaddr,
@@ -1653,19 +1609,15 @@ void proto_register_dplay(void)
         &ett_dplay_type29_spp,
     };
 
-    proto_dplay = proto_register_protocol (
-        "DirectPlay Protocol",
-        "DPLAY",
-        "dplay"
-        );
+    proto_dplay = proto_register_protocol ("DirectPlay Protocol", "DPLAY", "dplay");
     proto_register_field_array(proto_dplay, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 }
 
 void proto_reg_handoff_dplay(void)
 {
-    heur_dissector_add("udp", heur_dissect_dplay, "DirectPlay over UDP", "dplay_udp", proto_dplay, HEURISTIC_ENABLE);
-    heur_dissector_add("tcp", heur_dissect_dplay, "DirectPlay over TCP", "dplay_tcp", proto_dplay, HEURISTIC_ENABLE);
+    heur_dissector_add("udp", heur_dissect_dplay, "DirectPlay over UDP", "dplay_udp", proto_dplay, HEURISTIC_DISABLE);
+    heur_dissector_add("tcp", heur_dissect_dplay, "DirectPlay over TCP", "dplay_tcp", proto_dplay, HEURISTIC_DISABLE);
 }
 
 /*

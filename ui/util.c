@@ -343,7 +343,7 @@ bool display_is_remote(void)
 }
 
 // MUST be UTF-8
-static char *last_open_dir = NULL;
+static char *last_open_dir;
 
 const char *
 get_last_open_dir(void)
@@ -403,6 +403,10 @@ get_open_dialog_initial_dir(void)
             initial_dir = prefs.gui_fileopen_dir;
         else
             initial_dir = get_persdatafile_dir();
+        break;
+
+    case FO_STYLE_CWD:
+        initial_dir = get_current_working_dir();
         break;
 
     default:

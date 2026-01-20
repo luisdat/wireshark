@@ -1,5 +1,5 @@
 /* packet-idmp.c
- * Routines for X.519 Internet Directly Mapped Procotol (IDMP) packet dissection
+ * Routines for X.519 Internet Directly Mapped Protocol (IDMP) packet dissection
  * Graeme Lunt 2010
  *
  * Wireshark - Network traffic analyzer
@@ -17,12 +17,13 @@
 #include <epan/conversation.h>
 #include <epan/oids.h>
 #include <epan/asn1.h>
-#include <epan/ipproto.h>
 #include <epan/strutil.h>
 
 #include <wsutil/str_util.h>
+#include <wsutil/array.h>
 
 #include "packet-tcp.h"
+#include "packet-iana-data.h"
 
 #include "packet-ber.h"
 #include "packet-ros.h"
@@ -40,12 +41,12 @@ void register_idmp_protocol_info(const char *oid, const ros_info_t *rinfo, int p
 static bool           idmp_desegment       = true;
 #define IDMP_TCP_PORT     1102 /* made up for now - not IANA registered */
 static bool           idmp_reassemble      = true;
-static dissector_handle_t idmp_handle          = NULL;
+static dissector_handle_t idmp_handle;
 
-static proto_tree *top_tree         = NULL;
-static const char *protocolID       = NULL;
-static const char *saved_protocolID = NULL;
-static guint32     opcode           = -1;
+static proto_tree *top_tree;
+static const char *protocolID;
+static const char *saved_protocolID;
+static uint32_t    opcode           = -1;
 
 /* Initialize the protocol and registered fields */
 int proto_idmp;
@@ -69,8 +70,8 @@ static int hf_idmp_reassembled_in;
 static int hf_idmp_reassembled_length;
 static int hf_idmp_segment_data;
 
-static gint ett_idmp_fragment;
-static gint ett_idmp_fragments;
+static int ett_idmp_fragment;
+static int ett_idmp_fragments;
 
 static const fragment_items idmp_frag_items = {
     /* Fragment subtrees */
@@ -117,7 +118,7 @@ static int call_idmp_oid_callback(tvbuff_t *tvb, int offset, packet_info *pinfo,
 #include "packet-idmp-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_idmp;
+static int ett_idmp;
 #include "packet-idmp-ett.c"
 
 #include "packet-idmp-fn.c"
@@ -126,7 +127,7 @@ void
 register_idmp_protocol_info(const char *oid, const ros_info_t *rinfo, int proto _U_, const char *name)
 {
     /* just register with ROS for now */
-    register_ros_protocol_info(oid, rinfo, proto, name, FALSE);
+    register_ros_protocol_info(oid, rinfo, proto, name, false);
 }
 
 
@@ -138,13 +139,13 @@ static int dissect_idmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
     proto_tree                    *tree;
     asn1_ctx_t                     asn1_ctx;
     struct SESSION_DATA_STRUCTURE  session;
-    gboolean                       idmp_final;
-    guint32                        idmp_length;
+    bool                           idmp_final;
+    uint32_t                       idmp_length;
     fragment_head                 *fd_head;
     conversation_t                *conv;
-    guint32                        dst_ref = 0;
+    uint32_t                       dst_ref = 0;
 
-    asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+    asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
     conv = find_conversation_pinfo(pinfo, 0);
     if (conv) {
@@ -164,7 +165,7 @@ static int dissect_idmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 
     proto_tree_add_item(tree, hf_idmp_version, tvb, offset, 1, ENC_BIG_ENDIAN); offset++;
     proto_tree_add_item(tree, hf_idmp_final, tvb, offset, 1, ENC_BIG_ENDIAN);
-    idmp_final = tvb_get_guint8(tvb, offset); offset++;
+    idmp_final = tvb_get_uint8(tvb, offset); offset++;
     proto_tree_add_item(tree, hf_idmp_length, tvb, offset, 4, ENC_BIG_ENDIAN);
     idmp_length = tvb_get_ntohl(tvb, offset); offset += 4;
 
@@ -210,16 +211,16 @@ static int dissect_idmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
     /* not reassembling - just dissect */
     if(idmp_final) {
         asn1_ctx.private_data = &session;
-        dissect_idmp_IDM_PDU(FALSE, tvb, offset, &asn1_ctx, tree, hf_idmp_PDU);
+        dissect_idmp_IDM_PDU(false, tvb, offset, &asn1_ctx, tree, hf_idmp_PDU);
     }
 
     return tvb_captured_length(tvb);
 }
 
-static guint get_idmp_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb,
+static unsigned get_idmp_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb,
                               int offset, void *data _U_)
 {
-    guint32 len;
+    uint32_t len;
 
     len = tvb_get_ntohl(tvb, offset + 2);
 
@@ -301,7 +302,7 @@ void proto_register_idmp(void)
     };
 
     /* List of subtrees */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_idmp,
         &ett_idmp_fragment,
         &ett_idmp_fragments,

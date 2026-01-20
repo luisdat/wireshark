@@ -124,17 +124,23 @@
  * Includes updates for RFC8549
  */
 
+#define WS_LOG_DOMAIN "packet-netflow"
 #include "config.h"
+#include <wireshark.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <epan/ipproto.h>
 #include <epan/sminmpec.h>
 #include <epan/to_str.h>
 #include <epan/expert.h>
 #include <epan/addr_resolv.h>
 #include <epan/conversation.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
+
+#include <wsutil/array.h>
 #include <wsutil/str_util.h>
+#include "packet-iana-data.h"
 #include "packet-tcp.h"
 #include "packet-udp.h"
 #include "packet-ntp.h"
@@ -143,12 +149,6 @@ void proto_register_netflow(void);
 void proto_reg_handoff_netflow(void);
 
 static int dissect_tcp_netflow(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data);
-
-#if 0
-#define ipfix_debug(...) ws_warning(__VA_ARGS__)
-#else
-#define ipfix_debug(...)
-#endif
 
 
 /* 4739 is IPFIX.
@@ -170,15 +170,15 @@ static dissector_handle_t eth_handle;
 /*
  *  global_netflow_ports : holds the configured range of ports for netflow
  */
-static range_t *global_netflow_ports = NULL;
+static range_t *global_netflow_ports;
 /*
  *  global_ipfix_ports : holds the configured range of ports for IPFIX
  */
-static range_t *global_ipfix_ports = NULL;
+static range_t *global_ipfix_ports;
 
 static bool netflow_preference_desegment = true;
 
-static bool netflow_preference_tcpflags_1byte_cwr = false;
+static bool netflow_preference_tcpflags_1byte_cwr;
 
 /*
  * Flowset (template) ID's
@@ -287,13 +287,13 @@ static value_string_ext v8_agg_ext = VALUE_STRING_EXT_INIT(v8_agg);
    A value of 0 will be unlimited.
 */
 #define V9_TMPLT_MAX_FIELDS_DEF   60
-static guint v9_tmplt_max_fields = V9_TMPLT_MAX_FIELDS_DEF;
+static unsigned v9_tmplt_max_fields = V9_TMPLT_MAX_FIELDS_DEF;
 
 typedef struct _v9_v10_tmplt_entry {
-    guint16      type;
-    guint16      length;
-    guint32      pen;
-    const gchar *pen_str;
+    uint16_t     type;
+    uint16_t     length;
+    uint32_t     pen;
+    const char *pen_str;
 } v9_v10_tmplt_entry_t;
 
 typedef enum {
@@ -317,22 +317,22 @@ typedef enum {
 
 typedef struct _v9_v10_tmplt {
     /* For linking back to show where fields were defined */
-    guint32  template_frame_number;
+    uint32_t template_frame_number;
     address  src_addr;
-    guint32  src_port;
+    uint32_t src_port;
     address  dst_addr;
-    guint32  dst_port;
-    guint32  src_id;   /* SourceID in NetFlow V9, Observation Domain ID in IPFIX */
-    guint16  tmplt_id;
-    guint    length;
-    guint16  field_count[TF_NUM];                /* 0:scopes; 1:entries  */
+    uint32_t dst_port;
+    uint32_t src_id;   /* SourceID in NetFlow V9, Observation Domain ID in IPFIX */
+    uint16_t tmplt_id;
+    unsigned length;
+    uint16_t field_count[TF_NUM];                /* 0:scopes; 1:entries  */
     v9_v10_tmplt_entry_t *fields_p[TF_NUM_EXT];  /* 0:scopes; 1:entries; n:vendor_entries  */
 } v9_v10_tmplt_t;
 
 
-/* Map from (converstion+obs-domain-id+flowset-id) -> v9_v10_tmplt_entry_t*    */
+/* Map from (conversation+obs-domain-id+flowset-id) -> v9_v10_tmplt_entry_t*    */
 /* Confusingly, for key, fill in only relevant parts of v9_v10_tmplt_entry_t... */
-wmem_map_t *v9_v10_tmplt_table = NULL;
+wmem_map_t *v9_v10_tmplt_table;
 
 
 static const value_string v9_v10_template_types[] = {
@@ -804,7 +804,12 @@ static const value_string v9_v10_template_types[] = {
     { 500, "srhIPv6ActiveSegmentType" },
     { 501, "srhSegmentIPv6LocatorLength" },
     { 502, "srhSegmentIPv6EndpointBehavior" },
-
+    { 505, "gtpuFlags" },
+    { 506, "gtpuMsgType" },
+    { 507, "gtpuTEid" },
+    { 508, "gtpuSequenceNum" },
+    { 509, "gtpuQFI" },
+    { 510, "gtpuPduType" },
     /* Ericsson NAT Logging */
     { 24628, "NAT_LOG_FIELD_IDX_CONTEXT_ID" },
     { 24629, "NAT_LOG_FIELD_IDX_CONTEXT_NAME" },
@@ -1750,6 +1755,63 @@ static const value_string v10_template_types_ixia[] = {
     {  327, "SIP Content Type"},
     {  328, "SIP Route"},
     {  329, "SIP Geolocation"},
+    {  330, "Diameter Message" },
+    {  331, "Diameter CommandCode"},
+    {  332, "Diameter Request"},
+    {  333, "Diameter Response"},
+    {  334, "Diameter ApplicationId"},
+    {  335, "Diameter OriginHost"},
+    {  336, "Diameter OriginRealm"},
+    {  337, "Diameter DestinationHost"},
+    {  338, "Diameter DestinationRealm"},
+    {  339, "Diameter UserName"},
+    {  340, "Diameter SCAddress"},
+    {  341, "Diameter AuthenticationVectorRAND"},
+    {  342, "Diameter AuthenticationVectorXRES"},
+    {  343, "Diameter AuthenticationVectorAUTN"},
+    {  344, "Diameter AuthenticationVectorKASME"},
+    {  345, "Diameter SubscriptionDataAMBRMaxRequestedBandwidthUL"},
+    {  346, "Diameter SubscriptionDataAMBRMaxRequestedBandwidthDL"},
+    {  347, "Diameter APNConfigurationProfile"},
+    {  348, "Diameter AccessRestrictionDataFlags"},
+    {  349, "Diameter RouteRecord"},
+    {  350, "Diameter FramedIPAddress"},
+    {  351, "Diameter 3GPPUserLocationInfo"},
+    {  352, "Diameter CalledStationId"},
+    {  353, "Diameter QoSClassIdentifier"},
+    {  354, "Diameter QoSMaxRequestedBandwidthDL"},
+    {  355, "Diameter QoSMaxRequestedBandwidthUL"},
+    {  356, "Diameter QoSGuaranteedBitrateUL"},
+    {  357, "Diameter QoSGuaranteedBitrateDL"},
+    {  358, "Diameter QoSAPNAggregateMaxBitrateUL"},
+    {  359, "Diameter QoSAPNAggregateMaxBitrateDL"},
+    {  360, "Diameter IntegrityKey"},
+    {  361, "Diameter ConfidentialityKey"},
+    {  362, "Diameter Result Code"},
+    {  363, "Diameter Subscriber Id Data"},
+    {  364, "SessionFingerprint"},
+    {  365, "SessionParseErrors"},
+    {  366, "httpHeaders"},
+    {  367, "httpHeaderField"},
+    {  368, "httpHeaderValue"},
+    {  369, "sipPackets"},
+    {  370, "sipHeaders"},
+    {  371, "sipType"},
+    {  372, "sipHeaderField"},
+    {  373, "sipHeaderValue"},
+    {  374, "IP Scrambling"},
+    {  375, "JA4 Fingerprint Part A"},
+    {  376, "JA4 Fingerprint Part B"},
+    {  377, "JA4 Fingerprint Part C"},
+    {  378, "Extended HTTP URI"},
+    {  379, "App Octet Delta Count"},
+    {  380, "Reverse App Octet Delta Count"},
+    {  381, "GTP ULI nrCellId"},
+    {  382, "RAT Type Name"},
+    {  383, "Mobile Country Name"},
+    {  384, "Mobile Network Name"},
+    {  385, "IMEI Mobile Device Model"},
+    {  386, "IMEI Mobile Device Manufacturer"},
     { 0, NULL }
 };
 static value_string_ext v10_template_types_ixia_ext = VALUE_STRING_EXT_INIT(v10_template_types_ixia);
@@ -2119,6 +2181,7 @@ static const value_string v10_barracuda_logop[] = {
     { 28, "IntermediateReport" },
     { 0, NULL }
 };
+static value_string_ext v10_barracuda_logop_ext = VALUE_STRING_EXT_INIT(v10_barracuda_logop);
 
 static const value_string v10_barracuda_traffictype[] = {
     { 0, "Forwarding" },
@@ -2175,6 +2238,7 @@ static const value_string v10_cisco_waas_passthrough_reason[] = {
     { 33, "PT_RTSP_ALG" },
     {  0, NULL }
 };
+static value_string_ext v10_cisco_waas_passthrough_reason_ext = VALUE_STRING_EXT_INIT(v10_cisco_waas_passthrough_reason);
 
 static const value_string v10_template_types_fastip[] = {
     { 0, "METER_VERSION"},
@@ -2368,8 +2432,8 @@ static value_string_ext selector_algorithm_ext = VALUE_STRING_EXT_INIT(selector_
 
 static const value_string performance_monitor_specials[] = {
     { 0xFFFFFFFF, "Not Measured"},
-    { 0xFFFF, "Not Measured"},
-    { 0xFF, "Not Measured"},
+    { 0xFFFF,     "Not Measured"},
+    { 0xFF,       "Not Measured"},
     { 0, NULL }
 };
 
@@ -2422,6 +2486,7 @@ static int      ett_subtemplate_list;
 static int      ett_resiliency;
 static int      ett_data_link_frame_sec;
 static int      ett_srhflagsipv6;
+static int      ett_gtpflags;
 
 /*
  * cflow header
@@ -2981,6 +3046,29 @@ static int * const srh_flags_ipv6[] = {
         NULL
 };
 
+static int      hf_cflow_gtpu_flags;      /* ID: 505 */
+static int      hf_gtpu_flags_version;
+static int      hf_gtpu_flags_pt;
+static int      hf_gtpu_flags_reserved;
+static int      hf_gtpu_flags_s;
+static int      hf_gtpu_flags_n;
+static int      hf_gtpu_flags_pn;
+static int      hf_cflow_gtpu_msg_type;      /* ID: 506 */
+static int      hf_cflow_gtpu_teid;      /* ID: 507 */
+static int      hf_cflow_gtpu_seq_num;      /* ID: 508 */
+static int      hf_cflow_gtpu_qfi;      /* ID: 509 */
+static int      hf_cflow_gtpu_pdu_type;      /* ID: 510 */
+
+static int * const gtpu_flags[] = {
+        &hf_gtpu_flags_version,
+        &hf_gtpu_flags_pt,
+        &hf_gtpu_flags_reserved,
+        &hf_gtpu_flags_s,
+        &hf_gtpu_flags_n,
+        &hf_gtpu_flags_pn,
+        NULL
+};
+
 static int      hf_cflow_mpls_label;
 static int      hf_cflow_mpls_exp;
 static int      hf_cflow_mpls_bos;
@@ -3211,8 +3299,8 @@ static int      hf_pie_ntop_radius_user_imei;
 static int      hf_pie_ntop_radius_framed_ip_addr;
 static int      hf_pie_ntop_radius_acct_session_id;
 static int      hf_pie_ntop_radius_acct_status_type;
-static int      hf_pie_ntop_radius_acct_in_octects;
-static int      hf_pie_ntop_radius_acct_out_octects;
+static int      hf_pie_ntop_radius_acct_in_octets;
+static int      hf_pie_ntop_radius_acct_out_octets;
 static int      hf_pie_ntop_radius_acct_in_pkts;
 static int      hf_pie_ntop_radius_acct_out_pkts;
 static int      hf_pie_ntop_imap_login;
@@ -3640,6 +3728,27 @@ static int      hf_pie_ixia_diameter_result_code;
 static int      hf_pie_ixia_diameter_subscription_id_data;
 static int      hf_pie_ixia_session_fingerprint;
 static int      hf_pie_ixia_session_parse_errors;
+static int      hf_pie_ixia_http_headers;
+static int      hf_pie_ixia_http_header_field;
+static int      hf_pie_ixia_http_header_value;
+static int      hf_pie_ixia_sip_packets;
+static int      hf_pie_ixia_sip_headers;
+static int      hf_pie_ixia_sip_type;
+static int      hf_pie_ixia_sip_header_field;
+static int      hf_pie_ixia_sip_header_value;
+static int      hf_pie_ixia_session_ip_scrambling_key_hash;
+static int      hf_pie_ixia_ja4a;
+static int      hf_pie_ixia_ja4b;
+static int      hf_pie_ixia_ja4c;
+static int      hf_pie_ixia_uri_extended;
+static int      hf_pie_ixia_app_octet_delta_count;
+static int      hf_pie_ixia_reverse_app_octet_delta_count;
+static int      hf_pie_ixia_gtp_uli_cell_nr_cellid;
+static int      hf_pie_ixia_gtp_rat_type_name;
+static int      hf_pie_ixia_gtp_mobile_country_name;
+static int      hf_pie_ixia_gtp_mobile_network_name;
+static int      hf_pie_ixia_gtp_mobile_device_model;
+static int      hf_pie_ixia_gtp_mobile_device_manufacturer;
 
 static int      hf_pie_netscaler;
 static int      hf_pie_netscaler_roundtriptime;
@@ -4119,13 +4228,13 @@ proto_tree_add_mpls_label(proto_tree *pdutree, tvbuff_t *tvb, int offset, int le
     proto_tree *mpls_tree;
     proto_item *ti;
     if( length == 3) {
-        guint8 b0 = tvb_get_guint8(tvb, offset);
-        guint8 b1 = tvb_get_guint8(tvb, offset + 1);
-        guint8 b2 = tvb_get_guint8(tvb, offset + 2);
+        uint8_t b0 = tvb_get_uint8(tvb, offset);
+        uint8_t b1 = tvb_get_uint8(tvb, offset + 1);
+        uint8_t b2 = tvb_get_uint8(tvb, offset + 2);
 
-        guint32  label = (b0<<12) + (b1<<4) + (b2>>4);
-        guint8   exp   = (b2>>1) & 0x7;
-        guint8   bos   =  b2     & 0x1;
+        uint32_t label = (b0<<12) + (b1<<4) + (b2>>4);
+        uint8_t  exp   = (b2>>1) & 0x7;
+        uint8_t  bos   =  b2     & 0x1;
 
         mpls_tree = proto_tree_add_subtree_format(pdutree, tvb, offset, length, ett_mpls_label, &ti,
                                                   "MPLS-Label%d: %u exp-bits: %u %s",
@@ -4144,39 +4253,39 @@ proto_tree_add_mpls_label(proto_tree *pdutree, tvbuff_t *tvb, int offset, int le
 
 
 typedef struct _hdrinfo_t {
-    guint8  vspec;
-    guint32 src_id;            /* SourceID in NetFlow V9, Observation Domain ID in IPFIX */
+    uint8_t vspec;
+    uint32_t src_id;            /* SourceID in NetFlow V9, Observation Domain ID in IPFIX */
     time_t  export_time_secs;  /* secs since epoch */
 } hdrinfo_t;
 
 typedef int     dissect_pdu_t(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset,
-                              hdrinfo_t *hdrinfo_p, guint32 *flows_seen);
+                              hdrinfo_t *hdrinfo_p, uint32_t *flows_seen);
 
 static int      dissect_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset,
-                            hdrinfo_t *hdrinfo_p, guint32 *flows_seen);
+                            hdrinfo_t *hdrinfo_p, uint32_t *flows_seen);
 static int      dissect_v8_aggpdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
-                                  int offset, hdrinfo_t *hdrinfo_p, guint32 *flows_seen);
+                                  int offset, hdrinfo_t *hdrinfo_p, uint32_t *flows_seen);
 static int      dissect_v8_flowpdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
-                                   int offset, hdrinfo_t *hdrinfo_p, guint32 *flows_seen);
+                                   int offset, hdrinfo_t *hdrinfo_p, uint32_t *flows_seen);
 static int      dissect_v9_v10_flowset(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
-                                   int offset, hdrinfo_t *hdrinfo_p, guint32 *flows_seen);
+                                   int offset, hdrinfo_t *hdrinfo_p, uint32_t *flows_seen);
 static int      dissect_v9_v10_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
-                                int offset, guint16 id, guint length, hdrinfo_t *hdrinfo_p,
-                                guint32 *flows_seen);
-static guint    dissect_v9_v10_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
+                                int offset, uint16_t id, unsigned length, hdrinfo_t *hdrinfo_p,
+                                uint32_t *flows_seen);
+static unsigned dissect_v9_v10_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
                                int offset, v9_v10_tmplt_t *tmplt_p, hdrinfo_t *hdrinfo_p,
-                               guint32 *flows_seen);
-static guint    dissect_v9_pdu_scope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
+                               uint32_t *flows_seen);
+static unsigned dissect_v9_pdu_scope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
                                int offset, v9_v10_tmplt_t *tmplt_p);
-static guint    dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
+static unsigned dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
                                         int offset, v9_v10_tmplt_t *tmplt_p, hdrinfo_t *hdrinfo_p,
                                         v9_v10_tmplt_fields_type_t fields_type);
 static int      dissect_v9_v10_options_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
-                                                int offset, int len, hdrinfo_t *hdrinfo_p, guint16 flowset_id);
+                                                int offset, int len, hdrinfo_t *hdrinfo_p, uint16_t flowset_id);
 static int      dissect_v9_v10_data_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree,
-                                    int offset, int len, hdrinfo_t *hdrinfo_p, guint16 flowset_id);
+                                    int offset, int len, hdrinfo_t *hdrinfo_p, uint16_t flowset_id);
 
-static const gchar *getprefix(wmem_allocator_t *pool, const guint32 *address, unsigned prefix);
+static const char *getprefix(wmem_allocator_t *pool, const uint32_t *address, unsigned prefix);
 
 static int      flow_process_ints(proto_tree *pdutree, tvbuff_t *tvb,
                                   int offset);
@@ -4189,7 +4298,7 @@ static int      flow_process_aspair(proto_tree *pdutree, tvbuff_t *tvb,
 static int      flow_process_sizecount(proto_tree *pdutree, tvbuff_t *tvb,
                                        int offset);
 
-static v9_v10_tmplt_t *v9_v10_tmplt_build_key(v9_v10_tmplt_t *tmplt_p, packet_info *pinfo, guint32 src_id, guint16 tmplt_id);
+static v9_v10_tmplt_t *v9_v10_tmplt_build_key(v9_v10_tmplt_t *tmplt_p, packet_info *pinfo, uint32_t src_id, uint16_t tmplt_id);
 
 
 static int
@@ -4203,7 +4312,7 @@ flow_process_textfield(proto_tree *pdutree, tvbuff_t *tvb, int offset, int bytes
 
 
 static int
-pen_to_type_hf_list(guint32 pen) {
+pen_to_type_hf_list(uint32_t pen) {
     switch (pen) {
     case VENDOR_PLIXER:
         return TF_PLIXER;
@@ -4240,14 +4349,14 @@ pen_to_type_hf_list(guint32 pen) {
    map for each template/set ID inside the domain state? */
 
 typedef struct netflow_domain_state_t {
-    gboolean sequence_number_set;
-    guint32 current_sequence_number;
-    guint32 current_frame_number;
+    bool sequence_number_set;
+    uint32_t current_sequence_number;
+    uint32_t current_frame_number;
 } netflow_domain_state_t;
 
 /* On first pass, check ongoing sequence of observation domain, and only store a result
    if the sequence number is not as expected */
-static void store_sequence_analysis_info(guint32 domain_id, guint32 seqnum, unsigned int version, guint32 new_flows,
+static void store_sequence_analysis_info(uint32_t domain_id, uint32_t seqnum, unsigned int version, uint32_t new_flows,
                                          packet_info *pinfo)
 {
     /* Find current domain info */
@@ -4287,12 +4396,12 @@ static void store_sequence_analysis_info(guint32 domain_id, guint32 seqnum, unsi
     /* Update domain info for the next frame to consult.
        Add flows(data records) for all protocol versions except for 9, which just counts exported frames */
     domain_state->current_sequence_number = seqnum + ((version == 9) ? 1 : new_flows);
-    domain_state->sequence_number_set = TRUE;
+    domain_state->sequence_number_set = true;
     domain_state->current_frame_number = pinfo->num;
 }
 
 /* Check for result stored indicating that sequence number wasn't as expected, and show in tree */
-static void show_sequence_analysis_info(guint32 domain_id, guint32 seqnum,
+static void show_sequence_analysis_info(uint32_t domain_id, uint32_t seqnum,
                                         packet_info *pinfo, tvbuff_t *tvb,
                                         proto_item *flow_sequence_ti, proto_tree *tree)
 {
@@ -4321,8 +4430,8 @@ static void show_sequence_analysis_info(guint32 domain_id, guint32 seqnum,
 
 /* Try to look up the transport name given the pen_type, ip_protocol and port_number.
    If found, append to port number item */
-static void netflow_add_transport_info(packet_info *pinfo, guint64 pen_type, guint8 ip_protocol,
-                                       guint16 port_number, proto_item *ti)
+static void netflow_add_transport_info(packet_info *pinfo, uint64_t pen_type, uint8_t ip_protocol,
+                                       uint16_t port_number, proto_item *ti)
 {
     const char *port_str;
 
@@ -4357,19 +4466,19 @@ dissect_netflow(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     proto_tree     *timetree, *pdutree;
     unsigned int    pduret, ver, pdus, x;
     hdrinfo_t       hdrinfo;
-    guint32         flow_sequence = 0; /* TODO: could be part of hdrinfo struct? */
+    uint32_t        flow_sequence = 0; /* TODO: could be part of hdrinfo struct? */
     proto_item      *flow_sequence_ti = NULL;
-    gint            flow_len = -1;    /* v10 only */
-    guint           available, pdusize, offset = 0;
+    int             flow_len = -1;    /* v10 only */
+    unsigned        available, pdusize, offset = 0;
     nstime_t        ts;
     dissect_pdu_t  *pduptr;
-    guint32         flows_seen = 0;
+    uint32_t        flows_seen = 0;
 
-    ipfix_debug("dissect_netflow: start");
+    ws_debug("start");
 
     ver = tvb_get_ntohs(tvb, offset);
 
-    ipfix_debug("dissect_netflow: found version %d", ver);
+    ws_debug("found version %d", ver);
 
     switch (ver) {
     case 1:
@@ -4403,13 +4512,13 @@ dissect_netflow(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "CFLOW");
     col_clear(pinfo->cinfo, COL_INFO);
-    ipfix_debug("dissect_netflow: column cleared");
+    ws_debug("column cleared");
 
     if (tree) {
         ti = proto_tree_add_item(tree, proto_netflow, tvb, offset, -1, ENC_NA);
         netflow_tree = proto_item_add_subtree(ti, ett_netflow);
     }
-    ipfix_debug("dissect_netflow: tree added");
+    ws_debug("tree added");
 
     hdrinfo.vspec = ver;
     hdrinfo.src_id = 0;
@@ -4435,7 +4544,7 @@ dissect_netflow(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
                         "total: %u (v%u) record%s", pdus, ver,
                         plurality(pdus, "", "s"));
     } else if (ver == 10) {
-        gint remaining = tvb_reported_length_remaining(tvb, offset) + 4;
+        int remaining = tvb_reported_length_remaining(tvb, offset) + 4;
 
         if(remaining == flow_len)
             col_add_fstr(pinfo->cinfo, COL_INFO, "IPFIX flow (%4d bytes)",
@@ -4458,7 +4567,7 @@ dissect_netflow(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         return tvb_reported_length(tvb);
 
     if(ver != 10) {
-        guint32 sysuptime = tvb_get_ntohl(tvb, offset);
+        uint32_t sysuptime = tvb_get_ntohl(tvb, offset);
         nstime_t nsuptime;
 
         nsuptime.secs = sysuptime / 1000;
@@ -4521,7 +4630,7 @@ dissect_netflow(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         offset += 4;
     }
     if (ver == 8) {
-        hdrinfo.vspec = tvb_get_guint8(tvb, offset);
+        hdrinfo.vspec = tvb_get_uint8(tvb, offset);
         switch (hdrinfo.vspec) {
         case V8PDU_AS_METHOD:
             pdusize = V8PDU_AS_SIZE;
@@ -4688,8 +4797,8 @@ flow_process_timeperiod(proto_tree *pdutree, tvbuff_t *tvb, int offset)
     nstime_t    ts_start, ts_end;
     int         offset_s, offset_e;
     nstime_t    ts_delta;
-    guint32     msec_start, msec_end;
-    guint32     msec_delta;
+    uint32_t    msec_start, msec_end;
+    uint32_t    msec_delta;
     proto_tree *timetree;
     proto_item *timeitem;
 
@@ -4751,10 +4860,10 @@ flow_process_sizecount(proto_tree *pdutree, tvbuff_t *tvb, int offset)
 
 static int
 dissect_v8_flowpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutree, int offset,
-                   hdrinfo_t *hdrinfo_p, guint32 *flows_seen _U_)
+                   hdrinfo_t *hdrinfo_p, uint32_t *flows_seen _U_)
 {
     int      startoffset = offset;
-    guint8   verspec;
+    uint8_t  verspec;
 
     proto_tree_add_item(pdutree, hf_cflow_dstaddr, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -4811,10 +4920,10 @@ dissect_v8_flowpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutre
 
 static int
 dissect_v8_aggpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutree, int offset,
-                  hdrinfo_t *hdrinfo_p, guint32 *flows_seen _U_)
+                  hdrinfo_t *hdrinfo_p, uint32_t *flows_seen _U_)
 {
     int      startoffset = offset;
-    guint8   verspec;
+    uint8_t  verspec;
     int      local_cflow_as;   /* hf_cflow_srcas     || hf_cflow_dstas    */
     int      local_cflow_net;  /* hf_cflow_srcnet    || hf_cflow_dstnet   */
     int      local_cflow_int;  /* hf_cflow_outputint || hf_cflow_inputint */
@@ -4834,16 +4943,15 @@ dissect_v8_aggpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutree
     case V8PDU_TOSAS_METHOD:
         offset = flow_process_aspair(pdutree, tvb, offset);
 
+        offset = flow_process_ints(pdutree, tvb, offset);
+
         if (verspec == V8PDU_TOSAS_METHOD) {
             proto_tree_add_item(pdutree, hf_cflow_tos, tvb,
                                 offset++, 1, ENC_BIG_ENDIAN);
             offset = flow_process_textfield(pdutree, tvb, offset, 1, hf_cflow_padding);
             offset = flow_process_textfield(pdutree, tvb, offset, 2, hf_cflow_reserved);
         }
-        /* ACF - Seen in the wild and documented here...
-           http://www.caida.org/tools/measurement/cflowd/configuration/configuration-9.html#ss9.1
-        */
-        offset = flow_process_ints(pdutree, tvb, offset);
+
         break;
 
     case V8PDU_PROTO_METHOD:
@@ -4915,9 +5023,9 @@ dissect_v8_aggpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutree
         proto_tree_add_item(pdutree, hf_cflow_dstnet, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
 
-        proto_tree_add_item(pdutree, hf_cflow_srcmask, tvb, offset++, 1, ENC_BIG_ENDIAN);
-
         proto_tree_add_item(pdutree, hf_cflow_dstmask, tvb, offset++, 1, ENC_BIG_ENDIAN);
+
+        proto_tree_add_item(pdutree, hf_cflow_srcmask, tvb, offset++, 1, ENC_BIG_ENDIAN);
 
         if ((verspec == V8PDU_TOSMATRIX_METHOD) ||
             (verspec == V8PDU_PREPORTPROTOCOL_METHOD)) {
@@ -4949,17 +5057,17 @@ dissect_v8_aggpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutree
 
 static int
 dissect_v9_v10_flowset(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int offset,
-                       hdrinfo_t *hdrinfo_p, guint32 *flows_seen)
+                       hdrinfo_t *hdrinfo_p, uint32_t *flows_seen)
 {
     proto_item *pi;
     int     length;
-    guint16 flowset_id;
-    guint8  ver;
+    uint16_t flowset_id;
+    uint8_t ver;
 
     ver = hdrinfo_p->vspec;
 
     if ((ver != 9) && (ver != 10))
-        return (0);
+        return 0;
 
     flowset_id = tvb_get_ntohs(tvb, offset);
     length = tvb_get_ntohs(tvb, offset + 2);
@@ -4989,7 +5097,7 @@ dissect_v9_v10_flowset(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, i
     default:
         if (flowset_id >= FLOWSET_ID_DATA_MIN) {
             col_append_fstr(pinfo->cinfo, COL_INFO, " [Data:%u]", flowset_id);
-            dissect_v9_v10_data(tvb, pinfo, pdutree, offset, flowset_id, (guint)length - 4, hdrinfo_p, flows_seen);
+            dissect_v9_v10_data(tvb, pinfo, pdutree, offset, flowset_id, (unsigned)length - 4, hdrinfo_p, flows_seen);
         }
         break;
     }
@@ -4999,12 +5107,12 @@ dissect_v9_v10_flowset(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, i
 
 static int
 dissect_v9_v10_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int offset,
-                    guint16 id, guint length, hdrinfo_t *hdrinfo_p, guint32 *flows_seen)
+                    uint16_t id, unsigned length, hdrinfo_t *hdrinfo_p, uint32_t *flows_seen)
 {
     v9_v10_tmplt_t *tmplt_p;
     v9_v10_tmplt_t  tmplt_key;
     proto_tree     *data_tree;
-    guint           pdu_len;
+    unsigned        pdu_len;
 
     if (length == 0) {
         expert_add_info(pinfo, proto_tree_get_parent(pdutree), &ei_cflow_no_flow_information);
@@ -5048,7 +5156,7 @@ dissect_v9_v10_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int 
                                      length, plurality(length, "", "s"));
     }
 
-    return (0);
+    return 0;
 }
 
 #define GOT_LOCAL_ADDR  (1 << 0)
@@ -5074,9 +5182,9 @@ dissect_v9_v10_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int 
 #define GOT_TCP_UDP (GOT_BASE | GOT_LOCAL_PORT | GOT_REMOTE_PORT)
 #define GOT_ICMP    (GOT_BASE | GOT_IPv4_ID    | GOT_ICMP_ID)
 
-static guint
+static unsigned
 dissect_v9_v10_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int offset,
-                   v9_v10_tmplt_t *tmplt_p, hdrinfo_t *hdrinfo_p, guint32 *flows_seen)
+                   v9_v10_tmplt_t *tmplt_p, hdrinfo_t *hdrinfo_p, uint32_t *flows_seen)
 {
     int orig_offset = offset;
 
@@ -5092,10 +5200,10 @@ dissect_v9_v10_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int o
 
     /* Inc number of flows seen in this overall PDU */
     (*flows_seen)++;
-    return (guint) (offset - orig_offset);
+    return (unsigned) (offset - orig_offset);
 }
 
-static guint
+static unsigned
 dissect_v9_pdu_scope(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pdutree, int offset,
                      v9_v10_tmplt_t *tmplt_p)
 {
@@ -5107,8 +5215,8 @@ dissect_v9_pdu_scope(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pdutree,
     orig_offset = offset;
 
     for(i = 0; i < tmplt_p->field_count[TF_SCOPES]; i++) {
-        guint16 type   = tmplt_p->fields_p[TF_SCOPES][i].type;
-        guint16 length = tmplt_p->fields_p[TF_SCOPES][i].length;
+        uint16_t type   = tmplt_p->fields_p[TF_SCOPES][i].type;
+        uint16_t length = tmplt_p->fields_p[TF_SCOPES][i].length;
         if (length == 0) { /* XXX: Zero length fields probably shouldn't be included in the cached template */
             /* YYY: Maybe.  If you don't cache the zero length fields can you still compare that you actually  */
             /*      have the same template with the same ID. */
@@ -5143,7 +5251,7 @@ dissect_v9_pdu_scope(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pdutree,
         }
         offset += length;
     }
-    return (guint) (offset - orig_offset);
+    return (unsigned) (offset - orig_offset);
 }
 
 /* Type of duration being calculated for a flow. */
@@ -5161,11 +5269,11 @@ enum duration_type_e {
 static void
 // NOLINTNEXTLINE(misc-no-recursion)
 dissect_v10_pdu_subtemplate_list(tvbuff_t* tvb, packet_info* pinfo, proto_item* pduitem, int offset,
-                                 guint16 length, hdrinfo_t* hdrinfo_p)
+                                 uint16_t length, hdrinfo_t* hdrinfo_p)
 {
     int            start_offset = offset;
     int            end_offset   = offset + length;
-    guint32        semantic, subtemplate_id;
+    uint32_t       semantic, subtemplate_id;
     v9_v10_tmplt_t *subtmplt_p;
     v9_v10_tmplt_t  tmplt_key;
     proto_tree     *pdutree = proto_item_add_subtree(pduitem, ett_subtemplate_list);
@@ -5183,7 +5291,7 @@ dissect_v10_pdu_subtemplate_list(tvbuff_t* tvb, packet_info* pinfo, proto_item* 
         proto_item *ti;
         int        count = 1;
         proto_tree *sub_tree;
-        guint      consumed;
+        unsigned   consumed;
 
         /* Provide a link back to template frame */
         ti = proto_tree_add_uint(pdutree, hf_template_frame, tvb,
@@ -5222,7 +5330,7 @@ dissect_v10_pdu_subtemplate_list(tvbuff_t* tvb, packet_info* pinfo, proto_item* 
     }
 }
 
-static guint
+static unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
 dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int offset,
                         v9_v10_tmplt_t *tmplt_p, hdrinfo_t *hdrinfo_p, v9_v10_tmplt_fields_type_t fields_type)
@@ -5232,21 +5340,21 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
     nstime_t              ts_start[2][duration_type_max], ts_end[2][duration_type_max];
     int                   offset_s[2][duration_type_max], offset_e[2][duration_type_max];
     nstime_t              ts;
-    guint32               msec_start[2][duration_type_max], msec_end[2][duration_type_max];
-    gint                  duration_type;
-    guint32               msec_delta;
+    uint32_t              msec_start[2][duration_type_max], msec_end[2][duration_type_max];
+    int                   duration_type;
+    uint32_t              msec_delta;
     nstime_t              ts_delta;
-    guint32               usec;
+    uint32_t              usec;
     int                   i, j;
 
     address               local_addr, remote_addr;
-    guint16               local_port = 0, remote_port = 0/*, ipv4_id = 0, icmp_id = 0*/;
-    guint32               uid = 0, pid = 0;
+    uint16_t              local_port = 0, remote_port = 0/*, ipv4_id = 0, icmp_id = 0*/;
+    uint32_t              uid = 0, pid = 0;
     int                   uname_len;
-    gchar                *uname_str = NULL;
+    char                 *uname_str = NULL;
     int                   cmd_len;
-    gchar                *cmd_str = NULL;
-    guint16               got_flags = 0;
+    char                 *cmd_str = NULL;
+    uint16_t              got_flags = 0;
 
     int                   string_len_short = 0;
     int                   string_len_long = 0;
@@ -5254,31 +5362,31 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
     proto_tree           *string_tree;
     proto_tree           *dl_frame_sec_tree;
     proto_tree           *juniper_resilincy_tree;
-    guint32               cpid, cpdesc;
+    uint32_t              cpid, cpdesc;
 
-    gchar                *gen_str = NULL;
+    char                 *gen_str = NULL;
     int                   gen_str_offset = 0;
 
     proto_item           *ti;
     proto_item           *cti;
-    guint16               count;
+    uint16_t              count;
     v9_v10_tmplt_entry_t *entries_p;
     proto_tree           *fwdstattree;
 
-    gboolean             cace_pie_seen = FALSE,
-                         plixer_pie_seen = FALSE,
-                         ntop_pie_seen = FALSE,
-                         ixia_pie_seen = FALSE,
-                         netscaler_pie_seen = FALSE,
-                         barracuda_pie_seen = FALSE,
-                         gigamon_pie_seen = FALSE,
-                         cisco_pie_seen = FALSE,
-                         niagara_networks_pie_seen = FALSE,
-                         juniper_networks_pie_seen = FALSE;
+    bool                 cace_pie_seen = false,
+                         plixer_pie_seen = false,
+                         ntop_pie_seen = false,
+                         ixia_pie_seen = false,
+                         netscaler_pie_seen = false,
+                         barracuda_pie_seen = false,
+                         gigamon_pie_seen = false,
+                         cisco_pie_seen = false,
+                         niagara_networks_pie_seen = false,
+                         juniper_networks_pie_seen = false;
 
 
-    guint8       ip_protocol = 0;
-    guint16      port_number;
+    uint8_t      ip_protocol = 0;
+    uint16_t     port_number;
 
     entries_p = tmplt_p->fields_p[fields_type];
     if (entries_p == NULL) {
@@ -5297,12 +5405,12 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
     }
 
     for (i = 0; i < count; i++) {
-        guint64      pen_type;
-        guint16      type;
-        guint16      masked_type;
-        guint16      length;
-        guint32      pen;
-        const gchar *pen_str;
+        uint64_t     pen_type;
+        uint16_t     type;
+        uint16_t     masked_type;
+        uint16_t     length;
+        uint32_t     pen;
+        const char *pen_str;
         int          vstr_len;
 
         type    = entries_p[i].type;
@@ -5323,7 +5431,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
         vstr_len = 0;
         if (length == VARIABLE_LENGTH) {
             vstr_len = 1;
-            string_len_short = length = tvb_get_guint8(tvb, offset);
+            string_len_short = length = tvb_get_uint8(tvb, offset);
             if (length == 255) {
                 vstr_len = 3;
                 string_len_long = length = tvb_get_ntohs(tvb, offset+1);
@@ -5353,9 +5461,9 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             if (pen == REVPEN) { /* reverse PEN */
                 rev = 1;
             } else if (pen == 0) {
-                pen_type = (G_GUINT64_CONSTANT(0xffff) << 16) | pen_type;  /* hack to force "unknown" */
+                pen_type = (UINT64_C(0xffff) << 16) | pen_type;  /* hack to force "unknown" */
             } else {
-                pen_type = (((guint64)pen) << 16) | pen_type;
+                pen_type = (((uint64_t)pen) << 16) | pen_type;
             }
         }
 
@@ -5366,70 +5474,70 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
                 if (!cace_pie_seen) {
                     proto_item *pie_cace_ti = proto_tree_add_item(pdutree, hf_pie_cace, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_cace_ti);
-                    cace_pie_seen = TRUE;
+                    cace_pie_seen = true;
                 }
                 break;
             case VENDOR_PLIXER:
                 if (!plixer_pie_seen) {
                     proto_item *pie_plixer_ti = proto_tree_add_item(pdutree, hf_pie_plixer, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_plixer_ti);
-                    plixer_pie_seen = TRUE;
+                    plixer_pie_seen = true;
                 }
                 break;
             case VENDOR_NTOP:
                 if (!ntop_pie_seen) {
                     proto_item *pie_ntop_ti = proto_tree_add_item(pdutree, hf_pie_ntop, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_ntop_ti);
-                    ntop_pie_seen = TRUE;
+                    ntop_pie_seen = true;
                 }
                 break;
             case VENDOR_IXIA:
                 if (!ixia_pie_seen) {
                     proto_item *pie_ixia_ti = proto_tree_add_item(pdutree, hf_pie_ixia, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_ixia_ti);
-                    ixia_pie_seen = TRUE;
+                    ixia_pie_seen = true;
                 }
                 break;
             case VENDOR_NETSCALER:
                 if (!netscaler_pie_seen) {
                     proto_item *pie_netscaler_ti = proto_tree_add_item(pdutree, hf_pie_netscaler, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_netscaler_ti);
-                    netscaler_pie_seen = TRUE;
+                    netscaler_pie_seen = true;
                 }
                 break;
             case VENDOR_BARRACUDA:
                 if (!barracuda_pie_seen) {
                     proto_item *pie_barracuda_ti = proto_tree_add_item(pdutree, hf_pie_barracuda, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_barracuda_ti);
-                    barracuda_pie_seen = TRUE;
+                    barracuda_pie_seen = true;
                 }
                 break;
             case VENDOR_GIGAMON:
                 if (!gigamon_pie_seen) {
                     proto_item *pie_gigamon_ti = proto_tree_add_item(pdutree, hf_pie_gigamon, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_gigamon_ti);
-                    gigamon_pie_seen = TRUE;
+                    gigamon_pie_seen = true;
                 }
                 break;
             case VENDOR_CISCO:
                 if (!cisco_pie_seen) {
                     proto_item *pie_cisco_ti = proto_tree_add_item(pdutree, hf_pie_cisco, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_cisco_ti);
-                    cisco_pie_seen = TRUE;
+                    cisco_pie_seen = true;
                 }
                 break;
             case VENDOR_NIAGARA_NETWORKS:
                 if (!niagara_networks_pie_seen) {
                     proto_item *pie_niagara_networks_ti = proto_tree_add_item(pdutree, hf_pie_niagara_networks, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_niagara_networks_ti);
-                    niagara_networks_pie_seen = TRUE;
+                    niagara_networks_pie_seen = true;
                 }
                 break;
             case VENDOR_JUNIPER:
                 if(!juniper_networks_pie_seen) {
                     proto_item *pie_juniper_ti = proto_tree_add_item(pdutree, hf_pie_juniper, tvb, 0, 0, ENC_NA);
                     proto_item_set_hidden(pie_juniper_ti);
-                    juniper_networks_pie_seen = TRUE;
+                    juniper_networks_pie_seen = true;
                 }
                 break;
 
@@ -5458,7 +5566,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case 4: /* proto */
             /* Store this to help with possible port transport lookup */
-            ip_protocol = tvb_get_guint8(tvb, offset);
+            ip_protocol = tvb_get_uint8(tvb, offset);
             ti = proto_tree_add_item(pdutree, hf_cflow_prot,
                                      tvb, offset, length, ENC_BIG_ENDIAN);
             break;
@@ -5474,7 +5582,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             } else if (length == 1) {
                 ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_tcpflags, ett_tcpflags, tcp_flags, ENC_NA);
             } else {
-                ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_tcpflags16, ett_tcpflags, tcp_flags16, ENC_NA);
+                ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_tcpflags16, ett_tcpflags, tcp_flags16, ENC_BIG_ENDIAN);
             }
             break;
 
@@ -5560,7 +5668,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case 21: /* last switched */
-            duration_type = (gint)duration_type_switched;
+            duration_type = (int)duration_type_switched;
             offset_e[rev][duration_type] = offset;
             msec_end[rev][duration_type] = tvb_get_ntohl(tvb, offset);
             ts_end[rev][duration_type].secs = msec_end[rev][duration_type] / 1000;
@@ -5568,7 +5676,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             goto timestamp_common;
             break;
         case 22: /* first switched */
-            duration_type = (gint)duration_type_switched;
+            duration_type = (int)duration_type_switched;
             offset_s[rev][duration_type] = offset;
             msec_start[rev][duration_type] = tvb_get_ntohl(tvb, offset);
             ts_start[rev][duration_type].secs = msec_start[rev][duration_type] / 1000;
@@ -5577,7 +5685,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case 150: /*  flowStartSeconds */
-            duration_type = (gint)duration_type_seconds;
+            duration_type = (int)duration_type_seconds;
             offset_s[rev][duration_type] = offset;
             ts_start[rev][duration_type].secs = tvb_get_ntohl(tvb, offset);
             ts_start[rev][duration_type].nsecs = 0;
@@ -5585,7 +5693,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case 151: /*  flowEndSeconds */
-            duration_type = (gint)duration_type_seconds;
+            duration_type = (int)duration_type_seconds;
             offset_e[rev][duration_type] = offset;
             ts_end[rev][duration_type].secs = tvb_get_ntohl(tvb, offset);
             ts_end[rev][duration_type].nsecs = 0;
@@ -5593,7 +5701,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case 152: /*  flowStartMilliseconds: 64-bit integer */
-            duration_type = (gint)duration_type_milliseconds;
+            duration_type = (int)duration_type_milliseconds;
             offset_s[rev][duration_type] = offset;
             ts_start[rev][duration_type].secs = (time_t)(tvb_get_ntoh64(tvb, offset)/1000);
             ts_start[rev][duration_type].nsecs = (int)(tvb_get_ntoh64(tvb, offset)%1000) * 1000000;
@@ -5601,7 +5709,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case 153: /*  flowEndMilliseconds; 64-bit integer */
-            duration_type = (gint)duration_type_milliseconds;
+            duration_type = (int)duration_type_milliseconds;
             offset_e[rev][duration_type] = offset;
             ts_end[rev][duration_type].secs  = (time_t)(tvb_get_ntoh64(tvb, offset)/1000);
             ts_end[rev][duration_type].nsecs = (int)(tvb_get_ntoh64(tvb, offset)%1000) * 1000000;
@@ -5609,7 +5717,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case 154: /*  flowStartMicroseconds: 64-bit NTP format */
-            duration_type = (gint)duration_type_microseconds;
+            duration_type = (int)duration_type_microseconds;
             offset_s[rev][duration_type] = offset;
             ntp_to_nstime(tvb, offset, &ts_start[rev][duration_type]);
             goto timestamp_common;
@@ -5617,7 +5725,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case 155: /*  flowEndMicroseconds: 64-bit NTP format */
             /*  XXX: Not tested ...                    */
-            duration_type = (gint)duration_type_microseconds;
+            duration_type = (int)duration_type_microseconds;
             offset_e[rev][duration_type] = offset;
             ntp_to_nstime(tvb, offset, &ts_end[rev][duration_type]);
             goto timestamp_common;
@@ -5625,7 +5733,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case 156: /*  flowStartNanoseconds: 64-bit NTP format */
             /*  XXX: Not tested ...                     */
-            duration_type = (gint)duration_type_nanoseconds;
+            duration_type = (int)duration_type_nanoseconds;
             offset_s[rev][duration_type] = offset;
             ntp_to_nstime(tvb, offset, &ts_start[rev][duration_type]);
             goto timestamp_common;
@@ -5633,7 +5741,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case 157: /*  flowEndNanoseconds: 64-bit NTP format */
             /*  XXX: Not tested ...                   */
-            duration_type = (gint)duration_type_nanoseconds;
+            duration_type = (int)duration_type_nanoseconds;
             offset_e[rev][duration_type] = offset;
             ntp_to_nstime(tvb, offset, &ts_end[rev][duration_type]);
             goto timestamp_common;
@@ -5642,22 +5750,22 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
         case 158: /*  flowStartDeltaMicroseconds: 32-bit integer; negative time offset   */
             /*   relative to the export time specified in the IPFIX Message Header */
             /*  XXX: Not tested ...                                                */
-            duration_type = (gint)duration_type_delta_milliseconds;
+            duration_type = (int)duration_type_delta_milliseconds;
             offset_s[rev][duration_type]       = offset;
             usec                = tvb_get_ntohl(tvb, offset);
-            ts_start[rev][duration_type].secs  = (time_t)(((guint64)(hdrinfo_p->export_time_secs)*1000000 - usec) / 1000000);
-            ts_start[rev][duration_type].nsecs = (int)(((guint64)(hdrinfo_p->export_time_secs)*1000000 - usec) % 1000000) * 1000;
+            ts_start[rev][duration_type].secs  = (time_t)(((uint64_t)(hdrinfo_p->export_time_secs)*1000000 - usec) / 1000000);
+            ts_start[rev][duration_type].nsecs = (int)(((uint64_t)(hdrinfo_p->export_time_secs)*1000000 - usec) % 1000000) * 1000;
             goto timestamp_common;
             break;
 
         case 159: /*  flowEndDeltaMicroseconds: 32-bit integer; negative time offset     */
             /*   relative to the export time specified in the IPFIX Message Header */
             /*  XXX: Not tested ...                                                */
-            duration_type = (gint)duration_type_delta_milliseconds;
+            duration_type = (int)duration_type_delta_milliseconds;
             offset_e[rev][duration_type] = offset;
             usec          = tvb_get_ntohl(tvb, offset);
-            ts_end[rev][duration_type].secs  = (time_t)(((guint64)(hdrinfo_p->export_time_secs)*1000000 - usec) / 1000000);
-            ts_end[rev][duration_type].nsecs = (int)(((guint64)(hdrinfo_p->export_time_secs)*1000000 - usec) % 1000000) * 1000;
+            ts_end[rev][duration_type].secs  = (time_t)(((uint64_t)(hdrinfo_p->export_time_secs)*1000000 - usec) / 1000000);
+            ts_end[rev][duration_type].nsecs = (int)(((uint64_t)(hdrinfo_p->export_time_secs)*1000000 - usec) % 1000000) * 1000;
 
             /* This code executed for all timestamp fields above  */
             /* Since bug 11295, cope with multiple durations in one flow - not really sure if it makes sense... */
@@ -6018,13 +6126,13 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
              * the 2 left bits giving the status and the 6
              * remaining bits giving the reason code. */
 
-            guint8              forwarding_status;
+            uint8_t             forwarding_status;
             const value_string *x_vs;
             int                 x_hf;
 
             fwdstattree = proto_tree_add_subtree(pdutree, tvb, offset, length, ett_fwdstat, NULL, "Forwarding Status");
 
-            forwarding_status = tvb_get_guint8(tvb, offset)>>6;
+            forwarding_status = tvb_get_uint8(tvb, offset)>>6;
             switch(forwarding_status) {
             default:
             case FORWARDING_STATUS_UNKNOWN:
@@ -6055,7 +6163,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             if (length == 1) {
                 proto_item_append_text(ti, ": %s", val_to_str_const(forwarding_status,
                                                                     v9_forwarding_status, "(Unknown)"));
-                proto_item_append_text(ti, ": %s", val_to_str_const((tvb_get_guint8(tvb, offset)&0x3F),
+                proto_item_append_text(ti, ": %s", val_to_str_const((tvb_get_uint8(tvb, offset)&0x3F),
                                                                     x_vs, "(Unknown)"));
             };
         }
@@ -7003,7 +7111,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case 315: /* Data Link Frame Section */
             {
-                gboolean save_writable;
+                bool save_writable;
                 address save_dl_src, save_dl_dst, save_net_src, save_net_dst, save_src, save_dst;
                 ti = proto_tree_add_item(pdutree, hf_cflow_data_link_frame_section,
                         tvb, offset, length, ENC_NA);
@@ -7024,7 +7132,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
                 save_writable = col_get_writable (pinfo->cinfo, -1);
 
                 /* Disable overwriting of the info column by the sub dissectors*/
-                col_set_writable (pinfo->cinfo, -1, FALSE);
+                col_set_writable (pinfo->cinfo, -1, false);
                 /* Save the source and destination addresses */
                 copy_address_shallow(&save_dl_src, &pinfo->dl_src);
                 copy_address_shallow(&save_dl_dst, &pinfo->dl_dst);
@@ -7204,7 +7312,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case 341: /* informationElementName */
             {
-                const guint8 *string;
+                const uint8_t *string;
                 ti = proto_tree_add_item_ret_string(pdutree, hf_cflow_information_element_name,
                                          tvb, offset, length, ENC_UTF_8|ENC_NA, pinfo->pool, &string);
                 /* Add name of element to root for this flow */
@@ -8000,8 +8108,24 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             ti = proto_tree_add_item(pdutree, hf_cflow_srh_segment_ipv6_endpoint_behaviour,
                                      tvb, offset, length, ENC_NA);
             break;
-
-
+        case 505:  /* gtpuFlags */
+          ti = proto_tree_add_bitmask(pdutree, tvb, offset, hf_cflow_gtpu_flags, ett_gtpflags, gtpu_flags, ENC_NA);
+          break;
+        case 506:  /* gtpuMsgType */
+          ti = proto_tree_add_item(pdutree, hf_cflow_gtpu_msg_type, tvb, offset, length, ENC_BIG_ENDIAN);
+          break;
+        case 507:  /* gtpuTEid */
+          ti = proto_tree_add_item(pdutree, hf_cflow_gtpu_teid, tvb, offset, length, ENC_BIG_ENDIAN);
+          break;
+        case 508:  /* gtpuSequenceNum */
+          ti = proto_tree_add_item(pdutree, hf_cflow_gtpu_seq_num, tvb, offset, length, ENC_BIG_ENDIAN);
+          break;
+        case 509:  /* gtpuQFI */
+          ti = proto_tree_add_item(pdutree, hf_cflow_gtpu_qfi, tvb, offset, length, ENC_BIG_ENDIAN);
+          break;
+        case 510:  /* gtpuPduType */
+          ti = proto_tree_add_item(pdutree, hf_cflow_gtpu_pdu_type, tvb, offset, length, ENC_BIG_ENDIAN);
+          break;
 #if 0
         case 33625: /* nic_id */
             ti = proto_tree_add_item(pdutree, hf_cflow_nic_id,
@@ -8148,7 +8272,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             }
             break;
         case 37041: /* transport_payload_type */
-            if (tvb_get_guint8(tvb, offset) == 0xFF) {
+            if (tvb_get_uint8(tvb, offset) == 0xFF) {
                 ti = proto_tree_add_item(pdutree, hf_cflow_transport_rtp_payload_type_string,
                                          tvb, offset, length, ENC_BIG_ENDIAN);
             } else {
@@ -8157,7 +8281,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             }
             break;
         case 37071: /* bytes_out_of_order */
-            if (tvb_get_ntoh64(tvb, offset) == G_GUINT64_CONSTANT(0xFFFFFFFFFFFFFFFF)) {
+            if (tvb_get_ntoh64(tvb, offset) == UINT64_C(0xFFFFFFFFFFFFFFFF)) {
                 /* need to add custom code to show "Not Measured"  */
                 proto_tree_add_expert_format(pdutree, NULL, &ei_transport_bytes_out_of_order,
                                              tvb, offset, 8,
@@ -8345,7 +8469,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case VENDOR_CACE << 16 | 10: /* caceLocalProcessUserName */
-            uname_len = tvb_get_guint8(tvb, offset);
+            uname_len = tvb_get_uint8(tvb, offset);
             uname_str = tvb_format_text(pinfo->pool, tvb, offset+1, uname_len);
             proto_tree_add_item(pdutree, hf_pie_cace_local_username_len,
                                 tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -8356,7 +8480,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
 
         case VENDOR_CACE << 16 | 11: /* caceLocalProcessCommand */
-            cmd_len = tvb_get_guint8(tvb, offset);
+            cmd_len = tvb_get_uint8(tvb, offset);
             cmd_str = tvb_format_text(pinfo->pool, tvb, offset+1, cmd_len);
             proto_tree_add_item(pdutree, hf_pie_cace_local_cmd_len,
                                 tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -8378,7 +8502,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             ti = proto_tree_add_item(pdutree, hf_pie_fastip_meter_os_nodename,
                                      tvb, offset, length, ENC_ASCII);
             break;
-        case ((VENDOR_FASTIP << 16) | 3) : /* METER_OS_RELASE */
+        case ((VENDOR_FASTIP << 16) | 3) : /* METER_OS_RELEASE */
             ti = proto_tree_add_item(pdutree, hf_pie_fastip_meter_os_release,
                                      tvb, offset, length, ENC_ASCII);
             break;
@@ -8416,7 +8540,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_FASTIP << 16) | 17) : /* NIC_IP */
             ti = proto_tree_add_item(pdutree, hf_pie_fastip_nic_ip,
-                                     tvb, offset, length, ENC_NA);
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_FASTIP << 16) | 200) : /* TCP_HANDSHAKE_RTT_USEC */
             ti = proto_tree_add_item(pdutree, hf_pie_fastip_tcp_handshake_rtt_usec,
@@ -9021,7 +9145,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
         case (NTOP_BASE + 204):           /* ORACLE_QUERY_DURATION */
         case ((VENDOR_NTOP << 16) | 204): /* ORACLE_QUERY_DURATION */
             ti = proto_tree_add_item(pdutree, hf_pie_ntop_oracle_query_duration,
-                                     tvb, offset, length, ENC_ASCII|ENC_NA);
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
             break;
 
         case (NTOP_BASE + 205):           /* DNS_QUERY */
@@ -9236,13 +9360,13 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case (NTOP_BASE + 252):           /* RADIUS_ACCT_IN_OCTETS */
         case ((VENDOR_NTOP << 16) | 252): /* RADIUS_ACCT_IN_OCTETS */
-            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_in_octects,
+            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_in_octets,
                                      tvb, offset, length, ENC_BIG_ENDIAN);
             break;
 
         case (NTOP_BASE + 253):           /* RADIUS_ACCT_OUT_OCTETS */
         case ((VENDOR_NTOP << 16) | 253): /* RADIUS_ACCT_OUT_OCTETS */
-            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_out_octects,
+            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_out_octets,
                                      tvb, offset, length, ENC_BIG_ENDIAN);
             break;
 
@@ -10450,7 +10574,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 111):
             {
-            const guint8 *string;
+            const uint8_t *string;
             ti = proto_tree_add_item_ret_string(pdutree, hf_pie_ixia_l7_application_name,
                                      tvb, offset, length, ENC_ASCII|ENC_NA, pinfo->pool, &string);
             proto_item_append_text(pdutree, " (%s)", string);
@@ -10614,7 +10738,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 196):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_request_time,
-                                     tvb, offset, length, ENC_TIME_SECS);
+                                     tvb, offset, length, ENC_TIME_SECS|ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 197):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dns_records,
@@ -10652,7 +10776,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 205):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dhcp_message_timestamp,
-                                     tvb, offset, length, ENC_TIME_SECS_NSECS);
+                                     tvb, offset, length, ENC_TIME_SECS_NSECS|ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 206):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dhcp_message_type,
@@ -10660,7 +10784,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 207):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dhcp_lease_duration,
-                                     tvb, offset, length, ENC_TIME_SECS);
+                                     tvb, offset, length, ENC_TIME_SECS|ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 208):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dhcp_servername,
@@ -10673,11 +10797,11 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 210):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_radius_timestamp,
-                                     tvb, offset, length, ENC_TIME_SECS_NSECS);
+                                     tvb, offset, length, ENC_TIME_SECS_NSECS|ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 211):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_radius_event_timestamp,
-                                     tvb, offset, length, ENC_TIME_SECS_NSECS);
+                                     tvb, offset, length, ENC_TIME_SECS_NSECS|ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 212):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_radius_username,
@@ -10697,15 +10821,15 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 216):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_radius_filter_id,
-                                     tvb, offset, length, ENC_NA|ENC_ASCII);
+                                     tvb, offset, length, ENC_ASCII);
             break;
         case ((VENDOR_IXIA << 16) | 217):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_radius_reply_message,
-                                     tvb, offset, length, ENC_NA|ENC_ASCII);
+                                     tvb, offset, length, ENC_ASCII);
             break;
         case ((VENDOR_IXIA << 16) | 218):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_radius_called_station_id,
-                                     tvb, offset, length, ENC_NA|ENC_ASCII);
+                                     tvb, offset, length, ENC_ASCII);
             break;
         case ((VENDOR_IXIA << 16) | 219):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_connection,
@@ -10733,7 +10857,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 225):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_radius_calling_station_id,
-                                     tvb, offset, length, ENC_NA|ENC_ASCII);
+                                     tvb, offset, length, ENC_ASCII);
             break;
         case ((VENDOR_IXIA << 16) | 226):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_content_length,
@@ -10871,7 +10995,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 258):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dns_record_ttl,
-                                     tvb, offset, length, ENC_TIME_SECS);
+                                     tvb, offset, length, ENC_TIME_SECS|ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 259):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dns_raw_rdata,
@@ -10936,7 +11060,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 274):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dns_section_type,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 275):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_dns_qr_flag,
@@ -11113,7 +11237,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 318):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_stun_reflexive_ta_ipv4,
-                                     tvb, offset, length, ENC_NA);
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 319):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_stun_reflexive_ta_port,
@@ -11129,11 +11253,11 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 322):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_tls_server_rand,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 323):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_tls_session_id,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 324):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_to,
@@ -11202,23 +11326,23 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 340):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_sc_address,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 341):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_auth_vector_rand,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 342):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_auth_vector_xres,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 343):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_auth_vector_autn,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 344):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_auth_vector_kasme,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 345):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_sub_data_ambr_max_req_bw_ul,
@@ -11230,7 +11354,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 347):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_apn_configuration_profile,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 348):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_access_restriction_data_flags,
@@ -11242,11 +11366,11 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 350):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_framed_ip_address,
-                                     tvb, offset, length, ENC_NA);
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_IXIA << 16) | 351):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_3gpp_user_location_info,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 352):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_called_station_id,
@@ -11282,11 +11406,11 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 360):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_integrity_key,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 361):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_confidentiality_key,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 362):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_diameter_result_code,
@@ -11298,11 +11422,98 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_IXIA << 16) | 364):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_session_fingerprint,
-                                     tvb, offset, length, ENC_ASCII);
+                                     tvb, offset, length, ENC_NA);
             break;
         case ((VENDOR_IXIA << 16) | 365):
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_session_parse_errors,
                                      tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 366):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_headers,
+                                     tvb, offset, length, ENC_NA);
+            dissect_v10_pdu_subtemplate_list(tvb, pinfo, ti, offset, length, hdrinfo_p);
+            break;
+        case ((VENDOR_IXIA << 16) | 367):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_header_field,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 368):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_http_header_value,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 369):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_packets,
+                                     tvb, offset, length, ENC_ASCII);
+            dissect_v10_pdu_subtemplate_list(tvb, pinfo, ti, offset, length, hdrinfo_p);
+            break;
+        case ((VENDOR_IXIA << 16) | 370):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_headers,
+                                     tvb, offset, length, ENC_NA);
+            dissect_v10_pdu_subtemplate_list(tvb, pinfo, ti, offset, length, hdrinfo_p);
+            break;
+        case ((VENDOR_IXIA << 16) | 371):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_type,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 372):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_header_field,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 373):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_sip_header_value,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 374):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_session_ip_scrambling_key_hash,
+                                     tvb, offset, length, ENC_NA);
+            break;
+        case ((VENDOR_IXIA << 16) | 375):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_ja4a,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 376):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_ja4b,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 377):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_ja4c,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 378):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_uri_extended,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 379):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_app_octet_delta_count,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 380):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_reverse_app_octet_delta_count,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 381):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_uli_cell_nr_cellid,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 382):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_rat_type_name,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 383):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_mobile_country_name,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 384):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_mobile_network_name,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 385):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_mobile_device_model,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 386):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_gtp_mobile_device_manufacturer,
+                                     tvb, offset, length, ENC_ASCII);
             break;
             /* END Ixia Communications */
 
@@ -11533,7 +11744,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_NETSCALER << 16) | 200):
             ti = proto_tree_add_item(pdutree, hf_pie_netscaler_icasessionguid,
-                                     tvb, offset, length, ENC_NA);
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_NETSCALER << 16) | 201):
             ti = proto_tree_add_item(pdutree, hf_pie_netscaler_icaclientversion,
@@ -12238,11 +12449,11 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             break;
         case ((VENDOR_CISCO << 16) | 12236):
             ti = proto_tree_add_item(pdutree, hf_pie_cisco_connection_client_ipv4_address,
-                                     tvb, offset, length, ENC_NA);
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_CISCO << 16) | 12237):
             ti = proto_tree_add_item(pdutree, hf_pie_cisco_connection_server_ipv4_address,
-                                     tvb, offset, length, ENC_NA);
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
             break;
         case ((VENDOR_CISCO << 16) | 12240):
             ti = proto_tree_add_item(pdutree, hf_pie_cisco_connection_client_transport_port,
@@ -12788,7 +12999,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
     /* If only "start" or "end" time, show it here */
     /* XXX: length is actually 8 if millisec, microsec, nanosec time */
     for (i = 0; i < 2; i++) {
-        for (j=0; j < (gint)duration_type_max; j++) {
+        for (j=0; j < (int)duration_type_max; j++) {
             if (!(offset_s[i][j] && offset_e[i][j])) {
                 if (offset_s[i][j]) {
                     if (msec_start[i][j]) {
@@ -12820,7 +13031,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
         add_udp_process_info(pinfo->num, &local_addr, &remote_addr, local_port, remote_port, uid, pid, uname_str, cmd_str);
     }
 
-    return (guint) (offset - orig_offset);
+    return (unsigned) (offset - orig_offset);
 
 }
 
@@ -12882,10 +13093,10 @@ dissect_v9_v10_template_fields(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
 
     count = tmplt_p->field_count[fields_type];
     for(i=0; i<count; i++) {
-        guint16      type;
-        guint16      length;
-        guint32      pen;
-        const gchar *pen_str;
+        uint16_t     type;
+        uint16_t     length;
+        uint32_t     pen;
+        const char *pen_str;
         proto_tree  *field_tree;
         proto_item  *field_item;
         proto_item  *ti;
@@ -12900,13 +13111,17 @@ dissect_v9_v10_template_fields(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
         }
 
         if (tmplt_p->fields_p[fields_type] != NULL) {
-            DISSECTOR_ASSERT (i < count);
             tmplt_p->fields_p[fields_type][i].type    = type;
             tmplt_p->fields_p[fields_type][i].length  = length;
             tmplt_p->fields_p[fields_type][i].pen     = pen;
             tmplt_p->fields_p[fields_type][i].pen_str = pen_str;
-            if (length != VARIABLE_LENGTH) { /* Don't include "variable length" in the total */
+            /* The length is the minimum length of a record and is used to determine whether a record exists
+             * or is padding.
+             */
+            if (length != VARIABLE_LENGTH) {
                 tmplt_p->length    += length;
+            } else {
+                tmplt_p->length    += 1; /* a variable length field is at least 1 octet. */
             }
         }
 
@@ -12920,7 +13135,7 @@ dissect_v9_v10_template_fields(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
             proto_tree_add_item(field_tree, *v9_template_type_hf_list[fields_type],
                                 tvb, offset, 2, ENC_BIG_ENDIAN);
             proto_item_append_text(field_item, ": %s",
-                                   val_to_str_ext(type, v9_template_type_vse_list[fields_type], "Unknown(%d)"));
+                                   val_to_str_ext(pinfo->pool, type, v9_template_type_vse_list[fields_type], "Unknown(%d)"));
         } else { /* v10 */
             proto_tree_add_item(field_tree, hf_cflow_template_ipfix_pen_provided,
                                 tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -12929,7 +13144,7 @@ dissect_v9_v10_template_fields(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
                 rp_ti = proto_tree_add_item(field_tree, *v10_template_type_hf_list[fields_type],
                                             tvb, offset, 2, ENC_BIG_ENDIAN);
                 proto_item_append_text(field_item, ": %s",
-                                       val_to_str_ext(type&0x7fff, v10_template_type_vse_list[fields_type], "Unknown(%d)"));
+                                       val_to_str_ext(pinfo->pool, type&0x7fff, v10_template_type_vse_list[fields_type], "Unknown(%d)"));
                 if (pen == REVPEN) {
                     proto_item_append_text(rp_ti, " [Reverse]");
                     proto_item_append_text(field_item, " [Reverse]");
@@ -12940,7 +13155,7 @@ dissect_v9_v10_template_fields(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
                     proto_tree_add_item(field_tree, *v10_template_type_hf_list[fields_type_pen],
                                         tvb, offset, 2, ENC_BIG_ENDIAN);
                     proto_item_append_text(field_item, ": %s",
-                                           val_to_str_ext(type&0x7fff, v10_template_type_vse_list[fields_type_pen], "Unknown(%d)"));
+                                           val_to_str_ext(pinfo->pool, type&0x7fff, v10_template_type_vse_list[fields_type_pen], "Unknown(%d)"));
                 } else { /* Private Enterprise */
                     proto_item *pen_ti;
                     pen_ti = proto_tree_add_item(field_tree, hf_cflow_template_ipfix_field_type_enterprise,
@@ -12973,11 +13188,11 @@ dissect_v9_v10_template_fields(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
 /* Options Template Dissection */
 static int
 dissect_v9_v10_options_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int offset, int length,
-                                hdrinfo_t *hdrinfo_p, guint16 flowset_id)
+                                hdrinfo_t *hdrinfo_p, uint16_t flowset_id)
 {
     int remaining;
     proto_item_append_text(pdutree, " (Options Template): ");
-    col_append_fstr(pinfo->cinfo, COL_INFO, " [Options-Template:");
+    col_append_str(pinfo->cinfo, COL_INFO, " [Options-Template:");
 
     remaining = length;
     while (remaining > 3) { /* allow for padding */
@@ -12986,9 +13201,9 @@ dissect_v9_v10_options_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p
         proto_tree     *tmplt_tree;
         proto_item     *tmplt_item;
         proto_item     *ti;
-        guint16         id;
-        guint16         option_scope_field_count;
-        guint16         option_field_count;
+        uint16_t        id;
+        uint16_t        option_scope_field_count;
+        uint16_t        option_field_count;
         int             orig_offset;
 
         orig_offset = offset;
@@ -13019,7 +13234,7 @@ dissect_v9_v10_options_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p
                                      tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
         } else { /* IPFIX (V10) */
-            guint16 option_total_field_count;
+            uint16_t option_total_field_count;
 
             option_total_field_count = tvb_get_ntohs(tvb, offset);
             proto_tree_add_item(tmplt_tree,
@@ -13098,7 +13313,7 @@ dissect_v9_v10_options_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p
                 tmplt.fields_p[TF_SCOPES]  = (v9_v10_tmplt_entry_t *)wmem_alloc0(wmem_file_scope(), option_scope_field_count *sizeof(v9_v10_tmplt_entry_t));
                 tmplt.fields_p[TF_ENTRIES] = (v9_v10_tmplt_entry_t *)wmem_alloc0(wmem_file_scope(), option_field_count       *sizeof(v9_v10_tmplt_entry_t));
                 break;
-            } while (FALSE);
+            } while (false);
         }
 
         offset = dissect_v9_v10_template_fields(tvb, pinfo, tmplt_tree, offset,
@@ -13123,7 +13338,7 @@ dissect_v9_v10_options_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p
     if (remaining > 0)
         flow_process_textfield(pdutree, tvb, offset, remaining, hf_cflow_padding);
 
-    col_append_fstr(pinfo->cinfo, COL_INFO, "]");
+    col_append_str(pinfo->cinfo, COL_INFO, "]");
 
     return length;
 }
@@ -13131,7 +13346,7 @@ dissect_v9_v10_options_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p
 /* Data Template Dissection */
 static int
 dissect_v9_v10_data_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, int offset, int length,
-                             hdrinfo_t *hdrinfo_p, guint16 flowset_id _U_)
+                             hdrinfo_t *hdrinfo_p, uint16_t flowset_id _U_)
 {
     int remaining;
 
@@ -13143,7 +13358,7 @@ dissect_v9_v10_data_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdut
     }
 
     proto_item_append_text(pdutree, " (Data Template): ");
-    col_append_fstr(pinfo->cinfo, COL_INFO, " [Data-Template:");
+    col_append_str(pinfo->cinfo, COL_INFO, " [Data-Template:");
 
     remaining = length;
     while (remaining > 3) { /* allow for padding */
@@ -13151,8 +13366,8 @@ dissect_v9_v10_data_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdut
         v9_v10_tmplt_t  tmplt;
         proto_tree     *tmplt_tree;
         proto_item     *ti;
-        guint16         id;
-        guint16         count;
+        uint16_t        id;
+        uint16_t        count;
         int             orig_offset;
 
         orig_offset = offset;
@@ -13165,7 +13380,7 @@ dissect_v9_v10_data_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdut
         count = tvb_get_ntohs(tvb, offset + 2);
 
         tmplt_tree = proto_tree_add_subtree_format(pdutree, tvb, offset,
-                                         4 + 4 * count /* hdrsiz + count*2*(sizeof guint16)*/,
+                                         4 + 4 * count /* hdrsiz + count*2*(sizeof uint16_t)*/,
                                          ett_template, NULL, "Template (Id = %u, Count = %u)", id, count);
 
         proto_tree_add_item(tmplt_tree, hf_cflow_template_id, tvb,
@@ -13208,7 +13423,7 @@ dissect_v9_v10_data_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdut
                 }
                 tmplt.fields_p[TF_ENTRIES] = (v9_v10_tmplt_entry_t *)wmem_alloc0(wmem_file_scope(), count * sizeof(v9_v10_tmplt_entry_t));
                 break;
-            } while (FALSE);
+            } while (false);
         }
         offset = dissect_v9_v10_template_fields(tvb, pinfo, tmplt_tree, offset,
                                                 hdrinfo_p, &tmplt, TF_ENTRIES);
@@ -13238,14 +13453,14 @@ dissect_v9_v10_data_template(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdut
     if (remaining > 0)
         flow_process_textfield(pdutree, tvb, offset, remaining, hf_cflow_padding);
 
-    col_append_fstr(pinfo->cinfo, COL_INFO, "]");
+    col_append_str(pinfo->cinfo, COL_INFO, "]");
 
     return length;
 }
 
 /* build temporary key */
 /* Note: address at *(pinfo->net_???.data) is *not* copied */
-static v9_v10_tmplt_t *v9_v10_tmplt_build_key(v9_v10_tmplt_t *tmplt_p, packet_info *pinfo, guint32 src_id, guint16 tmplt_id)
+static v9_v10_tmplt_t *v9_v10_tmplt_build_key(v9_v10_tmplt_t *tmplt_p, packet_info *pinfo, uint32_t src_id, uint16_t tmplt_id)
 {
     set_address(&tmplt_p->src_addr, pinfo->net_src.type, pinfo->net_src.len, pinfo->net_src.data); /* lookup only! */
     tmplt_p->src_port  = pinfo->srcport;
@@ -13257,7 +13472,7 @@ static v9_v10_tmplt_t *v9_v10_tmplt_build_key(v9_v10_tmplt_t *tmplt_p, packet_in
 }
 
 static gboolean
-v9_v10_tmplt_table_equal(gconstpointer k1, gconstpointer k2)
+v9_v10_tmplt_table_equal(const void *k1, const void *k2)
 {
     const v9_v10_tmplt_t *ta = (const v9_v10_tmplt_t *)k1;
     const v9_v10_tmplt_t *tb = (const v9_v10_tmplt_t *)k2;
@@ -13272,11 +13487,11 @@ v9_v10_tmplt_table_equal(gconstpointer k1, gconstpointer k2)
         );
 }
 
-static guint
-v9_v10_tmplt_table_hash(gconstpointer k)
+static unsigned
+v9_v10_tmplt_table_hash(const void *k)
 {
     const v9_v10_tmplt_t *tmplt_p = (const v9_v10_tmplt_t *)k;
-    guint32               val;
+    uint32_t              val;
 
     val = tmplt_p->src_id + (tmplt_p->tmplt_id << 9) + tmplt_p->src_port + tmplt_p->dst_port;
 
@@ -13292,13 +13507,13 @@ v9_v10_tmplt_table_hash(gconstpointer k)
  */
 
 static int
-dissect_pdu(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pdutree, int offset, hdrinfo_t *hdrinfo_p, guint32 *flows_seen _U_)
+dissect_pdu(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pdutree, int offset, hdrinfo_t *hdrinfo_p, uint32_t *flows_seen _U_)
 {
     int             startoffset = offset;
-    guint32         srcaddr, dstaddr;
-    guint8          mask;
+    uint32_t        srcaddr, dstaddr;
+    uint8_t         mask;
     nstime_t        ts;
-    guint8          ver;
+    uint8_t         ver;
 
     memset(&ts, 0, sizeof(ts));
 
@@ -13354,14 +13569,14 @@ dissect_pdu(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pdutree, int offs
 
         offset = flow_process_aspair(pdutree, tvb, offset);
 
-        mask = tvb_get_guint8(tvb, offset);
+        mask = tvb_get_uint8(tvb, offset);
         proto_tree_add_uint_format_value(pdutree, hf_cflow_srcmask, tvb, offset++, 1,
                                          mask,
                                          "%u (prefix: %s/%u)",
                                          mask, getprefix(pinfo->pool, &srcaddr, mask),
                                          mask != 0 ? mask : 32);
 
-        mask = tvb_get_guint8(tvb, offset);
+        mask = tvb_get_uint8(tvb, offset);
         proto_tree_add_uint_format_value(pdutree, hf_cflow_dstmask, tvb, offset++, 1,
                                          mask,
                                          "%u (prefix: %s/%u)",
@@ -13379,10 +13594,10 @@ dissect_pdu(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pdutree, int offs
     return (offset - startoffset);
 }
 
-static const gchar   *
-getprefix(wmem_allocator_t *pool, const guint32 *addr, unsigned prefix)
+static const char    *
+getprefix(wmem_allocator_t *pool, const uint32_t *addr, unsigned prefix)
 {
-    guint32 gprefix;
+    uint32_t gprefix;
     address prefix_addr;
 
     if (prefix == 0) {
@@ -15928,7 +16143,66 @@ proto_register_netflow(void)
            FT_BYTES, BASE_NONE, NULL, 0x0,
            NULL, HFILL}
         },
-
+        { &hf_cflow_gtpu_flags,
+          {"GTPU Flags", "cflow.gtpu.flags",
+           FT_UINT8, BASE_HEX, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_gtpu_flags_version,
+          {"Version", "cflow.gtpu.version",
+           FT_UINT8, BASE_HEX_DEC, NULL, 0xE0,
+           NULL, HFILL}
+        },
+        { &hf_gtpu_flags_pt,
+          {"Protocol Type", "cflow.gtpu.pt",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x10,
+           NULL, HFILL}
+        },
+        { &hf_gtpu_flags_reserved,
+          {"Reserved Bit", "cflow.gtpu.reserved",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x8,
+           NULL, HFILL}
+        },
+        { &hf_gtpu_flags_s,
+          {"S Bit", "cflow.gtpu.s",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x4,
+           NULL, HFILL}
+        },
+        { &hf_gtpu_flags_n,
+          {"N Bit", "cflow.gtpu.n",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x2,
+           NULL, HFILL}
+        },
+        { &hf_gtpu_flags_pn,
+          {"PN Bit", "cflow.gtpu.pn",
+           FT_BOOLEAN, 8, TFS(&tfs_used_notused), 0x1,
+           NULL, HFILL}
+        },
+        { &hf_cflow_gtpu_msg_type,
+          {"GTPU Message Type", "cflow.gtpu.msg_type",
+           FT_UINT8, BASE_HEX_DEC, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_gtpu_teid,
+          {"GTPU TEID", "cflow.gtpu.teid",
+           FT_UINT32, BASE_HEX_DEC, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_gtpu_seq_num,
+          {"GTPU Sequence Number", "cflow.gtpu.seq_num",
+           FT_UINT16, BASE_HEX_DEC, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_gtpu_qfi,
+          {"GTPU QFI", "cflow.gtpu_qfi",
+           FT_UINT8, BASE_HEX_DEC, NULL, 0x0,
+           NULL, HFILL}
+        },
+        { &hf_cflow_gtpu_pdu_type,
+          {"GTPU PDU Type", "cflow.gtpu_pdu_type",
+           FT_UINT8, BASE_HEX_DEC, NULL, 0x0,
+           NULL, HFILL}
+        },
         /*
          * end pdu content storage
          */
@@ -16607,25 +16881,25 @@ proto_register_netflow(void)
         /* ntop, 35632 / 82 */
         {&hf_pie_ntop_src_to_dst_max_throughput,
          {"Src to dst max throughput", "cflow.pie.ntop.src_to_dst_max_throughput",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 83 */
         {&hf_pie_ntop_src_to_dst_min_throughput,
          {"Src to dst min throughput", "cflow.pie.ntop.src_to_dst_min_throughput",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 84 */
         {&hf_pie_ntop_src_to_dst_avg_throughput,
          {"Src to dst average throughput", "cflow.pie.ntop.src_to_dst_avg_throughput",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 85 */
         {&hf_pie_ntop_dst_to_src_max_throughput,
          {"Dst to src max throughput", "cflow.pie.ntop.dst_to_src_max_throughput",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 86 */
@@ -16637,7 +16911,7 @@ proto_register_netflow(void)
         /* ntop, 35632 / 87 */
         {&hf_pie_ntop_dst_to_src_avg_throughput,
          {"Dst to src average throughput", "cflow.pie.ntop.dst_to_src_avg_throughput",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 88 */
@@ -16818,19 +17092,19 @@ proto_register_netflow(void)
         /* ntop, 35632 / 123 */
         {&hf_pie_ntop_client_nw_latency_ms,
          {"Network RTT/2 client <-> nprobe", "cflow.pie.ntop.client_nw_latency_ms",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 124 */
         {&hf_pie_ntop_server_nw_latency_ms,
          {"Network RTT/2 nprobe <-> server", "cflow.pie.server_nw_latency_ms",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 125 */
         {&hf_pie_ntop_appl_latency_ms,
          {"Application latency", "cflow.pie.ntop.appl_latency_ms",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           "Server response time", HFILL}
         },
         /* ntop, 35632 / 126 */
@@ -16842,13 +17116,13 @@ proto_register_netflow(void)
         /* ntop, 35632 / 127 */
         {&hf_pie_ntop_retransmitted_in_bytes,
          {"Number of retransmitted TCP flow (src->dst)", "cflow.pie.ntop.retransmitted_in_bytes",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 128 */
         {&hf_pie_ntop_retransmitted_out_bytes,
          {"Number of retransmitted TCP flow (dst->src)", "cflow.pie.ntop.retransmitted_out_bytes",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 130 */
@@ -17380,14 +17654,14 @@ proto_register_netflow(void)
           NULL, HFILL}
         },
         /* ntop, 35632 / 252 */
-        {&hf_pie_ntop_radius_acct_in_octects,
-         {"RADIUS Accounting Input Octets", "cflow.pie.ntop.radius_acct_in_octects",
+        {&hf_pie_ntop_radius_acct_in_octets,
+         {"RADIUS Accounting Input Octets", "cflow.pie.ntop.radius_acct_in_octets",
           FT_UINT32, BASE_DEC, NULL, 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 253 */
-        {&hf_pie_ntop_radius_acct_out_octects,
-         {"RADIUS Accounting Output Octets", "cflow.pie.ntop.radius_acct_out_octects",
+        {&hf_pie_ntop_radius_acct_out_octets,
+         {"RADIUS Accounting Output Octets", "cflow.pie.ntop.radius_acct_out_octets",
           FT_UINT32, BASE_DEC, NULL, 0x0,
           NULL, HFILL}
         },
@@ -17952,7 +18226,7 @@ proto_register_netflow(void)
         /* ntop, 35632 / 380 */
         {&hf_pie_ntop_rtp_rtt,
          {"RTP Round Trip Time", "cflow.pie.ntop.rtp_rtt",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 381 */
@@ -17970,13 +18244,13 @@ proto_register_netflow(void)
         /* ntop, 35632 / 383 */
         {&hf_pie_ntop_src_proc_actual_memory,
          {"Src process actual memory", "cflow.pie.ntop.src_proc_actual_memory",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 384 */
         {&hf_pie_ntop_src_proc_peak_memory,
          {"Src process peak memory", "cflow.pie.ntop.src_proc_peak_memory",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 385 */
@@ -17994,13 +18268,13 @@ proto_register_netflow(void)
         /* ntop, 35632 / 387 */
         {&hf_pie_ntop_dst_proc_actual_memory,
          {"Dst process actual memory", "cflow.pie.ntop.dst_proc_actual_memory",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 388 */
         {&hf_pie_ntop_dst_proc_peak_memory,
          {"Dst process peak memory", "cflow.pie.ntop.dst_proc_peak_memory",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 389 */
@@ -18018,13 +18292,13 @@ proto_register_netflow(void)
         /* ntop, 35632 / 391 */
         {&hf_pie_ntop_duration_in,
          {"Client to Server stream duration", "cflow.pie.ntop.duration_in",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 392 */
         {&hf_pie_ntop_duration_out,
          {"Client to Server stream duration", "cflow.pie.ntop.duration_out",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 393 */
@@ -18777,7 +19051,7 @@ proto_register_netflow(void)
         /* ixia, 3054 / 180 */
         {&hf_pie_ixia_encryption_keylen,
          {"Encryption Key Length", "cflow.pie.ixia.encryption-keylen",
-          FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+          FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
           "Length of the encryption key in bytes", HFILL}
         },
 
@@ -19469,9 +19743,9 @@ proto_register_netflow(void)
 
         /* ixia, 3054 / 279 */
         {&hf_pie_ixia_ja3_fingerprint_string,
-         {"JA3 fingerprint", "cflow.pie.ixia.ja3-fingerprint",
+         {"JA3 Fingerprint", "cflow.pie.ixia.ja3-fingerprint",
           FT_STRING, BASE_NONE, NULL, 0x0,
-          "JA3 fingerprint string", HFILL}
+          "JA3 Fingerprint String", HFILL}
         },
 
         /* ixia, 3054 / 280 */
@@ -19506,7 +19780,7 @@ proto_register_netflow(void)
         {&hf_pie_ixia_udpAppResponseTime,
          {"UDP Average Application Response Time (us)", "cflow.pie.ixia.udpAppResponseTime",
          FT_UINT32, BASE_DEC, NULL, 0x0,
-         "Average UDP Application Response Time (us)", HFILL}
+         NULL, HFILL}
         },
 
         /* ixia, 3054 / 285 */
@@ -19631,14 +19905,14 @@ proto_register_netflow(void)
         /* ixia, 3054 / 302 */
         {&hf_pie_ixia_gtp_up_TEID,
          {"GTP Uplink TEID", "cflow.pie.ixia.gtp-uplink-TEID",
-          FT_UINT32, BASE_DEC, NULL, 0x0,
+          FT_UINT64, BASE_DEC, NULL, 0x0,
           "Mobile Session Uplink Tunnel Endpoint ID", HFILL}
         },
 
         /* ixia, 3054 / 303 */
         {&hf_pie_ixia_gtp_down_TEID,
          {"GTP Downlink TEID", "cflow.pie.ixia.gtp-downlink-TEID",
-          FT_UINT32, BASE_DEC, NULL, 0x0,
+          FT_UINT64, BASE_DEC, NULL, 0x0,
           "Mobile Session Downlink Tunnel Endpoint ID", HFILL}
         },
 
@@ -20086,6 +20360,153 @@ proto_register_netflow(void)
           "Session Parse Errors Count", HFILL}
         },
 
+        /* ixia, 3054 / 366 */
+        {&hf_pie_ixia_http_headers,
+         {"HTTP Headers", "cflow.pie.ixia.http-headers",
+          FT_NONE, BASE_NONE, NULL, 0x0,
+          "List of HTTP Headers", HFILL}
+        },
+
+        /* ixia, 3054 / 367 */
+        {&hf_pie_ixia_http_header_field,
+         {"HTTP Header Field", "cflow.pie.ixia.http-header-field",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Field name of HTTP header", HFILL}
+        },
+
+        /* ixia, 3054 / 368 */
+        {&hf_pie_ixia_http_header_value,
+         {"HTTP Header Value", "cflow.pie.ixia.http-header-value",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Value for HTTP header", HFILL}
+        },
+
+        /* ixia, 3054 / 369 */
+        {&hf_pie_ixia_sip_packets,
+         {"SIP Packets", "cflow.pie.ixia.sip-packets",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "List of SIP packets", HFILL}
+        },
+
+        /* ixia, 3054 / 370 */
+        {&hf_pie_ixia_sip_headers,
+         {"SIP Headers", "cflow.pie.ixia.sip-headers",
+          FT_NONE, BASE_NONE, NULL, 0x0,
+          "List of SIP headers", HFILL}
+        },
+
+        /* ixia, 3054 / 371 */
+        {&hf_pie_ixia_sip_type,
+         {"SIP Type", "cflow.pie.ixia.sip-type",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Type of SIP packet", HFILL}
+        },
+
+        /* ixia, 3054 / 372 */
+        {&hf_pie_ixia_sip_header_field,
+         {"SIP Header Field", "cflow.pie.ixia.sip-header-field",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Name of SIP header", HFILL}
+        },
+
+        /* ixia, 3054 / 373 */
+        {&hf_pie_ixia_sip_header_value,
+         {"SIP Header Value", "cflow.pie.ixia.sip-header-value",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Value of SIP header", HFILL}
+        },
+
+        /* ixia, 3054 / 374 */
+        {&hf_pie_ixia_session_ip_scrambling_key_hash,
+         {"IP Scrambling Key Hash", "cflow.pie.ixia.session-ip-scrambling-key-hash",
+          FT_BYTES, BASE_NONE, NULL, 0x0,
+          "Session IP Scrambling Key Hash", HFILL}
+        },
+
+        /* ixia, 3054 / 375 */
+        {&hf_pie_ixia_ja4a,
+         {"JA4 Fingerprint Part A", "cflow.pie.ixia.ja4a",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "First Part of a JA4 Fingerprint", HFILL}
+        },
+
+        /* ixia, 3054 / 376 */
+        {&hf_pie_ixia_ja4b,
+         {"JA4 Fingerprint Part B", "cflow.pie.ixia.ja4b",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Second Part of a JA4 Fingerprint", HFILL}
+        },
+
+        /* ixia, 3054 / 377 */
+        {&hf_pie_ixia_ja4c,
+         {"JA4 Fingerprint Part C", "cflow.pie.ixia.ja4c",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Third Part of a JA4 Fingerprint", HFILL}
+        },
+
+        /* ixia, 3054 / 378 */
+        {&hf_pie_ixia_uri_extended,
+         {"Extended HTTP URI", "cflow.pie.ixia.uri-extended",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Extended URI in HTTP requests", HFILL}
+        },
+
+        /* ixia, 3054 / 379 */
+        {&hf_pie_ixia_app_octet_delta_count,
+         {"App Octet Delta Count", "cflow.pie.ixia.app-octet-delta-count",
+          FT_UINT64, BASE_DEC, NULL, 0x0,
+          "Application Octet Delta Count", HFILL}
+        },
+
+        /* ixia, 3054 / 380 */
+        {&hf_pie_ixia_reverse_app_octet_delta_count,
+         {"Reverse App Octet Delta Count", "cflow.pie.ixia.reverse-app-octet-delta-count",
+          FT_UINT64, BASE_DEC, NULL, 0x0,
+          "In bi-directional flows, application octet delta count for the server back to client", HFILL}
+        },
+
+        /* ixia, 3054 / 381 */
+        {&hf_pie_ixia_gtp_uli_cell_nr_cellid,
+         {"GTP ULI nrCellId", "cflow.pie.ixia.gtp-uli-nrCellId",
+          FT_UINT64, BASE_DEC, NULL, 0x0,
+          NULL, HFILL}
+        },
+
+        /* ixia, 3054 / 382 */
+        {&hf_pie_ixia_gtp_rat_type_name,
+         {"GTP RAT Type Name", "cflow.pie.ixia.gtp-rat-type-name",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          NULL, HFILL}
+        },
+
+        /* ixia, 3054 / 383 */
+        {&hf_pie_ixia_gtp_mobile_country_name,
+         {"GTP Mobile Country Name", "cflow.pie.ixia.gtp-mobile-country-name",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          NULL, HFILL}
+        },
+
+        /* ixia, 3054 / 384 */
+        {&hf_pie_ixia_gtp_mobile_network_name,
+         {"GTP Mobile Network Name", "cflow.pie.ixia.gtp-mobile-network-name",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          NULL, HFILL}
+        },
+
+        /* ixia, 3054 / 385 */
+        {&hf_pie_ixia_gtp_mobile_device_model,
+         {"GTP Mobile Device Model", "cflow.pie.ixia.gtp-mobile-device-model",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          NULL, HFILL}
+        },
+
+        /* ixia, 3054 / 386 */
+        {&hf_pie_ixia_gtp_mobile_device_manufacturer,
+         {"GTP Mobile Device Manufacturer", "cflow.pie.ixia.gtp-mobile-device-manufacturer",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          NULL, HFILL}
+        },
+
         /* Netscaler root (a hidden item to allow filtering) */
         {&hf_pie_netscaler,
          {"Netscaler", "cflow.pie.netscaler",
@@ -20095,7 +20516,7 @@ proto_register_netflow(void)
         /* netscaler, 5951 / 128 */
         {&hf_pie_netscaler_roundtriptime,
          {"Round Trip Time", "cflow.pie.netscaler.round-trip-time",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           "TCP RTT of the flow in milliseconds", HFILL}
         },
         /* netscaler, 5951 / 129 */
@@ -20143,7 +20564,7 @@ proto_register_netflow(void)
         /* netscaler, 5951 / 136 */
         {&hf_pie_netscaler_syslogtimestamp,
          {"Syslog Timestamp", "cflow.pie.netscaler.syslog-timestamp",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
           NULL, HFILL}
         },
         /* netscaler, 5951 / 140 */
@@ -20185,13 +20606,13 @@ proto_register_netflow(void)
         /* netscaler, 5951 / 146 */
         {&hf_pie_netscaler_serverttfb,
          {"Server TTFB", "cflow.pie.netscaler.server-ttfb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Time till First Byte (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 147 */
         {&hf_pie_netscaler_serverttlb,
          {"Server TTLB", "cflow.pie.netscaler.server-ttlb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Time till Last Byte (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 150 */
@@ -20215,37 +20636,37 @@ proto_register_netflow(void)
         /* netscaler, 5951 / 153 */
         {&hf_pie_netscaler_httpreqrcvfb,
          {"HTTP Request Received FB", "cflow.pie.netscaler.http-req-rcv-fb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of first byte received from client (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 156 */
         {&hf_pie_netscaler_httpreqforwfb,
          {"HTTP Request Forwarded FB", "cflow.pie.netscaler.http-req-forw-fb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of first byte forwarded to server (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 157 */
         {&hf_pie_netscaler_httpresrcvfb,
          {"HTTP Response Received FB", "cflow.pie.netscaler.http-res-rcv-fb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of first byte received from server (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 158 */
         {&hf_pie_netscaler_httpresforwfb,
          {"HTTP Response Forwarded FB", "cflow.pie.netscaler.http-res-forw-fb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of first byte forwarded to client (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 159 */
         {&hf_pie_netscaler_httpreqrcvlb,
          {"HTTP Request Received LB", "cflow.pie.netscaler.http-req-rcv-lb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of last byte received from client (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 160 */
         {&hf_pie_netscaler_httpreqforwlb,
          {"HTTP Request Forwarded LB", "cflow.pie.netscaler.http-req-forw-lb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of last byte forwarded to server (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 161 */
@@ -20293,13 +20714,13 @@ proto_register_netflow(void)
         /* netscaler, 5951 / 169 */
         {&hf_pie_netscaler_httpresrcvlb,
          {"HTTP Response Received LB", "cflow.pie.netscaler.http-res-rcv-lb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of last byte received from server (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 170 */
         {&hf_pie_netscaler_httpresforwlb,
          {"HTTP Response Forwarded LB", "cflow.pie.netscaler.http-res-forw-lb",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0x0,
           "Timestamp of last byte of forwarded to client (microseconds)", HFILL}
         },
         /* netscaler, 5951 / 171 */
@@ -20479,7 +20900,7 @@ proto_register_netflow(void)
         /* netscaler, 5951 / 209 */
         {&hf_pie_netscaler_icasessionsetuptime,
          {"ICA Session Setup Time", "cflow.pie.netscaler.ica-session-setuptime",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
           NULL, HFILL}
         },
         /* netscaler, 5951 / 210 */
@@ -20647,13 +21068,13 @@ proto_register_netflow(void)
         /* netscaler, 5951 / 241 */
         {&hf_pie_netscaler_icaapplicationterminationtime,
          {"ICA Application Termination Time", "cflow.pie.netscaler.ica-application-termination-time",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
           NULL, HFILL}
         },
         /* netscaler, 5951 / 242 */
         {&hf_pie_netscaler_icasessionendtime,
          {"ICA Session End Time", "cflow.pie.netscaler.ica-session-end-time",
-          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0,
+          FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
           NULL, HFILL}
         },
         /* netscaler, 5951 / 243 */
@@ -20834,7 +21255,7 @@ proto_register_netflow(void)
         /* Barracuda, 10704 / 2 */
         {&hf_pie_barracuda_logop,
          {"LogOp", "cflow.pie.barracuda.logop",
-          FT_UINT8, BASE_DEC, VALS(v10_barracuda_logop), 0x0,
+          FT_UINT8, BASE_DEC|BASE_EXT_STRING, &v10_barracuda_logop_ext, 0x0,
           NULL, HFILL}
         },
         /* Barracuda, 10704 / 3 */
@@ -21875,7 +22296,7 @@ proto_register_netflow(void)
         /* Cisco, 9 / 9253 */
         {&hf_pie_cisco_services_waas_passthrough_reason,
          {"Services WAAS Passthrough-reason", "cflow.pie.cisco.services_waas_passthrough-reason",
-          FT_UINT8, BASE_DEC, VALS(v10_cisco_waas_passthrough_reason), 0x0,
+          FT_UINT8, BASE_DEC|BASE_EXT_STRING, &v10_cisco_waas_passthrough_reason_ext, 0x0,
           NULL, HFILL}
         },
         /* Cisco, 9 / 9357 */
@@ -22034,7 +22455,7 @@ proto_register_netflow(void)
         },
     };
 
-    static gint    *ett[] = {
+    static int     *ett[] = {
         &ett_netflow,
         &ett_unixtime,
         &ett_flow,
@@ -22049,7 +22470,8 @@ proto_register_netflow(void)
         &ett_subtemplate_list,
         &ett_resiliency,
         &ett_data_link_frame_sec,
-        &ett_srhflagsipv6
+        &ett_srhflagsipv6,
+        &ett_gtpflags
     };
 
     static ei_register_info ei[] = {
@@ -22146,11 +22568,11 @@ proto_register_netflow(void)
     v9_v10_tmplt_table = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), v9_v10_tmplt_table_hash, v9_v10_tmplt_table_equal);
 }
 
-static guint
+static unsigned
 get_netflow_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
     unsigned int    ver;
-    guint16         plen;
+    uint16_t        plen;
 
     ver = tvb_get_ntohs(tvb, offset);
     if (ver == 10) {
@@ -22174,7 +22596,7 @@ dissect_tcp_netflow(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
  * protocol/port association
  */
 static void
-ipfix_delete_callback(guint32 port, gpointer ptr _U_)
+ipfix_delete_callback(uint32_t port, void *ptr _U_)
 {
     if ( port ) {
         dissector_delete_uint("udp.port",  port, netflow_handle);
@@ -22183,7 +22605,7 @@ ipfix_delete_callback(guint32 port, gpointer ptr _U_)
 }
 
 static void
-ipfix_add_callback(guint32 port, gpointer ptr _U_)
+ipfix_add_callback(uint32_t port, void *ptr _U_)
 {
     if ( port ) {
         dissector_add_uint("udp.port",  port, netflow_handle);
@@ -22194,7 +22616,7 @@ ipfix_add_callback(guint32 port, gpointer ptr _U_)
 void
 proto_reg_handoff_netflow(void)
 {
-    static gboolean  netflow_prefs_initialized = FALSE;
+    static bool      netflow_prefs_initialized = false;
     static range_t  *netflow_ports;
     static range_t  *ipfix_ports;
 
@@ -22202,7 +22624,7 @@ proto_reg_handoff_netflow(void)
         /* Find eth_handle used for IE315*/
         eth_handle = find_dissector ("eth_withoutfcs");
 
-        netflow_prefs_initialized = TRUE;
+        netflow_prefs_initialized = true;
         dissector_add_uint("wtap_encap", WTAP_ENCAP_RAW_IPFIX, netflow_handle);
         dissector_add_uint_range_with_preference("tcp.port", IPFIX_UDP_PORTS, netflow_tcp_handle);
     } else {

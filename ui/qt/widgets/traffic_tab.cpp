@@ -15,6 +15,7 @@
 
 #include <wsutil/utf8_entities.h>
 #include <wsutil/filesystem.h>
+#include <app/application_flavor.h>
 
 #include <ui/qt/main_application.h>
 #include <ui/qt/filter_action.h>
@@ -66,19 +67,25 @@ int TabData::protoId() const
 
 
 TrafficTab::TrafficTab(QWidget * parent) :
-    DetachableTabWidget(parent)
+    DetachableTabWidget(parent),
+    _recentList(nullptr),
+    _recentColumnList(nullptr)
 {
     _createModel = nullptr;
     _createDelegate = nullptr;
     _disableTaps = false;
     _nameResolution = false;
+    _absoluteTime = false;
+    _limitToDisplayFilter = false;
+    _nanoseconds = false;
+    _machineReadable = false;
     setTabBasename(QString());
 }
 
 TrafficTab::~TrafficTab()
 {}
 
-void TrafficTab::setProtocolInfo(QString tableName, TrafficTypesList * trafficList, GList ** recentColumnList, ATapModelCallback createModel)
+void TrafficTab::setProtocolInfo(QString tableName, TrafficTypesList * trafficList, GList ** recentList, GList ** recentColumnList, ATapModelCallback createModel)
 {
     setTabBasename(tableName);
 
@@ -86,6 +93,7 @@ void TrafficTab::setProtocolInfo(QString tableName, TrafficTypesList * trafficLi
     if (createModel)
         _createModel = createModel;
 
+    _recentList = recentList;
     _recentColumnList = recentColumnList;
 
     setOpenTabs(trafficList->protocols(true));
@@ -114,10 +122,15 @@ QTreeView * TrafficTab::createTree(int protoId)
 
     if (_createModel) {
         ATapDataModel * model = _createModel(protoId, "");
+        model->useAbsoluteTime(_absoluteTime);
+        model->limitToDisplayFilter(_limitToDisplayFilter);
+        model->useNanosecondTimestamps(_nanoseconds);
+        model->setResolveNames(_nameResolution);
         model->setParent(tree);
         connect(model, &ATapDataModel::tapListenerChanged, tree, &TrafficTree::tapListenerEnabled);
 
         model->enableTap();
+        model->setMachineReadable(_machineReadable);
 
         if (_createDelegate)
         {
@@ -130,7 +143,31 @@ QTreeView * TrafficTab::createTree(int protoId)
 
         QItemSelectionModel * ism = new QItemSelectionModel(proxyModel, tree);
         tree->setSelectionModel(ism);
-        connect(ism, &QItemSelectionModel::currentChanged, this, &TrafficTab::doCurrentIndexChange);
+
+        /* The default (historical) selection mode is 'Single'
+         * However, we allow some protocols (IP/TCP/UDP..) to use 'Extended'
+         * for I/O Graph facility
+         */
+        QString protoname = proto_get_protocol_short_name(find_protocol_by_id(protoId));
+        bool useExtendedSelection = protoname.toUtf8().data()== QString("TCP") ||
+                                        protoname.toUtf8().data()== QString("UDP") ||
+                                        protoname.toUtf8().data()== QString("IPv4") ||
+                                        protoname.toUtf8().data()== QString("IPv6") ||
+                                        protoname.toUtf8().data()== QString("Ethernet");
+
+        if(useExtendedSelection) {
+            tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+            connect(ism, &QItemSelectionModel::selectionChanged, this, [=](const QItemSelection &sel, const QItemSelection &prev){ doSelectionChange(sel, prev); });
+        }
+        else {
+            tree->setSelectionMode(QAbstractItemView::SingleSelection);
+            connect(ism, &QItemSelectionModel::currentChanged, this, &TrafficTab::doCurrentIndexChange);
+        }
+
+        // Initially resize to the header widths (inc. hidden/filtered columns).
+        for (int col = 0; col < tree->model()->columnCount(); col++) {
+            tree->resizeColumnToContents(col);
+        }
 
         tree->applyRecentColumns();
 
@@ -138,11 +175,13 @@ QTreeView * TrafficTab::createTree(int protoId)
 
         connect(proxyModel, &TrafficDataFilterProxy::modelReset, this, [tree]() {
             if (tree->model()->rowCount() > 0) {
-                for (int col = 0; col < tree->model()->columnCount(); col++)
-                    tree->resizeColumnToContents(col);
+                for (int col = 0; col < tree->model()->columnCount(); col++) {
+                    tree->widenColumnToContents(col);
+                }
             }
         });
         connect(proxyModel, &TrafficDataFilterProxy::modelReset, this, &TrafficTab::modelReset);
+        connect(proxyModel, &TrafficDataFilterProxy::layoutChanged, this, &TrafficTab::modelReset);
 
         /* If the columns for the tree have changed, contact the tab. By also having the tab
          * columns changed signal connecting back to the tree, it will propagate to all trees
@@ -157,6 +196,10 @@ QTreeView * TrafficTab::createTree(int protoId)
 
 void TrafficTab::useAbsoluteTime(bool absolute)
 {
+    if (absolute == _absoluteTime)
+        return;
+
+    _absoluteTime = absolute;
     for(int idx = 0; idx < count(); idx++)
     {
         ATapDataModel * atdm = dataModelForTabIndex(idx);
@@ -167,11 +210,43 @@ void TrafficTab::useAbsoluteTime(bool absolute)
 
 void TrafficTab::useNanosecondTimestamps(bool nanoseconds)
 {
+    if (nanoseconds == _nanoseconds)
+        return;
+
+    _nanoseconds = nanoseconds;
     for(int idx = 0; idx < count(); idx++)
     {
         ATapDataModel * atdm = dataModelForTabIndex(idx);
         if (atdm)
             atdm->useNanosecondTimestamps(nanoseconds);
+    }
+}
+
+void TrafficTab::limitToDisplayFilter(bool limit)
+{
+    if (limit == _limitToDisplayFilter)
+        return;
+
+    _limitToDisplayFilter = limit;
+    for(int idx = 0; idx < count(); idx++)
+    {
+        ATapDataModel * atdm = dataModelForTabIndex(idx);
+        if (atdm)
+            atdm->limitToDisplayFilter(limit);
+    }
+}
+
+void TrafficTab::setMachineReadable(bool machine)
+{
+    if (machine == _machineReadable)
+        return;
+
+    _machineReadable = machine;
+    for(int idx = 0; idx < count(); idx++)
+    {
+        ATapDataModel * atdm = dataModelForTabIndex(idx);
+        if (atdm)
+            atdm->setMachineReadable(machine);
     }
 }
 
@@ -191,7 +266,6 @@ void TrafficTab::disableTap()
 void TrafficTab::setOpenTabs(QList<int> protocols)
 {
     QList<int> tabs = _tabs.keys();
-    QList<int> remove;
     blockSignals(true);
 
     foreach(int protocol, protocols)
@@ -250,7 +324,7 @@ void TrafficTab::insertProtoTab(int protoId, bool emitSignals)
     QVariant storage;
     storage.setValue(tabData);
     if (tree->model()->rowCount() > 0)
-        tableName += QString(" %1 %2").arg(UTF8_MIDDLE_DOT).arg(tree->model()->rowCount());
+        tableName += QStringLiteral(" %1 %2").arg(UTF8_MIDDLE_DOT).arg(tree->model()->rowCount());
 
     int tabId = -1;
     if (insertAt > -1)
@@ -260,14 +334,25 @@ void TrafficTab::insertProtoTab(int protoId, bool emitSignals)
     if (tabId >= 0)
         tabBar()->setTabData(tabId, storage);
 
+    // Identify the last known opened tab
+    int lastOpened_protoId = -1;
+    GList *selected_tab = g_list_first(*_recentList);
+    if (selected_tab != nullptr) {
+        lastOpened_protoId = proto_get_id_by_short_name((const char *)selected_tab->data);
+    }
 
     /* We reset the correct tab idxs. That operations is costly, but it is only
      * called during this operation and ensures, that other operations do not
-     * need to iterate, but rather can lookup the indeces. */
+     * need to iterate, but rather can lookup the indices. */
     _tabs.clear();
     for (int idx = 0; idx < count(); idx++) {
         TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx));
         _tabs.insert(tabData.protoId(), idx);
+    }
+
+    // Restore the last known opened tab
+    if(lastOpened_protoId == protoId) {
+        setCurrentIndex(tabId);
     }
 
     if (emitSignals) {
@@ -290,7 +375,7 @@ void TrafficTab::removeProtoTab(int protoId, bool emitSignals)
 
     /* We reset the correct tab idxs. That operations is costly, but it is only
     * called during this operation and ensures, that other operations do not
-    * need to iterate, but rather can lookup the indeces. */
+    * need to iterate, but rather can lookup the indices. */
     _tabs.clear();
     for (int idx = 0; idx < count(); idx++) {
         TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx));
@@ -317,7 +402,30 @@ void TrafficTab::doCurrentIndexChange(const QModelIndex & cur, const QModelIndex
         return;
 
     int tabId = _tabs[model->protoId()];
-    emit tabDataChanged(tabId);
+    emit tabDataChanged(tabId, 0);
+}
+
+void TrafficTab::doSelectionChange(const QItemSelection &, const QItemSelection &)
+{
+    int tabId = -1;
+
+    QTreeView * tree = qobject_cast<QTreeView *>(currentWidget());
+    if (tree) {
+        const QModelIndexList indexes = tree->selectionModel()->selectedIndexes();
+        for (const QModelIndex &index : indexes) {
+            const TrafficDataFilterProxy * proxy = qobject_cast<const TrafficDataFilterProxy *>(index.model());
+            if(proxy) {
+                ATapDataModel * model = qobject_cast<ATapDataModel *>(proxy->sourceModel());
+                if(model) {
+                    tabId = _tabs[model->protoId()];
+                    break;
+                }
+            }
+        }
+    }
+
+    if(tabId >= 0)
+        emit tabDataChanged(tabId, 0);
 }
 
 QVariant TrafficTab::currentItemData(int role)
@@ -338,6 +446,103 @@ QVariant TrafficTab::currentItemData(int role)
     return QVariant();
 }
 
+qlonglong TrafficTab::countSelectedItems(int role)
+{
+    qlonglong selectedCount = 0;
+    QTreeView * tree = qobject_cast<QTreeView *>(currentWidget());
+    if (tree && role>=0) {
+        QModelIndex idx = tree->selectionModel()->currentIndex();
+
+        /* In case no selection has been made yet, we select the topmostleft index,
+         * to ensure proper handling. Especially ConversationDialog depends on this
+         * method always returning data */
+        if (!idx.isValid()) {
+            TrafficDataFilterProxy * model = modelForTabIndex(currentIndex());
+            idx = model->index(0, 0);
+        }
+        QModelIndexList idxs = tree->selectionModel()->selectedIndexes();
+
+        const QModelIndexList indexes = tree->selectionModel()->selectedRows();
+        selectedCount = indexes.size();
+    }
+
+    return selectedCount;
+}
+
+QList<QList<QVariant>> TrafficTab::selectedItemsIOGData()
+{
+    QList<QList<QVariant> > lst_selectedData;
+
+    QTreeView * tree = qobject_cast<QTreeView *>(currentWidget());
+    QList<QList<QVariant>> dataItems;
+    if (tree) {
+
+        QModelIndex idx = tree->selectionModel()->currentIndex();
+
+        /* In case no selection has been made yet, we select the topmostleft index,
+         * to ensure proper handling. Especially ConversationDialog depends on this
+         * method always returning data */
+        if (!idx.isValid()) {
+            TrafficDataFilterProxy * model = modelForTabIndex(currentIndex());
+            idx = model->index(0, 0);
+            return lst_selectedData;
+        }
+
+        const TrafficDataFilterProxy * zemodel = qobject_cast<const TrafficDataFilterProxy *>(tree->model());
+
+        QList<QVariant> lst_ids;
+        QList<QVariant> lst_agg;
+
+        const QModelIndexList lst_indexes = tree->selectionModel()->selectedRows();
+
+        for (const QModelIndex &index : lst_indexes) {
+
+            ATapDataModel *dataModel = qobject_cast<ATapDataModel *>(zemodel->sourceModel());
+            int protoId = dataModel->protoId();
+
+            if (qobject_cast<ConversationDataModel *>(dataModel)) {
+                ConversationDataModel * conversationModel = qobject_cast<ConversationDataModel *>(dataModel);
+
+                conv_item_t *conv_item = conversationModel->itemForRow( (zemodel->mapToSource(index)).row() );
+
+                char *src_addr, *new_addr;
+                src_addr = address_to_str(NULL, &conv_item->src_address);
+                new_addr = wmem_strdup_printf(NULL, "\"%s\"", src_addr);
+                src_addr = new_addr;
+
+                char *dst_addr;
+                dst_addr = address_to_str(NULL, &conv_item->dst_address);
+                new_addr = wmem_strdup_printf(NULL, "\"%s\"", dst_addr);
+                dst_addr = new_addr;
+
+                /* Ordinary conversations have a conv_id and it's used to build the filter */
+                if(conv_item->conv_id != CONV_ID_UNSET) {
+                    // add to list (prepend with PROTO ID on 1st elt)
+                    if(lst_ids.isEmpty())
+                        lst_ids.append(protoId);
+                    lst_ids.append(conv_item->conv_id);
+                }
+
+                /* Aggregated conversations use to build the filter */
+                else {
+                    // add to list (prepend with PROTO ID on 1st elt)
+                    if(lst_agg.isEmpty())
+                        lst_agg.append(protoId);
+                    lst_agg.append(QString(src_addr));
+                    lst_agg.append(QString(dst_addr));
+                }
+
+                wmem_free(NULL, src_addr);
+                wmem_free(NULL, dst_addr);
+            }
+        }
+        dataItems.append(lst_ids);
+        dataItems.append(lst_agg);
+    }
+    return dataItems;
+}
+
+// update current tab label to include row count
 void TrafficTab::modelReset()
 {
     if (! qobject_cast<TrafficDataFilterProxy *>(sender()))
@@ -359,10 +564,12 @@ void TrafficTab::modelReset()
         if (qsfpm->rowCount() == 0)
             setTabText(tabIdx, tabData.name());
         else
-            setTabText(tabIdx, tabData.name() + QString(" %1 %2").arg(UTF8_MIDDLE_DOT).arg(qsfpm->rowCount()));
+            setTabText(tabIdx, QStringLiteral("%1 %2 %3")
+                .arg(tabData.name(), UTF8_MIDDLE_DOT)
+                .arg(qsfpm->rowCount()));
     }
 
-    emit tabDataChanged(tabIdx);
+    emit tabDataChanged(tabIdx, 0);
 }
 
 TrafficDataFilterProxy * TrafficTab::modelForTabIndex(int tabIdx)
@@ -430,7 +637,7 @@ void TrafficTab::setNameResolution(bool checked)
     _nameResolution = checked;
 
     /* Send the signal, that all tabs have potentially changed */
-    emit tabDataChanged(-1);
+    emit tabDataChanged(-1, 0);
 }
 
 bool TrafficTab::hasNameResolution(int tabIdx)
@@ -458,6 +665,9 @@ bool TrafficTab::hasGeoIPData(int tabIdx)
     int tab = tabIdx == -1 || tabIdx >= count() ? currentIndex() : tabIdx;
 
     ATapDataModel * dataModel = dataModelForTabIndex(tab);
+    if (! dataModel)
+        return false;
+
     return dataModel->hasGeoIPData();
 }
 
@@ -467,12 +677,11 @@ TrafficTab::writeGeoIPMapFile(QFile * fp, bool json_only, TrafficDataFilterProxy
     QTextStream out(fp);
 
     if (!json_only) {
-        QFile ipmap(get_datafile_path("ipmap.html"));
+        QFile ipmap(get_datafile_path("ipmap.html", application_configuration_environment_prefix()));
 
         if (!ipmap.open(QIODevice::ReadOnly)) {
             QMessageBox::warning(this, tr("Map file error"), tr("Could not open base file %1 for reading: %2")
-                .arg(get_datafile_path("ipmap.html"))
-                .arg(g_strerror(errno))
+                .arg(get_datafile_path("ipmap.html", application_configuration_environment_prefix()), g_strerror(errno))
             );
             return false;
         }
@@ -481,14 +690,10 @@ TrafficTab::writeGeoIPMapFile(QFile * fp, bool json_only, TrafficDataFilterProxy
         QTextStream in(&ipmap);
         QString line;
         while (in.readLineInto(&line)) {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
             out << line << Qt::endl;
-#else
-            out << line << endl;
-#endif
         }
 
-        out << QString("<script id=\"ipmap-data\" type=\"application/json\">\n");
+        out << QStringLiteral("<script id=\"ipmap-data\" type=\"application/json\">\n");
     }
 
     /*
@@ -573,7 +778,7 @@ TrafficTab::writeGeoIPMapFile(QFile * fp, bool json_only, TrafficDataFilterProxy
     out << doc.toJson();
 
     if (!json_only)
-        out << QString("</script>\n");
+        out << QStringLiteral("</script>\n");
 
     out.flush();
 
@@ -589,7 +794,7 @@ QUrl TrafficTab::createGeoIPMap(bool json_only, int tabIdx)
         return QUrl();
     }
 
-    QString tempname = QString("%1/ipmapXXXXXX.html").arg(QDir::tempPath());
+    QString tempname = QStringLiteral("%1/ipmapXXXXXX.html").arg(QDir::tempPath());
     QTemporaryFile tf(tempname);
     if (!tf.open()) {
         QMessageBox::warning(this, tr("Map file error"), tr("Unable to create temporary file"));
@@ -625,7 +830,7 @@ void TrafficTab::attachTab(QWidget * content, QString name)
 {
     ATapDataModel * model = dataModelForWidget(content);
     if (!model) {
-        attachTab(content, name);
+        DetachableTabWidget::attachTab(content, name);
         return;
     }
 

@@ -17,6 +17,7 @@
 
 #include "extcap-base.h"
 
+#include <wsutil/array.h>
 #include <wsutil/strtoi.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/privileges.h>
@@ -41,7 +42,7 @@
 #define DPAUXMON_VERSION_MINOR "1"
 #define DPAUXMON_VERSION_RELEASE "0"
 
-FILE* pcap_fp = NULL;
+ws_cwstream* pcap_fp;
 
 enum {
 	EXTCAP_BASE_OPTIONS_ENUM,
@@ -50,7 +51,7 @@ enum {
 	OPT_INTERFACE_ID,
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
 	EXTCAP_BASE_OPTIONS,
 	/* Generic application options */
 	{ "help", ws_no_argument, NULL, OPT_HELP},
@@ -94,17 +95,22 @@ static int list_config(char *interface)
 	return EXIT_SUCCESS;
 }
 
-static int setup_dumpfile(const char* fifo, FILE** fp)
+static int setup_dumpfile(const char* fifo, ws_cwstream** fp)
 {
 	uint64_t bytes_written = 0;
 	int err;
 
 	if (!g_strcmp0(fifo, "-")) {
-		*fp = stdout;
+		*fp = ws_cwstream_open_stdout(WS_FILE_UNCOMPRESSED, &err);
+		if (!(*fp)) {
+		    ws_warning("Error opening standard out: %s", g_strerror(errno));
+		    return EXIT_FAILURE;
+		}
+		/* XXX - Why does this not write the pcap file header to stdout? */
 		return EXIT_SUCCESS;
 	}
 
-	*fp = fopen(fifo, "wb");
+	*fp = ws_cwstream_open(fifo, WS_FILE_UNCOMPRESSED, &err);
 	if (!(*fp)) {
 		ws_warning("Error creating output file: %s", g_strerror(errno));
 		return EXIT_FAILURE;
@@ -115,23 +121,23 @@ static int setup_dumpfile(const char* fifo, FILE** fp)
 		return EXIT_FAILURE;
 	}
 
-        fflush(*fp);
+        ws_cwstream_flush(*fp, &err);
 
 	return EXIT_SUCCESS;
 }
 
-static int dump_packet(FILE* fp, const char* buf, const uint32_t buflen, uint64_t ts_usecs)
+static int dump_packet(ws_cwstream* fp, const char* buf, const uint32_t buflen, uint64_t ts_usecs)
 {
 	uint64_t bytes_written = 0;
 	int err;
 	int ret = EXIT_SUCCESS;
 
-	if (!libpcap_write_packet(fp, ts_usecs / 1000000, ts_usecs % 1000000, buflen, buflen, buf, &bytes_written, &err)) {
+	if (!libpcap_write_packet(fp, ts_usecs / 1000000, ts_usecs % 1000000, buflen, buflen, (const uint8_t*)buf, &bytes_written, &err)) {
 		ws_warning("Can't write packet");
 		ret = EXIT_FAILURE;
 	}
 
-	fflush(fp);
+	ws_cwstream_flush(fp, &err);
 
 	return ret;
 }
@@ -350,7 +356,7 @@ static int handle_data(struct nl_cache_ops *unused _U_, struct genl_cmd *cmd _U_
 
 	memcpy(&packet[2], data, data_size);
 
-	if (dump_packet(pcap_fp, packet, data_size + 2, ts) == EXIT_FAILURE)
+	if (dump_packet(pcap_fp, (const char*)packet, data_size + 2, ts) == EXIT_FAILURE)
 		extcap_end_application = true;
 
 	return NL_OK;
@@ -387,12 +393,10 @@ static struct genl_cmd cmds[] = {
 	},
 };
 
-#define ARRAY_SIZE(X) (sizeof(X) / sizeof((X)[0]))
-
 static struct genl_ops ops = {
 	.o_name = "dpauxmon",
 	.o_cmds = cmds,
-	.o_ncmds = ARRAY_SIZE(cmds),
+	.o_ncmds = array_length(cmds),
 };
 
 struct nl_sock *sock;
@@ -469,7 +473,7 @@ err_out:
 free_out:
 	nl_socket_free(sock);
 close_out:
-	fclose(pcap_fp);
+	ws_cwstream_close(pcap_fp, NULL);
 }
 
 int main(int argc, char *argv[])
@@ -482,8 +486,11 @@ int main(int argc, char *argv[])
 	extcap_parameters* extcap_conf = g_new0(extcap_parameters, 1);
 	char* help_header = NULL;
 
+	/* Set the program name. */
+	g_set_prgname("dpauxmon");
+
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init("dpauxmon");
+	extcap_log_init();
 
 	/*
 	 * Get credential information for later use.
@@ -494,7 +501,7 @@ int main(int argc, char *argv[])
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	configuration_init_error = configuration_init(argv[0], NULL);
+	configuration_init_error = configuration_init(argv[0], "wireshark");
 	if (configuration_init_error != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			configuration_init_error);

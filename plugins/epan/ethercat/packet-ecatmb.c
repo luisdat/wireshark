@@ -14,15 +14,14 @@
 
 #include "config.h"
 
-#include <string.h>
-
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 #include "packet-ecatmb.h"
 
 #define BIT2BYTE(x) ((x+7)/8)
-#define ENDOF(p) ((p)+1) /* pointer to end of *p */
 
 void proto_register_ecat_mailbox(void);
 void proto_reg_handoff_ecat_mailbox(void);
@@ -287,54 +286,54 @@ static const true_false_string tfs_complete =
    "Complete", "Legacy"
 };
 
-void init_mbx_header(PETHERCAT_MBOX_HEADER pMbox, tvbuff_t *tvb, gint offset)
+void init_mbx_header(PETHERCAT_MBOX_HEADER pMbox, tvbuff_t *tvb, int offset)
 {
    pMbox->Length = tvb_get_letohs(tvb, offset); offset+=2;
    pMbox->Address = tvb_get_letohs(tvb, offset); offset+=2;
    pMbox->aControlUnion.Control = tvb_get_letohs(tvb, offset);
 }
 
-static void init_eoe_header(PETHERCAT_EOE_HEADER pEoE, tvbuff_t *tvb, gint offset)
+static void init_eoe_header(PETHERCAT_EOE_HEADER pEoE, tvbuff_t *tvb, int offset)
 {
    pEoE->anEoeHeaderInfoUnion.Info = tvb_get_letohs(tvb, offset); offset+=2;
    pEoE->anEoeHeaderDataUnion.Result = tvb_get_letohs(tvb, offset);
 }
 
-static void init_foe_header(PETHERCAT_FOE_HEADER pFoE, tvbuff_t *tvb, gint offset)
+static void init_foe_header(PETHERCAT_FOE_HEADER pFoE, tvbuff_t *tvb, int offset)
 {
-   pFoE->OpMode = tvb_get_guint8(tvb, offset++);
-   pFoE->Reserved1 = tvb_get_guint8(tvb, offset++);
+   pFoE->OpMode = tvb_get_uint8(tvb, offset++);
+   pFoE->Reserved1 = tvb_get_uint8(tvb, offset++);
    pFoE->aFoeHeaderDataUnion.FileLength = tvb_get_letohl(tvb, offset);
 }
 
-static void init_soe_header(PETHERCAT_SOE_HEADER pSoE, tvbuff_t *tvb, gint offset)
+static void init_soe_header(PETHERCAT_SOE_HEADER pSoE, tvbuff_t *tvb, int offset)
 {
-   pSoE->anSoeHeaderControlUnion.v2.Control = tvb_get_guint8(tvb, offset++);
-   pSoE->anSoeHeaderControlUnion.v2.Element = tvb_get_guint8(tvb, offset++);
+   pSoE->anSoeHeaderControlUnion.v2.Control = tvb_get_uint8(tvb, offset++);
+   pSoE->anSoeHeaderControlUnion.v2.Element = tvb_get_uint8(tvb, offset++);
    pSoE->anSoeHeaderDataUnion.FragmentsLeft = tvb_get_letohs(tvb, offset);
 }
 
-static void init_coe_header(PETHERCAT_COE_HEADER pCoE, tvbuff_t *tvb, gint offset)
+static void init_coe_header(PETHERCAT_COE_HEADER pCoE, tvbuff_t *tvb, int offset)
 {
    pCoE->header = tvb_get_letohs(tvb, offset);
 }
 
-static void init_sdo_header(PETHERCAT_SDO_HEADER pSdo, tvbuff_t *tvb, gint offset)
+static void init_sdo_header(PETHERCAT_SDO_HEADER pSdo, tvbuff_t *tvb, int offset)
 {
-   pSdo->anSdoHeaderUnion.CS = tvb_get_guint8(tvb, offset++);
+   pSdo->anSdoHeaderUnion.CS = tvb_get_uint8(tvb, offset++);
    pSdo->Index = tvb_get_letohs(tvb, offset);offset+=2;
-   pSdo->SubIndex = tvb_get_guint8(tvb, offset++);
+   pSdo->SubIndex = tvb_get_uint8(tvb, offset++);
    pSdo->Data = tvb_get_letohl(tvb, offset);
 }
 
-static void init_sdo_info_header(PETHERCAT_SDO_INFO_HEADER pInfo, tvbuff_t *tvb, gint offset)
+static void init_sdo_info_header(PETHERCAT_SDO_INFO_HEADER pInfo, tvbuff_t *tvb, int offset)
 {
-   pInfo->anSdoControlUnion.Control = tvb_get_guint8(tvb, offset++);
-   pInfo->Reserved = tvb_get_guint8(tvb, offset);
+   pInfo->anSdoControlUnion.Control = tvb_get_uint8(tvb, offset++);
+   pInfo->Reserved = tvb_get_uint8(tvb, offset);
    pInfo->FragmentsLeft = 2;
 }
 
-static void CANopenSdoReqFormatter(PETHERCAT_SDO_HEADER pSdo, char *szText, gint nMax)
+static void CANopenSdoReqFormatter(PETHERCAT_SDO_HEADER pSdo, char *szText, int nMax)
 {
    switch ( pSdo->anSdoHeaderUnion.Idq.Ccs )
    {
@@ -358,7 +357,7 @@ static void CANopenSdoReqFormatter(PETHERCAT_SDO_HEADER pSdo, char *szText, gint
    }
 }
 
-static void FoeFormatter(tvbuff_t *tvb, wmem_allocator_t *scope, gint offset, char *szText, gint nMax, guint foe_length)
+static void FoeFormatter(tvbuff_t *tvb, wmem_allocator_t *scope, int offset, char *szText, int nMax, unsigned foe_length)
 {
    ETHERCAT_FOE_HEADER foe;
    char *tmp = NULL;
@@ -371,7 +370,7 @@ static void FoeFormatter(tvbuff_t *tvb, wmem_allocator_t *scope, gint offset, ch
    case ECAT_FOE_OPMODE_WRQ:
    case ECAT_FOE_OPMODE_ERR:
       if ( foe_length > ETHERCAT_FOE_HEADER_LEN ) {
-         tmp = tvb_get_string_enc(scope, tvb, offset+ETHERCAT_FOE_HEADER_LEN, MIN(foe_length-ETHERCAT_FOE_HEADER_LEN, 49), ENC_ASCII);
+         tmp = (char*)tvb_get_string_enc(scope, tvb, offset+ETHERCAT_FOE_HEADER_LEN, MIN(foe_length-ETHERCAT_FOE_HEADER_LEN, 49), ENC_ASCII);
       }
       break;
    }
@@ -395,7 +394,7 @@ static void FoeFormatter(tvbuff_t *tvb, wmem_allocator_t *scope, gint offset, ch
       break;
    case ECAT_FOE_OPMODE_BUSY:
       if ( foe.aFoeHeaderDataUnion.v2.Entire > 0 )
-         snprintf ( szText, nMax, "FoE BUSY (%d%%)", ((guint32)foe.aFoeHeaderDataUnion.v2.Done*100)/foe.aFoeHeaderDataUnion.v2.Entire);
+         snprintf ( szText, nMax, "FoE BUSY (%d%%)", ((uint32_t)foe.aFoeHeaderDataUnion.v2.Done*100)/foe.aFoeHeaderDataUnion.v2.Entire);
       else
          snprintf ( szText, nMax, "FoE BUSY (%d/%d)", foe.aFoeHeaderDataUnion.v2.Done, foe.aFoeHeaderDataUnion.v2.Entire);
       break;
@@ -404,7 +403,7 @@ static void FoeFormatter(tvbuff_t *tvb, wmem_allocator_t *scope, gint offset, ch
    }
 }
 
-static void SoEIdToString( char* txt, guint16 id, int nMax)
+static void SoEIdToString( char* txt, uint16_t id, int nMax)
 {
    if ( id & 0x8000 )
       snprintf(txt, nMax, "P-%d-%04d", (id>>12) & 0x0007, id & 0x0FFF );
@@ -412,7 +411,7 @@ static void SoEIdToString( char* txt, guint16 id, int nMax)
       snprintf(txt, nMax, "S-%d-%04d", id>>12, id & 0x0FFF );
 }
 
-static void SoeFormatter(tvbuff_t *tvb, gint offset, char *szText, gint nMax, guint soe_length)
+static void SoeFormatter(tvbuff_t *tvb, int offset, char *szText, int nMax, unsigned soe_length)
 {
    ETHERCAT_SOE_HEADER soe;
    char tmp[50];
@@ -448,16 +447,16 @@ static void SoeFormatter(tvbuff_t *tvb, gint offset, char *szText, gint nMax, gu
             snprintf ( szText, nMax, "SoE: RRQ (%s, '%s')", tmp, elm);
             break;
          case ECAT_SOE_OPCODE_RRS:
-            snprintf ( szText, nMax, "SoE: RRS (%s, '%s') : %u Bytes", tmp, elm, (guint)(soe_length-ETHERCAT_SOE_HEADER_LEN));
+            snprintf ( szText, nMax, "SoE: RRS (%s, '%s') : %u Bytes", tmp, elm, (unsigned)(soe_length-ETHERCAT_SOE_HEADER_LEN));
             break;
          case ECAT_SOE_OPCODE_WRS:
             snprintf ( szText, nMax, "SoE: WRS (%s, '%s')", tmp, elm);
             break;
          case ECAT_SOE_OPCODE_WRQ:
-            snprintf ( szText, nMax, "SoE: WRQ (%s, '%s') : %u Bytes", tmp, elm, (guint)(soe_length-ETHERCAT_SOE_HEADER_LEN));
+            snprintf ( szText, nMax, "SoE: WRQ (%s, '%s') : %u Bytes", tmp, elm, (unsigned)(soe_length-ETHERCAT_SOE_HEADER_LEN));
             break;
          case ECAT_SOE_OPCODE_NFC:
-            snprintf ( szText, nMax, "SoE: NFC (%s, '%s') : %u Bytes", tmp, elm, (guint)(soe_length-ETHERCAT_SOE_HEADER_LEN));
+            snprintf ( szText, nMax, "SoE: NFC (%s, '%s') : %u Bytes", tmp, elm, (unsigned)(soe_length-ETHERCAT_SOE_HEADER_LEN));
             break;
          case 6:
             snprintf ( szText, nMax, "SoE: EMGCY");
@@ -474,7 +473,7 @@ static void SoeFormatter(tvbuff_t *tvb, gint offset, char *szText, gint nMax, gu
 }
 
 /* ethercat mailbox */
-static void dissect_ecat_coe(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree)
+static void dissect_ecat_coe(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
    proto_tree *ecat_coe_tree = NULL, *ecat_sdo_tree, *ecat_coe_sdoccs_tree, *ecat_coe_sdoscs_tree;
 
@@ -482,8 +481,8 @@ static void dissect_ecat_coe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
    char szText[200];
    int nMax = sizeof(szText)-1;
 
-   guint coe_length = tvb_reported_length(tvb)-offset;
-   guint16 len;
+   unsigned coe_length = tvb_reported_length(tvb)-offset;
+   uint16_t len;
 
    if( tree )
    {
@@ -690,7 +689,7 @@ static void dissect_ecat_coe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
             memset(&info, 0x0, sizeof(info));
             init_sdo_info_header(&info, tvb, offset);
 
-            col_append_str(pinfo->cinfo, COL_INFO, val_to_str(info.anSdoControlUnion.v.OpCode & 0x7F, CANopenSdoInfo, "%d (Unknown)"));
+            col_append_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, info.anSdoControlUnion.v.OpCode & 0x7F, CANopenSdoInfo, "%d (Unknown)"));
             if ( info.anSdoControlUnion.v.InComplete )
                 col_append_str(pinfo->cinfo, COL_INFO, " - More Follows");
 
@@ -731,7 +730,7 @@ static void dissect_ecat_coe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
                      proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfomaxsub, tvb, offset++, 1, ENC_LITTLE_ENDIAN);
                      proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfoobjcode, tvb, offset++, 1, ENC_LITTLE_ENDIAN);
 
-                     proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfoname, tvb, offset, coe_length-offset, ENC_ASCII|ENC_NA);
+                     proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfoname, tvb, offset, coe_length-offset, ENC_ASCII);
                   }
                   break;
                case ECAT_COE_INFO_OPCODE_ENTRY_Q:
@@ -745,7 +744,7 @@ static void dissect_ecat_coe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
                   break;
                case ECAT_COE_INFO_OPCODE_ENTRY_S:
                   {
-                     guint16 objlen;
+                     uint16_t objlen;
 
                      proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfoindex, tvb, offset, 2, ENC_LITTLE_ENDIAN);
                      offset+=2;
@@ -785,7 +784,7 @@ static void dissect_ecat_coe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
                         proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfomaxvalue, tvb, offset, objlen, ENC_NA);
                         offset+=objlen;
                      }
-                     proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfoname, tvb, offset, coe_length-offset, ENC_ASCII|ENC_NA);
+                     proto_tree_add_item(ecat_coe_tree, hf_ecat_mailbox_coe_sdoinfoname, tvb, offset, coe_length-offset, ENC_ASCII);
                   }
                   break;
                case ECAT_COE_INFO_OPCODE_ERROR_S:
@@ -806,7 +805,7 @@ static void dissect_ecat_coe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
    }
 }
 
-static void dissect_ecat_soe(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree)
+static void dissect_ecat_soe(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
    proto_tree *ecat_soeflag_tree, *ecat_soe_tree;
 
@@ -814,7 +813,7 @@ static void dissect_ecat_soe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
    char szText[200];
    int nMax = sizeof(szText)-1;
 
-   guint soe_length = tvb_reported_length(tvb)-offset;
+   unsigned soe_length = tvb_reported_length(tvb)-offset;
 
    if( tree )
    {
@@ -896,7 +895,7 @@ static void dissect_ecat_soe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
    }
 }
 
-static void dissect_ecat_eoe(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree)
+static void dissect_ecat_eoe(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
    proto_tree *ecat_eoe_tree = 0, *ecat_fraghead_tree, *ecat_eoe_init_tree, *ecat_eoe_macfilter_tree,
       *ecat_eoe_macfilter_filter_tree;
@@ -904,7 +903,7 @@ static void dissect_ecat_eoe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
    proto_item *anItem = NULL, *aparent = NULL;
    int nCnt;
 
-   guint eoe_length = tvb_reported_length(tvb)-offset;
+   unsigned eoe_length = tvb_reported_length(tvb)-offset;
 
    if( tree )
    {
@@ -1010,7 +1009,7 @@ static void dissect_ecat_eoe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
                proto_tree_add_item(ecat_eoe_init_tree, hf_ecat_mailbox_eoe_init_dnsserver, tvb, offset, 4, ENC_LITTLE_ENDIAN);
                offset+=4;
 
-               proto_tree_add_item(ecat_eoe_init_tree, hf_ecat_mailbox_eoe_init_dnsname, tvb, offset, 32, ENC_ASCII|ENC_NA);
+               proto_tree_add_item(ecat_eoe_init_tree, hf_ecat_mailbox_eoe_init_dnsname, tvb, offset, 32, ENC_ASCII);
             }
             else
             {
@@ -1078,7 +1077,7 @@ static void dissect_ecat_eoe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
    }
 }
 
-static void dissect_ecat_foe(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree)
+static void dissect_ecat_foe(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
    proto_tree *ecat_foe_tree,*ecat_foe_efw_tree;
 
@@ -1086,7 +1085,7 @@ static void dissect_ecat_foe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
    char szText[200];
    int nMax = sizeof(szText)-1;
 
-   guint foe_length = tvb_reported_length(tvb)-offset;
+   unsigned foe_length = tvb_reported_length(tvb)-offset;
 
    if( tree )
    {
@@ -1117,7 +1116,7 @@ static void dissect_ecat_foe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
             proto_tree_add_item(ecat_foe_tree, hf_ecat_mailbox_foe_filelength, tvb, offset, 4, ENC_LITTLE_ENDIAN);
             offset+=4;
 
-            proto_tree_add_item(ecat_foe_tree, hf_ecat_mailbox_foe_filename, tvb, offset, foe_length-offset, ENC_ASCII|ENC_NA);
+            proto_tree_add_item(ecat_foe_tree, hf_ecat_mailbox_foe_filename, tvb, offset, foe_length-offset, ENC_ASCII);
             break;
 
          case ECAT_FOE_OPMODE_DATA:
@@ -1158,7 +1157,7 @@ static void dissect_ecat_foe(tvbuff_t *tvb, gint offset, packet_info *pinfo, pro
             proto_tree_add_item(ecat_foe_tree, hf_ecat_mailbox_foe_errcode, tvb, offset, 4, ENC_LITTLE_ENDIAN);
             offset+=4;
 
-            proto_tree_add_item(ecat_foe_tree, hf_ecat_mailbox_foe_errtext, tvb, offset, foe_length-offset, ENC_ASCII|ENC_NA);
+            proto_tree_add_item(ecat_foe_tree, hf_ecat_mailbox_foe_errtext, tvb, offset, foe_length-offset, ENC_ASCII);
             break;
 
          case ECAT_FOE_OPMODE_BUSY:
@@ -1183,9 +1182,9 @@ static int dissect_ecat_mailbox(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
    proto_tree *ecat_mailbox_header_tree = NULL;
    tvbuff_t *next_tvb;
    proto_item *anItem;
-   gint offset = 0;
+   int offset = 0;
 
-   gint mailbox_length = tvb_reported_length(tvb);
+   int mailbox_length = tvb_reported_length(tvb);
 
    if( mailbox_length >= ETHERCAT_MBOX_HEADER_LEN )
    {
@@ -1929,7 +1928,7 @@ void proto_register_ecat_mailbox(void)
       }
    };
 
-   static gint *ett[] =
+   static int *ett[] =
    {
       &ett_ecat_mailbox,
       &ett_ecat_mailbox_eoe,

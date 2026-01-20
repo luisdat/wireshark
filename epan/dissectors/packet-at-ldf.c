@@ -32,7 +32,7 @@ static int hf_at_ldf_ttl;
 static int hf_at_ldf_id;
 static int hf_at_ldf_text;
 
-static gint ett_at_ldf;
+static int ett_at_ldf;
 
 static int
 dissect_at_ldf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
@@ -50,7 +50,7 @@ dissect_at_ldf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
 
     /* Check if packet is destined to the Allied Telesis test address (00:00:F4:27:71:01) */
-    guint8 dst_mac[6] = {0x00, 0x00, 0xF4, 0x27, 0x71, 0x01};
+    uint8_t dst_mac[6] = {0x00, 0x00, 0xF4, 0x27, 0x71, 0x01};
     address dst_addr = ADDRESS_INIT_NONE;
     set_address(&dst_addr, AT_ETHER, sizeof(dst_mac), &dst_mac);
 
@@ -60,8 +60,8 @@ dissect_at_ldf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "AT LDF");
     col_clear(pinfo->cinfo,COL_INFO);
     col_add_fstr(pinfo->cinfo, COL_INFO, "Source VLAN: %u, Port: %u",
-                    tvb_get_guint16(tvb, 1, ENC_BIG_ENDIAN),
-                    tvb_get_guint16(tvb, 5, ENC_BIG_ENDIAN));
+                    tvb_get_uint16(tvb, 1, ENC_BIG_ENDIAN),
+                    tvb_get_uint16(tvb, 5, ENC_BIG_ENDIAN));
 
     /* Frame has fixed length, so we can directly set tree and reported length */
     tvb_set_reported_length(tvb, AT_LDF_FRAME_LEN);
@@ -69,7 +69,7 @@ dissect_at_ldf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     proto_item *ti = proto_tree_add_item(tree, proto_at_ldf, tvb, 0, AT_LDF_FRAME_LEN, ENC_NA);
     proto_tree *at_ldf_tree = proto_item_add_subtree(ti, ett_at_ldf);
 
-    gint offset = 0;
+    int offset = 0;
     proto_tree_add_item(at_ldf_tree, hf_at_ldf_version, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
     proto_tree_add_item(at_ldf_tree, hf_at_ldf_src_vlan, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -78,7 +78,7 @@ dissect_at_ldf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     offset += 4;
     proto_tree_add_item(at_ldf_tree, hf_at_ldf_ttl, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
-    proto_tree_add_item(at_ldf_tree, hf_at_ldf_id, tvb, offset, 7, ENC_NA);
+    proto_tree_add_item(at_ldf_tree, hf_at_ldf_id, tvb, offset, 7, ENC_BIG_ENDIAN);
     offset += 7;
     proto_tree_add_item(at_ldf_tree, hf_at_ldf_text, tvb, offset, 64, ENC_ASCII);
 
@@ -127,7 +127,7 @@ proto_register_at_ldf(void)
         }
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_at_ldf
     };
 

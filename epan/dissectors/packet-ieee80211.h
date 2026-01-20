@@ -20,53 +20,53 @@ extern "C" {
 #endif /* __cplusplus */
 
 typedef struct {
-  gboolean association_has_mobility_domain_element;
-  gboolean has_ft_akm_suite;
-  gboolean has_non_ft_akm_suite;
-  gboolean has_fils_session;
-  guint32 last_akm_suite;
-  guint16 owe_group;
+  bool association_has_mobility_domain_element;
+  bool has_ft_akm_suite;
+  bool has_non_ft_akm_suite;
+  bool has_fils_session;
+  uint32_t last_akm_suite;
+  uint16_t owe_group;
   proto_node *rsn_first_ft_akm_suite;
   proto_node *rsn_first_non_ft_akm_suite;
-  guint8 ampe_frame;
+  uint8_t ampe_frame;
 } association_sanity_check_t;
 
 typedef struct {
-  guint16 discovered_key_mic_len; /* Discovered from the first EAPOL frame */
-  gboolean last_akm_suite_set;    /* Have we set this? */
-  guint32 last_akm_suite;
-  guint16 owe_group;
+  uint16_t discovered_key_mic_len; /* Discovered from the first EAPOL frame */
+  bool last_akm_suite_set;    /* Have we set this? */
+  uint32_t last_akm_suite;
+  uint16_t owe_group;
 } ieee80211_conversation_data_t;
 
 typedef struct {
-  gboolean last_akm_suite_set;
-  guint32 last_akm_suite;
-  guint16 owe_group;
+  bool last_akm_suite_set;
+  uint32_t last_akm_suite;
+  uint16_t owe_group;
 } ieee80211_packet_data_t;
 
 typedef struct ieee80211_tagged_field_data
 {
   int ftype;
   association_sanity_check_t* sanity_check;
-  gboolean isDMG;
+  bool isDMG;
   proto_item* item_tag;
   proto_item* item_tag_length;
 } ieee80211_tagged_field_data_t;
 
 int add_tagged_field(packet_info *pinfo, proto_tree *tree,
                             tvbuff_t *tvb, int offset, int ftype,
-                            const guint8 *valid_element_ids,
-                            guint valid_element_ids_count,
+                            const uint8_t *valid_element_ids,
+                            unsigned valid_element_ids_count,
                             association_sanity_check_t *association_sanity_check);
 
 int add_tagged_field_with_validation(packet_info *pinfo, proto_tree *tree,
                                       tvbuff_t *tvb, int offset, int ftype,
-                                      const guint8 *element_ids,
-                                      guint element_ids_count,
-                                      gboolean elements_ids_assume_invalid,
-                                      const guint8 *ext_element_ids,
-                                      guint ext_element_ids_count,
-                                      gboolean ext_element_ids_assume_invalid,
+                                      const uint8_t *element_ids,
+                                      unsigned element_ids_count,
+                                      bool elements_ids_assume_invalid,
+                                      const uint8_t *ext_element_ids,
+                                      unsigned ext_element_ids_count,
+                                      bool ext_element_ids_assume_invalid,
                                       association_sanity_check_t *association_sanity_check);
 
 int dissect_wifi_dpp_config_proto(packet_info *pinfo, proto_tree *query,
@@ -80,13 +80,10 @@ int dissect_wifi_dpp_config_proto(packet_info *pinfo, proto_tree *query,
  */
 #define MAX_MCS_INDEX 76
 
-WS_DLL_PUBLIC const guint16 ieee80211_ht_Dbps[MAX_MCS_INDEX+1];
-float ieee80211_htrate(int mcs_index, gboolean bandwidth, gboolean short_gi);
+WS_DLL_PUBLIC const uint16_t ieee80211_ht_Dbps[MAX_MCS_INDEX+1];
+float ieee80211_htrate(int mcs_index, bool bandwidth, bool short_gi);
 
 WS_DLL_PUBLIC value_string_ext ieee80211_supported_rates_vals_ext;
-
-WS_DLL_PUBLIC
-gboolean is_broadcast_bssid(const address *bssid);
 
 #ifdef __cplusplus
 }
@@ -153,7 +150,7 @@ gboolean is_broadcast_bssid(const address *bssid);
 #define FLAG_TO_DS            0x01
 #define FLAG_FROM_DS          0x02
 #define FLAG_MORE_FRAGMENTS   0x04
-#define FLAG_RETRY            0x08
+#define FLAG_RETRY            0x08    /* overloaded for S1G dynamic indication */
 #define FLAG_POWER_MGT        0x10
 #define FLAG_MORE_DATA        0x20
 #define FLAG_PROTECTED        0x40
@@ -296,18 +293,18 @@ gboolean is_broadcast_bssid(const address *bssid);
 #define TBTT_INFO_LENGTH(x)   (((x) & (0xff<<8)) >> 8)
 
 typedef struct _wlan_stats {
-  guint8 channel;
-  guint8 ssid_len;
-  guchar ssid[MAX_SSID_LEN];
-  gchar protection[MAX_PROTECT_LEN];
-  gboolean fc_retry;
+  uint8_t channel;
+  uint8_t ssid_len;
+  unsigned char ssid[MAX_SSID_LEN];
+  char protection[MAX_PROTECT_LEN];
+  bool fc_retry;
 } wlan_stats_t;
 
 typedef struct _wlan_hdr {
   address bssid;
   address src;
   address dst;
-  guint16 type;
+  uint16_t type;
   struct _wlan_stats stats;
 } wlan_hdr_t;
 
@@ -317,8 +314,8 @@ typedef struct _wlan_hdr {
 
 /* UAT entry structure. */
 typedef struct {
-  guint8    key;
-  gchar    *string;
+  uint8_t   key;
+  char     *string;
 } uat_wep_key_record_t;
 
 #define ADV_PROTO_ID_ANQP      0
@@ -329,7 +326,7 @@ typedef struct {
 #define ADV_PROTO_ID_VS        221
 
 typedef struct anqp_info_dissector_data {
-  gboolean request;
+  bool request;
   int idx;
 } anqp_info_dissector_data_t;
 
@@ -345,13 +342,20 @@ typedef struct anqp_info_dissector_data {
 #define WFA_SUBTYPE_WIFI_60G                   23
 #define WFA_SUBTYPE_NAN_ACTION                 24
 #define WFA_SUBTYPE_DPP                        26
-#define WFA_SUBTYPE_IEEE1905_MULTI_AP          27 /* ox1B */
+#define WFA_SUBTYPE_IEEE1905_MULTI_AP          27 /* 0x1B */
 #define WFA_SUBTYPE_OWE_TRANSITION_MODE        28
 #define WFA_SUBTYPE_TRANSITION_DISABLE_KDE     32
 #define WFA_SUBTYPE_QOS_MGMT                   34 /* 0x22 */
+#define WFA_SUBTYPE_WFA_CAPA                   35 /* 0x23 */
+#define WFA_SUBTYPE_RSN_OVERRIDE               41 /* 0x29 */
+#define WFA_SUBTYPE_RSN_OVERRIDE_2             42 /* 0x2A */
+#define WFA_SUBTYPE_RSNX_OVERRIDE              43 /* 0x2B */
+#define WFA_SUBTYPE_RSN_SELECTION              44 /* 0x2C */
+#define WFA_SUBTYPE_RSN_OVERRIDE_LINK_KDE      45 /* 0x2D */
 
 /* WFA Public Action Types */
 #define WFA_SUBTYPE_ACTION_QOS_MGMT          0x1A
+#define WFA_SUBTYPE_ACTION_CAPABILITIES      0x1B
 
 /* WFA vendor specific ANQP subtypes */
 #define WFA_ANQP_SUBTYPE_HS20                  17
@@ -393,7 +397,7 @@ typedef struct anqp_info_dissector_data {
 #define TAG_ERP_INFO                  42
 #define TAG_TS_DELAY                  43
 #define TAG_TCLAS_PROCESS             44
-#define TAG_HT_CAPABILITY             45 /* IEEE Stc 802.11n/D2.0 */
+#define TAG_HT_CAPABILITY             45 /* IEEE Std 802.11n */
 #define TAG_QOS_CAPABILITY            46
 #define TAG_ERP_INFO_OLD              47 /* IEEE Std 802.11g/D4.0 */
 #define TAG_RSN_IE                    48
@@ -409,7 +413,7 @@ typedef struct anqp_info_dissector_data {
 #define TAG_DSE_REG_LOCATION          58
 #define TAG_SUPPORTED_OPERATING_CLASSES             59 /* IEEE Std 802.11w-2009 */
 #define TAG_EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT    60 /* IEEE Std 802.11w-2009 */
-#define TAG_HT_INFO                   61  /* IEEE Stc 802.11n/D2.0 */
+#define TAG_HT_OPERATION              61  /* IEEE Std 802.11n */
 #define TAG_SECONDARY_CHANNEL_OFFSET  62  /* IEEE Stc 802.11n/D1.10/D2.0 */
 #define TAG_BSS_AVG_ACCESS_DELAY      63
 #define TAG_ANTENNA                   64
@@ -571,13 +575,13 @@ typedef struct anqp_info_dissector_data {
 
 extern const value_string ie_tag_num_vals[];
 
-guint
+unsigned
 add_ff_action(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset,
               association_sanity_check_t *association_sanity_check );
 
-guint
+unsigned
 add_ff_action_public_fields(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
-                            int offset, guint8 code);
+                            int offset, uint8_t code);
 
 /*
  * Editor modelines

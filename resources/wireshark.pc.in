@@ -1,14 +1,14 @@
-prefix=${pcfiledir}/../..
+prefix=@CMAKE_INSTALL_PREFIX@
 exec_prefix=${prefix}
-libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
-includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
 sharedlibdir=${libdir}
-plugindir=${libdir}/wireshark/plugins
-plugin_suffix=@CMAKE_SHARED_MODULE_SUFFIX@.@PROJECT_ABI_VERSION_EPAN@
+plugindir=@PLUGIN_INSTALL_VERSION_LIBDIR@
 
 Name: Wireshark
 Description: Network Protocol Analyzer (Packet Dissection Library)
 Version: @PROJECT_VERSION@
+License: GPL-2.0-or-later
 
 Requires: glib-2.0, gmodule-2.0, gthread-2.0
 Libs: -L${libdir} -lwireshark -lwsutil

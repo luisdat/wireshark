@@ -22,7 +22,10 @@ set( ASN_FILE_LIST
 #	ISO_TS_24534-3.asn
 #	ISO_TS_17419.asn
 	ISO_TS_14906_Application.asn
-	ISO_TS_19091.asn
+#	ISO_TS_19091.asn
+    DSRC.asn
+    DSRC-region.asn
+    DSRC-addgrp-C.asn 
 	GDD.asn
 	ISO19321IVIv2.asn
 	ETSI_TS_103301.asn
@@ -36,6 +39,7 @@ set( ASN_FILE_LIST
 	EVCSN-PDU-Descriptions.asn
 	EV-RSR-PDU-Descriptions.asn
 	CPM-OriginatingStationContainers.asn
+	CPM-PDU-Descriptionsv1.asn
 	CPM-PDU-Descriptions.asn
 	CPM-PerceivedObjectContainer.asn
 	CPM-PerceptionRegionContainer.asn

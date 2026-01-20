@@ -18,10 +18,11 @@ ADD_CUSTOM_CMAKE_INCLUDE()
 set(WIRESHARK_WIDGET_HEADERS
 	widgets/additional_toolbar.h
 	widgets/apply_line_edit.h
-	widgets/byte_view_text.h
+	widgets/base_data_source_view.h
 	widgets/capture_filter_combo.h
 	widgets/capture_filter_edit.h
 	widgets/clickable_label.h
+	widgets/compression_group_box.h
 	widgets/copy_from_profile_button.h
 	widgets/detachable_tabwidget.h
 	widgets/display_filter_combo.h
@@ -38,16 +39,23 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/filter_expression_toolbar.h
 	widgets/find_line_edit.h
 	widgets/follow_stream_text.h
+	widgets/hex_data_source_view.h
 	widgets/interface_toolbar_lineedit.h
+	widgets/json_data_source_view.h
 	widgets/label_stack.h
 	widgets/overlay_scroll_bar.h
 	widgets/packet_list_header.h
 	widgets/path_selection_edit.h
 	widgets/pref_module_view.h
 	widgets/profile_tree_view.h
+	widgets/qcp_axis_ticker_elided.h
+	widgets/qcp_axis_ticker_si.h
+	widgets/qcp_spacer_legend_item.h
 	widgets/qcp_string_legend_item.h
 	widgets/range_syntax_lineedit.h
+	widgets/resize_header_view.h
 	widgets/resolved_addresses_view.h
+	widgets/rowmove_tree_view.h
 	widgets/rtp_audio_graph.h
 	widgets/splash_overlay.h
 	widgets/stock_icon_tool_button.h
@@ -58,6 +66,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/traffic_types_list.h
 	widgets/wireless_timeline.h
 	widgets/wireshark_file_dialog.h
+	widgets/customplot.h
 )
 
 set(WIRESHARK_3RD_PARTY_WIDGET_HEADERS
@@ -75,6 +84,7 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/field_information.h
 	utils/frame_information.h
 	utils/idata_printable.h
+	utils/profile_switcher.h
 	utils/proto_node.h
 	utils/qt_ui_utils.h
 	utils/rtp_audio_file.h
@@ -141,7 +151,6 @@ set(WIRESHARK_QT_HEADERS
 	bluetooth_device_dialog.h
 	bluetooth_devices_dialog.h
 	bluetooth_hci_summary_dialog.h
-	byte_view_tab.h
 	capture_comment_dialog.h
 	capture_file_dialog.h
 	capture_file_properties_dialog.h
@@ -157,6 +166,7 @@ set(WIRESHARK_QT_HEADERS
 	conversation_dialog.h
 	conversation_hash_tables_dialog.h
 	credentials_dialog.h
+	data_source_tab.h
 	decode_as_dialog.h
 	display_filter_expression_dialog.h
 	dissector_tables_dialog.h
@@ -174,7 +184,6 @@ set(WIRESHARK_QT_HEADERS
 	file_set_dialog.h
 	filter_action.h
 	filter_dialog.h
-	filter_dialog.h
 	filter_expression_frame.h
 	firewall_rules_dialog.h
 	follow_stream_action.h
@@ -185,13 +194,17 @@ set(WIRESHARK_QT_HEADERS
 	funnel_text_dialog.h
 	geometry_state_dialog.h
 	glib_mainloop_on_qeventloop.h
+	graph.h
 	gsm_map_summary_dialog.h
 	iax2_analysis_dialog.h
 	import_text_dialog.h
 	interface_frame.h
 	interface_toolbar_reader.h
 	interface_toolbar.h
+	keyboard_shortcuts_dialog.h
 	io_console_dialog.h
+	io_graph.h
+	io_graph_action.h
 	io_graph_dialog.h
 	layout_preferences_frame.h
 	lbm_lbtrm_transport_dialog.h
@@ -213,8 +226,13 @@ set(WIRESHARK_QT_HEADERS
 	packet_diagram.h
 	packet_dialog.h
 	packet_format_group_box.h
+	packet_format_stack.h
 	packet_list.h
 	packet_range_group_box.h
+	plot.h
+	plot_action.h
+	plot_dialog.h
+	marker_dialog.h
 	preference_editor_frame.h
 	preferences_dialog.h
 	print_dialog.h
@@ -281,10 +299,10 @@ endif()
 set(WIRESHARK_WIDGET_SRCS
 	widgets/additional_toolbar.cpp
 	widgets/apply_line_edit.cpp
-	widgets/byte_view_text.cpp
 	widgets/capture_filter_combo.cpp
 	widgets/capture_filter_edit.cpp
 	widgets/clickable_label.cpp
+	widgets/compression_group_box.cpp
 	widgets/copy_from_profile_button.cpp
 	widgets/detachable_tabwidget.cpp
 	widgets/display_filter_combo.cpp
@@ -301,16 +319,23 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/filter_expression_toolbar.cpp
 	widgets/find_line_edit.cpp
 	widgets/follow_stream_text.cpp
+	widgets/hex_data_source_view.cpp
 	widgets/interface_toolbar_lineedit.cpp
+	widgets/json_data_source_view.cpp
 	widgets/label_stack.cpp
 	widgets/overlay_scroll_bar.cpp
 	widgets/packet_list_header.cpp
 	widgets/path_selection_edit.cpp
 	widgets/pref_module_view.cpp
 	widgets/profile_tree_view.cpp
+	widgets/qcp_axis_ticker_elided.cpp
+	widgets/qcp_axis_ticker_si.cpp
+	widgets/qcp_spacer_legend_item.cpp
 	widgets/qcp_string_legend_item.cpp
 	widgets/range_syntax_lineedit.cpp
+	widgets/resize_header_view.cpp
 	widgets/resolved_addresses_view.cpp
+	widgets/rowmove_tree_view.cpp
 	widgets/rtp_audio_graph.cpp
 	widgets/splash_overlay.cpp
 	widgets/stock_icon_tool_button.cpp
@@ -321,6 +346,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/traffic_types_list.cpp
 	widgets/wireless_timeline.cpp
 	widgets/wireshark_file_dialog.cpp
+	widgets/customplot.cpp
 )
 
 set(WIRESHARK_3RD_PARTY_WIDGET_SRCS
@@ -337,6 +363,7 @@ set(WIRESHARK_UTILS_SRCS
 	utils/data_printer.cpp
 	utils/field_information.cpp
 	utils/frame_information.cpp
+	utils/profile_switcher.cpp
 	utils/proto_node.cpp
 	utils/qt_ui_utils.cpp
 	utils/rtp_audio_file.cpp
@@ -398,7 +425,6 @@ set(WIRESHARK_QT_SRC
 	bluetooth_device_dialog.cpp
 	bluetooth_devices_dialog.cpp
 	bluetooth_hci_summary_dialog.cpp
-	byte_view_tab.cpp
 	capture_comment_dialog.cpp
 	capture_file_dialog.cpp
 	capture_file_properties_dialog.cpp
@@ -414,6 +440,7 @@ set(WIRESHARK_QT_SRC
 	conversation_dialog.cpp
 	conversation_hash_tables_dialog.cpp
 	credentials_dialog.cpp
+	data_source_tab.cpp
 	decode_as_dialog.cpp
 	display_filter_expression_dialog.cpp
 	dissector_tables_dialog.cpp
@@ -444,7 +471,9 @@ set(WIRESHARK_QT_SRC
 	interface_frame.cpp
 	interface_toolbar_reader.cpp
 	interface_toolbar.cpp
+	keyboard_shortcuts_dialog.cpp
 	io_console_dialog.cpp
+	io_graph_action.cpp
 	layout_preferences_frame.cpp
 	lbm_lbtrm_transport_dialog.cpp
 	lbm_lbtru_transport_dialog.cpp
@@ -465,8 +494,11 @@ set(WIRESHARK_QT_SRC
 	packet_diagram.cpp
 	packet_dialog.cpp
 	packet_format_group_box.cpp
+	packet_format_stack.cpp
 	packet_list.cpp
 	packet_range_group_box.cpp
+	plot_action.cpp
+	marker_dialog.cpp
 	preference_editor_frame.cpp
 	preferences_dialog.cpp
 	print_dialog.cpp
@@ -533,12 +565,16 @@ endif()
 set(WIRESHARK_QT_TAP_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/expert_info_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/funnel_statistics.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/graph.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/gsm_map_summary_dialog.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/io_graph.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/io_graph_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/lte_mac_statistics_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/lte_rlc_statistics_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/mtp3_summary_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/multicast_statistics_dialog.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/plot.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/plot_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/rtp_stream_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/sctp_all_assocs_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/sctp_assoc_analyse_dialog.cpp
@@ -553,8 +589,9 @@ set(WIRESHARK_QT_NONGENERATED_SRC
 	${WIRESHARK_MODEL_SRCS}
 	${WIRESHARK_UTILS_SRCS}
 	${WIRESHARK_MANAGER_SRCS}
-	${WIRESHARK_3RD_PARTY_WIDGET_SRCS}
 	${WIRESHARK_WIDGET_SRCS}
+	# WIRESHARK_3RD_PARTY_WIDGET_SRCS is allowed to have warnings
+	#${WIRESHARK_3RD_PARTY_WIDGET_SRCS}
 )
 
 set(WIRESHARK_QT_UI
@@ -596,6 +633,7 @@ set(WIRESHARK_QT_UI
 	import_text_dialog.ui
 	interface_frame.ui
 	interface_toolbar.ui
+	keyboard_shortcuts_dialog.ui
 	io_console_dialog.ui
 	io_graph_dialog.ui
 	layout_preferences_frame.ui
@@ -611,7 +649,9 @@ set(WIRESHARK_QT_UI
 	packet_comment_dialog.ui
 	packet_dialog.ui
 	packet_format_group_box.ui
+	packet_format_json_group_box.ui
 	packet_range_group_box.ui
+	plot_dialog.ui
 	preference_editor_frame.ui
 	preferences_dialog.ui
 	print_dialog.ui
@@ -656,14 +696,19 @@ if(HAVE_PCAP_REMOTE)
 endif()
 
 set(WIRESHARK_QT_TS
+	wireshark_ca.ts
 	wireshark_de.ts
 	wireshark_en.ts # lupdate -pluralonly
 	wireshark_es.ts
 	wireshark_fr.ts
+	wireshark_ga_IE.ts
+	wireshark_hu.ts
+	wireshark_id.ts
 	wireshark_it.ts
 	wireshark_ja_JP.ts
 	wireshark_ko.ts
 	wireshark_pl.ts
+	wireshark_pt_BR.ts
 	wireshark_ru.ts
 	wireshark_sv.ts
 	wireshark_tr_TR.ts
@@ -696,48 +741,37 @@ add_custom_command(
 		${CMAKE_SOURCE_DIR}/AUTHORS
 )
 
-set(WIRESHARK_QT_QRC
+# Drop the file modification time of source files from generated files
+# to help with reproducible builds. We do not use QFileInfo.lastModified
+# so this has no unwanted side effects. This mtime started appearing in
+# Qt 5.8. The option to force the old file format without mtime was
+# added in Qt 5.9. See https://bugreports.qt.io/browse/QTBUG-58769.
+# Force the compression algorithm to zlib, since zstd requires format
+# version 3. See https://gitlab.com/wireshark/wireshark/-/issues/18100.
+# Use the number of dashes for each argument as documented at
+# https://doc.qt.io/qt-6/rcc.html.
+set(CMAKE_AUTORCC_OPTIONS --format-version 1)
+list(APPEND CMAKE_AUTORCC_OPTIONS -compress-algo zlib)
+
+if(NOT APPLE)
+	set(WSICON_QRC ${CMAKE_SOURCE_DIR}/resources/wsicon.qrc)
+endif()
+
+qt_add_resources(WIRESHARK_QT_QRC
 	../../resources/about.qrc
 	../../resources/languages/languages.qrc
 	../../resources/layout.qrc
 	../../resources/stock_icons.qrc
-	../../resources/wsicon.qrc
+	${WSICON_QRC}
 	${CMAKE_CURRENT_BINARY_DIR}/i18n.qrc
 	${CMAKE_CURRENT_BINARY_DIR}/authors.qrc
-	${CMAKE_CURRENT_BINARY_DIR}/authors.csv
+	OPTIONS ${CMAKE_AUTORCC_OPTIONS}
 )
-
-if(NOT Qt${qtver}Widgets_VERSION VERSION_LESS "5.9")
-	# Drop the file modification time of source files from generated files
-	# to help with reproducible builds. We do not use QFileInfo.lastModified
-	# so this has no unwanted side effects. This mtime started appearing in
-	# Qt 5.8. The option to force the old file format without mtime was
-	# added in Qt 5.9. See https://bugreports.qt.io/browse/QTBUG-58769.
-	# Force the compression algorithm to zlib, since zstd requires format
-	# version 3. See https://gitlab.com/wireshark/wireshark/-/issues/18100.
-	# Use the number of dashes for each argument as documented at
-	# https://doc.qt.io/qt-6/rcc.html.
-	set(CMAKE_AUTORCC_OPTIONS --format-version 1)
-	if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "5.13")
-		list(APPEND CMAKE_AUTORCC_OPTIONS -compress-algo zlib)
-	endif()
-endif()
 
 if (USE_qt6)
 	QT6_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
-elseif(NOT Qt${qtver}Widgets_VERSION VERSION_LESS "5.11")
-	QT5_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
 else()
-	QT5_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS})
-endif()
-
-if (WIN32)
-	add_custom_target(copy_qt_translations ALL)
-	add_custom_command(TARGET copy_qt_translations
-		POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:wireshark>/translations
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${WIRESHARK_QT_QM} $<TARGET_FILE_DIR:wireshark>/translations
-	)
+	QT5_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
 endif()
 
 add_custom_target(
@@ -746,6 +780,16 @@ add_custom_target(
 		${WIRESHARK_QT_QM}
 )
 set_target_properties(translations PROPERTIES FOLDER "UI")
+
+if (WIN32)
+	add_custom_target(copy_qt_translations ALL)
+	add_custom_command(TARGET copy_qt_translations
+		POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:wireshark>/translations
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${WIRESHARK_QT_QM} $<TARGET_FILE_DIR:wireshark>/translations
+	)
+	add_dependencies(copy_qt_translations translations)
+endif()
 
 set_source_files_properties(
 	${WIRESHARK_QT_NONGENERATED_SRC}
@@ -787,6 +831,7 @@ add_library(qtui OBJECT
 	${WIRESHARK_MODEL_HEADERS}
 
 	${WIRESHARK_QT_NONGENERATED_SRC}
+	${WIRESHARK_3RD_PARTY_WIDGET_SRCS}
 
 	# For AUTOUIC and AUTORCC.
 	${WIRESHARK_QT_UI}
@@ -806,6 +851,9 @@ if(USE_qt6)
 	if(Qt6Multimedia_FOUND)
 		target_link_libraries(qtui PUBLIC Qt6::Multimedia)
 	endif()
+	if(Qt6DBus_FOUND)
+		target_link_libraries(qtui PUBLIC Qt6::DBus)
+	endif()
 endif()
 
 target_include_directories(qtui
@@ -817,9 +865,12 @@ target_include_directories(qtui
 		${QT5_INCLUDE_DIRS}
 		${GCRYPT_INCLUDE_DIRS}
 		${MINIZIP_INCLUDE_DIRS}
+		${MINIZIPNG_INCLUDE_DIRS}
 		${PCAP_INCLUDE_DIRS}
 		${SPEEXDSP_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}
+		$<$<CXX_COMPILER_ID:MSVC>:${ZLIB_INCLUDE_DIRS}>
+		$<$<CXX_COMPILER_ID:MSVC>:${ZLIBNG_INCLUDE_DIRS}>
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}
@@ -835,13 +886,18 @@ set_target_properties(qtui PROPERTIES
 	FOLDER "UI"
 	AUTOMOC ON
 	AUTOUIC ON
-	AUTORCC ON
+	# AUTORCC not needed with qt_add_resources
+	#AUTORCC ON
 	# Ensure .qm files are generated before autogenerating i18n.qrc
 	AUTOGEN_TARGET_DEPENDS "${WIRESHARK_QT_QM}"
 )
 
 if(MSVC)
 	set_target_properties(qtui PROPERTIES LINK_FLAGS_DEBUG "${WS_MSVC_DEBUG_LINK_FLAGS}")
+	# https://bugreports.qt.io/browse/QTBUG-118993
+	if(Qt${qtver}Widgets_VERSION VERSION_LESS "6.5.4")
+		target_compile_definitions(qtui PUBLIC _SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
+	endif()
 endif()
 
 CHECKAPI(

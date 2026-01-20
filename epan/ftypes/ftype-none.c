@@ -9,13 +9,13 @@
 #include "config.h"
 
 #include <ftypes-int.h>
-
+#include <wsutil/array.h>
 
 void
 ftype_register_none(void)
 {
 
-	static ftype_t none_type = {
+	static const ftype_t none_type = {
 		FT_NONE,			/* ftype */
 		0,				/* wire_size */
 		NULL,				/* new_value */
@@ -43,9 +43,10 @@ ftype_register_none(void)
 		NULL,				/* hash */
 		NULL,				/* is_zero */
 		NULL,				/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
-		NULL,				/* biwise_and */
+		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
 		NULL,				/* add */
 		NULL,				/* subtract */

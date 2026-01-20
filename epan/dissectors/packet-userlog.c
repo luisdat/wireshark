@@ -24,7 +24,7 @@
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <epan/ipproto.h>
+#include "packet-iana-data.h"
 
 void proto_register_userlog(void);
 void proto_reg_handoff_userlog(void);
@@ -65,9 +65,9 @@ static int hf_userlog_Reserved1;
 static int hf_userlog_Reserved2;
 static int hf_userlog_Reserved3;
 
-static gint ett_userlog;
-static gint ett_userlog_header;
-static gint ett_userlog_log;
+static int ett_userlog;
+static int ett_userlog_header;
+static int ett_userlog_log;
 
 static const value_string version[] = {
 { 1, "V1" },
@@ -108,9 +108,9 @@ dissect_userlog(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
 	proto_tree *userlog_header, *userlog_tree;
 	proto_tree *userlog_log;
 	/* Other misc. local variables. */
-	gint offset    = 0;
-	guint log_count = 1;
-	guint log_type, log_max;
+	int offset    = 0;
+	unsigned log_count = 1;
+	unsigned log_type, log_max;
 
 	/* Check that the packet is long enough for it to belong to us. */
 	if (tvb_reported_length(tvb) < USERLOG_MIN_LENGTH)
@@ -128,7 +128,7 @@ dissect_userlog(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
 	offset += 1;
 
 	proto_tree_add_item_ret_uint(userlog_header, hf_userlog_logtype, tvb, offset, 1, ENC_BIG_ENDIAN, &log_type);
-	col_add_fstr(pinfo->cinfo, COL_INFO, "LogType = %s", val_to_str(log_type, logtype, "Unknown (0x%02x)"));
+	col_add_fstr(pinfo->cinfo, COL_INFO, "LogType = %s", val_to_str(pinfo->pool, log_type, logtype, "Unknown (0x%02x)"));
 	offset += 1;
 
 	proto_tree_add_item_ret_uint(userlog_header, hf_userlog_count, tvb, offset, 2, ENC_BIG_ENDIAN, &log_max);
@@ -387,7 +387,7 @@ proto_register_userlog(void)
 	};
 
 	/* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_userlog,
 		&ett_userlog_header,
 		&ett_userlog_log

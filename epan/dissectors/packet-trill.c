@@ -17,6 +17,8 @@
 
 #include <epan/packet.h>
 #include <epan/etypes.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 void proto_register_trill(void);
 void proto_reg_handoff_trill(void);
@@ -24,7 +26,7 @@ void proto_reg_handoff_trill(void);
 static dissector_handle_t trill_handle;
 
 static int proto_trill;
-static gint ett_trill;
+static int ett_trill;
 
 static int hf_trill_version;
 static int hf_trill_reserved;
@@ -87,14 +89,14 @@ dissect_trill( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 {
   proto_item *ti ;
   proto_tree *trill_tree ;
-  guint32     op_len ;
+  uint32_t    op_len ;
   tvbuff_t   *next_tvb ;
   int         offset = 0 ;
 
   col_set_str( pinfo->cinfo, COL_PROTOCOL, TRILL_PROTO_COL_NAME ) ;
   col_set_str( pinfo->cinfo, COL_INFO, TRILL_PROTO_COL_INFO ) ;
 
-  op_len = tvb_get_bits( tvb, 5, 5, ENC_BIG_ENDIAN ) * TRILL_OP_LENGTH_BYTE_UNITS ;
+  op_len = tvb_get_bits32( tvb, 5, 5, ENC_BIG_ENDIAN ) * TRILL_OP_LENGTH_BYTE_UNITS ;
   if (tree) {
     ti = proto_tree_add_item( tree, proto_trill, tvb, 0,
       TRILL_MIN_FRAME_LENGTH + op_len, ENC_NA ) ;
@@ -176,7 +178,7 @@ proto_register_trill(void)
         "The TRILL Options field.", HFILL }}
   };
 
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_trill
   };
 

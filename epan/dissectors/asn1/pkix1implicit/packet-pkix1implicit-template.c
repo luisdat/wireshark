@@ -11,6 +11,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <wsutil/array.h>
 
 #include <epan/asn1.h>
 #include "packet-ber.h"
@@ -33,14 +34,14 @@ static int proto_pkix1implicit;
 #include "packet-pkix1implicit-ett.c"
 
 
-int
-dissect_pkix1implicit_ReasonFlags(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
+unsigned
+dissect_pkix1implicit_ReasonFlags(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
   offset = dissect_x509ce_ReasonFlags(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
 }
-int
-dissect_pkix1implicit_GeneralName(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
+unsigned
+dissect_pkix1implicit_GeneralName(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
   offset = dissect_x509ce_GeneralName(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -58,7 +59,7 @@ void proto_register_pkix1implicit(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
 #include "packet-pkix1implicit-ettarr.c"
   };
 

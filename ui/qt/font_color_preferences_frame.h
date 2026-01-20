@@ -12,6 +12,7 @@
 
 #include <QFrame>
 #include <QFont>
+#include <QComboBox>
 
 #include <epan/prefs.h>
 
@@ -32,7 +33,9 @@ protected:
 
 private:
     Ui::FontColorPreferencesFrame *ui;
+    QComboBox *colorSchemeComboBox_;
 
+    pref_t *pref_color_scheme_;
     pref_t *pref_qt_gui_font_name_;
     pref_t *pref_active_fg_;
     pref_t *pref_active_bg_;
@@ -48,8 +51,11 @@ private:
     pref_t *pref_client_bg_;
     pref_t *pref_server_fg_;
     pref_t *pref_server_bg_;
+    pref_t* pref_valid_fg_;
     pref_t *pref_valid_bg_;
+    pref_t* pref_invalid_fg_;
     pref_t *pref_invalid_bg_;
+    pref_t* pref_deprecated_fg_;
     pref_t *pref_deprecated_bg_;
     QFont cur_font_;
 
@@ -58,6 +64,7 @@ private:
 
 private slots:
     void colorChanged(pref_t *pref, const QColor &cc);
+    void colorSchemeIndexChanged(int index);
     void on_fontPushButton_clicked();
 
     void on_activeFGPushButton_clicked();
@@ -75,8 +82,11 @@ private slots:
     void on_serverFGPushButton_clicked();
     void on_serverBGPushButton_clicked();
     void on_validFilterBGPushButton_clicked();
+    void on_validFilterFGPushButton_clicked();
     void on_invalidFilterBGPushButton_clicked();
+    void on_invalidFilterFGPushButton_clicked();
     void on_deprecatedFilterBGPushButton_clicked();
+    void on_deprecatedFilterFGPushButton_clicked();
 };
 
 #endif // FONT_COLOR_PREFERENCES_FRAME_H

@@ -110,7 +110,7 @@ srt_draw(void *arg)
 
 static GArray* global_srt_array;
 
-static void
+static bool
 init_srt_tables(register_srt_t* srt, const char *filter)
 {
 	srt_t *ui;
@@ -127,12 +127,14 @@ init_srt_tables(register_srt_t* srt, const char *filter)
 		free_srt_table(srt, global_srt_array);
 		g_free(ui);
 		cmdarg_err("Couldn't register srt tap: %s", error_string->str);
-		g_string_free(error_string, true);
-		exit(1);
+		g_string_free(error_string, TRUE);
+		return false;
 	}
+
+	return true;
 }
 
-static void
+static bool
 dissector_srt_init(const char *opt_arg, void* userdata)
 {
 	register_srt_t *srt = (register_srt_t*)userdata;
@@ -146,14 +148,14 @@ dissector_srt_init(const char *opt_arg, void* userdata)
 		cmdarg_err("invalid \"-z %s,%s\" argument", cmd_str, err);
 		g_free(cmd_str);
 		g_free(err);
-		exit(1);
+		return false;
 	}
 
 	/* Need to create the SRT array now */
 	global_srt_array = g_array_new(false, true, sizeof(srt_stat_table*));
 
 	srt_table_dissector_init(srt, global_srt_array);
-	init_srt_tables(srt, filter);
+	return init_srt_tables(srt, filter);
 }
 
 /* Set GUI fields for register_srt list */

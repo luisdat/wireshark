@@ -5,14 +5,15 @@
 	Pidl is a perl based IDL compiler for DCE/RPC idl files.
 	It is maintained by the Samba team, not the Wireshark team.
 	Instructions on how to download and install Pidl can be
-	found at https://gitlab.com/wireshark/wireshark/-/wikis/Pidl
+	found at https://wiki.wireshark.org/Pidl
 */
 
 
 #include "config.h"
-#include <glib.h>
 #include <string.h>
+#include <wsutil/array.h>
 #include <epan/packet.h>
+#include <epan/tfs.h>
 
 #include "packet-dcerpc.h"
 #include "packet-dcerpc-nt.h"
@@ -22,42 +23,42 @@ void proto_register_dcerpc_IWbemServices(void);
 void proto_reg_handoff_dcerpc_IWbemServices(void);
 
 /* Ett declarations */
-static gint ett_IWbemServices_GetObject_orpcthis = -1;
-static gint ett_IWbemServices_GetObject_orpcthat = -1;
-static gint ett_IWbemServices_ExecMethod_orpcthis = -1;
-static gint ett_IWbemServices_ExecMethod_orpcthat = -1;
-static gint ett_dcerpc_IWbemServices = -1;
-static gint ett_IWbemServices_ORPCTHIS = -1;
-static gint ett_IWbemServices_ORPCTHAT = -1;
-static gint ett_IWbemServices_IWbemCallResult = -1;
-static gint ett_IWbemServices_IWbemClassObject = -1;
-static gint ett_IWbemServices_MInterfacePointer = -1;
-static gint ett_IWbemServices_IWbemContext = -1;
+static int ett_IWbemServices_GetObject_orpcthis;
+static int ett_IWbemServices_GetObject_orpcthat;
+static int ett_IWbemServices_ExecMethod_orpcthis;
+static int ett_IWbemServices_ExecMethod_orpcthat;
+static int ett_dcerpc_IWbemServices;
+static int ett_IWbemServices_ORPCTHIS;
+static int ett_IWbemServices_ORPCTHAT;
+static int ett_IWbemServices_IWbemCallResult;
+static int ett_IWbemServices_IWbemClassObject;
+static int ett_IWbemServices_MInterfacePointer;
+static int ett_IWbemServices_IWbemContext;
 
 
 /* Header field declarations */
-static gint hf_IWbemServices_ExecMethod_lFlags = -1;
-static gint hf_IWbemServices_ExecMethod_orpcthat = -1;
-static gint hf_IWbemServices_ExecMethod_orpcthis = -1;
-static gint hf_IWbemServices_ExecMethod_strMethodName = -1;
-static gint hf_IWbemServices_ExecMethod_strObjectPath = -1;
-static gint hf_IWbemServices_GetObject_lFlags = -1;
-static gint hf_IWbemServices_GetObject_orpcthat = -1;
-static gint hf_IWbemServices_GetObject_orpcthis = -1;
-static gint hf_IWbemServices_GetObject_pCtx = -1;
-static gint hf_IWbemServices_GetObject_ppCallResult = -1;
-static gint hf_IWbemServices_GetObject_ppObject = -1;
-static gint hf_IWbemServices_GetObject_strObjectPath = -1;
-static gint hf_IWbemServices_IWbemClassObject_count = -1;
-static gint hf_IWbemServices_IWbemClassObject_objects = -1;
-static gint hf_IWbemServices_IWbemContext_intPtr = -1;
-static gint hf_IWbemServices_IWbemContext_u = -1;
-static gint hf_IWbemServices_MInterfacePointer_abData = -1;
-static gint hf_IWbemServices_MInterfacePointer_ulCntData = -1;
-static gint hf_IWbemServices_opnum = -1;
-static gint hf_IWbemServices_werror = -1;
+static int hf_IWbemServices_ExecMethod_lFlags;
+static int hf_IWbemServices_ExecMethod_orpcthat;
+static int hf_IWbemServices_ExecMethod_orpcthis;
+static int hf_IWbemServices_ExecMethod_strMethodName;
+static int hf_IWbemServices_ExecMethod_strObjectPath;
+static int hf_IWbemServices_GetObject_lFlags;
+static int hf_IWbemServices_GetObject_orpcthat;
+static int hf_IWbemServices_GetObject_orpcthis;
+static int hf_IWbemServices_GetObject_pCtx;
+static int hf_IWbemServices_GetObject_ppCallResult;
+static int hf_IWbemServices_GetObject_ppObject;
+static int hf_IWbemServices_GetObject_strObjectPath;
+static int hf_IWbemServices_IWbemClassObject_count;
+static int hf_IWbemServices_IWbemClassObject_objects;
+static int hf_IWbemServices_IWbemContext_intPtr;
+static int hf_IWbemServices_IWbemContext_u;
+static int hf_IWbemServices_MInterfacePointer_abData;
+static int hf_IWbemServices_MInterfacePointer_ulCntData;
+static int hf_IWbemServices_opnum;
+static int hf_IWbemServices_werror;
 
-static gint proto_dcerpc_IWbemServices = -1;
+static int proto_dcerpc_IWbemServices;
 /* Version information */
 
 
@@ -65,46 +66,46 @@ static e_guid_t uuid_dcerpc_IWbemServices = {
 	0x9556dc99, 0x828c, 0x11cf,
 	{ 0xa3, 0x7e, 0x00, 0xaa, 0x00, 0x32, 0x40, 0xc7 }
 };
-static guint16 ver_dcerpc_IWbemServices = 0;
+static uint16_t ver_dcerpc_IWbemServices = 0;
 
-static int IWbemServices_dissect_element_IWbemClassObject_count(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_IWbemClassObject_objects(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_MInterfacePointer_ulCntData(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_MInterfacePointer_abData(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_MInterfacePointer_abData_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_IWbemContext_u(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_IWbemContext_intPtr(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_IWbemContext_intPtr_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_orpcthis(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_strObjectPath(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_lFlags(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_pCtx(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_pCtx_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_orpcthat(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_orpcthat_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_ppObject(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_ppObject_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_ppObject__(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_ppCallResult(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_ppCallResult_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_GetObject_ppCallResult__(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_orpcthis(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_strObjectPath(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_strObjectPath_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_strMethodName(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_strMethodName_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_lFlags(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_orpcthat(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int IWbemServices_dissect_element_ExecMethod_orpcthat_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
+static unsigned IWbemServices_dissect_element_IWbemClassObject_count(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_IWbemClassObject_objects(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_MInterfacePointer_ulCntData(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_MInterfacePointer_abData(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_MInterfacePointer_abData_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_IWbemContext_u(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_IWbemContext_intPtr(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_IWbemContext_intPtr_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_orpcthis(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_strObjectPath(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_lFlags(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_pCtx(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_pCtx_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_orpcthat(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_orpcthat_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_ppObject(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_ppObject_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_ppObject__(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_ppCallResult(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_ppCallResult_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_GetObject_ppCallResult__(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_orpcthis(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_strObjectPath(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_strObjectPath_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_strMethodName(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_strMethodName_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_lFlags(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_orpcthat(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned IWbemServices_dissect_element_ExecMethod_orpcthat_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
 	#include "packet-dcom.h"
-static int
-IWbemServices_dissect_element_IWbemClassObject_objects_(tvbuff_t *tvb, int offset, int length, packet_info *pinfo, proto_tree *tree, dcerpc_info *di, guint8 *drep);
-static int
-IWbemServices_dissect_element_GetObject_strObjectPath_(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep);
+static unsigned
+IWbemServices_dissect_element_IWbemClassObject_objects_(tvbuff_t *tvb, unsigned offset, unsigned length, packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep);
+static unsigned
+IWbemServices_dissect_element_GetObject_strObjectPath_(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep);
 extern void register_dcom_wmio (void);
 /* GetObject */
-static int
-IWbemServices_dissect_element_GetObject_orpcthis(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep)
+static unsigned
+IWbemServices_dissect_element_GetObject_orpcthis(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep)
 {
 	proto_item *sub_item;
 	proto_tree *sub_tree;
@@ -112,8 +113,8 @@ IWbemServices_dissect_element_GetObject_orpcthis(tvbuff_t *tvb, int offset, pack
 	sub_tree = proto_item_add_subtree(sub_item, ett_IWbemServices_GetObject_orpcthis);
 	return dissect_dcom_this(tvb, offset, pinfo, sub_tree, di, drep);
 }
-static int
-IWbemServices_dissect_element_GetObject_orpcthat_(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep)
+static unsigned
+IWbemServices_dissect_element_GetObject_orpcthat_(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep)
 {
 	proto_item *sub_item;
 	proto_tree *sub_tree;
@@ -123,8 +124,8 @@ IWbemServices_dissect_element_GetObject_orpcthat_(tvbuff_t *tvb, int offset, pac
 	return dissect_dcom_that(tvb, offset, pinfo, sub_tree, di, drep);
 }
 /* ExecMethod */
-static int
-IWbemServices_dissect_element_ExecMethod_orpcthis(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_orpcthis(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep)
 {
 	proto_item *sub_item;
 	proto_tree *sub_tree;
@@ -132,8 +133,8 @@ IWbemServices_dissect_element_ExecMethod_orpcthis(tvbuff_t *tvb, int offset, pac
 	sub_tree = proto_item_add_subtree(sub_item, ett_IWbemServices_ExecMethod_orpcthis);
 	return dissect_dcom_this(tvb, offset, pinfo, sub_tree, di, drep);
 }
-static int
-IWbemServices_dissect_element_ExecMethod_orpcthat_(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_orpcthat_(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep)
 {
 	proto_item *sub_item;
 	proto_tree *sub_tree;
@@ -142,22 +143,22 @@ IWbemServices_dissect_element_ExecMethod_orpcthat_(tvbuff_t *tvb, int offset, pa
 	sub_tree = proto_item_add_subtree(sub_item, ett_IWbemServices_ExecMethod_orpcthat);
 	return dissect_dcom_that(tvb, offset, pinfo, sub_tree, di, drep);
 }
-static int
-IWbemServices_dissect_element_IWbemClassObject_objects(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep)
+static unsigned
+IWbemServices_dissect_element_IWbemClassObject_objects(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep)
 {
 	return dissect_ndr_ucarray_block(tvb, offset, pinfo, tree, di, drep, &IWbemServices_dissect_element_IWbemClassObject_objects_);
 }
-static int
-IWbemServices_dissect_element_IWbemClassObject_objects_(tvbuff_t *tvb, int offset, int length, packet_info *pinfo, proto_tree *tree, dcerpc_info *di, guint8 *drep)
+static unsigned
+IWbemServices_dissect_element_IWbemClassObject_objects_(tvbuff_t *tvb, unsigned offset, unsigned length, packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
 	dissect_dcom_OBJREF(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_IWbemClassObject_objects, NULL);
 	return offset + length;
 }
-static int
-IWbemServices_dissect_element_GetObject_strObjectPath_(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep)
+static unsigned
+IWbemServices_dissect_element_GetObject_strObjectPath_(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep)
 {
 	char *data = NULL;
-	offset = dissect_ndr_cvstring(tvb, offset, pinfo, tree, di, drep, sizeof(guint16), hf_IWbemServices_GetObject_strObjectPath, FALSE, &data);
+	offset = dissect_ndr_cvstring(tvb, offset, pinfo, tree, di, drep, sizeof(uint16_t), hf_IWbemServices_GetObject_strObjectPath, false, &data);
 	if (data){
 		proto_item_append_text(tree, ": %s", data);
 		col_append_fstr(pinfo->cinfo, COL_INFO, " Object=%s", data);
@@ -169,11 +170,11 @@ IWbemServices_dissect_element_GetObject_strObjectPath_(tvbuff_t *tvb, int offset
 /* IDL: struct { */
 /* IDL: } */
 
-int
-IWbemServices_dissect_struct_ORPCTHIS(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+unsigned
+IWbemServices_dissect_struct_ORPCTHIS(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	proto_item *item = NULL;
-	int old_offset;
+	unsigned old_offset;
 
 	old_offset = offset;
 
@@ -192,11 +193,11 @@ IWbemServices_dissect_struct_ORPCTHIS(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL: struct { */
 /* IDL: } */
 
-int
-IWbemServices_dissect_struct_ORPCTHAT(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+unsigned
+IWbemServices_dissect_struct_ORPCTHAT(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	proto_item *item = NULL;
-	int old_offset;
+	unsigned old_offset;
 
 	old_offset = offset;
 
@@ -215,11 +216,11 @@ IWbemServices_dissect_struct_ORPCTHAT(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL: struct { */
 /* IDL: } */
 
-int
-IWbemServices_dissect_struct_IWbemCallResult(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+unsigned
+IWbemServices_dissect_struct_IWbemCallResult(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	proto_item *item = NULL;
-	int old_offset;
+	unsigned old_offset;
 
 	old_offset = offset;
 
@@ -240,20 +241,20 @@ IWbemServices_dissect_struct_IWbemCallResult(tvbuff_t *tvb _U_, int offset _U_, 
 /* IDL: 	[size_is(count)] uint8 objects[*]; */
 /* IDL: } */
 
-static int
-IWbemServices_dissect_element_IWbemClassObject_count(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_IWbemClassObject_count(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_IWbemClassObject_count, 0);
 
 	return offset;
 }
 
-int
-IWbemServices_dissect_struct_IWbemClassObject(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+unsigned
+IWbemServices_dissect_struct_IWbemClassObject(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	proto_item *item = NULL;
 	proto_tree *tree = NULL;
-	int old_offset;
+	unsigned old_offset;
 
 	ALIGN_TO_4_BYTES;
 
@@ -285,36 +286,36 @@ IWbemServices_dissect_struct_IWbemClassObject(tvbuff_t *tvb _U_, int offset _U_,
 /* IDL: 	[size_is(count)] uint8 abData[*]; */
 /* IDL: } */
 
-static int
-IWbemServices_dissect_element_MInterfacePointer_ulCntData(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_MInterfacePointer_ulCntData(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_MInterfacePointer_ulCntData, 0);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_MInterfacePointer_abData(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_MInterfacePointer_abData(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_ucarray(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_MInterfacePointer_abData_);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_MInterfacePointer_abData_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_MInterfacePointer_abData_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint8(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_MInterfacePointer_abData, 0);
 
 	return offset;
 }
 
-int
-IWbemServices_dissect_struct_MInterfacePointer(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+unsigned
+IWbemServices_dissect_struct_MInterfacePointer(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	proto_item *item = NULL;
 	proto_tree *tree = NULL;
-	int old_offset;
+	unsigned old_offset;
 
 	ALIGN_TO_4_BYTES;
 
@@ -346,36 +347,36 @@ IWbemServices_dissect_struct_MInterfacePointer(tvbuff_t *tvb _U_, int offset _U_
 /* IDL: 	[unique(1)] MInterfacePointer *intPtr; */
 /* IDL: } */
 
-static int
-IWbemServices_dissect_element_IWbemContext_u(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_IWbemContext_u(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_IWbemContext_u, 0);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_IWbemContext_intPtr(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_IWbemContext_intPtr(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_embedded_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_IWbemContext_intPtr_, NDR_POINTER_UNIQUE, "Pointer to IntPtr (MInterfacePointer)",hf_IWbemServices_IWbemContext_intPtr);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_IWbemContext_intPtr_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_IWbemContext_intPtr_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = IWbemServices_dissect_struct_MInterfacePointer(tvb,offset,pinfo,tree,di,drep,hf_IWbemServices_IWbemContext_intPtr,0);
 
 	return offset;
 }
 
-int
-IWbemServices_dissect_struct_IWbemContext(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+unsigned
+IWbemServices_dissect_struct_IWbemContext(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	proto_item *item = NULL;
 	proto_tree *tree = NULL;
-	int old_offset;
+	unsigned old_offset;
 
 	ALIGN_TO_5_BYTES;
 
@@ -405,22 +406,22 @@ IWbemServices_dissect_struct_IWbemContext(tvbuff_t *tvb _U_, int offset _U_, pac
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum0_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum0_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum0";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum0_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum0_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum0";
 	return offset;
@@ -430,22 +431,22 @@ IWbemServices_dissect_iwbemservices_opnum0_request(tvbuff_t *tvb _U_, int offset
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum1_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum1_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum1";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum1_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum1_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum1";
 	return offset;
@@ -455,22 +456,22 @@ IWbemServices_dissect_iwbemservices_opnum1_request(tvbuff_t *tvb _U_, int offset
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum2_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum2_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum2";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum2_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum2_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum2";
 	return offset;
@@ -480,22 +481,22 @@ IWbemServices_dissect_iwbemservices_opnum2_request(tvbuff_t *tvb _U_, int offset
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_OpenNamespace_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_OpenNamespace_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_OpenNamespace";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_OpenNamespace_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_OpenNamespace_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_OpenNamespace";
 	return offset;
@@ -505,22 +506,22 @@ IWbemServices_dissect_iwbemservices_OpenNamespace_request(tvbuff_t *tvb _U_, int
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_CancelAsyncCall_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_CancelAsyncCall_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_CancelAsyncCall";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_CancelAsyncCall_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_CancelAsyncCall_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_CancelAsyncCall";
 	return offset;
@@ -530,109 +531,109 @@ IWbemServices_dissect_iwbemservices_CancelAsyncCall_request(tvbuff_t *tvb _U_, i
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_QueryObjectSink_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_QueryObjectSink_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_QueryObjectSink";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_QueryObjectSink_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_QueryObjectSink_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_QueryObjectSink";
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_strObjectPath(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_strObjectPath(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_GetObject_strObjectPath_, NDR_POINTER_UNIQUE, "Pointer to StrObjectPath (uint16)",hf_IWbemServices_GetObject_strObjectPath);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_lFlags(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_lFlags(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_GetObject_lFlags, 0);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_pCtx(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_pCtx(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_GetObject_pCtx_, NDR_POINTER_REF, "Pointer to PCtx (IWbemContext)",hf_IWbemServices_GetObject_pCtx);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_pCtx_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_pCtx_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = IWbemServices_dissect_struct_IWbemContext(tvb,offset,pinfo,tree,di,drep,hf_IWbemServices_GetObject_pCtx,0);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_orpcthat(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_orpcthat(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_GetObject_orpcthat_, NDR_POINTER_REF, "Pointer to Orpcthat (ORPCTHAT)",hf_IWbemServices_GetObject_orpcthat);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_ppObject(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_ppObject(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_GetObject_ppObject_, NDR_POINTER_UNIQUE, "Pointer to PpObject (IWbemClassObject)",hf_IWbemServices_GetObject_ppObject);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_ppObject_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_ppObject_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_embedded_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_GetObject_ppObject__, NDR_POINTER_UNIQUE, "Pointer to PpObject (IWbemClassObject)",hf_IWbemServices_GetObject_ppObject);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_ppObject__(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_ppObject__(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = IWbemServices_dissect_struct_IWbemClassObject(tvb,offset,pinfo,tree,di,drep,hf_IWbemServices_GetObject_ppObject,0);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_ppCallResult(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_ppCallResult(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_GetObject_ppCallResult_, NDR_POINTER_UNIQUE, "Pointer to PpCallResult (IWbemCallResult)",hf_IWbemServices_GetObject_ppCallResult);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_ppCallResult_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_ppCallResult_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_embedded_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_GetObject_ppCallResult__, NDR_POINTER_UNIQUE, "Pointer to PpCallResult (IWbemCallResult)",hf_IWbemServices_GetObject_ppCallResult);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_GetObject_ppCallResult__(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_GetObject_ppCallResult__(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = IWbemServices_dissect_struct_IWbemCallResult(tvb,offset,pinfo,tree,di,drep,hf_IWbemServices_GetObject_ppCallResult,0);
 
@@ -649,10 +650,10 @@ IWbemServices_dissect_element_GetObject_ppCallResult__(tvbuff_t *tvb _U_, int of
 /* IDL: [in] [out] [unique(1)] IWbemCallResult **ppCallResult */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_GetObject_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_GetObject_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="GetObject";
 	offset = IWbemServices_dissect_element_GetObject_orpcthat(tvb, offset, pinfo, tree, di, drep);
@@ -667,13 +668,13 @@ IWbemServices_dissect_GetObject_response(tvbuff_t *tvb _U_, int offset _U_, pack
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_GetObject_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_GetObject_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="GetObject";
 	offset = IWbemServices_dissect_element_GetObject_orpcthis(tvb, offset, pinfo, tree, di, drep);
@@ -695,22 +696,22 @@ IWbemServices_dissect_GetObject_request(tvbuff_t *tvb _U_, int offset _U_, packe
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum7_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum7_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum7";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum7_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum7_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum7";
 	return offset;
@@ -720,22 +721,22 @@ IWbemServices_dissect_iwbemservices_opnum7_request(tvbuff_t *tvb _U_, int offset
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum8_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum8_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum8";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum8_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum8_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum8";
 	return offset;
@@ -745,22 +746,22 @@ IWbemServices_dissect_iwbemservices_opnum8_request(tvbuff_t *tvb _U_, int offset
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum9_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum9_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum9";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum9_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum9_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum9";
 	return offset;
@@ -770,22 +771,22 @@ IWbemServices_dissect_iwbemservices_opnum9_request(tvbuff_t *tvb _U_, int offset
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum10_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum10_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum10";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum10_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum10_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum10";
 	return offset;
@@ -795,22 +796,22 @@ IWbemServices_dissect_iwbemservices_opnum10_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum11_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum11_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum11";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum11_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum11_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum11";
 	return offset;
@@ -820,22 +821,22 @@ IWbemServices_dissect_iwbemservices_opnum11_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum12_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum12_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum12";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum12_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum12_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum12";
 	return offset;
@@ -845,22 +846,22 @@ IWbemServices_dissect_iwbemservices_opnum12_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum13_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum13_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum13";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum13_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum13_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum13";
 	return offset;
@@ -870,22 +871,22 @@ IWbemServices_dissect_iwbemservices_opnum13_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum14_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum14_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum14";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum14_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum14_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum14";
 	return offset;
@@ -895,22 +896,22 @@ IWbemServices_dissect_iwbemservices_opnum14_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum15_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum15_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum15";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum15_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum15_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum15";
 	return offset;
@@ -920,22 +921,22 @@ IWbemServices_dissect_iwbemservices_opnum15_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum16_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum16_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum16";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum16_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum16_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum16";
 	return offset;
@@ -945,22 +946,22 @@ IWbemServices_dissect_iwbemservices_opnum16_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum17_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum17_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum17";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum17_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum17_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum17";
 	return offset;
@@ -970,22 +971,22 @@ IWbemServices_dissect_iwbemservices_opnum17_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum18_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum18_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum18";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum18_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum18_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum18";
 	return offset;
@@ -995,22 +996,22 @@ IWbemServices_dissect_iwbemservices_opnum18_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum19_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum19_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum19";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum19_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum19_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum19";
 	return offset;
@@ -1020,22 +1021,22 @@ IWbemServices_dissect_iwbemservices_opnum19_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum20_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum20_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum20";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum20_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum20_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum20";
 	return offset;
@@ -1045,22 +1046,22 @@ IWbemServices_dissect_iwbemservices_opnum20_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum21_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum21_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum21";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum21_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum21_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum21";
 	return offset;
@@ -1070,22 +1071,22 @@ IWbemServices_dissect_iwbemservices_opnum21_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum22_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum22_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum22";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum22_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum22_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum22";
 	return offset;
@@ -1095,75 +1096,75 @@ IWbemServices_dissect_iwbemservices_opnum22_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_iwbemservices_opnum23_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum23_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="iwbemservices_opnum23";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_iwbemservices_opnum23_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_iwbemservices_opnum23_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="iwbemservices_opnum23";
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_ExecMethod_strObjectPath(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_strObjectPath(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_ExecMethod_strObjectPath_, NDR_POINTER_UNIQUE, "Pointer to StrObjectPath (uint16)",hf_IWbemServices_ExecMethod_strObjectPath);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_ExecMethod_strObjectPath_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_strObjectPath_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	char *data;
 
-	offset = dissect_ndr_cvstring(tvb, offset, pinfo, tree, di, drep, sizeof(guint16), hf_IWbemServices_ExecMethod_strObjectPath, FALSE, &data);
+	offset = dissect_ndr_cvstring(tvb, offset, pinfo, tree, di, drep, sizeof(uint16_t), hf_IWbemServices_ExecMethod_strObjectPath, false, &data);
 	proto_item_append_text(tree, ": %s", data);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_ExecMethod_strMethodName(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_strMethodName(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_ExecMethod_strMethodName_, NDR_POINTER_UNIQUE, "Pointer to StrMethodName (uint16)",hf_IWbemServices_ExecMethod_strMethodName);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_ExecMethod_strMethodName_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_strMethodName_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	char *data;
 
-	offset = dissect_ndr_cvstring(tvb, offset, pinfo, tree, di, drep, sizeof(guint16), hf_IWbemServices_ExecMethod_strMethodName, FALSE, &data);
+	offset = dissect_ndr_cvstring(tvb, offset, pinfo, tree, di, drep, sizeof(uint16_t), hf_IWbemServices_ExecMethod_strMethodName, false, &data);
 	proto_item_append_text(tree, ": %s", data);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_ExecMethod_lFlags(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_lFlags(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_ExecMethod_lFlags, 0);
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_element_ExecMethod_orpcthat(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_element_ExecMethod_orpcthat(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, IWbemServices_dissect_element_ExecMethod_orpcthat_, NDR_POINTER_REF, "Pointer to Orpcthat (ORPCTHAT)",hf_IWbemServices_ExecMethod_orpcthat);
 
@@ -1178,10 +1179,10 @@ IWbemServices_dissect_element_ExecMethod_orpcthat(tvbuff_t *tvb _U_, int offset 
 /* IDL: [out] [ref] ORPCTHAT *orpcthat */
 /* IDL: ); */
 
-static int
-IWbemServices_dissect_ExecMethod_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_ExecMethod_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="ExecMethod";
 	offset = IWbemServices_dissect_element_ExecMethod_orpcthat(tvb, offset, pinfo, tree, di, drep);
@@ -1190,13 +1191,13 @@ IWbemServices_dissect_ExecMethod_response(tvbuff_t *tvb _U_, int offset _U_, pac
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_IWbemServices_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-IWbemServices_dissect_ExecMethod_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+IWbemServices_dissect_ExecMethod_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="ExecMethod";
 	offset = IWbemServices_dissect_element_ExecMethod_orpcthis(tvb, offset, pinfo, tree, di, drep);
@@ -1211,7 +1212,7 @@ IWbemServices_dissect_ExecMethod_request(tvbuff_t *tvb _U_, int offset _U_, pack
 }
 
 
-static dcerpc_sub_dissector IWbemServices_dissectors[] = {
+static const dcerpc_sub_dissector IWbemServices_dissectors[] = {
 	{ 0, "iwbemservices_opnum0",
 	   IWbemServices_dissect_iwbemservices_opnum0_request, IWbemServices_dissect_iwbemservices_opnum0_response},
 	{ 1, "iwbemservices_opnum1",
@@ -1307,11 +1308,11 @@ void proto_register_dcerpc_IWbemServices(void)
 	{ &hf_IWbemServices_opnum,
 	  { "Operation", "IWbemServices.opnum", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},
 	{ &hf_IWbemServices_werror,
-	  { "Windows Error", "IWbemServices.werror", FT_UINT32, BASE_HEX, VALS(WERR_errors), 0, NULL, HFILL }},
+	  { "Windows Error", "IWbemServices.werror", FT_UINT32, BASE_HEX|BASE_EXT_STRING, &WERR_errors_ext, 0, NULL, HFILL }},
 	};
 
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_IWbemServices_GetObject_orpcthis,
 		&ett_IWbemServices_GetObject_orpcthat,
 		&ett_IWbemServices_ExecMethod_orpcthis,

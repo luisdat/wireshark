@@ -20,24 +20,27 @@
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/tap.h>
-#include <epan/rtp_pt.h>
 #include <epan/show_exception.h>
 #include <epan/addr_resolv.h>
 #include <epan/conversation.h>
+#include <epan/proto_data.h>
 #include <epan/strutil.h>
 
 #include <wsutil/strtoi.h>
 #include <wsutil/str_util.h>
+#include <wsutil/array.h>
 
 #include "packet-media-type.h"
 #include "packet-sdp.h"
+#include "packet-http.h"
 
 /* un-comment the following as well as this line in conversation.c, to enable debug printing */
 /* #define DEBUG_CONVERSATION */
 #include "conversation_debug.h"
 
+#include "packet-gsm_osmux.h"
 #include "packet-rtp.h"
-
+#include "packet-rtp_pt.h"
 #include "packet-rtcp.h"
 #include "packet-t38.h"
 #include "packet-msrp.h"
@@ -66,8 +69,9 @@ static int proto_sdp;
 static int proto_sprt;
 
 static const char* UNKNOWN_ENCODING = "Unknown";
-static wmem_tree_t *sdp_transport_reqs = NULL;
-static wmem_tree_t *sdp_transport_rsps = NULL;
+static wmem_tree_t *sdp_transport_reqs;
+static wmem_tree_t *sdp_transport_rsps;
+static wmem_map_t *sdp_rtsp_control_map;
 
 /* preference globals */
 static bool global_sdp_establish_conversation = true;
@@ -212,7 +216,7 @@ static expert_field ei_sdp_invalid_media_format;
 static expert_field ei_sdp_invalid_crypto_tag;
 static expert_field ei_sdp_invalid_crypto_mki_length;
 
-/* patterns used for tvb_ws_mempbrk_pattern_guint8 */
+/* patterns used for tvb_ws_mempbrk_pattern_uint8 */
 static ws_mempbrk_pattern pbrk_digits;
 static ws_mempbrk_pattern pbrk_alpha;
 
@@ -234,10 +238,10 @@ typedef enum {
  * All parameters specific to one media description ("m=").
  */
 typedef struct {
-    gint32 pt[SDP_MAX_RTP_PAYLOAD_TYPES];
-    gint8 pt_count;
+    int32_t pt[SDP_MAX_RTP_PAYLOAD_TYPES];
+    int8_t pt_count;
     rtp_dyn_payload_t *rtp_dyn_payload;
-    gboolean set_rtp;
+    bool set_rtp;
 } transport_media_pt_t;
 
 /*
@@ -246,13 +250,17 @@ typedef struct {
  */
 typedef struct {
     transport_proto_t proto;    /**< Protocol, parsed from "m=" line. */
-    guint32 media_types;        /**< Whether "m=video" or others */
-    gboolean bundled;           /**< "m=" lines are "bundled", that is, all on same port */
-    guint16 media_port;         /**< Port number, parsed from "m=" line. */
-    guint16 control_port;       /**< Port number, parsed from "a=rtcp" or "a=rtcp-mux" line. */
+    uint32_t media_types;        /**< Whether "m=video" or others */
+    bool bundled;           /**< "m=" lines are "bundled", that is, all on same port */
+    uint16_t media_port;         /**< Port number, parsed from "m=" line. */
+    uint16_t control_port;       /**< Port number, parsed from "a=rtcp" or "a=rtcp-mux" line. */
     address conn_addr;          /**< The address from the "c=" line (default
                                      from session level, possibly overridden at
                                      the media level). */
+    char* control_uri;          /**< RTSP media control URI, parsed from "a=control:"
+                                     XXX - allowed to default to session level if not
+                                     overridden if only one media desc, but this is
+                                     not implemented yet. */
     transport_media_pt_t media; /**< Information about payload numbers for this media. */
 
     /*
@@ -261,7 +269,7 @@ typedef struct {
     union {
         struct {
             address ipaddr;
-            guint16  port_number;
+            uint16_t port_number;
         } msrp;                 /**< MSRP transport info, parsed from "a=label:" */
     } media_attr;
 } media_description_t;
@@ -273,23 +281,26 @@ typedef struct {
 typedef struct {
     enum sdp_exchange_type sdp_status;
     char  *encoding_name[SDP_NO_OF_PT];
-    int    sample_rate[SDP_NO_OF_PT];
+    unsigned sample_rate[SDP_NO_OF_PT];
     unsigned channels[SDP_NO_OF_PT];
 
     /* Data parsed from "m=" */
     wmem_array_t *media_descriptions;   /* array of media_description_t */
 
+    wmem_array_t *sdp_setup_info_list;  /* array of sdp_setup_info_t that refer
+                                         * to the same RTP conversation */
+
     /* SRTP related info XXX note currently we only handle one crypto line in the SDP
     * We should probably handle offer/answer and session updates etc(SIP) quite possibly the whole handling of
-    * seting up the RTP conversations should be done by the signaling protocol(s) calling the SDP dissector
+    * setting up the RTP conversations should be done by the signaling protocol(s) calling the SDP dissector
     * and the SDP dissector just provide the relevant data.
     * YES! packet-sdp.c should be about SDP parsing... SDP *state* needs to be maintained by upper
     * protocols, because each one has different rules/semantics.
     */
-    guint  encryption_algorithm;
-    guint  auth_algorithm;
-    guint  mki_len;                /* number of octets used for the MKI in the RTP payload */
-    guint  auth_tag_len;           /* number of octets used for the Auth Tag in the RTP payload */
+    unsigned  encryption_algorithm;
+    unsigned  auth_algorithm;
+    unsigned  mki_len;                /* number of octets used for the MKI in the RTP payload */
+    unsigned  auth_tag_len;           /* number of octets used for the Auth Tag in the RTP payload */
 } transport_info_t;
 
 /*
@@ -347,7 +358,7 @@ static const value_string sdp_exchange_type_vs[] = {
     { 0, NULL }
 };
 
-static void sdp_dump_transport_info(const transport_info_t* info) {
+static void sdp_dump_transport_info(packet_info *pinfo, const transport_info_t* info) {
     int i;
     int count;
     DPRINT2(("transport_info contents:"));
@@ -417,24 +428,24 @@ static dissector_table_t key_mgmt_dissector_table;
  * If this is the last token in the line, tokenlen will not be 0, but next_offset
  * will be -1.
  *
- * The optional param, if TRUE, means no expert error will be issued if no token
- * is found; if FALSE then a expert error will be issued if no token is found.
+ * The optional param, if true, means no expert error will be issued if no token
+ * is found; if false then a expert error will be issued if no token is found.
  *
  * This function expects to be given a tvb of only one line, and does no error
  * checking of its given arguments.
  */
-static inline gint
+static inline int
 find_next_optional_token_in_line(tvbuff_t *tvb, proto_tree *tree,
-                                 gint *offset, gint *next_offset,
-                                 const gboolean optional)
+                                 int *offset, int *next_offset,
+                                 const bool optional)
 {
-    gint tokenlen = 0;
-    gint next_off = -1;
-    gint off      = *offset;
+    int tokenlen = 0;
+    int next_off = -1;
+    int off      = *offset;
 
     if (tvb_offset_exists(tvb, off)) {
         while (tokenlen == 0) {
-            next_off = tvb_find_guint8(tvb, off, -1, ' ');
+            next_off = tvb_find_uint8(tvb, off, -1, ' ');
             if (next_off == -1) {
                 tokenlen = tvb_captured_length_remaining(tvb, off);
                 break; /* Nothing more left */
@@ -460,10 +471,10 @@ find_next_optional_token_in_line(tvbuff_t *tvb, proto_tree *tree,
 }
 
 /* Same as above, but always issues an expert error if a token is not found. */
-static inline gint
-find_next_token_in_line(tvbuff_t *tvb, proto_tree *tree, gint *offset, gint *next_offset)
+static inline int
+find_next_token_in_line(tvbuff_t *tvb, proto_tree *tree, int *offset, int *next_offset)
 {
-    return find_next_optional_token_in_line(tvb, tree, offset, next_offset, FALSE);
+    return find_next_optional_token_in_line(tvb, tree, offset, next_offset, false);
 }
 
 /* Convert the protocol from the "m=" line to something we understand. */
@@ -491,7 +502,7 @@ parse_sdp_media_protocol(const char *media_proto)
         { "UDP/BFCP",           SDP_PROTO_BFCP }, /* RFC 8856 */
     };
 
-    for (guint i = 0; i < G_N_ELEMENTS(protocols); i++) {
+    for (unsigned i = 0; i < G_N_ELEMENTS(protocols); i++) {
         if (!strcmp(protocols[i].proto_name, media_proto)) {
             return protocols[i].proto;
         }
@@ -502,11 +513,11 @@ parse_sdp_media_protocol(const char *media_proto)
 
 /* Parses the parts from "c=" into address structures. */
 static void
-parse_sdp_connection_address(const guint8 *connection_type, const char *connection_address,
+parse_sdp_connection_address(const char *connection_type, const char *connection_address,
         wmem_allocator_t *allocator, address *conn_addr)
 {
     if (strcmp(connection_type, "IP4") == 0) {
-        guint32 ip4_addr;
+        uint32_t ip4_addr;
 
         if (str_to_ip(connection_address, &ip4_addr)) {
             /* connection_address could be converted to a valid ipv4 address*/
@@ -559,13 +570,19 @@ sdp_new_media_description(wmem_array_t *media_descriptions, session_info_t *sess
     return media_desc;
 }
 
+rtp_dyn_payload_t *
+sdp_get_rtsp_media_desc(const char* control_uri)
+{
+    return wmem_map_lookup(sdp_rtsp_control_map, control_uri);
+}
+
 /* Remove information about media descriptions which are unused. These appeared
  * in the "a=rtpmap:" (and maybe even in the payload types part of "m="?), but
  * are not used (port is zero or it was not assigned to RTP dissector). */
 static void
 clean_unused_media_descriptions(wmem_array_t *descs)
 {
-    for (guint i = 0; i < wmem_array_get_count(descs); i++) {
+    for (unsigned i = 0; i < wmem_array_get_count(descs); i++) {
         media_description_t *media_desc = (media_description_t *)wmem_array_index(descs, i);
 
         /* If not assigned to subdissector, clear the unused information. */
@@ -581,7 +598,7 @@ clean_unused_media_descriptions(wmem_array_t *descs)
 static void
 dissect_sdp_owner(tvbuff_t *tvb, proto_item *ti) {
     proto_tree *sdp_owner_tree;
-    gint        offset, next_offset, tokenlen;
+    int         offset, next_offset, tokenlen;
 
     offset = 0;
 
@@ -644,8 +661,8 @@ static void
 dissect_sdp_connection_info(packet_info *pinfo, tvbuff_t *tvb, proto_item* ti, session_info_t *session_info, media_description_t *media_desc)
 {
     proto_tree *sdp_connection_info_tree;
-    gint        offset, next_offset, tokenlen;
-    const guint8 *connection_type, *connection_address;
+    int         offset, next_offset, tokenlen;
+    const char *connection_type, *connection_address;
 
     offset = 0;
 
@@ -670,21 +687,21 @@ dissect_sdp_connection_info(packet_info *pinfo, tvbuff_t *tvb, proto_item* ti, s
     /* Save connection address type */
     proto_tree_add_item_ret_string(sdp_connection_info_tree,
                         hf_connection_info_address_type, tvb, offset, tokenlen,
-                        ENC_UTF_8|ENC_NA, pinfo->pool, &connection_type);
+                        ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&connection_type);
     DPRINT(("parsed connection line type=%s", connection_type));
     offset = next_offset + 1;
 
     /* Find the connection address */
     /* XXX - what if there's a <number of addresses> value? */
-    next_offset = tvb_find_guint8(tvb, offset, -1, '/');
+    next_offset = tvb_find_uint8(tvb, offset, -1, '/');
     if (next_offset == -1) {
         tokenlen = -1; /* end of tvbuff */
         /* Save connection address */
-        connection_address = tvb_get_string_enc(pinfo->pool, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_UTF_8|ENC_NA);
+        connection_address = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_UTF_8|ENC_NA);
     } else {
         tokenlen = next_offset - offset;
         /* Save connection address */
-        connection_address = tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA);
+        connection_address = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA);
     }
 
     DPRINT(("parsed connection line address=%s", connection_address));
@@ -708,7 +725,7 @@ dissect_sdp_connection_info(packet_info *pinfo, tvbuff_t *tvb, proto_item* ti, s
                         tokenlen, ENC_UTF_8);
     if (next_offset != -1) {
         offset = next_offset + 1;
-        next_offset = tvb_find_guint8(tvb, offset, -1, '/');
+        next_offset = tvb_find_uint8(tvb, offset, -1, '/');
         if (next_offset == -1) {
             tokenlen = -1; /* end of tvbuff */
         } else {
@@ -727,17 +744,17 @@ dissect_sdp_connection_info(packet_info *pinfo, tvbuff_t *tvb, proto_item* ti, s
 static void
 dissect_sdp_bandwidth(tvbuff_t *tvb, proto_item *ti) {
     proto_tree *sdp_bandwidth_tree;
-    gint        offset, next_offset, tokenlen;
+    int         offset, next_offset, tokenlen;
     proto_item *item;
-    gboolean    unit_is_kbs = FALSE;
-    gboolean    unit_is_bps = FALSE;
+    bool        unit_is_kbs = false;
+    bool        unit_is_bps = false;
 
     offset = 0;
 
     sdp_bandwidth_tree = proto_item_add_subtree(ti, ett_sdp_bandwidth);
 
     /* find the modifier */
-    next_offset = tvb_find_guint8(tvb, offset, -1, ':');
+    next_offset = tvb_find_uint8(tvb, offset, -1, ':');
 
     if (next_offset == -1)
         return;
@@ -748,13 +765,13 @@ dissect_sdp_bandwidth(tvbuff_t *tvb, proto_item *ti) {
                                tokenlen, ENC_UTF_8);
     if (tvb_strneql(tvb, offset, "CT", 2) == 0) {
         proto_item_append_text(item, " [Conference Total(total bandwidth of all RTP sessions)]");
-        unit_is_kbs = TRUE;
+        unit_is_kbs = true;
     } else if (tvb_strneql(tvb, offset, "AS", 2) == 0) {
         proto_item_append_text(item, " [Application Specific (RTP session bandwidth)]");
-        unit_is_kbs = TRUE;
+        unit_is_kbs = true;
     } else if (tvb_strneql(tvb, offset, "TIAS", 4) == 0) {
         proto_item_append_text(item, " [Transport Independent Application Specific maximum]");
-        unit_is_bps = TRUE;
+        unit_is_bps = true;
     }
 
 
@@ -762,15 +779,15 @@ dissect_sdp_bandwidth(tvbuff_t *tvb, proto_item *ti) {
 
     item = proto_tree_add_item(sdp_bandwidth_tree, hf_bandwidth_value, tvb, offset, -1,
                                ENC_UTF_8);
-    if (unit_is_kbs == TRUE)
+    if (unit_is_kbs == true)
         proto_item_append_text(item, " kb/s");
-    if (unit_is_bps == TRUE)
+    if (unit_is_bps == true)
         proto_item_append_text(item, " b/s");
 }
 
 static void dissect_sdp_time(tvbuff_t *tvb, proto_item* ti) {
     proto_tree *sdp_time_tree;
-    gint        offset, next_offset, tokenlen;
+    int         offset, next_offset, tokenlen;
 
     offset = 0;
 
@@ -791,8 +808,8 @@ static void dissect_sdp_time(tvbuff_t *tvb, proto_item* ti) {
 
 static void dissect_sdp_repeat_time(tvbuff_t *tvb, proto_item* ti) {
     proto_tree *sdp_repeat_time_tree;
-    gint        offset, next_offset, tokenlen;
-    gboolean    optional = FALSE;
+    int         offset, next_offset, tokenlen;
+    bool        optional = false;
 
     offset = 0;
 
@@ -824,7 +841,7 @@ static void dissect_sdp_repeat_time(tvbuff_t *tvb, proto_item* ti) {
             break;
         proto_tree_add_item(sdp_repeat_time_tree, hf_repeat_time_offset,
                             tvb, offset, tokenlen, ENC_UTF_8);
-        optional = TRUE;
+        optional = true;
     } while (next_offset != -1);
 
 }
@@ -832,8 +849,8 @@ static void dissect_sdp_repeat_time(tvbuff_t *tvb, proto_item* ti) {
 static void
 dissect_sdp_timezone(tvbuff_t *tvb, proto_item* ti) {
     proto_tree* sdp_timezone_tree;
-    gint        offset, next_offset, tokenlen;
-    gboolean    optional = FALSE;
+    int         offset, next_offset, tokenlen;
+    bool        optional = false;
 
     offset = 0;
 
@@ -855,7 +872,7 @@ dissect_sdp_timezone(tvbuff_t *tvb, proto_item* ti) {
         proto_tree_add_item(sdp_timezone_tree, hf_timezone_offset, tvb, offset,
                             tokenlen, ENC_UTF_8);
         offset = next_offset + 1;
-        optional = TRUE;
+        optional = true;
     } while (next_offset != -1);
 
 }
@@ -863,13 +880,13 @@ dissect_sdp_timezone(tvbuff_t *tvb, proto_item* ti) {
 
 static void dissect_sdp_encryption_key(tvbuff_t *tvb, proto_item * ti) {
     proto_tree *sdp_encryption_key_tree;
-    gint        offset, next_offset, tokenlen;
+    int         offset, next_offset, tokenlen;
 
     offset = 0;
 
     sdp_encryption_key_tree = proto_item_add_subtree(ti, ett_sdp_encryption_key);
 
-    next_offset = tvb_find_guint8(tvb, offset, -1, ':');
+    next_offset = tvb_find_uint8(tvb, offset, -1, ':');
 
     if (next_offset == -1)
         return;
@@ -885,15 +902,15 @@ static void dissect_sdp_encryption_key(tvbuff_t *tvb, proto_item * ti) {
 }
 
 static void dissect_key_mgmt(tvbuff_t *tvb, packet_info * pinfo, proto_item * ti) {
-    gchar        *data_p      = NULL;
-    const guint8 *prtcl_id    = NULL;
-    gint          len;
+    char         *data_p      = NULL;
+    const uint8_t *prtcl_id    = NULL;
+    int           len;
     tvbuff_t     *keymgmt_tvb;
     int           found_match = 0;
     proto_tree   *key_tree;
-    gint          next_offset;
-    gint          offset      = 0;
-    gint          tokenlen;
+    int           next_offset;
+    int           offset      = 0;
+    int           tokenlen;
 
     key_tree = proto_item_add_subtree(ti, ett_sdp_key_mgmt);
 
@@ -909,15 +926,15 @@ static void dissect_key_mgmt(tvbuff_t *tvb, packet_info * pinfo, proto_item * ti
     if (len < 0)
         return;
 
-    data_p = (gchar *)tvb_get_string_enc(pinfo->pool, tvb, offset, len, ENC_UTF_8|ENC_NA);
+    data_p = (char *)tvb_get_string_enc(pinfo->pool, tvb, offset, len, ENC_UTF_8|ENC_NA);
     keymgmt_tvb = base64_to_tvb(tvb, data_p);
     add_new_data_source(pinfo, keymgmt_tvb, "Key Management Data");
 
     if ((prtcl_id != NULL) && (key_mgmt_dissector_table != NULL)) {
-        found_match = dissector_try_string(key_mgmt_dissector_table,
-                                           (const gchar *)prtcl_id,
+        found_match = dissector_try_string_with_data(key_mgmt_dissector_table,
+                                           (const char *)prtcl_id,
                                            keymgmt_tvb, pinfo,
-                                           key_tree, NULL);
+                                           key_tree, true, NULL);
     }
 
     if (found_match) {
@@ -934,15 +951,15 @@ static void dissect_key_mgmt(tvbuff_t *tvb, packet_info * pinfo, proto_item * ti
 
 static void dissect_sdp_session_attribute(tvbuff_t *tvb, packet_info * pinfo, proto_item * ti) {
     proto_tree   *sdp_session_attribute_tree;
-    gint          offset, next_offset, tokenlen;
-    const guint8 *field_name;
+    int           offset, next_offset, tokenlen;
+    const uint8_t *field_name;
 
     offset = 0;
 
     sdp_session_attribute_tree = proto_item_add_subtree(ti,
                                                         ett_sdp_session_attribute);
 
-    next_offset = tvb_find_guint8(tvb, offset, -1, ':');
+    next_offset = tvb_find_uint8(tvb, offset, -1, ':');
 
     if (next_offset == -1)
         return;
@@ -960,7 +977,7 @@ static void dissect_sdp_session_attribute(tvbuff_t *tvb, packet_info * pinfo, pr
     }
 
     if (strcmp((const char *)field_name, "ipbcp") == 0) {
-        offset = tvb_ws_mempbrk_pattern_guint8(tvb, offset, -1,&pbrk_digits, NULL);
+        offset = tvb_ws_mempbrk_pattern_uint8(tvb, offset, -1,&pbrk_digits, NULL);
 
         if (offset == -1)
             return;
@@ -971,12 +988,12 @@ static void dissect_sdp_session_attribute(tvbuff_t *tvb, packet_info * pinfo, pr
 
         proto_tree_add_item(sdp_session_attribute_tree, hf_ipbcp_version, tvb, offset, tokenlen, ENC_UTF_8);
 
-        offset = tvb_ws_mempbrk_pattern_guint8(tvb, offset, -1,&pbrk_alpha, NULL);
+        offset = tvb_ws_mempbrk_pattern_uint8(tvb, offset, -1,&pbrk_alpha, NULL);
 
         if (offset == -1)
             return;
 
-        tokenlen = tvb_find_line_end(tvb, offset, -1, &next_offset, FALSE);
+        tokenlen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
 
         if (tokenlen == -1)
             return;
@@ -1005,16 +1022,16 @@ static void
 dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
                   media_description_t *media_desc) {
     proto_tree *sdp_media_tree;
-    gint        offset, next_offset, tokenlen, idx;
-    guint8     *media_format;
-    gboolean    optional = FALSE;
+    int         offset, next_offset, tokenlen, idx;
+    uint8_t    *media_format;
+    bool        optional = false;
     proto_item *it;
-    const guint8 *media_type_str;
-    const guint8 *media_port_str;
-    const guint8 *media_proto_str;
+    const char *media_type_str;
+    const char *media_port_str;
+    const char *media_proto_str;
     transport_proto_t transport_proto;
-    guint16     media_port;
-    gboolean    media_port_valid;
+    uint16_t    media_port;
+    bool        media_port_valid;
     proto_item *pi;
 
     offset = 0;
@@ -1028,12 +1045,12 @@ dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
 
     /* Type of media session */
     proto_tree_add_item_ret_string(sdp_media_tree, hf_media_media, tvb, offset, tokenlen,
-                        ENC_UTF_8|ENC_NA, pinfo->pool, &media_type_str);
+                        ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&media_type_str);
     if (media_desc) {
         /* for RTP statistics (supposedly?) */
-        if (strcmp((const char*)media_type_str, "audio") == 0)
+        if (strcmp(media_type_str, "audio") == 0)
             media_desc->media_types |= RTP_MEDIA_AUDIO;
-        else if (strcmp((const char*)media_type_str, "video") == 0)
+        else if (strcmp(media_type_str, "video") == 0)
             media_desc->media_types |= RTP_MEDIA_VIDEO;
         else
             media_desc->media_types |= RTP_MEDIA_OTHER;
@@ -1046,13 +1063,13 @@ dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
     if (tokenlen == 0)
         return;
 
-    next_offset = tvb_find_guint8(tvb, offset, tokenlen, '/');
+    next_offset = tvb_find_uint8(tvb, offset, tokenlen, '/');
 
     if (next_offset != -1) {
         tokenlen = next_offset - offset;
         /* Save port info */
         it = proto_tree_add_item_ret_string(sdp_media_tree, hf_media_port_string, tvb, offset, tokenlen,
-                                   ENC_UTF_8|ENC_NA, pinfo->pool, &media_port_str);
+                                   ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&media_port_str);
         DPRINT(("parsed media_port=%s", media_port_str));
         if (g_ascii_isdigit(media_port_str[0])) {
             proto_item_set_hidden(it);
@@ -1083,7 +1100,7 @@ dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
 
         /* Save port info */
         it = proto_tree_add_item_ret_string(sdp_media_tree, hf_media_port_string, tvb, offset, tokenlen,
-                                   ENC_UTF_8|ENC_NA, pinfo->pool, &media_port_str);
+                                   ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&media_port_str);
         DPRINT(("parsed media_port=%s", media_port_str));
         if (g_ascii_isdigit(media_port_str[0])) {
             proto_item_set_hidden(it);
@@ -1105,7 +1122,7 @@ dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
 
     /* Save port protocol */
     proto_tree_add_item_ret_string(sdp_media_tree, hf_media_proto, tvb, offset, tokenlen,
-                        ENC_UTF_8|ENC_NA, pinfo->pool, &media_proto_str);
+                        ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&media_proto_str);
     DPRINT(("parsed media_proto=%s", media_proto_str));
     /* Detect protocol for registering with other dissectors like RTP. */
     transport_proto = parse_sdp_media_protocol(media_proto_str);
@@ -1126,11 +1143,11 @@ dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
             media_format = tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA);
             if (g_ascii_isdigit(media_format[0])) {
                 proto_tree_add_string(sdp_media_tree, hf_media_format, tvb, offset,
-                                      tokenlen, val_to_str_ext((guint32)strtoul((char*)media_format, NULL, 10), &rtp_payload_type_vals_ext, "%u"));
+                                      tokenlen, val_to_str_ext(pinfo->pool, (uint32_t)strtoul((char*)media_format, NULL, 10), &rtp_payload_type_vals_ext, "%u"));
 
                 if (media_desc) {
                     idx = media_desc->media.pt_count;
-                    media_desc->media.pt[idx] = (gint32)strtol((char*)media_format, NULL, 10);
+                    media_desc->media.pt[idx] = (int32_t)strtol((char*)media_format, NULL, 10);
                     DPRINT(("parsed media codec pt=%d", media_desc->media.pt[idx]));
                     if (idx < (SDP_MAX_RTP_PAYLOAD_TYPES-1))
                         media_desc->media.pt_count++;
@@ -1143,7 +1160,7 @@ dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
             proto_tree_add_item(sdp_media_tree, hf_media_format, tvb, offset,
                                 tokenlen, ENC_UTF_8);
         }
-        optional = TRUE;
+        optional = true;
     } while (next_offset != -1);
 
     /* XXX Dissect traffic to "Port" as "Protocol"
@@ -1156,10 +1173,10 @@ dissect_sdp_media(tvbuff_t *tvb, packet_info* pinfo, proto_item *ti,
 }
 
 static tvbuff_t *
-ascii_bytes_to_tvb(tvbuff_t *tvb, packet_info *pinfo, gchar *msg)
+ascii_bytes_to_tvb(tvbuff_t *tvb, packet_info *pinfo, char *msg)
 {
     size_t nbytes;
-    guint8 *buf = convert_string_to_hex(msg, &nbytes);
+    uint8_t *buf = convert_string_to_hex(msg, &nbytes);
     if (buf) {
         tvbuff_t *bytes_tvb;
 
@@ -1214,11 +1231,11 @@ static const value_string h264_packetization_mode_vals[] =
  * TODO: Make this a more generic routine to dissect fmtp parameters depending on media types
  */
 static void
-decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset, gint tokenlen, guint8 pt, transport_info_t *transport_info, rtp_dyn_payload_t *rtp_dyn_payload) {
-  gint                 next_offset;
-  gint                 end_offset;
-  guint8              *field_name;
-  gchar               *format_specific_parameter;
+decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset, int tokenlen, uint8_t pt, transport_info_t *transport_info, rtp_dyn_payload_t *rtp_dyn_payload) {
+  int                  next_offset;
+  int                  end_offset;
+  char                *field_name;
+  char                *format_specific_parameter;
   proto_item          *item;
   tvbuff_t * volatile  data_tvb;
 
@@ -1230,12 +1247,12 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
     tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_ASCII));
 #endif
 
-    /* Look for an '=' within this string - RFC 4855 suggets that parameters
+    /* Look for an '=' within this string - RFC 4855 suggests that parameters
        be "parameter=value" pairs. We'll store them in a hash map from the
        parameter name to the value, as well as dissect some of them here,
        depending on the media type.
      */
-    next_offset = tvb_find_guint8(tvb, offset, tokenlen, '=');
+    next_offset = tvb_find_uint8(tvb, offset, tokenlen, '=');
     if (next_offset == -1)
     {
         /* Some media types, like telephone-event and RED, don't have the
@@ -1253,7 +1270,7 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
     } else {
         /* Find the name of the parameter */
         tokenlen = next_offset - offset;
-        field_name = tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8);
+        field_name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8);
 
 #if 0
         proto_tree_add_debug(tree, tvb, offset, tokenlen, "Debug; MIMEtype '%s'Parameter name: '%s'", mime_type, field_name); */
@@ -1265,7 +1282,7 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
 
     /* Get the value */
     tokenlen = end_offset - offset;
-    format_specific_parameter = tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8);
+    format_specific_parameter = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8);
 
     if (rtp_dyn_payload) {
         rtp_dyn_payload_add_fmtp(rtp_dyn_payload, pt,
@@ -1277,7 +1294,7 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
     if ((mime_type != NULL) && (g_ascii_strcasecmp(mime_type, "MP4V-ES") == 0)) {
         if (strcmp((char*)field_name, "profile-level-id") == 0) {
             item = proto_tree_add_uint(tree, hf_sdp_fmtp_mpeg4_profile_level_id, tvb, offset, tokenlen,
-                                       (guint32)strtol((char*)format_specific_parameter, NULL, 10));
+                                       (uint32_t)strtol((char*)format_specific_parameter, NULL, 10));
             proto_item_set_generated(item);
         } else if (strcmp((char*)field_name, "config") == 0) {
             data_tvb = ascii_bytes_to_tvb(tvb, pinfo, format_specific_parameter);
@@ -1292,11 +1309,11 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
         ((mime_type != NULL) && (g_ascii_strcasecmp(mime_type, "H263-1998") == 0))) {
         if (strcmp((char*)field_name, "profile") == 0) {
             item = proto_tree_add_uint(tree, hf_sdp_fmtp_h263_profile, tvb, offset, tokenlen,
-                                       (guint32)strtol((char*)format_specific_parameter, NULL, 10));
+                                       (uint32_t)strtol((char*)format_specific_parameter, NULL, 10));
             proto_item_set_generated(item);
         } else if (strcmp((char*)field_name, "level") == 0) {
             item = proto_tree_add_uint(tree, hf_sdp_fmtp_h263_level, tvb, offset, tokenlen,
-                                       (guint32)strtol((char*)format_specific_parameter, NULL, 10));
+                                       (uint32_t)strtol((char*)format_specific_parameter, NULL, 10));
             proto_item_set_generated(item);
         }
     }
@@ -1334,7 +1351,7 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
             }
         } else if (strcmp(field_name, "packetization-mode") == 0) {
             item = proto_tree_add_uint(tree, hf_sdp_h264_packetization_mode, tvb, offset, tokenlen,
-                                       (guint32)strtol((char*)format_specific_parameter, NULL, 10));
+                                       (uint32_t)strtol((char*)format_specific_parameter, NULL, 10));
             proto_item_set_generated(item);
         } else if (strcmp(field_name, "sprop-parameter-sets") == 0) {
             /* The value of the parameter is the
@@ -1346,17 +1363,17 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
                takes place.  A comma is used to separate any
                pair of parameter sets in the list.
             */
-            const guint8 *data_p = NULL;
-            gint   comma_offset;
+            const char *data_p = NULL;
+            int    comma_offset;
 
-            comma_offset = tvb_find_guint8(tvb, offset, -1, ',');
+            comma_offset = tvb_find_uint8(tvb, offset, -1, ',');
             if (comma_offset != -1) {
                 tokenlen = comma_offset - offset;
             } else {
                 tokenlen = end_offset - offset;
             }
 
-            proto_tree_add_item_ret_string(tree, hf_sdp_nal_unit_1_string, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA, pinfo->pool, &data_p);
+            proto_tree_add_item_ret_string(tree, hf_sdp_nal_unit_1_string, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&data_p);
 
             data_tvb = base64_to_tvb(tvb, data_p);
             add_new_data_source(pinfo, data_tvb, "h264 prop-parameter-sets");
@@ -1373,7 +1390,7 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
                     /* Second NAL unit */
                     offset   = comma_offset +1;
                     tokenlen = end_offset - offset;
-                    proto_tree_add_item_ret_string(tree, hf_sdp_nal_unit_2_string, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA, pinfo->pool, &data_p);
+                    proto_tree_add_item_ret_string(tree, hf_sdp_nal_unit_2_string, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&data_p);
                     data_tvb = base64_to_tvb(tvb, data_p);
                     add_new_data_source(pinfo, data_tvb, "h264 prop-parameter-sets 2");
                     dissect_h264_nal_unit(data_tvb, pinfo, tree);
@@ -1428,8 +1445,8 @@ dissect_sdp_media_attribute_candidate(proto_tree *tree, packet_info *pinfo, tvbu
      * Example: "candidate:0 1 UDP 2122252543 10.9.0.2 60299 typ host"
      */
     proto_item   *pi;
-    gint          next_offset, tokenlen;
-    const guint8 *candidate_type;
+    int           next_offset, tokenlen;
+    const char   *candidate_type;
 
     /* foundation: between 1 and 32 "ICE chars" (ALPHA / DIGIT / "+" / "/") */
     tokenlen = find_next_token_in_line(tvb, tree, &offset, &next_offset);
@@ -1490,7 +1507,7 @@ dissect_sdp_media_attribute_candidate(proto_tree *tree, packet_info *pinfo, tvbu
         return;
     pi = proto_tree_add_item_ret_string(tree, hf_ice_candidate_type,
             tvb, offset, tokenlen, ENC_ASCII|ENC_NA,
-            pinfo->pool, &candidate_type);
+            pinfo->pool, (const uint8_t**)&candidate_type);
     if ((candidate_type = try_str_to_str(candidate_type, ice_candidate_types))) {
         proto_item_append_text(pi, " (%s)", candidate_type);
     }
@@ -1515,6 +1532,7 @@ typedef struct {
 #define SDP_ED137_FID           10
 #define SDP_RTCP                11
 #define SDP_RTCP_MUX            12
+#define SDP_CONTROL             13
 
 static const sdp_names_t sdp_media_attribute_names[] = {
     { "Unknown-name"},    /* 0 Pad so that the real headers start at index 1 */
@@ -1530,11 +1548,12 @@ static const sdp_names_t sdp_media_attribute_names[] = {
     { "fid" },            /* 10 */
     { "rtcp" },           /* 11 */
     { "rtcp-mux" },       /* 12 */
+    { "control" },        /* 13 */
 };
 
-static gint find_sdp_media_attribute_names(tvbuff_t *tvb, int offset, guint len)
+static int find_sdp_media_attribute_names(tvbuff_t *tvb, int offset, unsigned len)
 {
-    guint i;
+    unsigned i;
 
     for (i = 1; i < array_length(sdp_media_attribute_names); i++) {
         if ((len == strlen(sdp_media_attribute_names[i].name)) &&
@@ -1566,10 +1585,10 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
                                    transport_info_t *transport_info, session_info_t *session_info,
                                    media_description_t *media_desc, int offset)
 {
-    gint          next_offset, tokenlen;
-    const guint8 *payload_type;
+    int           next_offset, tokenlen;
+    const char   *payload_type;
     proto_item   *pi;
-    guint8        pt;
+    uint8_t       pt;
 
     /* RFC 8866 6.6 rtpmap
        Syntax:
@@ -1581,7 +1600,7 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
           encoding-params = channels
           channels = integer
      */
-    next_offset = tvb_find_guint8(tvb, offset, -1, ' ');
+    next_offset = tvb_find_uint8(tvb, offset, -1, ' ');
 
     if (next_offset == -1)
         return;
@@ -1589,11 +1608,12 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
     tokenlen = next_offset - offset;
 
     proto_tree_add_item_ret_string(tree, hf_media_format, tvb,
-                                   offset, tokenlen, ENC_UTF_8|ENC_NA, pinfo->pool, &payload_type);
+                                   offset, tokenlen, ENC_UTF_8|ENC_NA, pinfo->pool,
+                                   (const uint8_t**)&payload_type);
 
     offset = next_offset + 1;
 
-    next_offset = tvb_find_guint8(tvb, offset, -1, '/');
+    next_offset = tvb_find_uint8(tvb, offset, -1, '/');
 
     if (next_offset == -1) {
         return;
@@ -1613,7 +1633,7 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
 
     offset = next_offset + 1;
 
-    next_offset = tvb_find_guint8(tvb, offset, length - offset, '/');
+    next_offset = tvb_find_uint8(tvb, offset, length - offset, '/');
     if (next_offset == -1) {
         next_offset = length;
     }
@@ -1622,7 +1642,7 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
     pi = proto_tree_add_item(tree, hf_media_sample_rate, tvb,
                              offset, tokenlen, ENC_UTF_8);
     transport_info->sample_rate[pt] = 0;
-    if (!ws_strtou32(tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA),
+    if (!ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA),
                      NULL, &transport_info->sample_rate[pt])) {
         expert_add_info(pinfo, pi, &ei_sdp_invalid_sample_rate);
     } else if (!strcmp(transport_info->encoding_name[pt], "G722")) {
@@ -1638,7 +1658,7 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
             tokenlen = length - offset;
             pi = proto_tree_add_item(tree, hf_media_channels, tvb,
                                      offset, tokenlen, ENC_UTF_8);
-            if (!ws_strtou32(tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA),
+            if (!ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA),
                              NULL, &transport_info->channels[pt])) {
                 expert_add_info(pinfo, pi, &ei_sdp_invalid_channels);
             }
@@ -1686,19 +1706,19 @@ dissect_sdp_media_attribute_fmtp(proto_tree *tree, packet_info *pinfo, tvbuff_t 
                                  transport_info_t *transport_info, session_info_t *session_info,
                                  media_description_t *media_desc, int offset)
 {
-    gint          next_offset, tokenlen;
+    int           next_offset, tokenlen;
     proto_item   *fmtp_item, *media_format_item;
-    const guint8 *payload_type;
-    const guint8 *media_format_str;
+    const char   *payload_type;
+    const char   *media_format_str;
     proto_tree   *fmtp_tree;
-    gboolean      has_more_pars      = TRUE;
+    bool          has_more_pars      = true;
     /* Reading the Format parameter(fmtp) */
-    guint8        media_format;
+    uint8_t       media_format;
 
     /* Skip leading space, if any */
     offset = tvb_skip_wsp(tvb, offset, tvb_captured_length_remaining(tvb, offset));
     /* Media format extends to the next space */
-    next_offset = tvb_find_guint8(tvb, offset, -1, ' ');
+    next_offset = tvb_find_uint8(tvb, offset, -1, ' ');
 
     if (next_offset == -1)
         return;
@@ -1706,7 +1726,8 @@ dissect_sdp_media_attribute_fmtp(proto_tree *tree, packet_info *pinfo, tvbuff_t 
     tokenlen = next_offset - offset;
 
     media_format_item = proto_tree_add_item_ret_string(tree, hf_media_format, tvb,
-                                                       offset, tokenlen, ENC_UTF_8 | ENC_NA, pinfo->pool, &payload_type);
+                                                       offset, tokenlen, ENC_UTF_8 | ENC_NA, pinfo->pool,
+                                                       (const uint8_t**)&payload_type);
 
     /* Append encoding name to format if known */
     payload_type = wmem_ascii_strdown(pinfo->pool, payload_type, -1);
@@ -1732,12 +1753,12 @@ dissect_sdp_media_attribute_fmtp(proto_tree *tree, packet_info *pinfo, tvbuff_t 
     /* Move offset past the payload type */
     offset = next_offset + 1;
 
-    while (has_more_pars == TRUE) {
-        next_offset = tvb_find_guint8(tvb, offset, -1, ';');
+    while (has_more_pars == true) {
+        next_offset = tvb_find_uint8(tvb, offset, -1, ';');
         offset = tvb_skip_wsp(tvb, offset, tvb_captured_length_remaining(tvb, offset));
 
         if (next_offset == -1) {
-            has_more_pars = FALSE;
+            has_more_pars = false;
             next_offset= tvb_captured_length(tvb);
         }
 
@@ -1763,7 +1784,7 @@ dissect_sdp_media_attribute_fmtp(proto_tree *tree, packet_info *pinfo, tvbuff_t 
 }
 
 static void
-dissect_sdp_media_attribute_path(packet_info *pinfo, tvbuff_t *tvb, guint8 *attribute_value,
+dissect_sdp_media_attribute_path(packet_info *pinfo, tvbuff_t *tvb, char *attribute_value,
                                  media_description_t *media_desc, const char *msrp_res, int offset)
 {
     /* msrp attributes that contain address needed for conversation */
@@ -1783,7 +1804,7 @@ dissect_sdp_media_attribute_path(packet_info *pinfo, tvbuff_t *tvb, guint8 *attr
      */
 
     /* Check for "msrp://" */
-    if (strncmp((char*)attribute_value, msrp_res, strlen(msrp_res)) == 0 && msrp_handle &&
+    if (strncmp(attribute_value, msrp_res, strlen(msrp_res)) == 0 && msrp_handle &&
         media_desc && media_desc->proto == SDP_PROTO_MSRP) {
         int address_offset, port_offset, port_end_offset;
 
@@ -1791,22 +1812,22 @@ dissect_sdp_media_attribute_path(packet_info *pinfo, tvbuff_t *tvb, guint8 *attr
         address_offset = offset + (int)strlen(msrp_res);
 
         /* Port is after next ':' */
-        port_offset = tvb_find_guint8(tvb, address_offset, -1, ':');
-        /* Check if port is present if not skipp */
+        port_offset = tvb_find_uint8(tvb, address_offset, -1, ':');
+        /* Check if port is present, if not skip */
         if (port_offset!= -1) {
             /* Port ends with '/' */
-            port_end_offset = tvb_find_guint8(tvb, port_offset, -1, '/');
+            port_end_offset = tvb_find_uint8(tvb, port_offset, -1, '/');
             if (port_end_offset == -1) {
                 /* No "/" look for the ";" */
-                port_end_offset = tvb_find_guint8(tvb, port_offset, -1, ';');
+                port_end_offset = tvb_find_uint8(tvb, port_offset, -1, ';');
             }
             /* Attempt to convert address */
-            guint32 msrp_ipaddr;
-            guint16 msrp_port_number;
+            uint32_t msrp_ipaddr;
+            uint16_t msrp_port_number;
             if (str_to_ip((char*)tvb_get_string_enc(pinfo->pool, tvb, address_offset, port_offset-address_offset, ENC_UTF_8|ENC_NA),
                           &msrp_ipaddr)) {
                 /* Get port number */
-                if (ws_strtou16(tvb_get_string_enc(pinfo->pool, tvb, port_offset + 1,
+                if (ws_strtou16((char*)tvb_get_string_enc(pinfo->pool, tvb, port_offset + 1,
                                                    port_end_offset - port_offset - 1, ENC_UTF_8|ENC_NA), NULL, &msrp_port_number)) {
                     /* Port and address are usable, store for later use in
                      * complete_descriptions (overrides the "c=" address). */
@@ -1820,7 +1841,7 @@ dissect_sdp_media_attribute_path(packet_info *pinfo, tvbuff_t *tvb, guint8 *attr
 
 static void
 dissect_sdp_media_attribute_h248_item(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
-                                      guint8 *attribute_value, const char *msrp_res)
+                                      char *attribute_value, const char *msrp_res)
 {
     const char   *h324ext_h223lcparm = "h324ext/h223lcparm";
     tvbuff_t     *h245_tvb;
@@ -1848,7 +1869,7 @@ dissect_sdp_media_attribute_h248_item(proto_tree *tree, packet_info *pinfo, tvbu
            points are different, one is over tpkt and the other is raw
         */
         if (h245_tvb) {
-            asn1_ctx_init(&actx, ASN1_ENC_PER, TRUE, pinfo);
+            asn1_ctx_init(&actx, ASN1_ENC_PER, true, pinfo);
             dissect_h245_H223LogicalChannelParameters(h245_tvb, 0, &actx,
                                                       tree,hf_SDPh223LogicalChannelParameters);
         }
@@ -1881,14 +1902,14 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
     *   where WSP, ALPHA, DIGIT, and VCHAR are defined in [RFC4234].
     *
     */
-    gint          next_offset, tokenlen;
+    int           next_offset, tokenlen;
     proto_tree   *parameter_item;
     proto_item   *parameter_tree;
-    guint32       crypto_tag;
-    gboolean      crypto_tag_valid;
-    gboolean      has_more_pars      = TRUE;
-    guint8        master_key_length  = 0, master_salt_length = 0;
-    gboolean      mki_len_valid;
+    uint32_t      crypto_tag;
+    bool          crypto_tag_valid;
+    bool          has_more_pars      = true;
+    uint8_t       master_key_length  = 0, master_salt_length = 0;
+    bool          mki_len_valid;
     proto_item   *pi;
 
     /* We are at the first colon */
@@ -1896,7 +1917,7 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
     tokenlen = find_next_token_in_line(tvb, tree, &offset, &next_offset);
     if (tokenlen == 0)
         return;
-    crypto_tag_valid = ws_strtou32(tvb_get_string_enc(pinfo->pool, tvb, offset,
+    crypto_tag_valid = ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset,
                                                       tokenlen, ENC_UTF_8|ENC_NA), NULL, &crypto_tag);
     pi = proto_tree_add_uint(tree, hf_sdp_crypto_tag, tvb, offset, tokenlen, crypto_tag);
     if (!crypto_tag_valid)
@@ -1943,18 +1964,18 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
     offset = next_offset + 1;
 
     /* key-params */
-    while (has_more_pars == TRUE) {
+    while (has_more_pars == true) {
         int       param_end_offset;
         tvbuff_t *key_salt_tvb;
-        gchar    *data_p = NULL;
+        char     *data_p = NULL;
 
-        param_end_offset = tvb_find_guint8(tvb, offset, -1, ';');
+        param_end_offset = tvb_find_uint8(tvb, offset, -1, ';');
         if (param_end_offset == -1) {
-            has_more_pars = FALSE;
+            has_more_pars = false;
             param_end_offset = tvb_captured_length(tvb);
         }
         /* key-method or key-method-ext */
-        next_offset = tvb_find_guint8(tvb, offset, -1, ':');
+        next_offset = tvb_find_uint8(tvb, offset, -1, ':');
         if (next_offset == -1) {
             expert_add_info(pinfo, parameter_item, &ei_sdp_invalid_key_param);
             break;
@@ -1966,13 +1987,13 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
             /* XXX only for SRTP? */
             /* srtp-key-info       = key-salt ["|" lifetime] ["|" mki] */
             offset      = next_offset +1;
-            next_offset = tvb_find_guint8(tvb, offset, -1, '|');
+            next_offset = tvb_find_uint8(tvb, offset, -1, '|');
             if (next_offset == -1) {
                 tokenlen = param_end_offset - offset;
             } else {
                 tokenlen = next_offset - offset;
             }
-            data_p = tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA);
+            data_p = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA);
             key_salt_tvb = base64_to_tvb(tvb, data_p);
             add_new_data_source(pinfo, key_salt_tvb, "Key_Salt_tvb");
             if (master_key_length != 0) {
@@ -1988,7 +2009,7 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
             /*  ["|" lifetime] ["|" mki] are optional */
             if (next_offset != -1) {
                 offset = next_offset + 1;
-                next_offset = tvb_find_guint8(tvb, offset, -1, '|');
+                next_offset = tvb_find_uint8(tvb, offset, -1, '|');
                 if (next_offset == -1) {
                     if (next_offset < param_end_offset){
                         next_offset = param_end_offset;
@@ -2008,7 +2029,7 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
                 if (offset>param_end_offset) {
                     next_offset = -1;
                 } else {
-                    next_offset = tvb_find_guint8(tvb, offset, -1, ':');
+                    next_offset = tvb_find_uint8(tvb, offset, -1, ':');
                 }
                 if (next_offset != -1) {
                     tokenlen    = next_offset - offset;
@@ -2021,7 +2042,7 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
 
                     /* This will not work if more than one parameter */
                     /* number of octets used for the MKI in the RTP payload */
-                    mki_len_valid = ws_strtou32(tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen,
+                    mki_len_valid = ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen,
                                                                    ENC_UTF_8|ENC_NA), NULL, &transport_info->mki_len);
                     pi = proto_tree_add_item(parameter_tree, hf_sdp_crypto_mki_length,
                                              tvb, offset, tokenlen, ENC_UTF_8);
@@ -2044,9 +2065,9 @@ static void dissect_sdp_media_attribute(tvbuff_t *tvb, packet_info *pinfo, proto
 {
     proto_tree   *sdp_media_attribute_tree;
     proto_item   *pi;
-    gint          offset, tokenlen, colon_offset;
-    guint8       *attribute_value;
-    gint          sdp_media_attrbute_code;
+    int           offset, tokenlen, colon_offset;
+    char         *attribute_value;
+    int           sdp_media_attrbute_code;
     const char   *msrp_res           = "msrp://";
 
     offset = 0;
@@ -2055,7 +2076,7 @@ static void dissect_sdp_media_attribute(tvbuff_t *tvb, packet_info *pinfo, proto
     sdp_media_attribute_tree = proto_item_add_subtree(ti,
                                                       ett_sdp_media_attribute);
     /* Find end of field */
-    colon_offset = tvb_find_guint8(tvb, offset, -1, ':');
+    colon_offset = tvb_find_uint8(tvb, offset, -1, ':');
 
     if (colon_offset == -1)
       return;
@@ -2075,7 +2096,7 @@ static void dissect_sdp_media_attribute(tvbuff_t *tvb, packet_info *pinfo, proto
 
     /* Value is the remainder of the line */
     if (tvb_captured_length_remaining(tvb, offset) > 0)
-        attribute_value = tvb_get_string_enc(pinfo->pool, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_UTF_8|ENC_NA);
+        attribute_value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_UTF_8|ENC_NA);
     else
     {
         expert_add_info(pinfo, pi, &ei_sdp_invalid_line_fields);
@@ -2141,6 +2162,13 @@ static void dissect_sdp_media_attribute(tvbuff_t *tvb, packet_info *pinfo, proto
             proto_tree_add_item(sdp_media_attribute_tree, hf_media_attribute_value,
                                 tvb, offset, -1, ENC_UTF_8);
             break;
+        case SDP_CONTROL:
+            if (media_desc) {
+                media_desc->control_uri = wmem_ascii_strdown(wmem_file_scope(), attribute_value, -1);
+            }
+            proto_tree_add_item(sdp_media_attribute_tree, hf_media_attribute_value,
+                                tvb, offset, -1, ENC_UTF_8);
+            break;
         default:
             /* No special treatment for values of this attribute type, just add as one item. */
             proto_tree_add_item(sdp_media_attribute_tree, hf_media_attribute_value,
@@ -2190,17 +2218,17 @@ call_sdp_subdissector(tvbuff_t *tvb, packet_info *pinfo, int hf, proto_tree* ti,
  * answer_offset is non-zero.
  */
 static void
-complete_descriptions(transport_info_t *transport_info, guint answer_offset)
+complete_descriptions(transport_info_t *transport_info, unsigned answer_offset)
 {
-    guint media_count = wmem_array_get_count(transport_info->media_descriptions);
+    unsigned media_count = wmem_array_get_count(transport_info->media_descriptions);
     media_description_t *media_descs = (media_description_t *)wmem_array_get_raw(transport_info->media_descriptions);
     media_description_t *bundle_media_desc = NULL;
 
     DPRINT(("complete_descriptions called with answer_offset=%d media_count=%d",
             answer_offset, media_count));
 
-    for (guint i = answer_offset; i < media_count && !bundle_media_desc; i++) {
-        for (guint j = i+1; j < media_count && !bundle_media_desc; j++) {
+    for (unsigned i = answer_offset; i < media_count && !bundle_media_desc; i++) {
+        for (unsigned j = i+1; j < media_count && !bundle_media_desc; j++) {
             if (media_descs[i].media_port == media_descs[j].media_port)
                 bundle_media_desc = &media_descs[i];
         }
@@ -2209,16 +2237,16 @@ complete_descriptions(transport_info_t *transport_info, guint answer_offset)
     if (bundle_media_desc) {
         /* We have "bundling" of media, so now combine all the media bit masks
            and merge the rtp_dyn_payload so that the first media description
-           has all the data for every media desciption. */
-        for (guint i = answer_offset; i < media_count; i++) {
+           has all the data for every media description. */
+        for (unsigned i = answer_offset; i < media_count; i++) {
             media_description_t *media_desc = &media_descs[i];
 
             if (bundle_media_desc->media_port == media_desc->media_port) {
-                media_desc->bundled = TRUE;
+                media_desc->bundled = true;
 
                 if (media_desc != bundle_media_desc) {
                     bundle_media_desc->media_types |= media_desc->media_types;
-                    for (guint pt = 0; pt < 128; ++pt) {
+                    for (unsigned pt = 0; pt < 128; ++pt) {
                         const char * encoding_name;
                         int sample_rate;
                         unsigned channels;
@@ -2233,7 +2261,7 @@ complete_descriptions(transport_info_t *transport_info, guint answer_offset)
         }
     }
 
-    for (guint i = answer_offset; i < media_count; i++) {
+    for (unsigned i = answer_offset; i < media_count; i++) {
         media_description_t *media_desc = &media_descs[i];
 
         if (media_desc->control_port == 0)
@@ -2269,7 +2297,7 @@ complete_descriptions(transport_info_t *transport_info, guint answer_offset)
 /**
  * Given is a structure containing the parsed result from the SDP (including
  * protocol type (RTP, SRTP, T38, etc.), media info (payload type, etc.) and
- * connection info (address, port). Register the addresss+port such that the
+ * connection info (address, port). Register the address+port such that the
  * protocol will be invoked for this tuple with the media information.
  *
  * For use with SDP using the Offer/Answer model (such as SIP with INVITE and
@@ -2285,6 +2313,7 @@ static void
 apply_sdp_transport(packet_info *pinfo, transport_info_t *transport_info, int request_frame, sdp_setup_info_t *setup_info)
 {
     int establish_frame = 0;
+    wmem_array_t *setup_info_list;
 
     struct srtp_info *srtp_info = NULL;
 
@@ -2300,12 +2329,39 @@ apply_sdp_transport(packet_info *pinfo, transport_info_t *transport_info, int re
         establish_frame = request_frame;
     }
 
-    gboolean bundled_media_set = FALSE;
+    bool bundled_media_set = false;
 
-    for (guint i = 0; i < wmem_array_get_count(transport_info->media_descriptions); i++) {
+    for (unsigned i = 0; i < wmem_array_get_count(transport_info->media_descriptions); i++) {
         media_description_t *media_desc =
             (media_description_t *)wmem_array_index(transport_info->media_descriptions, i);
-        guint32 current_rtp_port = 0;
+        uint32_t current_rtp_port = 0;
+
+        /* "a=control:" is an attribute unique to RTSP. RTSP uses the same
+         * transport types as RTP but the port is either zero or merely a
+         * suggestion, actual information is obtained by later RTSP methods.
+         * We do not apply the descriptor here but save it, keyed by the
+         * URI. (RTSP clients can also receive media description via other
+         * protocols like HTTP, so there is no guarantee that the RTSP protocol
+         * is the caller here.)
+         */
+        if (media_desc->control_uri) {
+            /* Ensure that we do not attempt to set it below. */
+            media_desc->media.set_rtp = true;
+            if (setup_info && setup_info->base_uri) {
+                char *absolute_uri = determine_http_location_target(wmem_file_scope(), setup_info->base_uri, media_desc->control_uri);
+                if (absolute_uri) {
+                    media_desc->control_uri = absolute_uri;
+                }
+            }
+            ascii_strdown_inplace(media_desc->control_uri);
+            /* If there are multiple entries with the same URI they SHOULD be
+             * the same, so we could free the existing entry.  */
+            rtp_dyn_payload_t *old_rtp_pt;
+            old_rtp_pt = wmem_map_insert(sdp_rtsp_control_map, media_desc->control_uri, media_desc->media.rtp_dyn_payload);
+            if (old_rtp_pt) {
+                rtp_dyn_payload_free(old_rtp_pt);
+            }
+        }
 
         /* Add (s)rtp and (s)rtcp conversation, if available (overrides t38 if conversation already set) */
         if ((media_desc->media_port != 0) &&
@@ -2315,12 +2371,12 @@ apply_sdp_transport(packet_info *pinfo, transport_info_t *transport_info, int re
             (media_desc->conn_addr.type == AT_IPv4 ||
              media_desc->conn_addr.type == AT_IPv6)) {
 
-            media_desc->media.set_rtp = TRUE;
+            media_desc->media.set_rtp = true;
 
             if (media_desc->bundled) {
                 if (bundled_media_set)
                     continue;
-                bundled_media_set = TRUE;
+                bundled_media_set = true;
             }
 
             if (media_desc->proto == SDP_PROTO_SRTP) {
@@ -2342,7 +2398,13 @@ apply_sdp_transport(packet_info *pinfo, transport_info_t *transport_info, int re
                                  media_desc->media.rtp_dyn_payload, srtp_info,
                                  setup_info);
                 DENDENT();
-            } else if (!setup_info || !setup_info->is_osmux) {
+            } else if (setup_info && setup_info->is_osmux) {
+                DPRINT(("calling osmux_add_address, channel=%d, media_port=%d",
+                        i, media_desc->media_port));
+                DINDENT();
+                osmux_add_address(pinfo, &media_desc->conn_addr, media_desc->media_port, 0, establish_frame);
+                DENDENT();
+            } else {
                 DPRINT(("calling rtp_add_address, channel=%d, media_port=%d",
                         i, media_desc->media_port));
                 DINDENT();
@@ -2407,19 +2469,33 @@ apply_sdp_transport(packet_info *pinfo, transport_info_t *transport_info, int re
             bfcp_add_address(pinfo, PT_UDP, &media_desc->conn_addr, media_desc->media_port, "SDP", establish_frame);
         }
     } /* end of loop through all media descriptions. */
+
+    /* Copy the list of setup info of calls with the same RTP information
+     * to the transport info, so that we have it when dissecting the
+     * request as well.
+     * XXX - There can be multiple media descriptions, and while this SDP's
+     * setup info is on all of them, some other SDP might have some but not
+     * all media descriptions, so the arrays of setup infos might be different.
+     * They should be consolidated as with rtp_add_setup_info_if_no_duplicate()
+     * in packet-rtp.c, or stored with each media descriptor.
+     */
+    setup_info_list = p_get_proto_data(pinfo->pool, pinfo, proto_sdp, 0);
+    if (setup_info_list) {
+        transport_info->sdp_setup_info_list = setup_info_list;
+    }
 }
 
 void
 setup_sdp_transport(tvbuff_t *tvb, packet_info *pinfo, enum sdp_exchange_type exchange_type,
-    int request_frame, const gboolean delay, sdp_setup_info_t *setup_info)
+    int request_frame, const bool delay, sdp_setup_info_t *setup_info)
 {
-    gint        offset = 0, next_offset, n;
+    int         offset = 0, next_offset, n;
     int         linelen;
-    gboolean    in_media_description = FALSE;
-    guchar      type, delim;
+    bool        in_media_description = false;
+    unsigned char      type, delim;
     const int   tokenoffset = 2;
     int         hf     = -1;
-    gint        start_transport_info_count = 0;
+    int         start_transport_info_count = 0;
     transport_info_t* transport_info = NULL;
     media_description_t *media_desc = NULL;
     session_info_t session_info;
@@ -2491,8 +2567,8 @@ setup_sdp_transport(tvbuff_t *tvb, packet_info *pinfo, enum sdp_exchange_type ex
         if (linelen < 2)
             break;
 
-        type  = tvb_get_guint8(tvb, offset);
-        delim = tvb_get_guint8(tvb, offset + 1);
+        type  = tvb_get_uint8(tvb, offset);
+        delim = tvb_get_uint8(tvb, offset + 1);
         if (delim != '=') {
             offset = next_offset;
             continue;
@@ -2512,7 +2588,7 @@ setup_sdp_transport(tvbuff_t *tvb, packet_info *pinfo, enum sdp_exchange_type ex
                  * there are too many). */
                 media_desc = sdp_new_media_description(transport_info->media_descriptions, &session_info);
 
-                in_media_description = TRUE;
+                in_media_description = true;
                 DPRINT(("in media description, media descriptions count=%d",
                         wmem_array_get_count(transport_info->media_descriptions)));
                 break;
@@ -2594,10 +2670,10 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
     proto_tree *sdp_tree;
     proto_item *ti, *sub_ti;
-    gint        offset = 0, next_offset, n;
+    int         offset = 0, next_offset, n;
     int         linelen;
-    gboolean    in_media_description;
-    guchar      type, delim;
+    bool        in_media_description;
+    unsigned char      type, delim;
     int         datalen, tokenoffset, hf = -1;
     char       *string;
     sdp_data_t  sdp_data;
@@ -2624,13 +2700,11 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
     memset(&sdp_data, 0, sizeof(sdp_data));
 
-    if (!pinfo->fd->visited) {
-        transport_info = (transport_info_t*)wmem_tree_lookup32( sdp_transport_reqs, pinfo->num );
+    transport_info = (transport_info_t*)wmem_tree_lookup32( sdp_transport_reqs, pinfo->num );
 
-        if (transport_info == NULL) {
-          /* Can't find it in the requests, make sure it's not a response */
-          transport_info = (transport_info_t*)wmem_tree_lookup32( sdp_transport_rsps, pinfo->num );
-        }
+    if (transport_info == NULL) {
+      /* Can't find it in the requests, make sure it's not a response */
+      transport_info = (transport_info_t*)wmem_tree_lookup32( sdp_transport_rsps, pinfo->num );
     }
 
     if (transport_info == NULL) {
@@ -2674,7 +2748,7 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     /*
      * Show the SDP message a line at a time.
      */
-    in_media_description = FALSE;
+    in_media_description = false;
 
     /* Initialize the session description before parsing the media level. */
     memset(&session_info, 0, sizeof(session_info_t));
@@ -2692,8 +2766,8 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
         if (linelen < 2)
             break;
 
-        type  = tvb_get_guint8(tvb, offset);
-        delim = tvb_get_guint8(tvb, offset + 1);
+        type  = tvb_get_uint8(tvb, offset);
+        delim = tvb_get_uint8(tvb, offset + 1);
         if (delim != '=') {
             proto_item *ti2 = proto_tree_add_item(sdp_tree, hf_invalid, tvb, offset, linelen, ENC_UTF_8);
             expert_add_info(pinfo, ti2, &ei_sdp_invalid_line_equal);
@@ -2751,7 +2825,7 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
                  * setup_sdp_transport. */
                 media_desc = sdp_new_media_description(local_transport_info.media_descriptions, &session_info);
 
-                in_media_description = TRUE;
+                in_media_description = true;
                 break;
             case 'k':
                 hf = hf_encryption_key;
@@ -2839,10 +2913,15 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
          * Use 0 as request_frame since there is no (known) request.
          */
         apply_sdp_transport(pinfo, transport_info, 0, setup_info);
+        /* Save the list of setup info of calls with the same RTP information
+         * to the packet in file scope, since transport_info is local and
+         * we won't do this on future passes.
+         */
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_sdp, 0, transport_info->sdp_setup_info_list);
     }
 
     /* Add information to the VoIP Calls dialog. */
-    for (guint i = 0; i < wmem_array_get_count(local_transport_info.media_descriptions); i++)
+    for (unsigned i = 0; i < wmem_array_get_count(local_transport_info.media_descriptions); i++)
     {
         media_desc = (media_description_t *)wmem_array_index(local_transport_info.media_descriptions, i);
 
@@ -2856,7 +2935,7 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
                         j, media_desc->media. pt[j]));
                 /* if the payload type is dynamic (96 to 127), check the hash table to add the desc in the SDP summary */
                 if ((media_desc->media.pt[j] >= 96) && (media_desc->media.pt[j] <= 127)) {
-                    const gchar *payload_type_str = rtp_dyn_payload_get_name(
+                    const char *payload_type_str = rtp_dyn_payload_get_name(
                         media_desc->media.rtp_dyn_payload,
                         media_desc->media.pt[j]);
                     if (payload_type_str) {
@@ -2874,7 +2953,7 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
                     if (strlen(sdp_pi->summary_str))
                         (void) g_strlcat(sdp_pi->summary_str, " ", 50);
                     (void) g_strlcat(sdp_pi->summary_str,
-                              val_to_str_ext(media_desc->media.pt[j], &rtp_payload_type_short_vals_ext, "%u"),
+                              val_to_str_ext(pinfo->pool, media_desc->media.pt[j], &rtp_payload_type_short_vals_ext, "%u"),
                               50);
                 }
             }
@@ -2901,30 +2980,28 @@ dissect_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
         proto_tree_add_item(sdp_tree, hf_sdp_data, tvb, offset, datalen, ENC_NA);
     }
     /* Add Trace info */
-    conversation_t *sdp_conv;
-    wmem_array_t *sdp_conv_info_list;
-    sdp_conv = find_conversation_pinfo(pinfo, 0);
-    if (sdp_conv) {
-        guint i;
+    wmem_array_t *setup_info_list = transport_info->sdp_setup_info_list;
+    if (!setup_info_list) {
+        setup_info_list = (wmem_array_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_sdp, 0);
+    }
+    if (setup_info_list) {
+        unsigned i;
         sdp_setup_info_t *stored_setup_info;
         proto_item *item;
-        sdp_conv_info_list = (wmem_array_t *)conversation_get_proto_data(sdp_conv, proto_sdp);
-        if(sdp_conv_info_list){
-            for (i = 0; i < wmem_array_get_count(sdp_conv_info_list); i++) {
-                stored_setup_info = (sdp_setup_info_t *)wmem_array_index(sdp_conv_info_list, i);
-                if (stored_setup_info->hf_id) {
-                    if (stored_setup_info->hf_type == SDP_TRACE_ID_HF_TYPE_STR) {
-                        item = proto_tree_add_string(sdp_tree, stored_setup_info->hf_id, tvb, 0, 0, stored_setup_info->trace_id.str);
-                        proto_item_set_generated(item);
-                        if (stored_setup_info->add_hidden == TRUE) {
-                            proto_item_set_hidden(item);
-                        }
-                    } else if (stored_setup_info->hf_type == SDP_TRACE_ID_HF_TYPE_GUINT32) {
-                        item = proto_tree_add_uint(sdp_tree, stored_setup_info->hf_id, tvb, 0, 0, stored_setup_info->trace_id.num);
-                        proto_item_set_generated(item);
-                        if (stored_setup_info->add_hidden == TRUE) {
-                            proto_item_set_hidden(item);
-                        }
+        for (i = 0; i < wmem_array_get_count(setup_info_list); i++) {
+            stored_setup_info = (sdp_setup_info_t *)wmem_array_index(setup_info_list, i);
+            if (stored_setup_info->hf_id) {
+                if (stored_setup_info->hf_type == SDP_TRACE_ID_HF_TYPE_STR) {
+                    item = proto_tree_add_string(sdp_tree, stored_setup_info->hf_id, tvb, 0, 0, stored_setup_info->trace_id.str);
+                    proto_item_set_generated(item);
+                    if (stored_setup_info->add_hidden == true) {
+                        proto_item_set_hidden(item);
+                    }
+                } else if (stored_setup_info->hf_type == SDP_TRACE_ID_HF_TYPE_UINT32) {
+                    item = proto_tree_add_uint(sdp_tree, stored_setup_info->hf_id, tvb, 0, 0, stored_setup_info->trace_id.num);
+                    proto_item_set_generated(item);
+                    if (stored_setup_info->add_hidden == true) {
+                        proto_item_set_hidden(item);
                     }
                 }
             }
@@ -2968,7 +3045,7 @@ proto_register_sdp(void)
         { &hf_email,
             { "E-mail Address (e)", "sdp.email",
               FT_STRING, BASE_NONE, NULL, 0x0,
-              "E-mail Address", HFILL }
+              NULL, HFILL }
         },
         { &hf_phone,
             { "Phone Number (p)", "sdp.phone",
@@ -3017,13 +3094,13 @@ proto_register_sdp(void)
         },
         { &hf_media,
             { "Media Description, name and address (m)",
-              "sdp.media", FT_STRING, BASE_NONE, NULL,
-              0x0, NULL, HFILL }
+              "sdp.media", FT_STRING, BASE_NONE, NULL, 0x0,
+              NULL, HFILL }
         },
         { &hf_media_title,
             { "Media Title (i)", "sdp.media_title",
               FT_STRING, BASE_NONE, NULL, 0x0,
-              "Media Title", HFILL }
+              NULL, HFILL }
         },
         { &hf_unknown,
             { "Unknown", "sdp.unknown",
@@ -3162,7 +3239,7 @@ proto_register_sdp(void)
         },
         { &hf_media_port,
             { "Media Port", "sdp.media.port",
-              FT_UINT16, BASE_DEC, NULL, 0x0,
+              FT_UINT16, BASE_PT_UDP, NULL, 0x0,
               NULL, HFILL }
         },
         { &hf_media_port_string,
@@ -3341,7 +3418,7 @@ proto_register_sdp(void)
       { &hf_sdp_key_and_salt, { "Key and Salt", "sdp.key_and_salt", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_sdp_data, { "Data", "sdp.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
     };
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_sdp,
         &ett_sdp_owner,
         &ett_sdp_connection_info,
@@ -3462,6 +3539,7 @@ proto_register_sdp(void)
 
     sdp_transport_reqs = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
     sdp_transport_rsps = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
+    sdp_rtsp_control_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), wmem_str_hash, g_str_equal);
 
     /*
      * Register the dissector by name, so other dissectors can

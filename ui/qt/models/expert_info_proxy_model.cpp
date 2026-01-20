@@ -55,14 +55,17 @@ bool ExpertInfoProxyModel::lessThan(const QModelIndex &source_left, const QModel
             checkPacketNumber = true;
             break;
         case colProxyGroup:
-            if (left_item->group() != right_item->group()) {
-                return (left_item->group() < right_item->group());
-            }
+            compare_ret = QString::compare(val_to_str_const(left_item->group(), expert_group_vals, "Unknown"),
+                                            val_to_str_const(right_item->group(), expert_group_vals, "Unknown"));
+            if (compare_ret < 0)
+                return true;
+            if (compare_ret > 0)
+                return false;
 
             checkPacketNumber = true;
             break;
         case colProxyProtocol:
-            compare_ret = left_item->protocol().compare(right_item->protocol());
+            compare_ret =  QString::compare(left_item->protocol(), right_item->protocol(), Qt::CaseInsensitive);
             if (compare_ret < 0)
                 return true;
             if (compare_ret > 0)
@@ -271,6 +274,9 @@ void ExpertInfoProxyModel::setSeverityMode(enum SeverityMode mode)
 
 void ExpertInfoProxyModel::setSeverityFilter(int severity, bool hide)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     if (hide)
     {
         hidden_severities_ << severity;
@@ -280,11 +286,23 @@ void ExpertInfoProxyModel::setSeverityFilter(int severity, bool hide)
         hidden_severities_.removeOne(severity);
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 void ExpertInfoProxyModel::setSummaryFilter(const QString &filter)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     textFilter_ = filter;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }

@@ -32,7 +32,7 @@
 #define DFILTER_TOKEN_ID_OFFSET	1
 
 /* Holds the singular instance of our Lemon parser object */
-static void*	ParserObj = NULL;
+static void*	ParserObj;
 
 df_loc_t loc_empty = {-1, 0};
 
@@ -102,7 +102,7 @@ dfilter_resolve_unparsed(const char *name, GPtrArray *deprecated)
 
 /* Initialize the dfilter module */
 void
-dfilter_init(void)
+dfilter_init(const char* app_env_var_prefix)
 {
 	if (ParserObj) {
 		ws_message("I expected ParserObj to be NULL\n");
@@ -116,7 +116,7 @@ dfilter_init(void)
 	sttype_init();
 
 	df_func_init();
-	dfilter_macro_init();
+	dfilter_macro_init(app_env_var_prefix);
 	dfilter_plugins_init();
 }
 
@@ -235,7 +235,7 @@ dfsyntax_free(dfsyntax_t *dfs)
 		stnode_free(dfs->lval);
 
 	if (dfs->quoted_string)
-		g_string_free(dfs->quoted_string, true);
+		g_string_free(dfs->quoted_string, TRUE);
 
 
 
@@ -275,6 +275,10 @@ dfwork_free(dfwork_t *dfw)
 
 	if (dfw->loaded_raw_fields) {
 		g_hash_table_destroy(dfw->loaded_raw_fields);
+	}
+
+	if (dfw->loaded_vs_fields) {
+		g_hash_table_destroy(dfw->loaded_vs_fields);
 	}
 
 	if (dfw->interesting_fields) {
@@ -501,6 +505,7 @@ dfwork_build(dfwork_t *dfw)
 	dfw->raw_references = NULL;
 	dfilter->warnings = dfw->warnings;
 	dfw->warnings = NULL;
+	dfilter->ret_type = dfw->ret_type;
 
 	if (dfw->flags & DF_SAVE_TREE) {
 		ws_assert(tree_str);
@@ -646,6 +651,43 @@ dfilter_compile_full(const char *text, dfilter_t **dfp,
 	return true;
 }
 
+struct stnode *dfilter_get_syntax_tree(const char *text)
+{
+	dfsyntax_t *dfs = NULL;
+	dfwork_t *dfw = NULL;
+
+	dfs = dfsyntax_new(DF_EXPAND_MACROS);
+
+	char *expanded_text = dfilter_macro_apply(text, NULL);
+	if (!expanded_text) {
+		dfsyntax_free(dfs);
+		return NULL;
+	}
+
+	bool ok = dfwork_parse(expanded_text, dfs);
+	if (!ok || !dfs->st_root) {
+		g_free(expanded_text);
+		dfsyntax_free(dfs);
+		return NULL;
+	}
+
+	dfw = dfwork_new(expanded_text, dfs->flags);
+	dfw->st_root = dfs->st_root;
+	dfs->st_root = NULL;
+	g_free(expanded_text);
+	dfsyntax_free(dfs);
+
+	if (!dfw_semcheck(dfw)) {
+		dfwork_free(dfw);
+		return NULL;
+	}
+
+	stnode_t *st_root = dfw->st_root;
+	dfw->st_root = NULL;
+	dfwork_free(dfw);
+
+	return st_root;
+}
 
 bool
 dfilter_apply(dfilter_t *df, proto_tree *tree)
@@ -672,6 +714,14 @@ dfilter_prime_proto_tree(const dfilter_t *df, proto_tree *tree)
 
 	for (i = 0; i < df->num_interesting_fields; i++) {
 		proto_tree_prime_with_hfid(tree, df->interesting_fields[i]);
+	}
+}
+
+void
+dfilter_prime_proto_tree_print(const dfilter_t *df, proto_tree *tree)
+{
+	for (int i = 0; i < df->num_interesting_fields; i++) {
+		proto_tree_prime_with_hfid_print(tree, df->interesting_fields[i]);
 	}
 }
 
@@ -767,6 +817,12 @@ dfilter_syntax_tree(dfilter_t *df)
 	return df->syntax_tree_str;
 }
 
+ftenum_t
+dfilter_get_return_type(dfilter_t *df)
+{
+	return df->ret_type;
+}
+
 void
 dfilter_log_full(const char *domain, enum ws_log_level level,
 			const char *file, long line, const char *func,
@@ -790,7 +846,7 @@ dfilter_log_full(const char *domain, enum ws_log_level level,
 }
 
 static int
-compare_ref_layer(gconstpointer _a, gconstpointer _b)
+compare_ref_layer(const void *_a, const void *_b)
 {
 	const df_reference_t *a = *(const df_reference_t **)_a;
 	const df_reference_t *b = *(const df_reference_t **)_b;

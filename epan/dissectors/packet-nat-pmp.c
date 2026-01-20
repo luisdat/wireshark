@@ -28,6 +28,8 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 void proto_register_nat_pmp(void);
 void proto_reg_handoff_nat_pmp(void);
@@ -76,7 +78,7 @@ static int hf_external_port_mapped;
 static int hf_rpmlis;
 static int hf_pmlis;
 
-static gint ett_nat_pmp;
+static int ett_nat_pmp;
 
 /* Port Control Protocol */
 static int hf_pcp_version;
@@ -134,10 +136,10 @@ static int hf_option_portset_reserved;
 static int hf_option_portset_parity;
 static int hf_option_padding;
 
-static gint ett_pcp;
-static gint ett_opcode;
-static gint ett_option;
-static gint ett_suboption;
+static int ett_pcp;
+static int ett_opcode;
+static int ett_option;
+static int ett_suboption;
 
 static expert_field ei_natpmp_opcode_unknown;
 static expert_field ei_pcp_opcode_unknown;
@@ -221,8 +223,9 @@ dissect_nat_pmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 {
   proto_tree *nat_pmp_tree;
   proto_item *ti, *op_ti;
-  gint start_offset, offset = 0;
-  guint8 opcode;
+  int start_offset, offset = 0;
+  uint32_t opcode;
+  char* str_opcode;
 
   col_set_str (pinfo->cinfo, COL_PROTOCOL, "NAT-PMP");
   col_clear (pinfo->cinfo, COL_INFO);
@@ -234,12 +237,12 @@ dissect_nat_pmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
   proto_tree_add_item(nat_pmp_tree, hf_version, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
-  opcode = tvb_get_guint8 (tvb, offset);
-  proto_item_append_text (ti, ", %s", val_to_str(opcode, opcode_vals, "Unknown opcode: %d"));
-  op_ti = proto_tree_add_item(nat_pmp_tree, hf_opcode, tvb, offset, 1, ENC_BIG_ENDIAN);
+  op_ti = proto_tree_add_item_ret_uint(nat_pmp_tree, hf_opcode, tvb, offset, 1, ENC_BIG_ENDIAN, &opcode);
+  str_opcode = val_to_str(pinfo->pool, opcode, opcode_vals, "Unknown opcode: %d");
+  proto_item_append_text(ti, ", %s", str_opcode);
   offset++;
 
-  col_add_str (pinfo->cinfo, COL_INFO, val_to_str(opcode, opcode_vals, "Unknown opcode: %d"));
+  col_add_str (pinfo->cinfo, COL_INFO, str_opcode);
 
   switch(opcode) {
 
@@ -301,17 +304,17 @@ dissect_nat_pmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 }
 
 static int
-dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint8 version)
+dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint8_t version)
 {
   proto_tree *pcp_tree, *opcode_tree = NULL, *option_tree, *option_sub_tree;
   proto_item *ti, *opcode_ti, *option_ti, *suboption_ti;
-  gint offset = 0, start_offset, start_opcode_offset, start_option_offset;
-  guint8 ropcode, option;
-  guint16 option_length;
-  gint mod_option_length = 0;
-  gint option_padding_length = 0;
-  gboolean is_response;
-  const gchar* op_str;
+  int offset = 0, start_offset, start_opcode_offset, start_option_offset;
+  uint32_t ropcode, option;
+  uint16_t option_length;
+  int mod_option_length = 0;
+  int option_padding_length = 0;
+  bool is_response;
+  const char* op_str;
 
   if(version == 1)
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "PCP v1");
@@ -326,9 +329,9 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
   proto_tree_add_item(pcp_tree, hf_pcp_version, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
-  ropcode = tvb_get_guint8(tvb, offset);
+  ropcode = tvb_get_uint8(tvb, offset);
   is_response = ropcode & 0x80;
-  op_str = val_to_str(ropcode, pcp_ropcode_vals, "Unknown opcode: %d");
+  op_str = val_to_str(pinfo->pool, ropcode, pcp_ropcode_vals, "Unknown opcode: %d");
   proto_item_append_text(ti, ", %s", op_str);
   proto_tree_add_item(pcp_tree, hf_pcp_r, tvb, offset, 1, ENC_BIG_ENDIAN);
   opcode_ti = proto_tree_add_item(pcp_tree, hf_pcp_opcode, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -337,7 +340,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 
   if(!is_response)
   {
-    ti = proto_tree_add_boolean(pcp_tree, hf_request, tvb, offset-1, 1, is_response == FALSE);
+    ti = proto_tree_add_boolean(pcp_tree, hf_request, tvb, offset-1, 1, is_response == false);
     proto_item_set_hidden(ti);
 
     proto_tree_add_item(pcp_tree, hf_reserved2, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -351,7 +354,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
   }
   else
   {
-    ti = proto_tree_add_boolean(pcp_tree, hf_response, tvb, offset-1, 1, is_response == TRUE);
+    ti = proto_tree_add_boolean(pcp_tree, hf_response, tvb, offset-1, 1, is_response == true);
     proto_item_set_hidden(ti);
 
     proto_tree_add_item(pcp_tree, hf_reserved1, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -376,10 +379,10 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
     opcode_tree = proto_tree_add_subtree(pcp_tree, tvb, offset, 0, ett_opcode, &opcode_ti, op_str);
   }
 
-  guint32 protocol = 0;
-  guint32 internal_port = 0;
-  guint32 external_port = 0;
-  guint32 port_set_size = 0;
+  uint32_t protocol = 0;
+  uint32_t internal_port = 0;
+  uint32_t external_port = 0;
+  uint32_t port_set_size = 0;
 
   switch(ropcode) {
 
@@ -471,9 +474,8 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
       suboption_ti = proto_tree_add_item(option_tree, hf_option, tvb, offset, 1, ENC_NA);
       option_sub_tree = proto_item_add_subtree(suboption_ti, ett_suboption);
 
-      proto_tree_add_item(option_sub_tree, hf_option_code, tvb, offset, 1, ENC_BIG_ENDIAN);
-      option = tvb_get_guint8(tvb, offset);
-      proto_item_append_text(suboption_ti, ": %s", val_to_str(option, pcp_option_vals, "Unknown option: %d"));
+      proto_tree_add_item_ret_uint(option_sub_tree, hf_option_code, tvb, offset, 1, ENC_BIG_ENDIAN, &option);
+      proto_item_append_text(suboption_ti, ": %s", val_to_str(pinfo->pool, option, pcp_option_vals, "Unknown option: %d"));
       offset++;
 
       proto_tree_add_item(option_sub_tree, hf_option_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -516,7 +518,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 
         case OPT_PREFIX64:
           {
-            guint32 p64_length;
+            uint32_t p64_length;
             int optoffset = 0;
 
             if(option_length-optoffset < 2)
@@ -546,7 +548,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 
             if(option_length-optoffset > 0)
             {
-              guint32 ipv4_prefix_count;
+              uint32_t ipv4_prefix_count;
 
               if(option_length-optoffset < 2)
               {
@@ -610,7 +612,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 
   proto_item_set_len(opcode_ti, offset-start_opcode_offset);
 
-  gboolean is_map_opcode = (ropcode == MAP_REQUEST || ropcode == MAP_RESPONSE);
+  bool is_map_opcode = (ropcode == MAP_REQUEST || ropcode == MAP_RESPONSE);
   if (is_map_opcode && port_set_size != 0) {
     col_add_fstr(
       pinfo->cinfo,
@@ -621,7 +623,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
       internal_port + port_set_size,
       external_port,
       external_port + port_set_size,
-      val_to_str(protocol, pcp_protocol_vals, "Unknown Protocol %d")
+      val_to_str(pinfo->pool, protocol, pcp_protocol_vals, "Unknown Protocol %d")
     );
   } else if (is_map_opcode) {
     col_add_fstr(
@@ -631,7 +633,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
       op_str,
       internal_port,
       external_port,
-      val_to_str(protocol, pcp_protocol_vals, "Unknown Protocol %d")
+      val_to_str(pinfo->pool, protocol, pcp_protocol_vals, "Unknown Protocol %d")
     );
   }
 
@@ -641,7 +643,7 @@ dissect_portcontrol_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 static int
 dissect_portcontrol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    guint8 version = tvb_get_guint8(tvb, 0);
+    uint8_t version = tvb_get_uint8(tvb, 0);
 
     switch(version)
     {
@@ -859,14 +861,14 @@ void proto_register_nat_pmp(void)
         NULL, 0x0, NULL, HFILL } },
     };
 
-  static gint *pcp_ett[] = {
+  static int *pcp_ett[] = {
         &ett_pcp,
         &ett_opcode,
         &ett_option,
         &ett_suboption
     };
 
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_nat_pmp,
   };
 

@@ -28,13 +28,14 @@
 #include <epan/tap.h>
 #include <wsutil/wslog.h>
 
-static gboolean tapping_is_active=FALSE;
+static bool tapping_is_active=false;
+static dfilter_t *main_filter;
 
 typedef struct _tap_dissector_t {
 	struct _tap_dissector_t *next;
 	char *name;
 } tap_dissector_t;
-static tap_dissector_t *tap_dissector_list=NULL;
+static tap_dissector_t *tap_dissector_list;
 
 /*
  * This is the list of free and used packets queued for a tap.
@@ -67,7 +68,7 @@ static tap_dissector_t *tap_dissector_list=NULL;
  */
 typedef struct _tap_packet_t {
 	int tap_id;
-	guint32 flags;
+	uint32_t flags;
 	packet_info *pinfo;
 	const void *tap_specific_data;
 } tap_packet_t;
@@ -76,15 +77,15 @@ typedef struct _tap_packet_t {
 
 #define TAP_PACKET_QUEUE_LEN 5000
 static tap_packet_t tap_packet_array[TAP_PACKET_QUEUE_LEN];
-static guint tap_packet_index;
+static unsigned tap_packet_index;
 
 typedef struct _tap_listener_t {
 	struct _tap_listener_t *next;
 	int tap_id;
-	gboolean needs_redraw;
-	gboolean failed;
-	guint flags;
-	gchar *fstring;
+	bool needs_redraw;
+	bool failed;
+	unsigned flags;
+	char *fstring;
 	dfilter_t *code;
 	void *tapdata;
 	tap_reset_cb reset;
@@ -93,9 +94,9 @@ typedef struct _tap_listener_t {
 	tap_finish_cb finish;
 } tap_listener_t;
 
-static tap_listener_t *tap_listener_queue=NULL;
+static tap_listener_t *tap_listener_queue;
 
-static GSList *tap_plugins = NULL;
+static GSList *tap_plugins;
 
 #ifdef HAVE_PLUGINS
 void
@@ -107,12 +108,12 @@ tap_register_plugin(const tap_plugin *plug)
 void
 tap_register_plugin(const tap_plugin *plug _U_)
 {
-	ws_warning("tap_register_plugin: built without support for binary plugins");
+	ws_warning("built without support for binary plugins");
 }
 #endif /* HAVE_PLUGINS */
 
 static void
-call_plugin_register_tap_listener(gpointer data, gpointer user_data _U_)
+call_plugin_register_tap_listener(void *data, void *user_data _U_)
 {
 	tap_plugin *plug = (tap_plugin *)data;
 
@@ -135,9 +136,12 @@ register_all_tap_listeners(tap_reg_t const *tap_reg_listeners)
          * by stats_tree_stat.c and need to registered before that */
 	g_slist_foreach(tap_plugins, call_plugin_register_tap_listener, NULL);
 
-	/* Register all builtin listeners. */
-	for (tap_reg_t const *t = &tap_reg_listeners[0]; t->cb_func != NULL; t++) {
-		t->cb_func();
+	if (tap_reg_listeners != NULL)
+	{
+		/* Register all builtin listeners. */
+		for (tap_reg_t const *t = &tap_reg_listeners[0]; t->cb_func != NULL; t++) {
+			t->cb_func();
+		}
 	}
 }
 
@@ -263,6 +267,8 @@ tap_queue_packet(int tap_id, packet_info *pinfo, const void *tap_specific_data)
 void tap_build_interesting (epan_dissect_t *edt)
 {
 	tap_listener_t *tl;
+	bool need_protocols = false;
+	bool need_main_filter = false;
 
 	/* nothing to do, just return */
 	if(!tap_listener_queue){
@@ -275,6 +281,18 @@ void tap_build_interesting (epan_dissect_t *edt)
 		if(tl->code){
 			epan_dissect_prime_with_dfilter(edt, tl->code);
 		}
+		if(tl->flags & TL_REQUIRES_PROTOCOLS){
+			need_protocols = true;
+		}
+		if(tl->flags & TL_LIMIT_TO_DISPLAY_FILTER){
+			need_main_filter = true;
+		}
+	}
+	if (need_main_filter && main_filter) {
+		epan_dissect_prime_with_dfilter(edt, main_filter);
+	}
+	if (need_protocols) {
+		epan_dissect_fake_protocols(edt, false);
 	}
 }
 
@@ -290,7 +308,7 @@ tap_queue_init(epan_dissect_t *edt)
 		return;
 	}
 
-	tapping_is_active=TRUE;
+	tapping_is_active=true;
 
 	tap_packet_index=0;
 
@@ -305,14 +323,14 @@ tap_push_tapped_queue(epan_dissect_t *edt)
 {
 	tap_packet_t *tp;
 	tap_listener_t *tl;
-	guint i;
+	unsigned i;
 
 	/* nothing to do, just return */
 	if(!tapping_is_active){
 		return;
 	}
 
-	tapping_is_active=FALSE;
+	tapping_is_active=false;
 
 	/* nothing to do, just return */
 	if(!tap_packet_index){
@@ -348,7 +366,18 @@ tap_push_tapped_queue(epan_dissect_t *edt)
 					/* If we have a filter, see if the
 					 * packet passes.
 					 */
-					guint flags = tl->flags;
+					unsigned flags = tl->flags;
+					if((tl->flags & TL_LIMIT_TO_DISPLAY_FILTER) && main_filter) {
+
+						if (!dfilter_apply_edt(main_filter, edt)){
+							/* The packet didn't
+							 * pass the filter. */
+							if (tl->flags & TL_IGNORE_DISPLAY_FILTER)
+								flags |= TL_DISPLAY_FILTER_IGNORED;
+							else
+								continue;
+						}
+					}
 					if(tl->code){
 						if (!dfilter_apply_edt(tl->code, edt)){
 							/* The packet didn't
@@ -371,11 +400,11 @@ tap_push_tapped_queue(epan_dissect_t *edt)
 						break;
 
 					case TAP_PACKET_REDRAW:
-						tl->needs_redraw=TRUE;
+						tl->needs_redraw=true;
 						break;
 
 					case TAP_PACKET_FAILED:
-						tl->failed=TRUE;
+						tl->failed=true;
 						break;
 					}
 				}
@@ -403,7 +432,7 @@ const void *
 fetch_tapped_data(int tap_id, int idx)
 {
 	tap_packet_t *tp;
-	guint i;
+	unsigned i;
 
 	/* nothing to do, just return */
 	if(!tapping_is_active){
@@ -440,8 +469,8 @@ reset_tap_listeners(void)
 		if(tl->reset){
 			tl->reset(tl->tapdata);
 		}
-		tl->needs_redraw=TRUE;
-		tl->failed=FALSE;
+		tl->needs_redraw=true;
+		tl->failed=false;
 	}
 
 }
@@ -455,7 +484,7 @@ reset_tap_listeners(void)
    changed or not.
 */
 void
-draw_tap_listeners(gboolean draw_all)
+draw_tap_listeners(bool draw_all)
 {
 	tap_listener_t *tl;
 
@@ -465,7 +494,7 @@ draw_tap_listeners(gboolean draw_all)
 				tl->draw(tl->tapdata);
 			}
 		}
-		tl->needs_redraw=FALSE;
+		tl->needs_redraw=false;
 	}
 }
 
@@ -512,12 +541,6 @@ find_tap_id(const char *name)
 static void
 free_tap_listener(tap_listener_t *tl)
 {
-	/* The free_tap_listener is called in the error path of
-	 * register_tap_listener (when the dfilter fails to be registered)
-	 * and the finish callback is set after that.
-	 * If this is changed make sure the finish callback is not called
-	 * twice to prevent double-free errors.
-	 */
 	if (tl->finish) {
 		tl->finish(tl->tapdata);
 	}
@@ -534,7 +557,7 @@ free_tap_listener(tap_listener_t *tl)
  */
 GString *
 register_tap_listener(const char *tapname, void *tapdata, const char *fstring,
-		      guint flags, tap_reset_cb reset, tap_packet_cb packet,
+		      unsigned flags, tap_reset_cb reset, tap_packet_cb packet,
 		      tap_draw_cb draw, tap_finish_cb finish)
 {
 	tap_listener_t *tl;
@@ -551,8 +574,14 @@ register_tap_listener(const char *tapname, void *tapdata, const char *fstring,
 	}
 
 	tl=g_new0(tap_listener_t, 1);
-	tl->needs_redraw=TRUE;
-	tl->failed=FALSE;
+	tl->needs_redraw=true;
+	tl->failed=false;
+	if (flags & TL_REQUIRES_PROTOCOLS) {
+		/* Requiring protocols implies needing a protocol tree.
+		 * XXX - Warn?
+		 */
+		flags |= TL_REQUIRES_PROTO_TREE;
+	}
 	tl->flags=flags;
 	if(fstring && *fstring){
 		if(!dfilter_compile(fstring, &code, &df_err)){
@@ -561,7 +590,7 @@ register_tap_listener(const char *tapname, void *tapdata, const char *fstring,
 			    "Filter \"%s\" is invalid - %s",
 			    fstring, df_err->msg);
 			df_error_free(&df_err);
-			free_tap_listener(tl);
+			g_free(tl);
 			return error_string;
 		}
 		tl->fstring=g_strdup(fstring);
@@ -612,7 +641,7 @@ set_tap_dfilter(void *tapdata, const char *fstring)
 			dfilter_free(tl->code);
 			tl->code=NULL;
 		}
-		tl->needs_redraw=TRUE;
+		tl->needs_redraw=true;
 		g_free(tl->fstring);
 		if(fstring){
 			if(!dfilter_compile(fstring, &code, &df_err)){
@@ -632,6 +661,41 @@ set_tap_dfilter(void *tapdata, const char *fstring)
 	return NULL;
 }
 
+GString *
+set_tap_flags(void *tapdata, unsigned flags)
+{
+	/* This never fails, and hence always returns NULL.
+	 * It could fail on an unknown flag, but that's a
+	 * programming error, not a runtime error (a bad filter
+	 * above can be a runtime error. Also like the above,
+	 * there's no failure notification on an unknown listener.
+	 */
+	tap_listener_t *tl=NULL,*tl2;
+
+	if(!tap_listener_queue){
+		return NULL;
+	}
+
+	if(tap_listener_queue->tapdata==tapdata){
+		tl=tap_listener_queue;
+	} else {
+		for(tl2=tap_listener_queue;tl2->next;tl2=tl2->next){
+			if(tl2->next->tapdata==tapdata){
+				tl=tl2->next;
+				break;
+			}
+
+		}
+	}
+
+	if(tl && tl->flags != flags) {
+		tl->needs_redraw=true;
+		tl->flags=flags;
+	}
+
+	return NULL;
+}
+
 /* this function recompiles dfilter for all registered tap listeners
  */
 void
@@ -645,7 +709,7 @@ tap_listeners_dfilter_recompile(void)
 			dfilter_free(tl->code);
 			tl->code=NULL;
 		}
-		tl->needs_redraw=TRUE;
+		tl->needs_redraw=true;
 		code=NULL;
 		if(tl->fstring){
 			if(!dfilter_compile(tl->fstring, &code, NULL)){
@@ -681,7 +745,7 @@ remove_tap_listener(void *tapdata)
 
 		}
 		if(!tl) {
-			ws_warning("remove_tap_listener(): no listener found with that tap data");
+			ws_warning("no listener found with that tap data");
 			return;
 		}
 	}
@@ -689,77 +753,79 @@ remove_tap_listener(void *tapdata)
 }
 
 /*
- * Return TRUE if we have one or more tap listeners that require dissection,
- * FALSE otherwise.
+ * Return true if we have one or more tap listeners that require dissection,
+ * false otherwise.
  */
-gboolean
+bool
 tap_listeners_require_dissection(void)
 {
 	tap_listener_t *tap_queue = tap_listener_queue;
 
 	while(tap_queue) {
 		if(!(tap_queue->flags & TL_IS_DISSECTOR_HELPER))
-			return TRUE;
+			return true;
 
 		tap_queue = tap_queue->next;
 	}
 
-	return FALSE;
+	return false;
 
 }
 
 /*
- * Return TRUE if we have one or more tap listeners that require the columns,
- * FALSE otherwise.
+ * Return true if we have one or more tap listeners that require the columns,
+ * false otherwise.
  */
-gboolean
+bool
 tap_listeners_require_columns(void)
 {
 	tap_listener_t *tap_queue = tap_listener_queue;
 
 	while(tap_queue) {
 		if(tap_queue->flags & TL_REQUIRES_COLUMNS)
-			return TRUE;
+			return true;
 
 		if(dfilter_requires_columns(tap_queue->code))
-			return TRUE;
+			return true;
 
 		tap_queue = tap_queue->next;
 	}
 
-	return FALSE;
+	return false;
 
 }
 
-/* Returns TRUE there is an active tap listener for the specified tap id. */
-gboolean
+/* Returns true there is an active tap listener for the specified tap id. */
+bool
 have_tap_listener(int tap_id)
 {
 	tap_listener_t *tap_queue = tap_listener_queue;
 
 	while(tap_queue) {
 		if(tap_queue->tap_id == tap_id)
-			return TRUE;
+			return true;
 
 		tap_queue = tap_queue->next;
 	}
 
-	return FALSE;
+	return false;
 }
 
 /*
- * Return TRUE if we have any tap listeners with filters, FALSE otherwise.
+ * Return true if we have any tap listeners with filters, false otherwise.
  */
-gboolean
+bool
 have_filtering_tap_listeners(void)
 {
 	tap_listener_t *tl;
 
 	for(tl=tap_listener_queue;tl;tl=tl->next){
 		if(tl->code)
-			return TRUE;
+			return true;
+		if((tl->flags & TL_LIMIT_TO_DISPLAY_FILTER) && main_filter)
+			return true;
 	}
-	return FALSE;
+	return false;
 }
 
 void
@@ -778,11 +844,11 @@ tap_listeners_load_field_references(epan_dissect_t *edt)
  * an indication of whether the protocol tree, or the columns, are
  * required by any taps.
  */
-guint
+unsigned
 union_of_tap_listener_flags(void)
 {
 	tap_listener_t *tl;
-	guint flags = 0;
+	unsigned flags = 0;
 
 	for(tl=tap_listener_queue;tl;tl=tl->next){
 		flags|=tl->flags;
@@ -808,12 +874,20 @@ void tap_cleanup(void)
 		elem_dl = head_dl;
 		head_dl = head_dl->next;
 		g_free(elem_dl->name);
-		g_free((gpointer)elem_dl);
+		g_free((void *)elem_dl);
 	}
 	tap_dissector_list = NULL;
 
 	g_slist_free(tap_plugins);
 	tap_plugins = NULL;
+}
+
+void tap_load_main_filter(dfilter_t *dfcode)
+{
+	/* Does not take ownership. This is not const because too
+	 * much of the dfilter API does not accept a const dfilter_t.
+	 */
+	main_filter = dfcode;
 }
 
 /*

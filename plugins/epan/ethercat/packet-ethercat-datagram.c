@@ -17,6 +17,8 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 #include "packet-ethercat-datagram.h"
 #include "packet-ecatmb.h"
@@ -532,12 +534,10 @@ static const true_false_string tfs_esc_reg_watchdog =
 };
 
 
-static const char* convertEcCmdToText(int cmd, const value_string ec_cmd[])
+static const char* convertEcCmdToShortText(wmem_allocator_t* scope, int cmd)
 {
-   return val_to_str(cmd, ec_cmd, "<UNKNOWN: %d>");
+   return val_to_str(scope, cmd, EcCmdShort, "<UNKNOWN: %d>");
 }
-
-#define ENDOF(p) ((p)+1) /* pointer to end of *p*/
 
 typedef enum
 {
@@ -1072,12 +1072,12 @@ typedef int register_dissect_func(packet_info *pinfo, proto_tree *tree, tvbuff_t
 /* esc registers */
 typedef struct
 {
-   guint16								reg;
-   guint16								length;
-   guint16								repeat;
+   uint16_t								reg;
+   uint16_t								length;
+   uint16_t								repeat;
    int*									phf;
    int* const							*bitmask_info;
-   gint*								pett;
+   int*								pett;
    register_dissect_func				*dissect;
 } ecat_esc_reg_info;
 
@@ -1086,13 +1086,13 @@ typedef struct
 
 static ecat_esc_reg_info ecat_esc_registers [] =
 {
-   { 0x0000, 1, 1, &hf_ecat_reg_revision, NO_SUBTREE_FILL},
-   { 0x0001, 1, 1, &hf_ecat_reg_esc_type, NO_SUBTREE_FILL},
+   { 0x0000, 1, 1, &hf_ecat_reg_esc_type, NO_SUBTREE_FILL},
+   { 0x0001, 1, 1, &hf_ecat_reg_revision, NO_SUBTREE_FILL},
    { 0x0002, 2, 1, &hf_ecat_reg_esc_build, NO_SUBTREE_FILL},
    { 0x0004, 1, 1, &hf_ecat_reg_esc_fmmucnt, NO_SUBTREE_FILL},
    { 0x0005, 1, 1, &hf_ecat_reg_esc_smcnt, NO_SUBTREE_FILL},
-   { 0x0006, 1, 1, &hf_ecat_reg_esc_ports, NO_SUBTREE_FILL},
-   { 0x0007, 1, 1, &hf_ecat_reg_esc_dpram, NO_SUBTREE_FILL},
+   { 0x0006, 1, 1, &hf_ecat_reg_esc_dpram, NO_SUBTREE_FILL},
+   { 0x0007, 1, 1, &hf_ecat_reg_esc_ports, NO_SUBTREE_FILL},
    { 0x0008, 2, 1, &hf_ecat_reg_esc_features, ecat_esc_reg_8, &ett_ecat_reg_esc_features, NULL},
    { 0x0010, 2, 1, &hf_ecat_reg_physaddr, NO_SUBTREE_FILL},
    { 0x0012, 2, 1, &hf_ecat_reg_physaddr2, NO_SUBTREE_FILL},
@@ -1198,13 +1198,13 @@ static ecat_esc_reg_info ecat_esc_registers [] =
 };
 
 /* esc dissector */
-static int dissect_esc_register(packet_info* pinfo, proto_tree *tree, tvbuff_t *tvb, gint offset, guint32 len, EcParserHDR* hdr, guint16 cnt)
+static int dissect_esc_register(packet_info* pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, uint32_t len, EcParserHDR* hdr, uint16_t cnt)
 {
-   guint i;
-   gint r;
-   gint res = -1;
-   gint regOffset;
-   gint read = 0;
+   unsigned i;
+   int r;
+   int res = -1;
+   int regOffset;
+   int read = 0;
 
    if (len > 0 )
    {
@@ -1231,7 +1231,7 @@ static int dissect_esc_register(packet_info* pinfo, proto_tree *tree, tvbuff_t *
             regOffset = ecat_esc_registers[i].reg;
             for ( r=0; r<ecat_esc_registers[i].repeat; r++ )
             {
-               if ( regOffset >= hdr->anAddrUnion.a.ado && regOffset+ecat_esc_registers[i].length <= (guint16)(hdr->anAddrUnion.a.ado + len) )
+               if ( regOffset >= hdr->anAddrUnion.a.ado && regOffset+ecat_esc_registers[i].length <= (uint16_t)(hdr->anAddrUnion.a.ado + len) )
                {
                   if ( cnt > 0 || !read )
                   {
@@ -1260,17 +1260,17 @@ static int dissect_esc_register(packet_info* pinfo, proto_tree *tree, tvbuff_t *
 
    return res;
 }
-static void init_EcParserHDR(EcParserHDR* pHdr, tvbuff_t *tvb, gint offset)
+static void init_EcParserHDR(EcParserHDR* pHdr, tvbuff_t *tvb, int offset)
 {
-   pHdr->cmd = tvb_get_guint8(tvb, offset++);
-   pHdr->idx = tvb_get_guint8(tvb, offset++);
+   pHdr->cmd = tvb_get_uint8(tvb, offset++);
+   pHdr->idx = tvb_get_uint8(tvb, offset++);
    pHdr->anAddrUnion.a.adp = tvb_get_letohs(tvb, offset); offset+=2;
    pHdr->anAddrUnion.a.ado = tvb_get_letohs(tvb, offset); offset+=2;
    pHdr->len = tvb_get_letohs(tvb, offset); offset+=2;
    pHdr->intr = tvb_get_letohs(tvb, offset);
 }
 
-static void init_dc_measure(guint32* pDC, tvbuff_t *tvb, gint offset)
+static void init_dc_measure(uint32_t* pDC, tvbuff_t *tvb, int offset)
 {
    int i;
    for ( i=0; i<4; i++ )
@@ -1280,27 +1280,28 @@ static void init_dc_measure(guint32* pDC, tvbuff_t *tvb, gint offset)
    }
 }
 
-static guint16 get_wc(EcParserHDR* pHdr, tvbuff_t *tvb, gint offset)
+static uint16_t get_wc(EcParserHDR* pHdr, tvbuff_t *tvb, int offset)
 {
    return tvb_get_letohs(tvb, offset+EcParserHDR_Len+(pHdr->len&0x07ff));
 }
 
-static guint16 get_cmd_len(EcParserHDR* pHdr)
+static uint16_t get_cmd_len(EcParserHDR* pHdr)
 {
    return (EcParserHDR_Len+(pHdr->len&0x07ff)+2); /*Header + data + wc*/
 }
 
 
-static void EcSummaryFormater(guint32 datalength, tvbuff_t *tvb, gint offset, char *szText, gint nMax)
+static char* EcSummaryFormater(wmem_allocator_t* scope, uint32_t datalength, tvbuff_t *tvb, int offset)
 {
-   guint nSub=0;
-   guint nLen=0;
-   guint8  nCmds[4];
-   guint nLens[4];
+   unsigned nSub=0;
+   unsigned nLen=0;
+   uint8_t nCmds[4];
+   unsigned nLens[4];
    EcParserHDR ecFirst;
    EcParserHDR ecParser;
+   char* szText;
 
-   guint suboffset=0;
+   unsigned suboffset=0;
 
    init_EcParserHDR(&ecFirst, tvb, offset);
 
@@ -1331,47 +1332,41 @@ static void EcSummaryFormater(guint32 datalength, tvbuff_t *tvb, gint offset, ch
    }
    if ( nSub == 1 )
    {
-      guint16 len = ecFirst.len&0x07ff;
-      guint16 cnt = get_wc(&ecFirst, tvb, offset);
-      snprintf ( szText, nMax, "'%s': Len: %d, Adp 0x%x, Ado 0x%x, Wc %d ",
-         convertEcCmdToText(ecFirst.cmd, EcCmdShort), len, ecFirst.anAddrUnion.a.adp, ecFirst.anAddrUnion.a.ado, cnt );
+      uint16_t len = ecFirst.len&0x07ff;
+      uint16_t cnt = get_wc(&ecFirst, tvb, offset);
+      szText = wmem_strdup_printf( scope, "'%s': Len: %d, Adp 0x%x, Ado 0x%x, Wc %d ",
+          convertEcCmdToShortText(scope, ecFirst.cmd), len, ecFirst.anAddrUnion.a.adp, ecFirst.anAddrUnion.a.ado, cnt );
    }
    else if ( nSub == 2 )
    {
-      snprintf ( szText, nMax, "%d Cmds, '%s': len %d, '%s': len %d ",
-         nSub, convertEcCmdToText(nCmds[0], EcCmdShort), nLens[0], convertEcCmdToText(nCmds[1], EcCmdShort), nLens[1]);
+      szText = wmem_strdup_printf(scope, "%d Cmds, '%s': len %d, '%s': len %d ",
+         nSub, convertEcCmdToShortText(scope, nCmds[0]), nLens[0], convertEcCmdToShortText(scope, nCmds[1]), nLens[1]);
    }
    else if ( nSub == 3 )
    {
-      snprintf ( szText, nMax, "%d Cmds, '%s': len %d, '%s': len %d, '%s': len %d",
-         nSub, convertEcCmdToText(nCmds[0], EcCmdShort), nLens[0], convertEcCmdToText(nCmds[1], EcCmdShort), nLens[1], convertEcCmdToText(nCmds[2], EcCmdShort), nLens[2]);
+      szText = wmem_strdup_printf(scope, "%d Cmds, '%s': len %d, '%s': len %d, '%s': len %d",
+         nSub, convertEcCmdToShortText(scope, nCmds[0]), nLens[0], convertEcCmdToShortText(scope, nCmds[1]), nLens[1], convertEcCmdToShortText(scope, nCmds[2]), nLens[2]);
    }
    else if ( nSub == 4 )
    {
-      snprintf ( szText, nMax, "%d Cmds, '%s': len %d, '%s': len %d, '%s': len %d, '%s': len %d",
-         nSub, convertEcCmdToText(nCmds[0], EcCmdShort), nLens[0], convertEcCmdToText(nCmds[1], EcCmdShort), nLens[1], convertEcCmdToText(nCmds[2], EcCmdShort), nLens[2], convertEcCmdToText(nCmds[3], EcCmdShort), nLens[3]);
+      szText = wmem_strdup_printf(scope, "%d Cmds, '%s': len %d, '%s': len %d, '%s': len %d, '%s': len %d",
+         nSub, convertEcCmdToShortText(scope, nCmds[0]), nLens[0], convertEcCmdToShortText(scope, nCmds[1]), nLens[1], convertEcCmdToShortText(scope, nCmds[2]), nLens[2], convertEcCmdToShortText(scope, nCmds[3]), nLens[3]);
    }
    else
-      snprintf ( szText, nMax, "%d Cmds, SumLen %d, '%s'... ",
-         nSub, nLen, convertEcCmdToText(ecFirst.cmd, EcCmdShort));
-}
+   {
+      szText = wmem_strdup_printf(scope, "%d Cmds, SumLen %d, '%s'... ",
+         nSub, nLen, convertEcCmdToShortText(scope, ecFirst.cmd));
+   }
 
-static void EcCmdFormatter(guint8 cmd, char *szText, gint nMax)
-{
-   gint idx=0;
-   const gchar *szCmd = try_val_to_str_idx((guint32)cmd, EcCmdLong, &idx);
-
-   if ( idx != -1 )
-      snprintf(szText, nMax, "Cmd        : %d (%s)", cmd, szCmd);
-   else
-      snprintf(szText, nMax, "Cmd        : %d (Unknown command)", cmd);
+   return szText;
 }
 
 
-static void EcSubFormatter(tvbuff_t *tvb, gint offset, char *szText, gint nMax)
+static char* EcSubFormatter(wmem_allocator_t* scope, tvbuff_t *tvb, int offset)
 {
    EcParserHDR ecParser;
-   guint16 len, cnt;
+   uint16_t len, cnt;
+   char* szText;
 
    init_EcParserHDR(&ecParser, tvb, offset);
    len = ecParser.len&0x07ff;
@@ -1391,21 +1386,23 @@ static void EcSubFormatter(tvbuff_t *tvb, gint offset, char *szText, gint nMax)
    case EC_CMD_TYPE_BRW:
    case EC_CMD_TYPE_ARMW:
    case EC_CMD_TYPE_FRMW:
-      snprintf ( szText, nMax, "EtherCAT datagram: Cmd: '%s' (%d), Len: %d, Adp 0x%x, Ado 0x%x, Cnt %d",
-         convertEcCmdToText(ecParser.cmd, EcCmdShort), ecParser.cmd, len, ecParser.anAddrUnion.a.adp, ecParser.anAddrUnion.a.ado, cnt);
+      szText = wmem_strdup_printf(scope, "EtherCAT datagram: Cmd: '%s' (%d), Len: %d, Adp 0x%x, Ado 0x%x, Cnt %d",
+         convertEcCmdToShortText(scope, ecParser.cmd), ecParser.cmd, len, ecParser.anAddrUnion.a.adp, ecParser.anAddrUnion.a.ado, cnt);
       break;
    case EC_CMD_TYPE_LRD:
    case EC_CMD_TYPE_LWR:
    case EC_CMD_TYPE_LRW:
-      snprintf ( szText, nMax, "EtherCAT datagram: Cmd: '%s' (%d), Len: %d, Addr 0x%x, Cnt %d",
-         convertEcCmdToText(ecParser.cmd, EcCmdShort), ecParser.cmd, len, ecParser.anAddrUnion.addr, cnt);
+      szText = wmem_strdup_printf(scope, "EtherCAT datagram: Cmd: '%s' (%d), Len: %d, Addr 0x%x, Cnt %d",
+           convertEcCmdToShortText(scope, ecParser.cmd), ecParser.cmd, len, ecParser.anAddrUnion.addr, cnt);
       break;
    case EC_CMD_TYPE_EXT:
-      snprintf ( szText, nMax, "EtherCAT datagram: Cmd: 'EXT' (%d), Len: %d",  ecParser.cmd, len);
+      szText = wmem_strdup_printf(scope, "EtherCAT datagram: Cmd: 'EXT' (%d), Len: %d",  ecParser.cmd, len);
       break;
    default:
-      snprintf ( szText, nMax, "EtherCAT datagram: Cmd: 'Unknown' (%d), Len: %d",  ecParser.cmd, len);
+      szText = wmem_strdup_printf(scope, "EtherCAT datagram: Cmd: 'Unknown' (%d), Len: %d",  ecParser.cmd, len);
    }
+
+   return szText;
 }
 
 /* Ethercat Datagram */
@@ -1414,16 +1411,15 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
    tvbuff_t *next_tvb;
    proto_item *ti, *aitem = NULL;
    proto_tree *ecat_datagrams_tree = NULL;
-   guint offset = 0;
-   char szText[200];
-   int nMax = sizeof(szText)-1;
+   unsigned offset = 0;
 
-   guint ecLength=0;
-   guint subCount = 0;
-   const guint datagram_length = tvb_captured_length(tvb);
-   guint datagram_padding_bytes = 0;
+   unsigned ecLength=0;
+   unsigned subCount = 0;
+   const unsigned datagram_length = tvb_captured_length(tvb);
+   unsigned datagram_padding_bytes = 0;
    EcParserHDR ecHdr;
    heur_dtbl_entry_t *hdtbl_entry;
+   char* summary;
 
    col_set_str(pinfo->cinfo, COL_PROTOCOL, "ECAT");
 
@@ -1455,8 +1451,8 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
    /* Calculate the amount of padding data available in the PDU */
    datagram_padding_bytes = datagram_length - ecLength;
 
-   EcSummaryFormater(ecLength, tvb, offset, szText, nMax);
-   col_append_str(pinfo->cinfo, COL_INFO, szText);
+   summary = EcSummaryFormater(pinfo->pool, ecLength, tvb, offset);
+   col_append_str(pinfo->cinfo, COL_INFO, summary);
 
    if( tree )
    {
@@ -1464,7 +1460,7 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
       ti = proto_tree_add_item(tree, proto_ecat_datagram, tvb, 0, -1, ENC_NA);
       ecat_datagrams_tree = proto_item_add_subtree(ti, ett_ecat);
 
-      proto_item_append_text(ti,": %s", szText);
+      proto_item_append_text(ti,": %s", summary);
    }
 
    /* Dissect all sub frames of this EtherCAT PDU */
@@ -1473,10 +1469,10 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
       proto_tree *ecat_datagram_tree = NULL, *ecat_header_tree = NULL, *ecat_dc_tree = NULL;
 
       proto_item *hidden_item;
-      guint32 subsize;
-      guint32 suboffset;
-      guint32 len;
-      guint16 cnt;
+      uint32_t subsize;
+      uint32_t suboffset;
+      uint32_t len;
+      uint16_t cnt;
       ETHERCAT_MBOX_HEADER mbox;
 
       suboffset = offset;
@@ -1489,15 +1485,12 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
       if( tree )
       {
          /* Create the sub tree for the current datagram */
-         EcSubFormatter(tvb, suboffset, szText, nMax);
-         ecat_datagram_tree = proto_tree_add_subtree(ecat_datagrams_tree, tvb, suboffset, subsize, ett_ecat_datagram_subtree, NULL, szText);
+         ecat_datagram_tree = proto_tree_add_subtree(ecat_datagrams_tree, tvb, suboffset, subsize, ett_ecat_datagram_subtree, NULL, EcSubFormatter(pinfo->pool, tvb, suboffset));
 
          /* Create a subtree placeholder for the Header */
          ecat_header_tree = proto_tree_add_subtree(ecat_datagram_tree, tvb, offset, EcParserHDR_Len, ett_ecat_header, NULL, "Header");
 
-         EcCmdFormatter(ecHdr.cmd, szText, nMax);
-         aitem = proto_tree_add_item(ecat_header_tree, hf_ecat_cmd, tvb, suboffset, 1, ENC_LITTLE_ENDIAN);
-         proto_item_set_text(aitem, "%s", szText);
+         proto_tree_add_item(ecat_header_tree, hf_ecat_cmd, tvb, suboffset, 1, ENC_LITTLE_ENDIAN);
          if( subCount < 10 ){
             aitem = proto_tree_add_item(ecat_header_tree, hf_ecat_sub_cmd[subCount], tvb, suboffset, 1, ENC_LITTLE_ENDIAN);
             proto_item_set_hidden(aitem);
@@ -1568,7 +1561,7 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
       if ( (ecHdr.cmd == 1 || ecHdr.cmd == 4) && ecHdr.anAddrUnion.a.ado == 0x900 && ecHdr.len >= 16 && cnt > 0 )
       {
-         guint32 pDC[4];
+         uint32_t pDC[4];
          init_dc_measure(pDC, tvb, suboffset);
 
          ecat_dc_tree = proto_tree_add_subtree(ecat_datagram_tree, tvb, suboffset, len, ett_ecat_dc, NULL, "Dc");
@@ -1631,8 +1624,8 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
       }
       else if (dissect_esc_register(pinfo, ecat_datagram_tree, tvb, suboffset, len, &ecHdr, cnt) != 0)
       {
-         guint startOfData = offset + EcParserHDR_Len;
-         guint dataLength = len;
+         unsigned startOfData = offset + EcParserHDR_Len;
+         unsigned dataLength = len;
 
          if ( len >= ETHERCAT_MBOX_HEADER_LEN &&
            ((ecHdr.cmd==EC_CMD_TYPE_FPWR || ecHdr.cmd == EC_CMD_TYPE_APWR || ecHdr.cmd == EC_CMD_TYPE_APRW || ecHdr.cmd == EC_CMD_TYPE_FPRW) || ((ecHdr.cmd==EC_CMD_TYPE_FPRD  || ecHdr.cmd==EC_CMD_TYPE_APRD) && cnt==1) ) &&
@@ -1649,7 +1642,7 @@ static int dissect_ecat_datagram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                case ETHERCAT_MBOX_TYPE_SOE:
                if ( mbox.Length <= 1500 )
                {
-                  guint MBoxLength = mbox.Length + ETHERCAT_MBOX_HEADER_LEN;
+                  unsigned MBoxLength = mbox.Length + ETHERCAT_MBOX_HEADER_LEN;
                   if ( MBoxLength > len )
                      MBoxLength = len;
 
@@ -1806,7 +1799,7 @@ void proto_register_ecat(void)
          },
          { &hf_ecat_cmd,
            { "Command", "ecat.cmd",
-             FT_UINT8, BASE_HEX, VALS(EcCmdShort), 0x0, NULL, HFILL }
+             FT_UINT8, BASE_HEX, VALS(EcCmdLong), 0x0, NULL, HFILL }
          },
          { &hf_ecat_sub_cmd[0],
            { "Command", "ecat.sub1.cmd",
@@ -2377,12 +2370,12 @@ void proto_register_ecat(void)
          },
 
          /* Registers */
-         { &hf_ecat_reg_revision,
-           {"ESC Revision (0x0)", "ecat.reg.revision",
+         { &hf_ecat_reg_esc_type,
+           {"ESC Type (0x0)", "ecat.reg.type",
              FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }
          },
-         { &hf_ecat_reg_esc_type,
-           {"ESC Type (0x1)", "ecat.reg.type",
+         { &hf_ecat_reg_revision,
+           {"ESC Revision (0x1)", "ecat.reg.revision",
              FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }
          },
          { &hf_ecat_reg_esc_build,
@@ -2397,12 +2390,12 @@ void proto_register_ecat(void)
            {"ESC SM Cnt (0x5)", "ecat.reg.smcnt",
              FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }
          },
-         { &hf_ecat_reg_esc_ports,
-           {"ESC Ports (0x6)", "ecat.reg.ports",
+         { &hf_ecat_reg_esc_dpram,
+           {"ESC DPRAM (0x6)", "ecat.reg.dpram",
              FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }
          },
-         { &hf_ecat_reg_esc_dpram,
-           {"ESC DPRAM (0x7)", "ecat.reg.dpram",
+         { &hf_ecat_reg_esc_ports,
+           {"ESC Ports (0x7)", "ecat.reg.ports",
              FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }
          },
          { &hf_ecat_reg_esc_features,
@@ -3660,7 +3653,7 @@ void proto_register_ecat(void)
          },
       };
 
-   static gint *ett[] =
+   static int *ett[] =
       {
          &ett_ecat,
          &ett_ecat_header,

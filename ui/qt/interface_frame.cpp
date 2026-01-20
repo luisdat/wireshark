@@ -30,10 +30,15 @@
 #include "extcap.h"
 
 #include <ui/recent.h>
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 #include "ui/capture_globals.h"
 #include <ui/iface_lists.h>
+#include <app/application_flavor.h>
 #include <wsutil/utf8_entities.h>
+#ifdef Q_OS_UNIX
+#include <unistd.h> /* for access() and X_OK */
+#include <wsutil/filesystem.h>
+#endif
 
 #include <QDesktopServices>
 #include <QFrame>
@@ -42,6 +47,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QUrl>
+#include <QMutex>
+#include <QDebug>
 
 #include <epan/prefs.h>
 
@@ -51,6 +58,8 @@
 const int stat_update_interval_ = 1000; // ms
 #endif
 const char *no_capture_link = "#no_capture";
+
+static QMutex scan_mutex;
 
 InterfaceFrame::InterfaceFrame(QWidget * parent)
 : QFrame(parent),
@@ -64,7 +73,7 @@ InterfaceFrame::InterfaceFrame(QWidget * parent)
 {
     ui->setupUi(this);
 
-    setStyleSheet(QString(
+    setStyleSheet(QStringLiteral(
                       "QFrame {"
                       "  border: 0;"
                       "}"
@@ -109,13 +118,13 @@ InterfaceFrame::InterfaceFrame(QWidget * parent)
     ui->interfaceTree->setItemDelegateForColumn(proxy_model_.mapSourceToColumn(IFTREE_COL_STATS), new SparkLineDelegate(this));
 
     ui->interfaceTree->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(ui->interfaceTree, SIGNAL(customContextMenuRequested(QPoint)), this, SLOT(showContextMenu(QPoint)));
+    connect(ui->interfaceTree, &QTreeView::customContextMenuRequested, this, &InterfaceFrame::showContextMenu);
 
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(interfaceListChanged()));
-    connect(mainApp, SIGNAL(localInterfaceListChanged()), this, SLOT(interfaceListChanged()));
+    connect(mainApp, &MainApplication::appInitialized, this, &InterfaceFrame::interfaceListChanged);
+    connect(mainApp, &MainApplication::localInterfaceListChanged, this, &InterfaceFrame::interfaceListChanged);
 
-    connect(ui->interfaceTree->selectionModel(), SIGNAL(selectionChanged(const QItemSelection &, const QItemSelection &)),
-            this, SLOT(interfaceTreeSelectionChanged(const QItemSelection &, const QItemSelection &)));
+    connect(ui->interfaceTree->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, &InterfaceFrame::interfaceTreeSelectionChanged);
 }
 
 InterfaceFrame::~InterfaceFrame()
@@ -139,7 +148,7 @@ QMenu * InterfaceFrame::getSelectionMenu()
             endp_action->setData(QVariant::fromValue(ifType));
             endp_action->setCheckable(true);
             endp_action->setChecked(proxy_model_.isInterfaceTypeShown(ifType));
-            connect(endp_action, SIGNAL(triggered()), this, SLOT(triggeredIfTypeButton()));
+            connect(endp_action, &QAction::triggered, this, &InterfaceFrame::triggeredIfTypeButton);
             contextMenu->addAction(endp_action);
         }
         ++it;
@@ -151,7 +160,7 @@ QMenu * InterfaceFrame::getSelectionMenu()
         QAction * toggleRemoteAction = new QAction(tr("Remote interfaces"), this);
         toggleRemoteAction->setCheckable(true);
         toggleRemoteAction->setChecked(proxy_model_.remoteDisplay());
-        connect(toggleRemoteAction, SIGNAL(triggered()), this, SLOT(toggleRemoteInterfaces()));
+        connect(toggleRemoteAction, &QAction::triggered, this, &InterfaceFrame::toggleRemoteInterfaces);
         contextMenu->addAction(toggleRemoteAction);
     }
 #endif
@@ -160,7 +169,7 @@ QMenu * InterfaceFrame::getSelectionMenu()
     QAction * toggleHideAction = new QAction(tr("Show hidden interfaces"), this);
     toggleHideAction->setCheckable(true);
     toggleHideAction->setChecked(! proxy_model_.filterHidden());
-    connect(toggleHideAction, SIGNAL(triggered()), this, SLOT(toggleHiddenInterfaces()));
+    connect(toggleHideAction, &QAction::triggered, this, &InterfaceFrame::toggleHiddenInterfaces);
     contextMenu->addAction(toggleHideAction);
 
     return contextMenu;
@@ -210,15 +219,20 @@ void InterfaceFrame::showEvent(QShowEvent *) {
 void InterfaceFrame::scanLocalInterfaces(GList *filter_list)
 {
     GList *if_list = NULL;
-    if (isVisible()) {
-        source_model_.stopStatistic();
-        if_stat_cache_t * stat_cache = capture_interface_stat_start(&global_capture_opts, &if_list);
-        source_model_.setCache(stat_cache);
+    if (scan_mutex.tryLock()) {
+        if (isVisible()) {
+            source_model_.stopStatistic();
+            if_stat_cache_t * stat_cache = capture_interface_stat_start(&global_capture_opts, &if_list);
+            source_model_.setCache(stat_cache);
+        }
+        mainApp->setInterfaceList(if_list);
+        free_interface_list(if_list);
+        scan_local_interfaces_filtered(&global_capture_opts, filter_list, main_window_update);
+        mainApp->emitAppSignal(MainApplication::LocalInterfacesChanged);
+        scan_mutex.unlock();
+    } else {
+        qDebug() << "scan mutex locked, can't scan interfaces";
     }
-    mainApp->setInterfaceList(if_list);
-    free_interface_list(if_list);
-    scan_local_interfaces_filtered(filter_list, main_window_update);
-    mainApp->emitAppSignal(MainApplication::LocalInterfacesChanged);
 }
 #endif // HAVE_LIBPCAP
 
@@ -260,7 +274,7 @@ void InterfaceFrame::interfaceListChanged()
     if (!stat_timer_) {
         updateStatistics();
         stat_timer_ = new QTimer(this);
-        connect(stat_timer_, SIGNAL(timeout()), this, SLOT(updateStatistics()));
+        connect(stat_timer_, &QTimer::timeout, this, &InterfaceFrame::updateStatistics);
         stat_timer_->start(stat_update_interval_);
     }
 #endif
@@ -287,7 +301,7 @@ void InterfaceFrame::resetInterfaceTreeDisplay()
     ui->warningLabel->hide();
     ui->warningLabel->clear();
 
-    ui->warningLabel->setStyleSheet(QString(
+    ui->warningLabel->setStyleSheet(QStringLiteral(
                 "QLabel {"
                 "  border-radius: 0.5em;"
                 "  padding: 0.33em;"
@@ -299,22 +313,34 @@ void InterfaceFrame::resetInterfaceTreeDisplay()
 
 #ifdef HAVE_LIBPCAP
 #ifdef Q_OS_WIN
-    if (!has_wpcap) {
-        ui->warningLabel->setText(tr(
-            "<p>"
-            "Local interfaces are unavailable because no packet capture driver is installed."
-            "</p><p>"
-            "You can fix this by installing <a href=\"https://npcap.com/\">Npcap</a>."
-            "</p>"));
-    } else if (!npf_sys_is_running()) {
-        ui->warningLabel->setText(tr(
-            "<p>"
-            "Local interfaces are unavailable because the packet capture driver isn't loaded."
-            "</p><p>"
-            "You can fix this by running <pre>net start npcap</pre> if you have Npcap installed"
-            " or <pre>net start npf</pre> if you have WinPcap installed."
-            " Both commands must be run as Administrator."
-            "</p>"));
+    if (application_flavor_is_wireshark()) {
+        if (caplibs_have_winpcap()) {
+            // We have gotten reports of the WinPcap uninstaller not correctly
+            // removing all its DLLs and this causing conflicts:
+            // https://gitlab.com/wireshark/wireshark/-/issues/14160
+            // https://gitlab.com/wireshark/wireshark/-/issues/14543
+            ui->warningLabel->setText(tr(
+                "<p>"
+                "Local interfaces are unavailable because WinPcap is installed but is no longer supported."
+                "</p><p>"
+                "You can fix this by uninstalling WinPcap and installing <a href=\"https://npcap.com/\">Npcap</a>."
+                "</p>"));
+        } else if (!has_npcap) {
+            ui->warningLabel->setText(tr(
+                "<p>"
+                "Local interfaces are unavailable because no packet capture driver is installed."
+                "</p><p>"
+                "You can fix this by installing <a href=\"https://npcap.com/\">Npcap</a>."
+                "</p>"));
+        } else if (!npf_sys_is_running()) {
+            ui->warningLabel->setText(tr(
+                "<p>"
+                "Local interfaces are unavailable because the packet capture driver isn't loaded."
+                "</p><p>"
+                "You can fix this by running <pre>net start npcap</pre> if you have Npcap installed."
+                " The command must be run as Administrator."
+                "</p>"));
+        }
     }
 #endif
 
@@ -327,7 +353,7 @@ void InterfaceFrame::resetInterfaceTreeDisplay()
         // used if __APPLE__ is defined, so that it reflects the
         // new message text.
         //
-        QString install_chmodbpf_path = mainApp->applicationDirPath() + "/../Resources/Extras/Install ChmodBPF.pkg";
+        QString install_chmodbpf_path = QStringLiteral("%1/../Resources/Extras/Install ChmodBPF.pkg").arg(mainApp->applicationDirPath());
         ui->warningLabel->setText(tr(
             "<p>"
             "You don't have permission to capture on local interfaces."
@@ -358,7 +384,7 @@ void InterfaceFrame::resetInterfaceTreeDisplay()
     if (!ui->warningLabel->text().isEmpty() && recent.sys_warn_if_no_capture)
     {
         QString warning_text = ui->warningLabel->text();
-        warning_text.append(QString("<p><a href=\"%1\">%2</a></p>")
+        warning_text.append(QStringLiteral("<p><a href=\"%1\">%2</a></p>")
                             .arg(no_capture_link)
                             .arg(SimpleDialog::dontShowThisAgain()));
         ui->warningLabel->setText(warning_text);
@@ -384,8 +410,17 @@ void InterfaceFrame::resetInterfaceTreeDisplay()
 bool InterfaceFrame::haveLocalCapturePermissions() const
 {
 #ifdef Q_OS_MAC
-    QFileInfo bpf0_fi = QFileInfo("/dev/bpf0");
-    return bpf0_fi.isReadable() && bpf0_fi.isWritable();
+    if (application_flavor_is_wireshark()) {
+        QFileInfo bpf0_fi = QFileInfo("/dev/bpf0");
+        return bpf0_fi.isReadable() && bpf0_fi.isWritable();
+    } else {
+        return true;
+    }
+#elif defined(Q_OS_UNIX)
+    char *dumpcap_bin = get_executable_path("dumpcap");
+    bool executable = access(dumpcap_bin, X_OK) == 0;
+    g_free(dumpcap_bin);
+    return executable;
 #else
     // XXX Add checks for other platforms.
     return true;
@@ -551,7 +586,7 @@ void InterfaceFrame::showContextMenu(QPoint pos)
 void InterfaceFrame::on_warningLabel_linkActivated(const QString &link)
 {
     if (link.compare(no_capture_link) == 0) {
-        recent.sys_warn_if_no_capture = FALSE;
+        recent.sys_warn_if_no_capture = false;
         resetInterfaceTreeDisplay();
     } else {
         QDesktopServices::openUrl(QUrl(link));

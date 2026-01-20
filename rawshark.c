@@ -42,16 +42,18 @@
 #include <glib.h>
 #include <epan/epan.h>
 
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
+#include <app/application_flavor.h>
 #include <wsutil/file_util.h>
 #include <wsutil/socket.h>
-#include <wsutil/plugins.h>
 #include <wsutil/privileges.h>
-#include <wsutil/report_message.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
 #include <wsutil/clopts_common.h>
+#include <wsutil/report_message.h>
 
 #ifdef _WIN32
 #include <wsutil/unicode-utils.h>
@@ -62,7 +64,6 @@
 #include <epan/packet.h>
 #include <epan/ftypes/ftypes.h>
 #include "file.h"
-#include "frame_tvbuff.h"
 #include <epan/disabled_protos.h>
 #include <epan/prefs.h>
 #include <epan/column.h>
@@ -102,7 +103,7 @@
  * This is the template for the decode as option; it is shared between the
  * various functions that output the usage for this parameter.
  */
-static const gchar decode_as_arg_template[] = "<layer_type>==<selector>,<decode_as_protocol>";
+static const char decode_as_arg_template[] = "<layer_type>==<selector>,<decode_as_protocol>";
 #endif
 
 /* Additional exit codes */
@@ -111,7 +112,7 @@ static const gchar decode_as_arg_template[] = "<layer_type>==<selector>,<decode_
 
 capture_file cfile;
 
-static guint32 cum_bytes;
+static uint32_t cum_bytes;
 static frame_data ref_frame;
 static frame_data prev_dis_frame;
 static frame_data prev_cap_frame;
@@ -125,21 +126,19 @@ typedef enum {
     /* Add CSV and the like here */
 } output_action_e;
 
-static gboolean line_buffered;
+static bool line_buffered;
 static print_format_e print_format = PR_FMT_TEXT;
 
-static gboolean want_pcap_pkthdr;
+static bool want_pcap_pkthdr;
 
 cf_status_t raw_cf_open(capture_file *cf, const char *fname);
-static gboolean load_cap_file(capture_file *cf);
-static gboolean process_packet(capture_file *cf, epan_dissect_t *edt, gint64 offset,
-                               wtap_rec *rec, Buffer *buf);
+static bool load_cap_file(capture_file *cf);
+static bool process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
+                               wtap_rec *rec);
 static void show_print_file_io_error(int err);
 
-static void rawshark_cmdarg_err(const char *fmt, va_list ap);
-static void rawshark_cmdarg_err_cont(const char *fmt, va_list ap);
-static void protocolinfo_init(char *field);
-static gboolean parse_field_string_format(char *format);
+static bool protocolinfo_init(char *field);
+static bool parse_field_string_format(char *format);
 
 typedef enum {
     SF_NONE,    /* No format (placeholder) */
@@ -149,7 +148,7 @@ typedef enum {
 } string_fmt_e;
 
 typedef struct string_fmt_s {
-    gchar *plain;
+    char *plain;
     string_fmt_e format;    /* Valid if plain is NULL */
 } string_fmt_t;
 
@@ -210,7 +209,7 @@ print_usage(FILE *output)
     fprintf(output, "  -l                       flush output after each packet\n");
     fprintf(output, "  -S                       format string for fields\n");
     fprintf(output, "                           (%%D - name, %%S - stringval, %%N numval)\n");
-    fprintf(output, "  -t (a|ad|adoy|d|dd|e|r|u|ud|udoy)[.[N]]|.[N]\n");
+    fprintf(output, "  -t (a|ad|adoy|d|dd|e|r|rc|u|ud|udoy)[.[N]]|.[N]\n");
     fprintf(output, "                           output format of time stamps (def: r: rel. to first)\n");
     fprintf(output, "  -u s|hms                 output format of seconds (def: s: seconds)\n");
     fprintf(output, "\n");
@@ -340,7 +339,7 @@ raw_pipe_open(const char *pipe_name)
  * a LINKTYPE_ value supported by Wiretap.  "Proto name" must be
  * a protocol name, e.g. "http".
  */
-static gboolean
+static bool
 set_link_type(const char *lt_arg) {
     char *spec_ptr = strchr(lt_arg, ':');
     char *p;
@@ -351,7 +350,7 @@ set_link_type(const char *lt_arg) {
     char *errmsg = NULL;
 
     if (!spec_ptr)
-        return FALSE;
+        return false;
 
     spec_ptr++;
 
@@ -361,7 +360,7 @@ set_link_type(const char *lt_arg) {
             errno = 0;
             val = strtol(spec_ptr, &p, 10);
             if (p == spec_ptr || *p != '\0' || errno != 0 || val > INT_MAX) {
-                return FALSE;
+                return false;
             }
             dlt_val = (int)val;
         }
@@ -377,9 +376,9 @@ set_link_type(const char *lt_arg) {
          */
         encap = wtap_pcap_encap_to_wtap_encap(dlt_val);
         if (encap == WTAP_ENCAP_UNKNOWN) {
-            return FALSE;
+            return false;
         }
-        return TRUE;
+        return true;
     } else if (strncmp(lt_arg, "proto:", strlen("proto:")) == 0) {
         dhandle = find_dissector(spec_ptr);
         if (dhandle) {
@@ -392,13 +391,13 @@ set_link_type(const char *lt_arg) {
             if (prefs_set_pref(pref_str->str, &errmsg) != PREFS_SET_OK) {
                 g_string_free(pref_str, TRUE);
                 g_free(errmsg);
-                return FALSE;
+                return false;
             }
             g_string_free(pref_str, TRUE);
-            return TRUE;
+            return true;
         }
     }
-    return FALSE;
+    return false;
 }
 
 int
@@ -412,36 +411,34 @@ main(int argc, char *argv[])
     struct rlimit limit;
 #endif  /* !_WIN32 */
 
-    gchar               *pipe_name = NULL;
-    gchar               *rfilters[64];
+    char                *pipe_name = NULL;
+    char                *rfilters[64];
     e_prefs             *prefs_p;
     GPtrArray           *disp_fields = g_ptr_array_new();
-    guint                fc;
-    gboolean             skip_pcap_header = FALSE;
+    unsigned             fc;
+    bool                 skip_pcap_header = false;
     int                  ret = EXIT_SUCCESS;
     static const struct ws_option long_options[] = {
       {"help", ws_no_argument, NULL, 'h'},
       {"version", ws_no_argument, NULL, 'v'},
       LONGOPT_DISSECT_COMMON
       LONGOPT_READ_CAPTURE_COMMON
+      LONGOPT_WSLOG
       {0, 0, 0, 0 }
     };
 
 #define OPTSTRING_INIT OPTSTRING_DISSECT_COMMON OPTSTRING_READ_CAPTURE_COMMON "F:hlm:o:psS:v"
 
     static const char    optstring[] = OPTSTRING_INIT;
-    static const struct report_message_routines rawshark_report_routines = {
-      failure_message,
-      failure_message,
-      open_failure_message,
-      read_failure_message,
-      write_failure_message,
-      cfile_open_failure_message,
-      cfile_dump_open_failure_message,
-      cfile_read_failure_message,
-      cfile_write_failure_message,
-      cfile_close_failure_message
-    };
+    const struct file_extension_info* file_extensions;
+    unsigned num_extensions;
+    epan_app_data_t app_data;
+
+    /* Future proof by zeroing out all data */
+    memset(&app_data, 0, sizeof(app_data));
+
+    /* Set the program name. */
+    g_set_prgname("rawshark");
 
     /*
      * Set the C-language locale to the native environment and set the
@@ -453,20 +450,15 @@ main(int argc, char *argv[])
     setlocale(LC_ALL, "");
 #endif
 
-    cmdarg_err_init(rawshark_cmdarg_err, rawshark_cmdarg_err_cont);
+    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init("rawshark", vcmdarg_err);
+    ws_log_init(vcmdarg_err, "Rawshark Debug Console");
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, vcmdarg_err, WS_EXIT_INVALID_OPTION);
+    ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
 
     ws_noisy("Finished log init and parsing command line log arguments");
-
-    /* Initialize the version information. */
-    ws_init_version_info("Rawshark",
-                         epan_gather_compile_info,
-                         NULL);
 
 #ifdef _WIN32
     create_app_running_mutex();
@@ -494,13 +486,18 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    err_msg = configuration_init(argv[0], NULL);
+    err_msg = configuration_init(argv[0], "wireshark");
     if (err_msg != NULL) {
         fprintf(stderr, "rawshark: Can't get pathname of rawshark program: %s.\n",
                 err_msg);
     }
 
-    init_report_message("rawshark", &rawshark_report_routines);
+    /* Initialize the version information. */
+    ws_init_version_info("Rawshark", NULL, application_get_vcs_version_info,
+                         epan_gather_compile_info,
+                         NULL);
+
+    init_report_failure_message("rawshark");
 
     timestamp_set_type(TS_RELATIVE);
     timestamp_set_precision(TS_PREC_AUTO);
@@ -516,13 +513,19 @@ main(int argc, char *argv[])
      * file-type-dependent blocks can register using the file
      * type/subtype value for the file type.
      */
-    wtap_init(FALSE);
+    application_file_extensions(&file_extensions, &num_extensions);
+    wtap_init(false, application_configuration_environment_prefix(), file_extensions, num_extensions);
 
     /* Register all dissectors; we must do this before checking for the
        "-G" flag, as the "-G" flag dumps information registered by the
        dissectors, and we must do it before we read the preferences, in
        case any dissectors register preferences. */
-    if (!epan_init(NULL, NULL, TRUE)) {
+    app_data.env_var_prefix = application_configuration_environment_prefix();
+    app_data.col_fmt = application_columns();
+    app_data.num_cols = application_num_columns();
+    app_data.register_func = register_all_protocols;
+    app_data.handoff_func = register_all_protocol_handoffs;
+    if (!epan_init(NULL, NULL, true, &app_data)) {
         ret = WS_EXIT_INIT_FAILED;
         goto clean_exit;
     }
@@ -579,20 +582,42 @@ main(int argc, char *argv[])
                    make the standard output line-buffered (short version: in
                    Windows, "line-buffered" is the same as "fully-buffered",
                    and the output buffer is only flushed when it fills up). */
-                line_buffered = TRUE;
+                line_buffered = true;
                 break;
 #if !defined(_WIN32) && defined(RLIMIT_AS)
             case 'm':
-                limit.rlim_cur = get_positive_int(ws_optarg, "memory limit");
-                limit.rlim_max = get_positive_int(ws_optarg, "memory limit");
-
-                if(setrlimit(RLIMIT_AS, &limit) != 0) {
+            {
+                /* POSIX says that rlim_t shall be defined through typedef to
+                 * be an unsigned integer type. On many 32-bit platforms rlim_t
+                 * as defined by sys/resource.h is 64-bit anyway in order to
+                 * provide large file support. (Exactly how that is translated
+                 * to system calls varies.)
+                 */
+                if (sizeof(rlim_t) < 8) {
+                    uint32_t memory_limit;
+                    if (!get_nonzero_uint32(ws_optarg, "memory limit", &memory_limit)) {
+                        ret = WS_EXIT_INVALID_OPTION;
+                        goto clean_exit;
+                    }
+                    limit.rlim_cur = memory_limit;
+                    limit.rlim_max = memory_limit;
+                } else {
+                    uint64_t memory_limit;
+                    if (!get_nonzero_uint64(ws_optarg, "memory limit", &memory_limit)) {
+                        ret = WS_EXIT_INVALID_OPTION;
+                        goto clean_exit;
+                    }
+                    limit.rlim_cur = memory_limit;
+                    limit.rlim_max = memory_limit;
+                }
+                if ((setrlimit(RLIMIT_AS, &limit) != 0)) {
                     cmdarg_err("setrlimit(RLIMIT_AS) failed: %s",
                                g_strerror(errno));
                     ret = WS_EXIT_INVALID_OPTION;
                     goto clean_exit;
                 }
                 break;
+            }
 #endif
             case 'o':        /* Override preference from command line */
             {
@@ -626,7 +651,7 @@ main(int argc, char *argv[])
                 break;
             }
             case 'p':        /* Expect pcap_pkthdr packet headers, which may have 64-bit timestamps */
-                want_pcap_pkthdr = TRUE;
+                want_pcap_pkthdr = true;
                 break;
             case 'r':        /* Read capture file xxx */
                 pipe_name = g_strdup(ws_optarg);
@@ -634,7 +659,7 @@ main(int argc, char *argv[])
             case 'R':        /* Read file filter */
             case 'Y':        /* Read file filter */
                 /* Read and display filters are the same for rawshark */
-                if(n_rfilters < (int) sizeof(rfilters) / (int) sizeof(rfilters[0])) {
+                if(n_rfilters < (int)array_length(rfilters)) {
                     rfilters[n_rfilters++] = ws_optarg;
                 }
                 else {
@@ -644,7 +669,7 @@ main(int argc, char *argv[])
                 }
                 break;
             case 's':        /* Skip PCAP header */
-                skip_pcap_header = TRUE;
+                skip_pcap_header = true;
                 break;
             case 'S':        /* Print string representations */
                 if (!parse_field_string_format(ws_optarg)) {
@@ -678,8 +703,12 @@ main(int argc, char *argv[])
                     goto clean_exit;
                 }
                 break;
-            default:
             case '?':        /* Bad flag - print usage message */
+            default:
+                /* wslog arguments are okay */
+                if (ws_log_is_wslog_arg(opt))
+                    break;
+
                 print_usage(stderr);
                 ret = WS_EXIT_INVALID_OPTION;
                 goto clean_exit;
@@ -695,7 +724,8 @@ main(int argc, char *argv[])
 
     /* Initialize our display fields */
     for (fc = 0; fc < disp_fields->len; fc++) {
-        protocolinfo_init((char *)g_ptr_array_index(disp_fields, fc));
+        if (!protocolinfo_init((char *)g_ptr_array_index(disp_fields, fc)))
+            return WS_EXIT_INVALID_OPTION;
     }
     g_ptr_array_free(disp_fields, TRUE);
     printf("\n");
@@ -749,7 +779,7 @@ main(int argc, char *argv[])
     }
 
     /* Build the column format array */
-    build_column_format_array(&cfile.cinfo, prefs_p->num_cols, TRUE);
+    build_column_format_array(&cfile.cinfo, prefs_p->num_cols, true);
 
     if (n_rfilters != 0) {
         for (i = 0; i < n_rfilters; i++) {
@@ -782,8 +812,8 @@ main(int argc, char *argv[])
 
         /* Do we need to PCAP header and magic? */
         if (skip_pcap_header) {
-            unsigned int bytes_left = (unsigned int) sizeof(struct pcap_hdr) + sizeof(guint32);
-            gchar buf[sizeof(struct pcap_hdr) + sizeof(guint32)];
+            unsigned int bytes_left = (unsigned int) sizeof(struct pcap_hdr) + sizeof(uint32_t);
+            char buf[sizeof(struct pcap_hdr) + sizeof(uint32_t)];
             while (bytes_left != 0) {
                 ssize_t bytes = ws_read(fd, buf, bytes_left);
                 if (bytes <= 0) {
@@ -818,26 +848,26 @@ clean_exit:
 /**
  * Read data from a raw pipe.  The "raw" data consists of a libpcap
  * packet header followed by the payload.
- * @param buf [IN] A POSIX file descriptor.  Because that's _exactly_ the sort
- *           of thing you want to use in Windows.
+ * @param rec [IN/OUT] A wtap_rec into which to read packet metadata
+ *           and data.
  * @param err [OUT] Error indicator.  Uses wiretap values.
  * @param err_info [OUT] Error message.
  * @param data_offset [OUT] data offset in the pipe.
- * @return TRUE on success, FALSE on failure.
+ * @return true on success, false on failure.
  */
-static gboolean
-raw_pipe_read(wtap_rec *rec, Buffer *buf, int *err, gchar **err_info, gint64 *data_offset) {
+static bool
+raw_pipe_read(wtap_rec *rec, int *err, char **err_info, int64_t *data_offset) {
     struct pcap_pkthdr mem_hdr;
     struct pcaprec_hdr disk_hdr;
     ssize_t bytes_read = 0;
     unsigned int bytes_needed = (unsigned int) sizeof(disk_hdr);
-    guchar *ptr = (guchar*) &disk_hdr;
+    unsigned char *ptr = (unsigned char*) &disk_hdr;
 
     *err = 0;
 
     if (want_pcap_pkthdr) {
         bytes_needed = sizeof(mem_hdr);
-        ptr = (guchar*) &mem_hdr;
+        ptr = (unsigned char*) &mem_hdr;
     }
 
     /*
@@ -853,7 +883,7 @@ raw_pipe_read(wtap_rec *rec, Buffer *buf, int *err, gchar **err_info, gint64 *da
     if (fd == 0 && GetHandleInformation(GetStdHandle(STD_INPUT_HANDLE), &ghi_flags) == 0) {
         *err = 0;
         *err_info = NULL;
-        return FALSE;
+        return false;
     }
 #endif
 
@@ -863,22 +893,22 @@ raw_pipe_read(wtap_rec *rec, Buffer *buf, int *err, gchar **err_info, gint64 *da
         if (bytes_read == 0) {
             *err = 0;
             *err_info = NULL;
-            return FALSE;
+            return false;
         } else if (bytes_read < 0) {
             *err = errno;
             *err_info = NULL;
-            return FALSE;
+            return false;
         }
         bytes_needed -= (unsigned int)bytes_read;
         *data_offset += bytes_read;
         ptr += bytes_read;
     }
 
-    rec->rec_type = REC_TYPE_PACKET;
+    wtap_setup_packet_rec(rec, encap);
     rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
     if (want_pcap_pkthdr) {
         rec->ts.secs = mem_hdr.ts.tv_sec;
-        rec->ts.nsecs = (gint32)mem_hdr.ts.tv_usec * 1000;
+        rec->ts.nsecs = (int32_t)mem_hdr.ts.tv_usec * 1000;
         rec->rec_header.packet_header.caplen = mem_hdr.caplen;
         rec->rec_header.packet_header.len = mem_hdr.len;
     } else {
@@ -888,8 +918,6 @@ raw_pipe_read(wtap_rec *rec, Buffer *buf, int *err, gchar **err_info, gint64 *da
         rec->rec_header.packet_header.len = disk_hdr.orig_len;
     }
     bytes_needed = rec->rec_header.packet_header.caplen;
-
-    rec->rec_header.packet_header.pkt_encap = encap;
 
 #if 0
     printf("mem_hdr: %lu disk_hdr: %lu\n", sizeof(mem_hdr), sizeof(disk_hdr));
@@ -902,68 +930,65 @@ raw_pipe_read(wtap_rec *rec, Buffer *buf, int *err, gchar **err_info, gint64 *da
         *err = WTAP_ERR_BAD_FILE;
         *err_info = ws_strdup_printf("Bad packet length: %lu",
                    (unsigned long) bytes_needed);
-        return FALSE;
+        return false;
     }
 
-    ws_buffer_assure_space(buf, bytes_needed);
-    ptr = ws_buffer_start_ptr(buf);
+    ws_buffer_assure_space(&rec->data, bytes_needed);
+    ptr = ws_buffer_start_ptr(&rec->data);
     while (bytes_needed > 0) {
         bytes_read = ws_read(fd, ptr, bytes_needed);
         if (bytes_read == 0) {
             *err = WTAP_ERR_SHORT_READ;
             *err_info = NULL;
-            return FALSE;
+            return false;
         } else if (bytes_read < 0) {
             *err = errno;
             *err_info = NULL;
-            return FALSE;
+            return false;
         }
         bytes_needed -= (unsigned int)bytes_read;
         *data_offset += bytes_read;
         ptr += bytes_read;
     }
-    return TRUE;
+    return true;
 }
 
-static gboolean
+static bool
 load_cap_file(capture_file *cf)
 {
     int          err;
-    gchar       *err_info = NULL;
-    gint64       data_offset = 0;
+    char        *err_info = NULL;
+    int64_t      data_offset = 0;
 
     wtap_rec     rec;
-    Buffer       buf;
     epan_dissect_t edt;
 
-    wtap_rec_init(&rec);
-    ws_buffer_init(&buf, 1514);
+    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
 
-    epan_dissect_init(&edt, cf->epan, TRUE, FALSE);
+    epan_dissect_init(&edt, cf->epan, true, false);
 
-    while (raw_pipe_read(&rec, &buf, &err, &err_info, &data_offset)) {
-        process_packet(cf, &edt, data_offset, &rec, &buf);
+    while (raw_pipe_read(&rec, &err, &err_info, &data_offset)) {
+        process_packet(cf, &edt, data_offset, &rec);
     }
 
     epan_dissect_cleanup(&edt);
 
     wtap_rec_cleanup(&rec);
-    ws_buffer_free(&buf);
     if (err != 0) {
         /* Print a message noting that the read failed somewhere along the line. */
-        cfile_read_failure_message(cf->filename, err, err_info);
-        return FALSE;
+        report_cfile_read_failure(cf->filename, err, err_info);
+        return false;
     }
 
-    return TRUE;
+    return true;
 }
 
-static gboolean
-process_packet(capture_file *cf, epan_dissect_t *edt, gint64 offset,
-               wtap_rec *rec, Buffer *buf)
+static bool
+process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
+               wtap_rec *rec)
 {
     frame_data fdata;
-    gboolean passed;
+    bool passed;
     int i;
 
     if(rec->rec_header.packet_header.len == 0)
@@ -972,11 +997,11 @@ process_packet(capture_file *cf, epan_dissect_t *edt, gint64 offset,
            packets to process. We spit out a line with the timestamp and the text "void"
         */
         printf("%lu %" PRIu64 " %d void -\n", (unsigned long int)cf->count,
-               (guint64)rec->ts.secs, rec->ts.nsecs);
+               (uint64_t)rec->ts.secs, rec->ts.nsecs);
 
         fflush(stdout);
 
-        return FALSE;
+        return false;
     }
 
     /* Count this packet. */
@@ -987,7 +1012,7 @@ process_packet(capture_file *cf, epan_dissect_t *edt, gint64 offset,
        do a dissection and do so. */
     frame_data_init(&fdata, cf->count, rec, offset, cum_bytes);
 
-    passed = TRUE;
+    passed = true;
 
     /* If we're running a read filter, prime the epan_dissect_t with that
        filter. */
@@ -1010,9 +1035,7 @@ process_packet(capture_file *cf, epan_dissect_t *edt, gint64 offset,
     /* We only need the columns if we're printing packet info but we're
      *not* verbose; in verbose mode, we print the protocol tree, not
      the protocol summary. */
-    epan_dissect_run_with_taps(edt, cf->cd_t, rec,
-                               frame_tvbuff_new_buffer(&cf->provider, &fdata, buf),
-                               &fdata, &cf->cinfo);
+    epan_dissect_run_with_taps(edt, cf->cd_t, rec, &fdata, &cf->cinfo);
 
     frame_data_set_after_dissect(&fdata, &cum_bytes);
     prev_dis_frame = fdata;
@@ -1026,7 +1049,7 @@ process_packet(capture_file *cf, epan_dissect_t *edt, gint64 offset,
         if (rfcodes[i])
             passed = dfilter_apply_edt(rfcodes[i], edt);
         else
-            passed = TRUE;
+            passed = true;
 
         /* Print a one-line summary */
         printf(" %d", passed ? 1 : 0);
@@ -1059,7 +1082,7 @@ process_packet(capture_file *cf, epan_dissect_t *edt, gint64 offset,
 
     if (ferror(stdout)) {
         show_print_file_io_error(errno);
-        exit(2);
+        return false;
     }
 
     epan_dissect_reset(edt);
@@ -1113,19 +1136,19 @@ static void field_display_to_string(header_field_info *hfi, char* buf, int size)
  */
 #define FIELD_STR_INIT_LEN 256
 #define cVALS(x) (const value_string*)(x)
-static gboolean print_field_value(field_info *finfo, int cmd_line_index)
+static bool print_field_value(field_info *finfo, int cmd_line_index)
 {
-    header_field_info   *hfinfo;
+    const header_field_info *hfinfo;
     char                *fs_buf;
     char                *fs_ptr = NULL;
     static GString     *label_s = NULL;
     size_t              fs_len;
-    guint              i;
+    unsigned           i;
     string_fmt_t       *sf;
-    guint32            uvalue;
-    gint32             svalue;
-    guint64            uvalue64;
-    gint64             svalue64;
+    uint32_t           uvalue;
+    int32_t            svalue;
+    uint64_t           uvalue64;
+    int64_t            svalue64;
 
     hfinfo = finfo->hfinfo;
 
@@ -1229,14 +1252,14 @@ static gboolean print_field_value(field_info *finfo, int cmd_line_index)
         }
         printf(" %d=\"%s\"", cmd_line_index, label_s->str);
         wmem_free(NULL, fs_buf);
-        return TRUE;
+        return true;
     }
 
     if(fs_buf)
     {
         printf(" %d=\"%s\"", cmd_line_index, fs_ptr);
         wmem_free(NULL, fs_buf);
-        return TRUE;
+        return true;
     }
 
     /*
@@ -1245,7 +1268,7 @@ static gboolean print_field_value(field_info *finfo, int cmd_line_index)
      * We return n.a.
      */
     printf(" %d=\"n.a.\"", cmd_line_index);
-    return TRUE;
+    return true;
 }
 
 static tap_packet_status
@@ -1253,7 +1276,7 @@ protocolinfo_packet(void *prs, packet_info *pinfo _U_, epan_dissect_t *edt, cons
 {
     pci_t *rs=(pci_t *)prs;
     GPtrArray *gp;
-    guint i;
+    unsigned i;
 
     gp=proto_get_finfo_ptr_array(edt->tree, rs->hf_index);
     if(!gp){
@@ -1271,12 +1294,12 @@ protocolinfo_packet(void *prs, packet_info *pinfo _U_, epan_dissect_t *edt, cons
     return TAP_PACKET_DONT_REDRAW;
 }
 
-int g_cmd_line_index = 0;
+int g_cmd_line_index;
 
 /*
  * field must be persistent - we don't g_strdup() it below
  */
-static void
+static bool
 protocolinfo_init(char *field)
 {
     pci_t *rs;
@@ -1287,7 +1310,7 @@ protocolinfo_init(char *field)
     hfi=proto_registrar_get_byname(field);
     if(!hfi){
         fprintf(stderr, "rawshark: Field \"%s\" doesn't exist.\n", field);
-        exit(1);
+        return false;
     }
 
     field_display_to_string(hfi, hfibuf, sizeof(hfibuf));
@@ -1312,8 +1335,10 @@ protocolinfo_init(char *field)
         }
         g_free(rs);
 
-        exit(1);
+        return false;
     }
+
+    return true;
 }
 
 /*
@@ -1322,7 +1347,7 @@ protocolinfo_init(char *field)
  */
 
 static void
-add_string_fmt(string_fmt_e format, gchar *plain) {
+add_string_fmt(string_fmt_e format, char *plain) {
     string_fmt_t *sf = g_new(string_fmt_t, 1);
 
     sf->format = format;
@@ -1331,13 +1356,13 @@ add_string_fmt(string_fmt_e format, gchar *plain) {
     g_ptr_array_add(string_fmts, sf);
 }
 
-static gboolean
-parse_field_string_format(gchar *format) {
+static bool
+parse_field_string_format(char *format) {
     size_t len;
     size_t pos = 0;
 
     if (!format) {
-        return FALSE;
+        return false;
     }
 
     GString *plain_s = g_string_new("");
@@ -1348,7 +1373,7 @@ parse_field_string_format(gchar *format) {
     while (pos < len) {
         if (format[pos] == '%') {
             if (pos >= (len-1)) { /* There should always be a following specifier character */
-                return FALSE;
+                return false;
             }
             pos++;
             if (plain_s->len > 0) {
@@ -1369,7 +1394,7 @@ parse_field_string_format(gchar *format) {
                     g_string_append_c(plain_s, '%');
                     break;
                 default: /* Invalid format */
-                    return FALSE;
+                    return false;
             }
         } else {
             g_string_append_c(plain_s, format[pos]);
@@ -1382,7 +1407,7 @@ parse_field_string_format(gchar *format) {
     }
     g_string_free(plain_s, TRUE);
 
-    return TRUE;
+    return true;
 }
 /****************************************************************************************
  * END OF FIELD EXTRACTION ROUTINES
@@ -1417,8 +1442,13 @@ raw_epan_new(capture_file *cf)
 {
     static const struct packet_provider_funcs funcs = {
         cap_file_provider_get_frame_ts,
+        cap_file_provider_get_start_ts,
+        cap_file_provider_get_end_ts,
         cap_file_provider_get_interface_name,
         cap_file_provider_get_interface_description,
+        NULL,
+        NULL,
+        NULL,
         NULL,
     };
 
@@ -1446,15 +1476,15 @@ raw_cf_open(capture_file *cf, const char *fname)
     cf->filename = g_strdup(fname);
 
     /* Indicate whether it's a permanent or temporary file. */
-    cf->is_tempfile = FALSE;
+    cf->is_tempfile = false;
 
     /* No user changes yet. */
-    cf->unsaved_changes = FALSE;
+    cf->unsaved_changes = false;
 
     cf->cd_t      = WTAP_FILE_TYPE_SUBTYPE_UNKNOWN;
     cf->open_type = WTAP_TYPE_AUTO;
     cf->count     = 0;
-    cf->drops_known = FALSE;
+    cf->drops_known = false;
     cf->drops     = 0;
     cf->snap      = 0;
     nstime_set_zero(&cf->elapsed_time);
@@ -1463,27 +1493,6 @@ raw_cf_open(capture_file *cf, const char *fname)
     cf->provider.prev_cap = NULL;
 
     return CF_OK;
-}
-
-/*
- * Report an error in command-line arguments.
- */
-static void
-rawshark_cmdarg_err(const char *fmt, va_list ap)
-{
-    fprintf(stderr, "rawshark: ");
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
-}
-
-/*
- * Report additional information for an error in command-line arguments.
- */
-static void
-rawshark_cmdarg_err_cont(const char *fmt, va_list ap)
-{
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
 }
 
 /*

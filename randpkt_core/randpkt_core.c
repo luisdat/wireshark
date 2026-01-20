@@ -17,18 +17,16 @@
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wsutil/array.h>
 #include <wsutil/file_util.h>
 #include <wsutil/wslog.h>
+#include <wsutil/report_message.h>
 #include <wiretap/wtap_opttypes.h>
-
-#include "ui/failure_message.h"
-
-#define array_length(x)	(sizeof x / sizeof x[0])
 
 #define INVALID_LEN 1
 #define WRITE_ERROR 2
 
-GRand *pkt_rand = NULL;
+GRand *pkt_rand;
 
 /* Types of produceable packets */
 enum {
@@ -564,25 +562,22 @@ void randpkt_loop(randpkt_example* example, uint64_t produce_count, uint64_t pac
 	unsigned len_this_pkt;
 	char* err_info;
 	union wtap_pseudo_header* ps_header;
-	uint8_t* buffer;
-	wtap_rec* rec;
+	wtap_rec rec;
 
-	rec = g_new0(wtap_rec, 1);
-	buffer = (uint8_t*)g_malloc0(65536);
+	wtap_rec_init(&rec, example->sample_length);
 
-	rec->rec_type = REC_TYPE_PACKET;
-	rec->presence_flags = WTAP_HAS_TS;
-	rec->rec_header.packet_header.pkt_encap = example->sample_wtap_encap;
+	wtap_setup_packet_rec(&rec, example->sample_wtap_encap);
+	rec.presence_flags = WTAP_HAS_TS;
 
-	ps_header = &rec->rec_header.packet_header.pseudo_header;
+	ps_header = &rec.rec_header.packet_header.pseudo_header;
 
-	/* Load the sample pseudoheader into our pseudoheader buffer */
+	/* Load the sample pseudoheader into the record's pseudoheader buffer */
 	if (example->pseudo_buffer)
 		memcpy(ps_header, example->pseudo_buffer, example->pseudo_length);
 
-	/* Load the sample into our buffer */
+	/* Load the sample into the record's data buffer */
 	if (example->sample_buffer)
-		memcpy(buffer, example->sample_buffer, example->sample_length);
+		ws_buffer_append(&rec.data, example->sample_buffer, example->sample_length);
 
 	/* Produce random packets */
 	for (i = 0; i < produce_count; i++) {
@@ -602,14 +597,16 @@ void randpkt_loop(randpkt_example* example, uint64_t produce_count, uint64_t pac
 			len_this_pkt = WTAP_MAX_PACKET_SIZE_STANDARD;
 		}
 
-		rec->rec_header.packet_header.caplen = len_this_pkt;
-		rec->rec_header.packet_header.len = len_this_pkt;
-		rec->ts.secs = i; /* just for variety */
+		rec.rec_header.packet_header.caplen = len_this_pkt;
+		rec.rec_header.packet_header.len = len_this_pkt;
+		rec.ts.secs = i; /* just for variety */
 
 		for (j = example->pseudo_length; j < (int) sizeof(*ps_header); j++) {
 			((uint8_t*)ps_header)[j] = g_rand_int_range(pkt_rand, 0, 0x100);
 		}
 
+		ws_buffer_assure_space(&rec.data, len_this_pkt);
+		uint8_t* buffer = ws_buffer_start_ptr(&rec.data);
 		for (j = example->sample_length; j < len_this_pkt; j++) {
 			/* Add format strings here and there */
 			if ((int) (100.0*g_rand_double(pkt_rand)) < 3 && j < (len_random - 3)) {
@@ -620,23 +617,22 @@ void randpkt_loop(randpkt_example* example, uint64_t produce_count, uint64_t pac
 			}
 		}
 
-		if (!wtap_dump(example->dump, rec, buffer, &err, &err_info)) {
-			cfile_write_failure_message(NULL,
+		if (!wtap_dump(example->dump, &rec, &err, &err_info)) {
+			report_cfile_write_failure(NULL,
 			    example->filename, err, err_info, 0,
 			    wtap_dump_file_type_subtype(example->dump));
 		}
 		if (packet_delay_ms) {
 			g_usleep(1000 * (unsigned long)packet_delay_ms);
 			if (!wtap_dump_flush(example->dump, &err)) {
-				cfile_write_failure_message(NULL,
+				report_cfile_write_failure(NULL,
 				    example->filename, err, NULL, 0,
 				    wtap_dump_file_type_subtype(example->dump));
 			}
 		}
 	}
 
-	g_free(rec);
-	g_free(buffer);
+	wtap_rec_cleanup(&rec);
 }
 
 bool randpkt_example_close(randpkt_example* example)
@@ -646,7 +642,7 @@ bool randpkt_example_close(randpkt_example* example)
 	bool ok = true;
 
 	if (!wtap_dump_close(example->dump, NULL, &err, &err_info)) {
-		cfile_close_failure_message(example->filename, err, err_info);
+		report_cfile_close_failure(example->filename, err, err_info);
 		ok = false;
 	}
 
@@ -674,15 +670,15 @@ int randpkt_example_init(randpkt_example* example, char* produce_filename, int p
 	if (strcmp(produce_filename, "-") == 0) {
 		/* Write to the standard output. */
 		example->dump = wtap_dump_open_stdout(file_type_subtype,
-			WTAP_UNCOMPRESSED, &params, &err, &err_info);
+			WS_FILE_UNCOMPRESSED, &params, &err, &err_info);
 		example->filename = "the standard output";
 	} else {
 		example->dump = wtap_dump_open(produce_filename, file_type_subtype,
-			WTAP_UNCOMPRESSED, &params, &err, &err_info);
+			WS_FILE_UNCOMPRESSED, &params, &err, &err_info);
 		example->filename = produce_filename;
 	}
 	if (!example->dump) {
-		cfile_dump_open_failure_message(produce_filename,
+		report_cfile_dump_open_failure(produce_filename,
 			err, err_info, file_type_subtype);
 		return WRITE_ERROR;
 	}

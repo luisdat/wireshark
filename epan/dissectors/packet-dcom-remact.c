@@ -37,27 +37,27 @@ static int hf_remact_authn_hint;
 
 
 static int proto_remact;
-static gint ett_remact;
+static int ett_remact;
 static e_guid_t uuid_remact = { 0x4d9f4ab8, 0x7d1c, 0x11cf, { 0x86, 0x1e, 0x00, 0x20, 0xaf, 0x6e, 0x7c, 0x57 } };
-static guint16  ver_remact = 0;
+static uint16_t ver_remact;
 
 
-static int
-dissect_remact_remote_activation_rqst(tvbuff_t *tvb, int offset,
-				      packet_info *pinfo, proto_tree *tree, dcerpc_info *di, guint8 *drep)
+static unsigned
+dissect_remact_remote_activation_rqst(tvbuff_t *tvb, unsigned offset,
+				      packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
-	guint32 u32ClientImpLevel;
-	guint32 u32Mode;
-	guint32 u32Interfaces;
-	guint32 u32Pointer;
-	guint32 u32ArraySize;
-	guint32 u32ItemIdx;
-	guint16 u16ProtSeqs;
+	uint32_t u32ClientImpLevel;
+	uint32_t u32Mode;
+	uint32_t u32Interfaces;
+	uint32_t u32Pointer;
+	uint32_t u32ArraySize;
+	uint32_t u32ItemIdx;
+	uint16_t u16ProtSeqs;
 	e_guid_t clsid;
 	e_guid_t iid;
 
-	gchar 	szObjName[1000] = { 0 };
-	guint32 u32ObjNameLen = sizeof(szObjName);
+	char 	szObjName[1000] = { 0 };
+	uint32_t u32ObjNameLen = sizeof(szObjName);
 
 	offset = dissect_dcom_this(tvb, offset, pinfo, tree, di, drep);
 
@@ -87,12 +87,10 @@ dissect_remact_remote_activation_rqst(tvbuff_t *tvb, int offset,
 	if (u32Pointer) {
 		offset = dissect_dcom_dcerpc_array_size(tvb, offset, pinfo, tree, di, drep,
 							&u32ArraySize);
-		u32ItemIdx = 1;
-		while (u32Interfaces--) {
+		for (u32ItemIdx = 1; u32ItemIdx <= u32Interfaces; u32ItemIdx++) {
 			offset = dissect_dcom_append_UUID(tvb, offset, pinfo, tree, di, drep,
 							  hf_dcom_iid, u32ItemIdx, &iid);
 
-			u32ItemIdx++;
 		}
 	}
 
@@ -101,30 +99,28 @@ dissect_remact_remote_activation_rqst(tvbuff_t *tvb, int offset,
 
 	offset = dissect_dcom_dcerpc_array_size(tvb, offset, pinfo, tree, di, drep,
 						&u32ArraySize);
-	u32ItemIdx = 1;
-	while (u32ArraySize--) {
+	for (u32ItemIdx = 1; u32ItemIdx <= u32ArraySize; u32ItemIdx++) {
 		offset = dissect_dcom_WORD(tvb, offset, pinfo, tree, di, drep,
 					   hf_remact_protseqs, &u16ProtSeqs);
-		u32ItemIdx++;
 	}
 
 	return offset;
 }
 
 
-static int
-dissect_remact_remote_activation_resp(tvbuff_t *tvb, int offset,
-				      packet_info *pinfo, proto_tree *tree, dcerpc_info *di, guint8 *drep)
+static unsigned
+dissect_remact_remote_activation_resp(tvbuff_t *tvb, unsigned offset,
+				      packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
-	guint32	u32Pointer;
+	uint32_t	u32Pointer;
 	e_guid_t ipid;
-	guint32	u32AuthnHint;
-	guint16	u16VersionMajor;
-	guint16	u16VersionMinor;
-	guint32	u32HResult;
-	guint32 u32ArraySize;
-	guint32 u32Idx;
-	guint32	u32VariableOffset;
+	uint32_t	u32AuthnHint;
+	uint16_t	u16VersionMajor;
+	uint16_t	u16VersionMinor;
+	uint32_t	u32HResult;
+	uint32_t u32ArraySize;
+	uint32_t u32Idx;
+	uint32_t	u32VariableOffset;
 
 
 	offset = dissect_dcom_that(tvb, offset, pinfo, tree, di, drep);
@@ -171,7 +167,7 @@ dissect_remact_remote_activation_resp(tvbuff_t *tvb, int offset,
 						      &u32HResult, u32Idx);
 		/* update column info now */
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s[%u]",
-				val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"),
+				val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"),
 				u32Idx);
 		u32Idx++;
 	}
@@ -181,13 +177,13 @@ dissect_remact_remote_activation_resp(tvbuff_t *tvb, int offset,
 
 	/* update column info now */
 	col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-			val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"));
+			val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"));
 
 	return offset;
 }
 
 
-static dcerpc_sub_dissector remact_dissectors[] = {
+static const dcerpc_sub_dissector remact_dissectors[] = {
 	{ 0, "RemoteActivation", dissect_remact_remote_activation_rqst, dissect_remact_remote_activation_resp },
 	{ 0, NULL, NULL, NULL },
 };
@@ -223,7 +219,7 @@ proto_register_remact (void)
 		  { "AuthnHint", "remact.authn_hint", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_remact
 	};
 

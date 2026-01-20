@@ -16,9 +16,9 @@
 
 #ifdef HAVE_LIBPCAP
 
-#include <pcap.h>
+#include <pcap/pcap.h>
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 
 #endif
 
@@ -36,9 +36,11 @@ extern "C" {
  */
 #define MIN_PACKET_SIZE 1	/* minimum amount of packet data we can read */
 
-GList *get_interface_list(int *err, char **err_str);
+GList *get_interface_list_ws(int *err, char **err_str);
+GList* get_interface_list_ss(int* err, char** err_str);
 #ifdef HAVE_PCAP_REMOTE
 GList *get_remote_interface_list(const char *hostname, const char *port,
+                                 bool wireshark_remote,
                                  int auth_type, const char *username,
                                  const char *passwd, int *err, char **err_str);
 #endif /* HAVE_PCAP_REMOTE */
@@ -52,13 +54,11 @@ bool set_pcap_datalink(pcap_t *pcap_h, int datalink, char *name,
     char *errmsg, size_t errmsg_len,
     char *secondary_errmsg, size_t secondary_errmsg_len);
 
-#ifdef HAVE_PCAP_SET_TSTAMP_PRECISION
 /*
  * Return true if the pcap_t in question is set up for high-precision
  * time stamps, false otherwise.
  */
 bool have_high_resolution_timestamp(pcap_t *pcap_h);
-#endif /* HAVE_PCAP_SET_TSTAMP_PRECISION */
 
 /*
  * Capture device open status values.

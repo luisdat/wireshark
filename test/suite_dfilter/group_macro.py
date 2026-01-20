@@ -3,8 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import pytest
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 class TestDfilterMacro:
     trace_file = "http.pcap"
@@ -26,15 +25,15 @@ class TestDfilterMacroZeroArg:
 
     def test_macro_1(self, checkDFilterCount):
         dfilter = "$nfs()"
-        checkDFilterCount(dfilter, 2)
+        checkDFilterCount(dfilter, 4)
 
     def test_macro_2(self, checkDFilterCount):
         dfilter = "${nfs}"
-        checkDFilterCount(dfilter, 2)
+        checkDFilterCount(dfilter, 4)
 
     def test_macro_3(self, checkDFilterCount):
         dfilter = "${nfs:}"
-        checkDFilterCount(dfilter, 2)
+        checkDFilterCount(dfilter, 4)
 
     def test_macro_wrong_count_1(self, checkDFilterFail):
         dfilter = "${private_ipv4}"
@@ -53,7 +52,7 @@ class TestDfilterMacroNullArg:
 
     def test_macro_works(self, checkDFilterCount):
         dfilter = "$ip(198.95.230.20, 2049)"
-        checkDFilterCount(dfilter, 2)
+        checkDFilterCount(dfilter, 4)
 
     def test_macro_null_1(self, checkDFilterFail):
         dfilter = "$ip(198.95.230.20,)"

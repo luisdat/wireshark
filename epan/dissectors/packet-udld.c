@@ -12,7 +12,7 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/cisco_pid.h>
+#include "packet-cisco-pid.h"
 
 /*
  * See
@@ -47,9 +47,9 @@ static int hf_udld_data;
 
 static expert_field ei_udld_tlvlength;
 
-static gint ett_udld;
-static gint ett_udld_flags;
-static gint ett_udld_tlv;
+static int ett_udld;
+static int ett_udld_flags;
+static int ett_udld_tlv;
 
 #define TYPE_DEVICE_ID        0x0001
 #define TYPE_PORT_ID          0x0002
@@ -90,8 +90,8 @@ dissect_udld(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     proto_item *ti;
     proto_tree *udld_tree = NULL;
     int         offset    = 0;
-    guint16     type;
-    guint16     length;
+    uint16_t    type;
+    uint16_t    length;
     proto_tree *tlv_tree;
     int         real_length;
 
@@ -161,7 +161,7 @@ dissect_udld(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
         case TYPE_PORT_ID:
         real_length = length;
-        if (tvb_get_guint8(tvb, offset + real_length) != 0x00) {
+        if (tvb_get_uint8(tvb, offset + real_length) != 0x00) {
             /* The length in the TLV doesn't appear to be the
                length of the TLV, as the byte just past it
                isn't the first byte of a 2-byte big-endian
@@ -197,7 +197,7 @@ dissect_udld(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         default:
         tlv_tree = proto_tree_add_subtree_format(udld_tree, tvb, offset,
             length, ett_udld_tlv, NULL, "Type: %s, length: %u",
-            val_to_str(type, type_vals, "Unknown (0x%04x)"),
+            val_to_str(pinfo->pool, type, type_vals, "Unknown (0x%04x)"),
             length);
         proto_tree_add_uint(tlv_tree, hf_udld_tlvtype, tvb,
             offset + TLV_TYPE, 2, type);
@@ -266,7 +266,7 @@ proto_register_udld(void)
             NULL, HFILL }},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_udld,
         &ett_udld_flags,
         &ett_udld_tlv

@@ -13,7 +13,7 @@
 #include <wsutil/ws_assert.h>
 
 /* Keep track of ftype_t's via their ftenum number */
-ftype_t* type_list[FT_NUM_TYPES];
+const ftype_t* type_list[FT_ENUM_SIZE + 1];
 
 /* Initialize the ftype module. */
 void
@@ -37,10 +37,7 @@ ftypes_register_pseudofields(void)
 {
 	static int proto_ftypes;
 
-	proto_ftypes = proto_register_protocol(
-				"Wireshark Field/Fundamental Types",
-				"Wireshark FTypes",
-				"_ws.ftypes");
+	proto_ftypes = proto_register_protocol("Wireshark Field/Fundamental Types", "Wireshark FTypes", "_ws.ftypes");
 
 	ftype_register_pseudofields_bytes(proto_ftypes);
 	ftype_register_pseudofields_double(proto_ftypes);
@@ -59,7 +56,7 @@ ftypes_register_pseudofields(void)
 
 /* Each ftype_t is registered via this function */
 void
-ftype_register(enum ftenum ftype, ftype_t *ft)
+ftype_register(enum ftenum ftype, const ftype_t *ft)
 {
 	/* Check input */
 	ws_assert(ftype < FT_NUM_TYPES);
@@ -74,13 +71,24 @@ ftype_register(enum ftenum ftype, ftype_t *ft)
 
 /* from README.dissector:
 	Note that the formats used must all belong to the same list as defined below:
-	- FT_INT8, FT_INT16, FT_INT24 and FT_INT32
-	- FT_UINT8, FT_UINT16, FT_UINT24, FT_UINT32, FT_IPXNET and FT_FRAMENUM
-	- FT_UINT64 and FT_EUI64
-	- FT_STRING, FT_STRINGZ and FT_UINT_STRING
-	- FT_FLOAT and FT_DOUBLE
-	- FT_BYTES, FT_UINT_BYTES, FT_AX25, FT_ETHER, FT_VINES, FT_OID and FT_REL_OID
+	- FT_INT8, FT_INT16, FT_INT24 and FT_INT32, FT_CHAR, FT_UINT8, FT_UINT16,
+	  FT_UINT24, FT_UINT32, FT_IPXNET, FT_FRAMENUM, FT_INT40, FT_INT48, FT_INT56
+	  FT_INT64, FT_UINT40, FT_UINT48, FT_UINT56 and FT_UINT64
 	- FT_ABSOLUTE_TIME and FT_RELATIVE_TIME
+	- FT_STRING, FT_STRINGZ, FT_UINT_STRING, FT_STRINGZPAD, FT_STRINGZTRUNC and FT_AX25
+	- FT_FLOAT, FT_DOUBLE, FT_IEEE_11073_SFLOAT and FT_IEEE_11073_FLOAT
+	- FT_BYTES, FT_UINT_BYTES, FT_ETHER, FT_VINES, FT_FCWWN and FT_EUI64
+	- FT_OID, FT_REL_OID and FT_SYSTEM_ID
+
+   We thus divide the types into equivalence classes of compatible types.
+   The same field abbreviation can be used by more than one field, even of
+   different types, so long as the types are compatible.
+
+   This function returns the canonical representative of a type. It can
+   be used to check if two fields are compatible.
+
+   XXX - Currently epan/dfilter/semcheck.c has its own implementation of
+   compatible types.
 */
 static enum ftenum
 same_ftype(const enum ftenum ftype)
@@ -90,20 +98,17 @@ same_ftype(const enum ftenum ftype)
 		case FT_INT16:
 		case FT_INT24:
 		case FT_INT32:
-			return FT_INT32;
-
+		case FT_CHAR:
 		case FT_UINT8:
 		case FT_UINT16:
 		case FT_UINT24:
 		case FT_UINT32:
-			return FT_UINT32;
-
+		case FT_IPXNET:
+		case FT_FRAMENUM:
 		case FT_INT40:
 		case FT_INT48:
 		case FT_INT56:
 		case FT_INT64:
-			return FT_INT64;
-
 		case FT_UINT40:
 		case FT_UINT48:
 		case FT_UINT56:
@@ -113,6 +118,9 @@ same_ftype(const enum ftenum ftype)
 		case FT_STRING:
 		case FT_STRINGZ:
 		case FT_UINT_STRING:
+		case FT_STRINGZPAD:
+		case FT_STRINGZTRUNC:
+		case FT_AX25:
 			return FT_STRING;
 
 		case FT_FLOAT:
@@ -121,17 +129,26 @@ same_ftype(const enum ftenum ftype)
 
 		case FT_BYTES:
 		case FT_UINT_BYTES:
+		case FT_ETHER:
+		case FT_VINES:
+		case FT_FCWWN:
+		case FT_EUI64:
 			return FT_BYTES;
 
 		case FT_OID:
 		case FT_REL_OID:
+		case FT_SYSTEM_ID:
+			/* XXX - dfilter/semcheck.c treats this group as compatible with BYTES */
 			return FT_OID;
 
 		/* XXX: the following are unique for now */
 		case FT_IPv4:
 		case FT_IPv6:
+		case FT_IEEE_11073_SFLOAT: /* XXX - should be able to compare with DOUBLE (#19011) */
+		case FT_IEEE_11073_FLOAT:  /* XXX - should be able to compare with DOUBLE */
 
 		/* everything else is unique */
+		/* XXX - README.dissector claims the time types are compatible. */
 		default:
 			return ftype;
 	}
@@ -150,7 +167,7 @@ ftype_similar_types(const enum ftenum ftype_a, const enum ftenum ftype_b)
 const char*
 ftype_name(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 	const char *s = "(null)";
 
 	FTYPE_LOOKUP(ftype, ft);
@@ -210,7 +227,7 @@ ftype_name(enum ftenum ftype)
 const char*
 ftype_pretty_name(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 	const char *s = "(null)";
 
 	FTYPE_LOOKUP(ftype, ft);
@@ -270,7 +287,7 @@ ftype_pretty_name(enum ftenum ftype)
 int
 ftype_wire_size(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->wire_size;
@@ -279,7 +296,7 @@ ftype_wire_size(enum ftenum ftype)
 bool
 ftype_can_length(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->len ? true : false;
@@ -288,7 +305,7 @@ ftype_can_length(enum ftenum ftype)
 bool
 ftype_can_slice(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->slice ? true : false;
@@ -297,7 +314,7 @@ ftype_can_slice(enum ftenum ftype)
 bool
 ftype_can_eq(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->compare != NULL;
@@ -306,7 +323,7 @@ ftype_can_eq(enum ftenum ftype)
 bool
 ftype_can_cmp(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->compare != NULL;
@@ -315,7 +332,7 @@ ftype_can_cmp(enum ftenum ftype)
 bool
 ftype_can_bitwise_and(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->bitwise_and ? true : false;
@@ -324,7 +341,7 @@ ftype_can_bitwise_and(enum ftenum ftype)
 bool
 ftype_can_unary_minus(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->unary_minus != NULL;
@@ -333,7 +350,7 @@ ftype_can_unary_minus(enum ftenum ftype)
 bool
 ftype_can_add(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->add != NULL;
@@ -342,7 +359,7 @@ ftype_can_add(enum ftenum ftype)
 bool
 ftype_can_subtract(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->subtract != NULL;
@@ -351,7 +368,7 @@ ftype_can_subtract(enum ftenum ftype)
 bool
 ftype_can_multiply(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->multiply != NULL;
@@ -360,7 +377,7 @@ ftype_can_multiply(enum ftenum ftype)
 bool
 ftype_can_divide(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->divide != NULL;
@@ -369,7 +386,7 @@ ftype_can_divide(enum ftenum ftype)
 bool
 ftype_can_modulo(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->modulo != NULL;
@@ -378,7 +395,7 @@ ftype_can_modulo(enum ftenum ftype)
 bool
 ftype_can_contains(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->contains ? true : false;
@@ -387,7 +404,7 @@ ftype_can_contains(enum ftenum ftype)
 bool
 ftype_can_matches(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->matches ? true : false;
@@ -396,7 +413,7 @@ ftype_can_matches(enum ftenum ftype)
 bool
 ftype_can_is_zero(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->is_zero ? true : false;
@@ -405,16 +422,25 @@ ftype_can_is_zero(enum ftenum ftype)
 bool
 ftype_can_is_negative(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->is_negative ? true : false;
 }
 
 bool
+ftype_can_is_nan(enum ftenum ftype)
+{
+	const ftype_t	*ft;
+
+	FTYPE_LOOKUP(ftype, ft);
+	return ft->is_nan ? true : false;
+}
+
+bool
 ftype_can_val_to_sinteger(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	/* We first convert to 64 bit and then check for overflow. */
@@ -424,7 +450,7 @@ ftype_can_val_to_sinteger(enum ftenum ftype)
 bool
 ftype_can_val_to_uinteger(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	/* We first convert to 64 bit and then check for overflow. */
@@ -434,7 +460,7 @@ ftype_can_val_to_uinteger(enum ftenum ftype)
 bool
 ftype_can_val_to_sinteger64(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->val_to_sinteger64 ? true : false;
@@ -443,10 +469,20 @@ ftype_can_val_to_sinteger64(enum ftenum ftype)
 bool
 ftype_can_val_to_uinteger64(enum ftenum ftype)
 {
-	ftype_t	*ft;
+	const ftype_t	*ft;
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->val_to_uinteger64 ? true : false;
+}
+
+bool
+ftype_can_val_to_double(enum ftenum ftype)
+{
+	const ftype_t	*ft;
+
+	FTYPE_LOOKUP(ftype, ft);
+	/* We first convert to 64 bit and then check for overflow. */
+	return ft->val_to_double ? true : false;
 }
 
 /* ---------------------------------------------------------- */
@@ -456,7 +492,7 @@ fvalue_t*
 fvalue_new(ftenum_t ftype)
 {
 	fvalue_t		*fv;
-	ftype_t			*ft;
+	const ftype_t		*ft;
 	FvalueNewFunc		new_value;
 
 	fv = g_slice_new(fvalue_t);
@@ -496,7 +532,7 @@ fvalue_dup(const fvalue_t *fv_orig)
 void
 fvalue_init(fvalue_t *fv, ftenum_t ftype)
 {
-	ftype_t			*ft;
+	const ftype_t		*ft;
 	FvalueNewFunc		new_value;
 
 	FTYPE_LOOKUP(ftype, ft);
@@ -532,15 +568,15 @@ fvalue_from_literal(ftenum_t ftype, const char *s, bool allow_partial_value, cha
 	fv = fvalue_new(ftype);
 	if (fv->ftype->val_from_literal) {
 		ok = fv->ftype->val_from_literal(fv, s, allow_partial_value, err_msg);
-		if (ok) {
-			/* Success */
-			if (err_msg != NULL)
-				*err_msg = NULL;
-			return fv;
-		}
+	}
+	if (ok) {
+		/* Success */
+		if (err_msg != NULL)
+			*err_msg = NULL;
+		return fv;
 	}
 	else {
-		if (err_msg != NULL) {
+		if (err_msg != NULL && *err_msg == NULL) {
 			*err_msg = ws_strdup_printf("\"%s\" cannot be converted to %s.",
 					s, ftype_pretty_name(ftype));
 		}
@@ -555,16 +591,14 @@ fvalue_from_string(ftenum_t ftype, const char *str, size_t len, char **err_msg)
 	fvalue_t	*fv;
 
 	fv = fvalue_new(ftype);
-	if (fv->ftype->val_from_string) {
-		if (fv->ftype->val_from_string(fv, str, len, err_msg)) {
-			/* Success */
-			if (err_msg != NULL)
-				*err_msg = NULL;
-			return fv;
-		}
+	if (fv->ftype->val_from_string && fv->ftype->val_from_string(fv, str, len, err_msg)) {
+		/* Success */
+		if (err_msg != NULL)
+			*err_msg = NULL;
+		return fv;
 	}
 	else {
-		if (err_msg != NULL) {
+		if (err_msg != NULL && *err_msg == NULL) {
 			*err_msg = ws_strdup_printf("%s cannot be converted from a string (\"%s\").",
 					ftype_pretty_name(ftype), str);
 		}
@@ -579,16 +613,14 @@ fvalue_from_charconst(ftenum_t ftype, unsigned long num, char **err_msg)
 	fvalue_t	*fv;
 
 	fv = fvalue_new(ftype);
-	if (fv->ftype->val_from_charconst) {
-		if (fv->ftype->val_from_charconst(fv, num, err_msg)) {
-			/* Success */
-			if (err_msg != NULL)
-				*err_msg = NULL;
-			return fv;
-		}
+	if (fv->ftype->val_from_charconst && fv->ftype->val_from_charconst(fv, num, err_msg)) {
+		/* Success */
+		if (err_msg != NULL)
+			*err_msg = NULL;
+		return fv;
 	}
 	else {
-		if (err_msg != NULL) {
+		if (err_msg != NULL && *err_msg == NULL) {
 			if (num <= 0x7f && g_ascii_isprint(num)) {
 				*err_msg = ws_strdup_printf("Character constant '%c' (0x%lx) cannot be converted to %s.",
 						(int)num, num, ftype_pretty_name(ftype));
@@ -609,16 +641,14 @@ fvalue_from_sinteger64(ftenum_t ftype, const char *s, int64_t num, char **err_ms
 	fvalue_t	*fv;
 
 	fv = fvalue_new(ftype);
-	if (fv->ftype->val_from_sinteger64) {
-		if (fv->ftype->val_from_sinteger64(fv, s, num, err_msg)) {
-			/* Success */
-			if (err_msg != NULL)
-				*err_msg = NULL;
-			return fv;
-		}
+	if (fv->ftype->val_from_sinteger64 && fv->ftype->val_from_sinteger64(fv, s, num, err_msg)) {
+		/* Success */
+		if (err_msg != NULL)
+			*err_msg = NULL;
+		return fv;
 	}
 	else {
-		if (err_msg != NULL) {
+		if (err_msg != NULL && *err_msg == NULL) {
 			*err_msg = ws_strdup_printf("Integer %"PRId64" cannot be converted to %s.",
 						num, ftype_pretty_name(ftype));
 		}
@@ -633,17 +663,15 @@ fvalue_from_uinteger64(ftenum_t ftype, const char *s, uint64_t num, char **err_m
 	fvalue_t	*fv;
 
 	fv = fvalue_new(ftype);
-	if (fv->ftype->val_from_uinteger64) {
-		if (fv->ftype->val_from_uinteger64(fv, s, num, err_msg)) {
-			/* Success */
-			if (err_msg != NULL)
-				*err_msg = NULL;
-			return fv;
-		}
+	if (fv->ftype->val_from_uinteger64 && fv->ftype->val_from_uinteger64(fv, s, num, err_msg)) {
+		/* Success */
+		if (err_msg != NULL)
+			*err_msg = NULL;
+		return fv;
 	}
 	else {
-		if (err_msg != NULL) {
-			*err_msg = ws_strdup_printf("Unsigned integer 0x%"PRIu64" cannot be converted to %s.",
+		if (err_msg != NULL && *err_msg == NULL) {
+			*err_msg = ws_strdup_printf("Unsigned integer %"PRIu64" cannot be converted to %s.",
 						num, ftype_pretty_name(ftype));
 		}
 	}
@@ -657,16 +685,14 @@ fvalue_from_floating(ftenum_t ftype, const char *s, double num, char **err_msg)
 	fvalue_t	*fv;
 
 	fv = fvalue_new(ftype);
-	if (fv->ftype->val_from_double) {
-		if (fv->ftype->val_from_double(fv, s, num, err_msg)) {
-			/* Success */
-			if (err_msg != NULL)
-				*err_msg = NULL;
-			return fv;
-		}
+	if (fv->ftype->val_from_double && fv->ftype->val_from_double(fv, s, num, err_msg)) {
+		/* Success */
+		if (err_msg != NULL)
+			*err_msg = NULL;
+		return fv;
 	}
 	else {
-		if (err_msg != NULL) {
+		if (err_msg != NULL && *err_msg == NULL) {
 			*err_msg = ws_strdup_printf("Double %g cannot be converted to %s.",
 						num, ftype_pretty_name(ftype));
 		}
@@ -732,6 +758,8 @@ fvalue_to_sinteger(const fvalue_t *fv, int32_t *repr)
 		return res;
 	if (val > INT32_MAX)
 		return FT_OVERFLOW;
+	if (val < INT32_MIN)
+		return FT_UNDERFLOW;
 
 	*repr = (int32_t)val;
 	return FT_OK;
@@ -740,21 +768,31 @@ fvalue_to_sinteger(const fvalue_t *fv, int32_t *repr)
 enum ft_result
 fvalue_to_uinteger64(const fvalue_t *fv, uint64_t *repr)
 {
-	ws_assert(fv->ftype->val_to_uinteger64);
+	if (!fv->ftype->val_to_uinteger64) {
+		return FT_BADARG;
+	}
 	return fv->ftype->val_to_uinteger64(fv, repr);
 }
 
 enum ft_result
 fvalue_to_sinteger64(const fvalue_t *fv, int64_t *repr)
 {
-	ws_assert(fv->ftype->val_to_sinteger64);
+	if (!fv->ftype->val_to_sinteger64) {
+		return FT_BADARG;
+	}
 	return fv->ftype->val_to_sinteger64(fv, repr);
 }
 
 enum ft_result
 fvalue_to_double(const fvalue_t *fv, double *repr)
 {
-	ws_assert(fv->ftype->val_to_double);
+	/* We should be able to test this earlier (e.g., in semantic check)
+	 * but there are non-compatible fields that share the same abbrev
+	 * so we have to check it on each fvalue.
+	 */
+	if (!fv->ftype->val_to_double) {
+		return FT_BADARG;
+	}
 	return fv->ftype->val_to_double(fv, repr);
 }
 
@@ -903,9 +941,9 @@ fvalue_set_bytes(fvalue_t *fv, GBytes *value)
 			fv->ftype->ftype == FT_OID ||
 			fv->ftype->ftype == FT_REL_OID ||
 			fv->ftype->ftype == FT_SYSTEM_ID ||
-			fv->ftype->ftype == FT_AX25 ||
 			fv->ftype->ftype == FT_VINES ||
 			fv->ftype->ftype == FT_ETHER ||
+			fv->ftype->ftype == FT_EUI64 ||
 			fv->ftype->ftype == FT_FCWWN);
 	ws_assert(fv->ftype->set_value.set_value_bytes);
 	fv->ftype->set_value.set_value_bytes(fv, value);
@@ -938,9 +976,19 @@ fvalue_set_fcwwn(fvalue_t *fv, const uint8_t *value)
 void
 fvalue_set_ax25(fvalue_t *fv, const uint8_t *value)
 {
-	GBytes *bytes = g_bytes_new(value, FT_AX25_ADDR_LEN);
-	fvalue_set_bytes(fv, bytes);
-	g_bytes_unref(bytes);
+	wmem_strbuf_t *buf = wmem_strbuf_new(NULL, NULL);
+	for (size_t i = 0; i < FT_AX25_ADDR_LEN - 1; i++) {
+		if (value[i] != 0x40) {
+			/* ignore space-padding */
+			wmem_strbuf_append_c(buf, value[i] >> 1);
+		}
+	}
+	/* Ignore C-bit and reserved bits, and end of address bits. */
+	uint8_t ssid = (value[FT_AX25_ADDR_LEN - 1] >> 1) & 0x0f;
+	if (ssid != 0) {
+		wmem_strbuf_append_printf(buf, "-%u", ssid);
+	}
+	fvalue_set_strbuf(fv, buf);
 }
 
 void
@@ -1003,6 +1051,14 @@ fvalue_set_protocol(fvalue_t *fv, tvbuff_t *value, const char *name, int length)
 }
 
 void
+fvalue_set_protocol_length(fvalue_t *fv, int length)
+{
+	ws_assert(fv->ftype->ftype == FT_PROTOCOL);
+	protocol_value_t *proto = &fv->value.protocol;
+	proto->length = length;
+}
+
+void
 fvalue_set_uinteger(fvalue_t *fv, uint32_t value)
 {
 	ws_assert(fv->ftype->ftype == FT_IEEE_11073_SFLOAT ||
@@ -1036,8 +1092,7 @@ fvalue_set_uinteger64(fvalue_t *fv, uint64_t value)
 			fv->ftype->ftype == FT_UINT48 ||
 			fv->ftype->ftype == FT_UINT56 ||
 			fv->ftype->ftype == FT_UINT64 ||
-			fv->ftype->ftype == FT_BOOLEAN ||
-			fv->ftype->ftype == FT_EUI64);
+			fv->ftype->ftype == FT_BOOLEAN);
 	ws_assert(fv->ftype->set_value.set_value_uinteger64);
 	fv->ftype->set_value.set_value_uinteger64(fv, value);
 }
@@ -1083,13 +1138,13 @@ fvalue_get_bytes(fvalue_t *fv)
 {
 	ws_assert(fv->ftype->ftype == FT_BYTES ||
 			fv->ftype->ftype == FT_UINT_BYTES ||
-			fv->ftype->ftype == FT_AX25 ||
 			fv->ftype->ftype == FT_VINES ||
 			fv->ftype->ftype == FT_ETHER ||
 			fv->ftype->ftype == FT_OID ||
 			fv->ftype->ftype == FT_REL_OID ||
 			fv->ftype->ftype == FT_SYSTEM_ID ||
 			fv->ftype->ftype == FT_FCWWN ||
+			fv->ftype->ftype == FT_EUI64 ||
 			fv->ftype->ftype == FT_IPv6);
 	ws_assert(fv->ftype->get_value.get_value_bytes);
 	return fv->ftype->get_value.get_value_bytes(fv);
@@ -1185,8 +1240,7 @@ fvalue_get_uinteger64(fvalue_t *fv)
 			fv->ftype->ftype == FT_UINT48 ||
 			fv->ftype->ftype == FT_UINT56 ||
 			fv->ftype->ftype == FT_UINT64 ||
-			fv->ftype->ftype == FT_BOOLEAN ||
-			fv->ftype->ftype == FT_EUI64);
+			fv->ftype->ftype == FT_BOOLEAN);
 	ws_assert(fv->ftype->get_value.get_value_uinteger64);
 	return fv->ftype->get_value.get_value_uinteger64(fv);
 }
@@ -1341,6 +1395,12 @@ bool
 fvalue_is_negative(const fvalue_t *a)
 {
 	return a->ftype->is_negative(a);
+}
+
+bool
+fvalue_is_nan(const fvalue_t *a)
+{
+	return a->ftype->is_nan(a);
 }
 
 static fvalue_t *

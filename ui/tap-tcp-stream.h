@@ -27,6 +27,19 @@ typedef enum tcp_graph_type_ {
     GRAPH_UNDEFINED
 } tcp_graph_type;
 
+#define RTT_ALL             0x0001
+#define RTT_SAK             0x0002
+#define RTT_RTT             0x0004
+#define RTT_KRN             0x0008
+
+typedef enum rtt_sampling_method_ {
+    SAMPLING_ALL,
+    SAMPLING_ALL_SACK,
+    SAMPLING_RTT,
+    SAMPLING_KARN,
+    SAMPLING_UNDEFINED
+} rtt_sampling_method;
+
 struct segment {
     struct segment *next;
     uint32_t num;
@@ -39,6 +52,8 @@ struct segment {
 
     uint32_t th_seq;
     uint32_t th_ack;
+    uint32_t th_rawseq;
+    uint32_t th_rawack;
     uint16_t th_flags;
     uint32_t th_win;   /* make it 32 bits so we can handle some scaling */
     uint32_t th_seglen;
@@ -46,6 +61,8 @@ struct segment {
     uint16_t th_dport;
     address ip_src;
     address ip_dst;
+
+    bool     ack_karn; /* true when ambiguous according to Karn's algo */
 
     uint8_t num_sack_ranges;
     uint32_t sack_left_edge[MAX_TCP_SACK_RANGES];
@@ -55,6 +72,9 @@ struct segment {
 struct tcp_graph {
     tcp_graph_type   type;
 
+    /* RTT sampling method (for RTT graphs only) */
+    uint8_t          rtt_sampling;
+
     /* The stream this graph will show */
     address          src_address;
     uint16_t         src_port;
@@ -63,6 +83,7 @@ struct tcp_graph {
     uint32_t         stream;
     /* Should this be a map or tree instead? */
     struct segment  *segments;
+    struct segment  *last;
 };
 
 /** Fill in the segment list for a TCP graph
@@ -96,11 +117,27 @@ struct rtt_unack {
     unsigned int  end_seqno;
 };
 
-int rtt_is_retrans(struct rtt_unack * , unsigned int );
+/**
+ * Check if a sequence number is currently in the Unacked list,
+ * typically for avoiding adding redundant sequences.
+ * In practice, the retrans meaning in this particular code is different
+ * from TCP's one and would rather cover Keep-Alives and Spurious Retrans.
+ *
+ * @param list The list containing the Unacked sequences
+ * @param seqno The sequence number to be searched for in the Unacked list
+ * @return true if the list contains the sequence number, false otherwise
+ */
+bool rtt_is_retrans(struct rtt_unack *list, unsigned int seqno);
+
 struct rtt_unack *rtt_get_new_unack(double , unsigned int , unsigned int );
 void rtt_put_unack_on_list(struct rtt_unack ** , struct rtt_unack * );
 void rtt_delete_unack_from_list(struct rtt_unack ** , struct rtt_unack * );
 void rtt_destroy_unack_list(struct rtt_unack ** );
+
+static inline int
+tcp_seq_eq(uint32_t s1, uint32_t s2) {
+    return (int32_t)(s1 - s2) == 0;
+}
 
 static inline int
 tcp_seq_before(uint32_t s1, uint32_t s2) {
@@ -117,7 +154,8 @@ tcp_seq_after(uint32_t s1, uint32_t s2) {
     return (int32_t)(s1 - s2) > 0;
 }
 
-static inline int tcp_seq_before_or_eq(uint32_t s1, uint32_t s2) {
+static inline int
+tcp_seq_before_or_eq(uint32_t s1, uint32_t s2) {
     return !tcp_seq_after(s1, s2);
 }
 

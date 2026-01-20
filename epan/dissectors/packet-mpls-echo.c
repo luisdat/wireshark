@@ -25,6 +25,8 @@
 #include <epan/expert.h>
 #include <epan/to_str.h>
 
+#include <wsutil/ws_padding_to.h>
+
 #include "packet-ldp.h"
 #include "packet-mpls.h"
 
@@ -237,14 +239,14 @@ static int hf_mpls_echo_tlv_responder_indent_ipv4;
 static int hf_mpls_echo_tlv_responder_indent_ipv6;
 static int hf_mpls_echo_tlv_bfd;
 
-static gint ett_mpls_echo;
-static gint ett_mpls_echo_gflags;
-static gint ett_mpls_echo_tlv;
-static gint ett_mpls_echo_tlv_fec;
-static gint ett_mpls_echo_tlv_ds_map;
-static gint ett_mpls_echo_tlv_ilso;
-static gint ett_mpls_echo_tlv_dd_map;
-static gint ett_mpls_echo_tlv_ddstlv_map;
+static int ett_mpls_echo;
+static int ett_mpls_echo_gflags;
+static int ett_mpls_echo_tlv;
+static int ett_mpls_echo_tlv_fec;
+static int ett_mpls_echo_tlv_ds_map;
+static int ett_mpls_echo_tlv_ilso;
+static int ett_mpls_echo_tlv_dd_map;
+static int ett_mpls_echo_tlv_ddstlv_map;
 
 static expert_field ei_mpls_echo_tlv_fec_len;
 static expert_field ei_mpls_echo_tlv_dd_map_subtlv_len;
@@ -570,13 +572,13 @@ static const value_string mpls_echo_tlv_ds_map_mp_proto[] = {
  * Dissector for FEC sub-TLVs
  */
 static void
-dissect_mpls_echo_tlv_fec(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int rem)
+dissect_mpls_echo_tlv_fec(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, unsigned rem)
 {
     proto_tree *ti, *tlv_fec_tree;
-    guint16     idx = 1, nil_idx = 1, type, saved_type;
-    int         length, nil_length, pad;
-    guint32     label, adj_offset, adj_type, adj_proto;
-    guint8      exp, bos, ttl;
+    uint16_t    idx = 1, nil_idx = 1, type, saved_type;
+    unsigned    length, nil_length, pad;
+    uint32_t    label, adj_offset, adj_type, adj_proto;
+    uint8_t     exp, bos, ttl;
 
     while (rem >= 4) { /* Type, Length */
         type = tvb_get_ntohs(tvb, offset);
@@ -590,10 +592,16 @@ dissect_mpls_echo_tlv_fec(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto
         ti = NULL;
         tlv_fec_tree = NULL;
 
+        /*
+         * FEC sub-TLVs are zero-padded to align to four-octet boundary.
+         * Compute the padding.
+         */
+        pad = WS_PADDING_TO_4(length);
+
         if (tree) {
-            tlv_fec_tree = proto_tree_add_subtree_format(tree, tvb, offset, length + (4-(length%4)),
+            tlv_fec_tree = proto_tree_add_subtree_format(tree, tvb, offset, length + pad,
                                      ett_mpls_echo_tlv_fec, NULL, "FEC Element %u: %s",
-                                     idx, val_to_str_ext(type, &mpls_echo_tlv_fec_names_ext,
+                                     idx, val_to_str_ext(pinfo->pool, type, &mpls_echo_tlv_fec_names_ext,
                                                          "Unknown FEC type (0x%04X)"));
 
             /* FEC sub-TLV Type and Length */
@@ -922,7 +930,7 @@ dissect_mpls_echo_tlv_fec(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto
             break;
         case TLV_FEC_STACK_SR_IGP_IPv4:
             proto_tree_add_item(tlv_fec_tree, hf_mpls_echo_tlv_fec_igp_ipv4,
-                                tvb, offset + 4, 4, ENC_NA);
+                                tvb, offset + 4, 4, ENC_BIG_ENDIAN);
             proto_tree_add_item(tlv_fec_tree, hf_mpls_echo_tlv_fec_igp_mask,
                                 tvb, offset + 8, 1, ENC_BIG_ENDIAN);
             proto_tree_add_item(tlv_fec_tree, hf_mpls_echo_tlv_fec_igp_protocol,
@@ -954,10 +962,10 @@ dissect_mpls_echo_tlv_fec(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto
             switch(adj_type) {
                 case SUB_TLV_FEC_SR_IGP_ADJ_IPv4:
                     proto_tree_add_item(tlv_fec_tree, hf_mpls_echo_tlv_fec_igp_adj_local_ipv4,
-                                        tvb, adj_offset, 4, ENC_NA);
+                                        tvb, adj_offset, 4, ENC_BIG_ENDIAN);
                     adj_offset += 4;
                     proto_tree_add_item(tlv_fec_tree, hf_mpls_echo_tlv_fec_igp_adj_remote_ipv4,
-                                        tvb, adj_offset, 4, ENC_NA);
+                                        tvb, adj_offset, 4, ENC_BIG_ENDIAN);
                     adj_offset += 4;
                     break;
                 case SUB_TLV_FEC_SR_IGP_ADJ_IPv6:
@@ -1012,10 +1020,8 @@ dissect_mpls_echo_tlv_fec(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto
 
         /*
          * Check for padding based on sub-TLV length alignment;
-         * FEC sub-TLVs is zero-padded to align to four-octet boundary.
          */
-        if (length  % 4) {
-            pad = 4 - (length % 4);
+        if (pad != 0) {
             if (length + 4 + pad > rem) {
                 expert_add_info_format(pinfo, ti, &ei_mpls_echo_tlv_fec_len,
                                        "Invalid FEC Sub-TLV Padded Length (claimed %u, found %u)",
@@ -1038,14 +1044,14 @@ dissect_mpls_echo_tlv_fec(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto
  * Dissector for Downstream Mapping TLV
  */
 static void
-dissect_mpls_echo_tlv_ds_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int rem)
+dissect_mpls_echo_tlv_ds_map(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, int rem)
 {
     proto_tree *ti, *tlv_ds_map_tree;
     proto_tree *addr_ti;
-    guint16     mplen, idx = 1;
-    guint32     label;
-    guint8      exp, bos, proto;
-    guint8      hash_type, addr_type;
+    uint16_t    mplen, idx = 1;
+    uint32_t    label;
+    uint8_t     exp, bos, proto;
+    uint8_t     hash_type, addr_type;
 
     proto_tree_add_item(tree, hf_mpls_echo_tlv_ds_map_mtu, tvb,
                         offset, 2, ENC_BIG_ENDIAN);
@@ -1062,7 +1068,7 @@ dissect_mpls_echo_tlv_ds_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, pr
     proto_tree_add_item(tlv_ds_map_tree, hf_mpls_echo_tlv_ds_map_flag_n, tvb,
                         offset + 3, 1, ENC_BIG_ENDIAN);
 
-    addr_type = tvb_get_guint8(tvb, offset + 2);
+    addr_type = tvb_get_uint8(tvb, offset + 2);
     switch (addr_type) {
     case TLV_ADDR_IPv4:
         proto_tree_add_item(tree, hf_mpls_echo_tlv_ds_map_ds_ip, tvb,
@@ -1105,7 +1111,7 @@ dissect_mpls_echo_tlv_ds_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, pr
 
     /* Get the Multipath Length and Hash Type */
     mplen     = tvb_get_ntohs(tvb, offset + 14);
-    hash_type = tvb_get_guint8(tvb, offset + 12);
+    hash_type = tvb_get_uint8(tvb, offset + 12);
 
     rem    -= 16;
     offset += 16;
@@ -1207,15 +1213,15 @@ dissect_mpls_echo_tlv_ds_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, pr
 
 /* Dissector for Detailed Downstream Mapping TLV - RFC [6424] */
 static void
-dissect_mpls_echo_tlv_dd_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int rem)
+dissect_mpls_echo_tlv_dd_map(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, int rem)
 {
     proto_tree *ddti = NULL, *tlv_dd_map_tree, *tlv_ddstlv_map_tree;
     proto_tree *ddsti, *ddsti2;
-    guint16     subtlv_length, subtlv_type, multipath_length;
-    guint8      addr_type, multipath_type, fec_tlv_length;
-    guint16     idx = 1;
-    guint32     label;
-    guint8      tc, s_bit, proto;
+    uint16_t    subtlv_length, subtlv_type, multipath_length;
+    uint8_t     addr_type, multipath_type, fec_tlv_length;
+    uint16_t    idx = 1;
+    uint32_t    label;
+    uint8_t     tc, s_bit, proto;
 
     if (tree) {
         proto_tree_add_item(tree, hf_mpls_echo_tlv_dd_map_mtu, tvb,
@@ -1233,7 +1239,7 @@ dissect_mpls_echo_tlv_dd_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, pr
         ddti = proto_tree_add_item(tlv_dd_map_tree, hf_mpls_echo_tlv_dd_map_flag_n, tvb,
                                    offset + 3, 1, ENC_BIG_ENDIAN);
     }
-    addr_type = tvb_get_guint8(tvb, offset + 2);
+    addr_type = tvb_get_uint8(tvb, offset + 2);
     switch (addr_type) {
     case TLV_ADDR_IPv4:
         proto_tree_add_item(tree, hf_mpls_echo_tlv_dd_map_ds_ip, tvb,
@@ -1289,7 +1295,7 @@ dissect_mpls_echo_tlv_dd_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, pr
 
         switch (subtlv_type) {
         case TLV_FEC_MULTIPATH_DATA:
-            multipath_type   = tvb_get_guint8(tvb, offset);
+            multipath_type   = tvb_get_uint8(tvb, offset);
             multipath_length = tvb_get_ntohs(tvb, offset + 1);
             tlv_dd_map_tree = proto_tree_add_subtree(tree, tvb, offset - 4, multipath_length + 8,
                                         ett_mpls_echo_tlv_dd_map, &ddsti, "Multipath sub-TLV");
@@ -1431,8 +1437,8 @@ dissect_mpls_echo_tlv_dd_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, pr
             break;
 
         case TLV_FEC_STACK_CHANGE: {
-            addr_type       = tvb_get_guint8(tvb, offset + 1);
-            fec_tlv_length  = tvb_get_guint8(tvb, offset + 2);
+            addr_type       = tvb_get_uint8(tvb, offset + 1);
+            fec_tlv_length  = tvb_get_uint8(tvb, offset + 2);
             tlv_dd_map_tree = proto_tree_add_subtree(tree, tvb, offset - 4, fec_tlv_length + 12,
                                             ett_mpls_echo_tlv_dd_map, NULL, "Stack change sub-TLV");
 
@@ -1478,16 +1484,16 @@ dissect_mpls_echo_tlv_dd_map(tvbuff_t *tvb, packet_info *pinfo, guint offset, pr
  * Dissector for IPv4 and IPv6 Interface and Label Stack Object
  */
 static void
-dissect_mpls_echo_tlv_ilso(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int rem, gboolean is_ipv6)
+dissect_mpls_echo_tlv_ilso(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, int rem, bool is_ipv6)
 {
     proto_tree *ti;
-    guint8      type;
-    guint16     idx = 1;
-    guint32     label;
-    guint8      exp, bos, ttl;
+    uint8_t     type;
+    uint16_t    idx = 1;
+    uint32_t    label;
+    uint8_t     exp, bos, ttl;
 
     ti      = proto_tree_add_item(tree, hf_mpls_echo_tlv_ilso_addr_type, tvb, offset, 1, ENC_BIG_ENDIAN);
-    type    = tvb_get_guint8(tvb, offset);
+    type    = tvb_get_uint8(tvb, offset);
     offset += 1;
     rem    -= 1;
 
@@ -1566,20 +1572,20 @@ dissect_mpls_echo_tlv_ilso(tvbuff_t *tvb, packet_info *pinfo, guint offset, prot
 }
 
 static int
-dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int rem, gboolean in_errored);
+dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, int rem, bool in_errored);
 
 /*
  * Dissector for Errored TLVs
  */
 static void
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_mpls_echo_tlv_errored(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int rem)
+dissect_mpls_echo_tlv_errored(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, int rem)
 {
     int errored_tlv_length;
 
     increment_dissection_depth(pinfo);
     while (rem >= 4) {
-        errored_tlv_length = dissect_mpls_echo_tlv(tvb, pinfo, offset, tree, rem, TRUE);
+        errored_tlv_length = dissect_mpls_echo_tlv(tvb, pinfo, offset, tree, rem, true);
         rem    -= errored_tlv_length;
         offset += errored_tlv_length;
     }
@@ -1591,10 +1597,10 @@ dissect_mpls_echo_tlv_errored(tvbuff_t *tvb, packet_info *pinfo, guint offset, p
  */
 static int
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree, int rem, gboolean in_errored)
+dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, int rem, bool in_errored)
 {
     proto_tree *ti = NULL, *mpls_echo_tlv_tree = NULL;
-    guint16     type, saved_type;
+    uint16_t    type, saved_type;
     int         length;
 
     length = tvb_reported_length_remaining(tvb, offset);
@@ -1619,7 +1625,7 @@ dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tre
     if (tree) {
         mpls_echo_tlv_tree = proto_tree_add_subtree_format(tree, tvb, offset, length + 4, ett_mpls_echo_tlv, NULL,
                                   "%s%s", in_errored ? "Errored TLV Type: " : "",
-                                 val_to_str_ext(type, &mpls_echo_tlv_type_names_ext, "Unknown TLV type (0x%04X)"));
+                                 val_to_str_ext(pinfo->pool, type, &mpls_echo_tlv_type_names_ext, "Unknown TLV type (0x%04X)"));
 
         /* MPLS Echo TLV Type and Length */
         if (in_errored) {
@@ -1662,7 +1668,7 @@ dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tre
                                    length);
             break;
         }
-        dissect_mpls_echo_tlv_ilso(tvb, pinfo, offset + 4, mpls_echo_tlv_tree, length, FALSE);
+        dissect_mpls_echo_tlv_ilso(tvb, pinfo, offset + 4, mpls_echo_tlv_tree, length, false);
         break;
     case TLV_ILSO_IPv6:
         if (length < 24) {
@@ -1671,7 +1677,7 @@ dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tre
                                    length);
             break;
         }
-        dissect_mpls_echo_tlv_ilso(tvb, pinfo, offset + 4, mpls_echo_tlv_tree, length, TRUE);
+        dissect_mpls_echo_tlv_ilso(tvb, pinfo, offset + 4, mpls_echo_tlv_tree, length, true);
         break;
 #if 0
     case TLV_RTO_IPv4:
@@ -1706,7 +1712,7 @@ dissect_mpls_echo_tlv(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tre
                             tvb, offset + 4, 4, ENC_BIG_ENDIAN);
         break;
     case TLV_P2MP_RESPONDER_IDENT: {
-        guint16     resp_ident_type, resp_ident_len;
+        uint16_t    resp_ident_type, resp_ident_len;
         proto_item *hidden_item;
 
         resp_ident_type = tvb_get_ntohs(tvb, offset + 4);
@@ -1838,7 +1844,7 @@ dissect_mpls_echo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
     int         offset = 0, rem = 0, len;
     proto_item *ti = NULL;
     proto_tree *mpls_echo_tree = NULL;
-    guint8      msgtype;
+    uint8_t     msgtype;
 
     /* If version != 1 we assume it's not an mpls ping packet */
     if (tvb_captured_length(tvb) < 5) {
@@ -1858,7 +1864,7 @@ dissect_mpls_echo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
     rem = tvb_reported_length_remaining(tvb, offset);
 
     /* Get the message type and fill in the Column info */
-    msgtype = tvb_get_guint8(tvb, offset + 4);
+    msgtype = tvb_get_uint8(tvb, offset + 4);
 
     /* The minimum fixed part of the packet is 16 Bytes or 32 Bytes depending on Msg Type */
     if ( ((!MSGTYPE_MPLS_ECHO(msgtype)) && (rem < 16)) ||
@@ -1871,7 +1877,7 @@ dissect_mpls_echo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
     }
 
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str(msgtype, mpls_echo_msgtype, "Unknown Message Type (0x%02X)"));
+                val_to_str(pinfo->pool, msgtype, mpls_echo_msgtype, "Unknown Message Type (0x%02X)"));
 
 
     if (tree) {
@@ -1931,7 +1937,7 @@ dissect_mpls_echo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
     /* Dissect all TLVs */
     while (tvb_reported_length_remaining(tvb, offset) > 0 ) {
-        len = dissect_mpls_echo_tlv(tvb, pinfo, offset, mpls_echo_tree, rem, FALSE);
+        len = dissect_mpls_echo_tlv(tvb, pinfo, offset, mpls_echo_tree, rem, false);
         offset += len;
         rem    -= len;
     }
@@ -2769,7 +2775,7 @@ proto_register_mpls_echo(void)
         },
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_mpls_echo,
         &ett_mpls_echo_gflags,
         &ett_mpls_echo_tlv,

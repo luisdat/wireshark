@@ -12,6 +12,7 @@ import os.path
 from subprocesstest import count_output
 import subprocess
 import pytest
+from pathlib import PurePath
 
 # XXX Currently unused. It would be nice to be able to use this below.
 time_output_args = ('-Tfields', '-e', 'frame.number', '-e', 'frame.time_epoch', '-e', 'frame.time_delta')
@@ -122,9 +123,9 @@ def check_pcapng_dsb_fields(request, cmd_tshark):
         output = proc_stdout.strip()
         actual = list(zip(*[x.split(",") for x in output.split('\t')]))
         def format_field(field):
-            t, l, v = field
+            t, length, v = field
             v_hex = ''.join('%02x' % c for c in v)
-            return ('0x%08x' % t, str(l), v_hex)
+            return ('0x%08x' % t, str(length), v_hex)
         fields = [format_field(field) for field in fields]
         assert fields == actual
     return check_dsb_fields_real
@@ -213,6 +214,7 @@ class TestFileFormatsPcapngDsb:
         p12_keyfile = os.path.join(dirs.key_dir, 'key.p12')
         outfile = result_file('rsasnakeoil2-dsb.pcapng')
         proc = subprocess.run((cmd_editcap,
+            '--log-fatal', 'warning',
             '--inject-secrets', 'tls,%s' % rsa_keyfile,
             '--inject-secrets', 'tls,%s' % p12_keyfile,
             capture_file('rsasnakeoil2.pcap'), outfile
@@ -227,6 +229,27 @@ class TestFileFormatsPcapngDsb:
             (0x544c534b, len(dsb2_contents), dsb2_contents),
         ), env=base_env)
 
+    def test_pcapng_dsb_extract(self, cmd_editcap, dirs, capture_file, result_file, check_pcapng_dsb_fields, base_env):
+        '''Check that extracted DSBs match the original key log files.'''
+        dsb_keys1 = os.path.join(dirs.key_dir, 'tls12-dsb-1.keys')
+        dsb_keys2 = os.path.join(dirs.key_dir, 'tls12-dsb-2.keys')
+        outfile = result_file('tls12-dsb-extract.key')
+        subprocess.run((cmd_editcap,
+            '--extract-secrets',
+            capture_file('tls12-dsb.pcapng'), outfile
+        ), check=True, env=base_env)
+        p = PurePath(outfile)
+        with open(dsb_keys1, 'r') as f:
+            dsb1_contents = f.read().encode('utf8')
+        with open(dsb_keys2, 'r') as f:
+            dsb2_contents = f.read().encode('utf8')
+        # Python 3.9 and higher has p.with_stem(p.stem + "_00000"))
+        with open(p.with_name(p.stem + "_00000" + p.suffix)) as f:
+            dsb1_out = f.read().encode('utf8')
+        with open(p.with_name(p.stem + "_00001" + p.suffix)) as f:
+            dsb2_out = f.read().encode('utf8')
+        assert dsb1_contents == dsb1_out
+        assert dsb2_contents == dsb2_out
 
 class TestFileFormatMime:
     def test_mime_pcapng_gz(self, cmd_tshark, capture_file, test_env):
@@ -240,3 +263,15 @@ class TestFileFormatMime:
                 '-e', 'pcapng.block.length_trailer',
             ), encoding='utf-8', env=test_env)
         assert proc_stdout.strip() == '480\t128,88,132,132\t128,88,132,132'
+
+class TestFileFormatCllog:
+    def test_cllog_cl2000(self, cmd_tshark, capture_file, test_env):
+        '''Basic test of CAN Logger file format reader.'''
+        proc_stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('canlogger-cl2000.txt'),
+                '-Xread_format:CSS Electronics CLX000 CAN log',
+                '-Tfields',
+                '-e', 'can.id',
+            ), encoding='utf-8', env=test_env)
+        assert ' '.join(proc_stdout.strip().splitlines()) == \
+            '2015 2024 2015 2024 2015 2024 2015 2024'

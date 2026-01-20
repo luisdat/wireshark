@@ -20,13 +20,17 @@
 #include <epan/addr_resolv.h>
 #include <epan/tvbparse.h>
 #include <epan/conversation.h>
-
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include <wsutil/epochs.h>
 
 #include "packet-ntp.h"
+#include "packet-nts-ke.h"
 
+/* Prototypes */
 void proto_register_ntp(void);
 void proto_reg_handoff_ntp(void);
+static int dissect_ntp_ext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, int offset, uint64_t flags);
 
 static dissector_handle_t ntp_handle;
 
@@ -49,7 +53,7 @@ static dissector_handle_t ntp_handle;
  * |                   Reference Timestamp (64)                    |
  * |                                                               |
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                   Originate Timestamp (64)                    |
+ * |                     Origin Timestamp (64)                     |
  * |                                                               |
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  * |                    Receive Timestamp (64)                     |
@@ -98,6 +102,7 @@ static dissector_handle_t ntp_handle;
 
 #define UDP_PORT_NTP	123
 #define TCP_PORT_NTP	123
+#define PTP_ORG_SUBTYPE   1
 
 /* Leap indicator, 2bit field is used to warn of a inserted/deleted
  * second, or clock unsynchronized indication.
@@ -210,7 +215,9 @@ static const struct {
 	const char *id;
 	const char *data;
 } primary_sources[] = {
-	/* IANA / RFC 5905 */
+	/* Reference Identifier Codes
+	 *  https://www.iana.org/assignments/ntp-parameters/ntp-parameters.xhtml#ntp-parameters-1
+	 */
 	{ "GOES",	"Geostationary Orbit Environment Satellite" },
 	{ "GPS\0",	"Global Position System" },
 	{ "GAL\0",	"Galileo Positioning System" },
@@ -230,8 +237,10 @@ static const struct {
 	{ "ACTS",	"NIST telephone modem" },
 	{ "USNO",	"USNO telephone modem" },
 	{ "PTB\0",	"European telephone modem" },
+	{ "DFM\0",	"UTC(DFM)"},
 
 	/* Unofficial codes */
+	{ "LCL\0",	"uncalibrated local clock" },
 	{ "LOCL",	"uncalibrated local clock" },
 	{ "CESM",	"calibrated Cesium clock" },
 	{ "RBDM",	"calibrated Rubidium clock" },
@@ -241,6 +250,19 @@ static const struct {
 	{ "DTS\0",	"Digital Time Service" },
 	{ "ATOM",	"Atomic clock (calibrated)" },
 	{ "VLF\0",	"VLF radio (OMEGA,, etc.)" },
+	{ "DCFa",	"DCF77 with amplitude modulation" },
+	{ "DCFp",	"DCF77 with phase modulation/pseudo random phase modulation" },
+	{ "PZF\0",	"DCF77 correlation receiver for middle Europe" },
+	{ "PZFs",	"DCF77 correlation receiver (with shared memory access)" },
+	{ "PZFi",	"DCF77 correlation receiver (with interrupt based access)" },
+	{ "GPSD",	"GPSD client driver" },
+	{ "GPSs",	"GPS (with shared memory access)" },
+	{ "GPSi",	"GPS (with interrupt based access)" },
+	{ "GLNs",	"GPS/GLONASS (with shared memory access)" },
+	{ "GLNi",	"GPS/GLONASS (with interrupt based access)" },
+	{ "GNSS",	"Global Navigation Satellite System" },
+	{ "MRS\0",	"Multi Reference System" },
+	{ "Nut1",	"UT1(NIST)" },
 	{ "1PPS",	"External 1 PPS input" },
 	{ "FREE",	"(Internal clock)" },
 	// { "INIT",	"(Initialization)" },
@@ -257,7 +279,7 @@ static const struct {
 #define NTPCTRL_MORE_MASK 0x20
 #define NTPCTRL_OP_MASK 0x1f
 
-#define NTPCTRL_OP_UNSPEC 0		/* unspeciffied */
+#define NTPCTRL_OP_UNSPEC 0		/* unspecified */
 #define NTPCTRL_OP_READSTAT 1		/* read status */
 #define NTPCTRL_OP_READVAR 2		/* read variables */
 #define NTPCTRL_OP_WRITEVAR 3		/* write variables */
@@ -586,51 +608,114 @@ static const value_string authentication_types[] = {
  * NTP Extension Field Types.
  * https://www.iana.org/assignments/ntp-parameters/ntp-parameters.xhtml#ntp-parameters-3
  */
-static const value_string ntp_ext_field_types[] = {
+static const range_string ntp_ext_field_types[] = {
+	{ 0x0000, 0x0000, "Crypto-NAK; authentication failure" },
+	{ 0x0002, 0x0002, "Reserved for historic reasons" },
+	{ 0x0102, 0x0102, "Reserved for historic reasons" },
+	{ 0x0104, 0x0104, "Unique Identifier" },
+	{ 0x010A, 0x010A, "Network Correction" },
+	{ 0x0200, 0x0200, "No-Operation Request" },
+	{ 0x0201, 0x0201, "Association Message Request" },
+	{ 0x0202, 0x0202, "Certificate Message Request" },
+	{ 0x0203, 0x0203, "Cookie Message Request" },
+	{ 0x0204, 0x0204, "NTS Cookie or Autokey Message Request" },
+	{ 0x0205, 0x0205, "Leapseconds Message Request" },
+	{ 0x0206, 0x0206, "Sign Message Request" },
+	{ 0x0207, 0x0207, "IFF Identity Message Request" },
+	{ 0x0208, 0x0208, "GQ Identity Message Request" },
+	{ 0x0209, 0x0209, "MV Identity Message Request" },
+	{ 0x0302, 0x0302, "Reserved for historic reasons" },
+	{ 0x0304, 0x0304, "NTS Cookie Placeholder" },
+	{ 0x0402, 0x0402, "Reserved for historic reasons" },
+	{ 0x0404, 0x0404, "NTS Authenticator and Encrypted Extension Fields" },
+	{ 0x0502, 0x0502, "Reserved for historic reasons" },
+	{ 0x0602, 0x0602, "Reserved for historic reasons" },
+	{ 0x0702, 0x0702, "Reserved for historic reasons" },
+	{ 0x0802, 0x0802, "Reserved for historic reasons" },
+	{ 0x0902, 0x0902, "Reserved for historic reasons" },
+	{ 0x2005, 0x2005, "UDP Checksum Complement" },
+	{ 0x8002, 0x8002, "Reserved for historic reasons" },
+	{ 0x8102, 0x8102, "Reserved for historic reasons" },
+	{ 0x8200, 0x8200, "No-Operation Response" },
+	{ 0x8201, 0x8201, "Association Message Response" },
+	{ 0x8202, 0x8202, "Certificate Message Response" },
+	{ 0x8203, 0x8203, "Cookie Message Response" },
+	{ 0x8204, 0x8204, "Autokey Message Response" },
+	{ 0x8205, 0x8205, "Leapseconds Message Response" },
+	{ 0x8206, 0x8206, "Sign Message Response" },
+	{ 0x8207, 0x8207, "IFF Identity Message Response" },
+	{ 0x8208, 0x8208, "GQ Identity Message Response" },
+	{ 0x8209, 0x8209, "MV Identity Message Response" },
+	{ 0x8302, 0x8302, "Reserved for historic reasons" },
+	{ 0x8402, 0x8402, "Reserved for historic reasons" },
+	{ 0x8502, 0x8502, "Reserved for historic reasons" },
+	{ 0x8602, 0x8602, "Reserved for historic reasons" },
+	{ 0x8702, 0x8702, "Reserved for historic reasons" },
+	{ 0x8802, 0x8802, "Reserved for historic reasons" },
+	{ 0x8902, 0x8902, "Reserved for historic reasons" },
+	{ 0xC002, 0xC002, "Reserved for historic reasons" },
+	{ 0xC102, 0xC102, "Reserved for historic reasons" },
+	{ 0xC200, 0xC200, "No-Operation Error Response" },
+	{ 0xC201, 0xC201, "Association Message Error Response" },
+	{ 0xC202, 0xC202, "Certificate Message Error Response" },
+	{ 0xC203, 0xC203, "Cookie Message Error Response" },
+	{ 0xC204, 0xC204, "Autokey Message Error Response" },
+	{ 0xC205, 0xC205, "Leapseconds Message Error Response" },
+	{ 0xC206, 0xC206, "Sign Message Error Response" },
+	{ 0xC207, 0xC207, "IFF Identity Message Error Response" },
+	{ 0xC208, 0xC208, "GQ Identity Message Error Response" },
+	{ 0xC209, 0xC209, "MV Identity Message Error Response" },
+	{ 0xC302, 0xC302, "Reserved for historic reasons" },
+	{ 0xC402, 0xC402, "Reserved for historic reasons" },
+	{ 0xC502, 0xC502, "Reserved for historic reasons" },
+	{ 0xC602, 0xC602, "Reserved for historic reasons" },
+	{ 0xC702, 0xC702, "Reserved for historic reasons" },
+	{ 0xC802, 0xC802, "Reserved for historic reasons" },
+	{ 0xC902, 0xC902, "Reserved for historic reasons" },
+	{ 0xF000, 0xFFFF, "Reserved for Private or Experimental Use" },
+	{      0,      0, NULL }
+};
+
+/*
+ * Deprecated, historic extensions by RFC 9748 with their former meaning
+ * (https://datatracker.ietf.org/doc/rfc9748)
+ */
+static const value_string ntp_ext_field_types_historic[] = {
 	{ 0x0002, "No-Operation Request" },
 	{ 0x0102, "Association Message Request" },
-	{ 0x0104, "Unique Identifier" },
-	{ 0x0202, "Certificate Message Request" },
-	{ 0x0204, "NTS Cookie" },
 	{ 0x0302, "Cookie Message Request" },
-	{ 0x0304, "NTS Cookie Placeholder" },
 	{ 0x0402, "Autokey Message Request" },
-	{ 0x0404, "NTS Authenticator and Encrypted Extension Fields" },
-	{ 0x0502, "Leapseconds Message Request" },
+	{ 0x0502, "Leapseconds Value Message Request" },
 	{ 0x0602, "Sign Message Request" },
 	{ 0x0702, "IFF Identity Message Request" },
 	{ 0x0802, "GQ Identity Message Request" },
 	{ 0x0902, "MV Identity Message Request" },
-	{ 0x2005, "Checksum Complement" },
 	{ 0x8002, "No-Operation Response" },
 	{ 0x8102, "Association Message Response" },
-	{ 0x8202, "Certificate Message Response" },
 	{ 0x8302, "Cookie Message Response" },
 	{ 0x8402, "Autokey Message Response" },
-	{ 0x8502, "Leapseconds Message Response" },
+	{ 0x8502, "Leapseconds Value Message Response" },
 	{ 0x8602, "Sign Message Response" },
 	{ 0x8702, "IFF Identity Message Response" },
 	{ 0x8802, "GQ Identity Message Response" },
 	{ 0x8902, "MV Identity Message Response" },
 	{ 0xC002, "No-Operation Error Response" },
 	{ 0xC102, "Association Message Error Response" },
-	{ 0xC202, "Certificate Message Error Response" },
 	{ 0xC302, "Cookie Message Error Response" },
 	{ 0xC402, "Autokey Message Error Response" },
-	{ 0xC502, "Leapseconds Message Error Response" },
+	{ 0xC502, "Leapseconds Value Message Error Response" },
 	{ 0xC602, "Sign Message Error Response" },
 	{ 0xC702, "IFF Identity Message Error Response" },
 	{ 0xC802, "GQ Identity Message Error Response" },
 	{ 0xC902, "MV Identity Message Error Response" },
-	{ 0, NULL }
+	{      0, NULL }
 };
 
-
 typedef struct {
-	guint32 req_frame;
-	guint32 resp_frame;
+	uint32_t req_frame;
+	uint32_t resp_frame;
 	nstime_t req_time;
-	guint32 seq;
+	uint32_t seq;
 } ntp_trans_info_t;
 
 typedef struct {
@@ -668,6 +753,16 @@ static int hf_ntp_ext;
 static int hf_ntp_ext_type;
 static int hf_ntp_ext_length;
 static int hf_ntp_ext_value;
+static int hf_ntp_ext_network_correction;
+
+static int hf_ntp_ext_nts;
+static int hf_ntp_nts_nonce_length;
+static int hf_ntp_nts_ciphertext_length;
+static int hf_ntp_nts_nonce;
+static int hf_ntp_nts_ciphertext;
+static int hf_ntp_nts_cookie_receive_frame;
+static int hf_ntp_nts_cookie_used_frame;
+static int hf_ntp_nts_crypto_success;
 
 static int hf_ntpctrl_flags2;
 static int hf_ntpctrl_flags2_r;
@@ -937,23 +1032,25 @@ static int hf_ntppriv_mode7_fudgeval_flags;
 static int hf_ntppriv_mode7_ippeerlimit;
 static int hf_ntppriv_mode7_restrict_flags;
 
-static gint ett_ntp;
-static gint ett_ntp_flags;
-static gint ett_ntp_ext;
-static gint ett_ntp_ext_flags;
-static gint ett_ntpctrl_flags2;
-static gint ett_ntpctrl_status;
-static gint ett_ntpctrl_data;
-static gint ett_ntpctrl_item;
-static gint ett_ntppriv_auth_seq;
-static gint ett_mode7_item;
-static gint ett_ntp_authenticator;
-static gint ett_ntppriv_peer_list_flags;
-static gint ett_ntppriv_config_flags;
-static gint ett_ntppriv_sys_flag_flags;
-static gint ett_ntppriv_reset_stats_flags;
+static int ett_ntp;
+static int ett_ntp_flags;
+static int ett_ntp_ext;
+static int ett_ntp_ext_flags;
+static int ett_ntp_ext_nts;
+static int ett_ntpctrl_flags2;
+static int ett_ntpctrl_status;
+static int ett_ntpctrl_data;
+static int ett_ntpctrl_item;
+static int ett_ntppriv_auth_seq;
+static int ett_mode7_item;
+static int ett_ntp_authenticator;
+static int ett_ntppriv_peer_list_flags;
+static int ett_ntppriv_config_flags;
+static int ett_ntppriv_sys_flag_flags;
+static int ett_ntppriv_reset_stats_flags;
 
-static expert_field ei_ntp_ext;
+static expert_field ei_ntp_ext_invalid_length;
+static expert_field ei_ntp_ext_historic;
 
 static const char *mon_names[12] = {
 	"Jan",
@@ -1046,26 +1143,29 @@ static int * const ntppriv_reset_stats_flags[] = {
 static tvbparse_wanted_t *want;
 static tvbparse_wanted_t *want_ignore;
 
+/* NTS cookie and reminders */
+static nts_cookie_t *nts_cookie;
+static int nts_tvb_uid_offset;
+static int nts_tvb_uid_length;
+static int nts_aad_start;
+
 /*
  * NTP_BASETIME is in fact epoch - ntp_start_time; ntp_start_time
  * is January 1, 2036, 00:00:00 UTC.
  */
 #define NTP_BASETIME EPOCH_DELTA_1900_01_01_00_00_00_UTC
 #define NTP_FLOAT_DENOM 4294967296.0
-#define NTP_TS_SIZE 110
 
 /* tvb_ntp_fmt_ts_sec - converts an NTP timestamps second part (32bits) to an human readable string.
 * TVB and an offset (IN).
-* returns pointer to filled buffer.  This buffer will be freed automatically once
-* dissection of the next packet occurs.
+* returns pointer to filled buffer allocated by allocator.
 */
 const char *
-tvb_ntp_fmt_ts_sec(tvbuff_t *tvb, gint offset)
+tvb_ntp_fmt_ts_sec(wmem_allocator_t* allocator, tvbuff_t *tvb, int offset)
 {
-	guint32 tempstmp;
+	uint32_t tempstmp;
 	time_t temptime;
 	struct tm *bd;
-	char *buff;
 
 	tempstmp = tvb_get_ntohl(tvb, offset);
 	if (tempstmp == 0){
@@ -1082,22 +1182,103 @@ tvb_ntp_fmt_ts_sec(tvbuff_t *tvb, gint offset)
 		return "Not representable";
 	}
 
-	buff = (char *)wmem_alloc(wmem_packet_scope(), NTP_TS_SIZE);
-	snprintf(buff, NTP_TS_SIZE,
-		"%s %2d, %d %02d:%02d:%02d UTC",
+	return wmem_strdup_printf(allocator, "%s %2d, %d %02d:%02d:%02d UTC",
 		mon_names[bd->tm_mon],
 		bd->tm_mday,
 		bd->tm_year + 1900,
 		bd->tm_hour,
 		bd->tm_min,
 		bd->tm_sec);
-	return buff;
+}
+
+static tvbuff_t*
+ntp_decrypt_nts(tvbuff_t *parent_tvb, packet_info *pinfo, uint8_t *nonce, uint32_t nonce_len,
+				uint8_t *ciphertext, uint32_t ciphertext_len, uint8_t *aad, uint32_t aad_len,
+				const nts_aead *aead, uint8_t *key)
+{
+	gcry_cipher_hd_t gc_hd = NULL;
+	gcry_error_t err;
+	uint8_t *tag, *ct;
+	uint32_t ct_len;
+
+	/* Field ciphertext length is the total length, including authentication tag.
+	 * Now, as we know the AEAD details, we need to adjust the lengths and copy the bytes
+	 */
+	ct_len = ciphertext_len - aead->tag_len;
+
+	/* SIV has authentication tag prepended */
+	tag = wmem_alloc0(pinfo->pool, aead->tag_len);
+	ct = wmem_alloc0(pinfo->pool, ct_len);
+
+/* GCRYPT 1.10.0 is mandatory for decryption due to SIV algos */
+#if GCRYPT_VERSION_NUMBER >= 0x010a00
+	if(aead->mode == GCRY_CIPHER_MODE_SIV) {
+		memcpy(tag, ciphertext, aead->tag_len);
+		memcpy(ct, ciphertext + aead->tag_len, ct_len);
+	} else {
+		memcpy(ct, ciphertext, ct_len);
+		memcpy(tag, ciphertext + ct_len, aead->tag_len);
+	}
+#else
+	memcpy(ct, ciphertext, ct_len);
+	memcpy(tag, ciphertext + ct_len, aead->tag_len);
+#endif
+
+	/*
+	 * Be sure to align the following with supported ciphers in NTS-KE
+	 */
+
+	err = gcry_cipher_open(&gc_hd, aead->cipher, aead->mode, 0);
+	if (err) { ws_debug("Decryption (open) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+	err = gcry_cipher_setkey(gc_hd, key, aead->key_len);
+	if (err) { ws_debug("Decryption (setkey) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+#if GCRYPT_VERSION_NUMBER >= 0x010a00
+
+	/* gcry_cipher_setiv() blocks further gcry_cipher_authenticate() calls with GCRY_CIPHER_MODE_SIV */
+	if(aead->mode != GCRY_CIPHER_MODE_SIV) {
+		err = gcry_cipher_setiv(gc_hd, nonce, nonce_len);
+		if (err) { ws_debug("Decryption (setiv) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+	}
+
+	err = gcry_cipher_authenticate(gc_hd, aad, aad_len);
+	if (err) { ws_debug("Decryption (authenticate) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+	if(aead->mode == GCRY_CIPHER_MODE_SIV) {
+		err = gcry_cipher_setiv(gc_hd, nonce, nonce_len);
+		if (err) { ws_debug("Decryption (setiv) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+	}
+
+	err = gcry_cipher_set_decryption_tag(gc_hd, tag, aead->tag_len);
+	if (err) { ws_debug("Decryption (decryption tag) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+#else
+
+	err = gcry_cipher_authenticate(gc_hd, aad, aad_len);
+	if (err) { ws_debug("Decryption (authenticate) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+	err = gcry_cipher_setiv(gc_hd, nonce, nonce_len);
+	if (err) { ws_debug("Decryption (setiv) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+#endif
+
+	err = gcry_cipher_decrypt(gc_hd, ct, ct_len, NULL, 0);
+	if (err) { ws_debug("Decryption (decrypt) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+	err = gcry_cipher_checktag(gc_hd, tag, aead->tag_len);
+	if (err) { ws_debug("Decryption (checktag) failed: %s", gcry_strerror(err)); gcry_cipher_close(gc_hd); return NULL; }
+
+	if(gc_hd)
+		gcry_cipher_close(gc_hd);
+
+	return tvb_new_child_real_data(parent_tvb, ct, ct_len, ct_len);
 }
 
 void
-ntp_to_nstime(tvbuff_t *tvb, gint offset, nstime_t *nstime)
+ntp_to_nstime(tvbuff_t *tvb, int offset, nstime_t *nstime)
 {
-	guint32 tempstmp;
+	uint32_t tempstmp;
 
 	/* We need a temporary variable here so the unsigned math
 	 * works correctly (for years > 2036 according to RFC 2030
@@ -1112,21 +1293,39 @@ ntp_to_nstime(tvbuff_t *tvb, gint offset, nstime_t *nstime)
 	nstime->nsecs = (int)(tvb_get_ntohl(tvb, offset+4)/(NTP_FLOAT_DENOM/1000000000.0));
 }
 
+static void
+dissect_nts_cookie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ext_tree, int offset, int length, uint64_t flags)
+{
+	proto_item *ct;
+	nts_cookie_t *new_cookie;
+	nts_used_frames_lookup_t lookup_data = {.tvb = tvb, .hfindex = hf_ntp_nts_cookie_used_frame};
+
+	if ((flags & NTP_MODE_MASK) == NTP_MODE_CLIENT) {
+		nts_cookie = nts_use_cookie(
+			tvb_new_subset_length(tvb, offset, length),
+			tvb_new_subset_length(tvb, nts_tvb_uid_offset, nts_tvb_uid_length),
+			pinfo);
+		if(nts_cookie) {
+			ct = proto_tree_add_uint(ext_tree, hf_ntp_nts_cookie_receive_frame, tvb, 0, 0, nts_cookie->frame_received);
+			proto_item_set_generated(ct);
+		}
+	} else if ((flags & NTP_MODE_MASK) == NTP_MODE_SERVER && nts_cookie) {
+		/* If a cookie extension was received in a server packet, we need to add it as a new one */
+		new_cookie = nts_new_cookie_copy(tvb_new_subset_length(tvb, offset, length), nts_cookie, pinfo);
+
+		if(new_cookie) {
+			/* List all packets which made use of that cookie */
+			lookup_data.tree = ext_tree;
+			wmem_list_foreach(new_cookie->frames_used, nts_append_used_frames_to_tree, &lookup_data);
+		}
+	}
+}
 
 static int
-dissect_ntp_ext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, int offset)
+dissect_ntp_ext_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ext_tree, int offset, uint16_t extlen)
 {
-	proto_tree *ext_tree;
 	proto_item *tf;
-	guint16 extlen;
 	int value_length;
-
-	extlen = tvb_get_ntohs(tvb, offset+2);
-	tf = proto_tree_add_item(ntp_tree, hf_ntp_ext, tvb, offset, extlen, ENC_NA);
-	ext_tree = proto_item_add_subtree(tf, ett_ntp_ext);
-
-	proto_tree_add_item(ext_tree, hf_ntp_ext_type, tvb, offset, 2, ENC_BIG_ENDIAN);
-	offset += 2;
 
 	tf = proto_tree_add_item(ext_tree, hf_ntp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset += 2;
@@ -1136,7 +1335,7 @@ dissect_ntp_ext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, int off
 		 * Report the error, and return an offset that goes to
 		 * the end of the tvbuff, so we stop dissecting.
 		 */
-		expert_add_info_format(pinfo, tf, &ei_ntp_ext, "Extension length %u < 8", extlen);
+		expert_add_info_format(pinfo, tf, &ei_ntp_ext_invalid_length, "Extension length %u < 8", extlen);
 		return tvb_reported_length(tvb);
 	}
 	if (extlen % 4) {
@@ -1144,14 +1343,150 @@ dissect_ntp_ext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, int off
 		 * Report the error, and return an offset that goes
 		 * to the end of the tvbuff, so we stop dissecting.
 		 */
-		expert_add_info_format(pinfo, tf, &ei_ntp_ext, "Extension length %u isn't a multiple of 4",
+		expert_add_info_format(pinfo, tf, &ei_ntp_ext_invalid_length, "Extension length %u isn't a multiple of 4",
 				extlen);
 		return tvb_reported_length(tvb);
 	}
 
 	value_length = extlen - 4;
 	proto_tree_add_item(ext_tree, hf_ntp_ext_value, tvb, offset, value_length, ENC_NA);
+
+	return offset;
+}
+
+static void
+// NOLINTNEXTLINE(misc-no-recursion)
+dissect_nts_ext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ext_tree, proto_tree *ntp_tree, int offset, int length, uint64_t flags, int ext_start)
+{
+	proto_tree *nts_tree;
+	proto_item *tf, *af;
+	uint32_t nonce_len, ciphertext_len, aad_len;
+	uint8_t *nonce, *aad, *ciphertext;
+	uint8_t *ptr_key = NULL;
+	const nts_aead *aead;
+	int crypto_offset = 0, offset_n = offset;
+	tvbuff_t *decrypted;
+
+	tf = proto_tree_add_item(ext_tree, hf_ntp_ext_nts, tvb, offset_n, length, ENC_NA);
+	nts_tree = proto_item_add_subtree(tf, ett_ntp_ext_nts);
+
+	proto_tree_add_item_ret_uint(nts_tree, hf_ntp_nts_nonce_length, tvb, offset_n, 2, ENC_BIG_ENDIAN, &nonce_len);
+	offset_n += 2;
+
+	proto_tree_add_item_ret_uint(nts_tree, hf_ntp_nts_ciphertext_length, tvb, offset_n, 2, ENC_BIG_ENDIAN, &ciphertext_len);
+	offset_n += 2;
+
+	proto_tree_add_item(nts_tree, hf_ntp_nts_nonce, tvb, offset_n, nonce_len, ENC_NA);
+	nonce = (uint8_t *)tvb_memdup(pinfo->pool, tvb, offset_n, nonce_len);
+	offset_n += nonce_len;
+
+	proto_tree_add_item(nts_tree, hf_ntp_nts_ciphertext, tvb, offset_n, ciphertext_len, ENC_NA);
+	ciphertext = (uint8_t *)tvb_memdup(pinfo->pool, tvb, offset_n, ciphertext_len);
+
+	/* CLIENT REQUEST: C2S key is required, used cookie data should already be available */
+	if ((flags & NTP_MODE_MASK) == NTP_MODE_CLIENT) {
+		if(!nts_cookie)
+			return;
+		ptr_key = nts_cookie->key_c2s;
+
+	/* SERVER RESPONSE: S2C key is required, used cookie data has to be looked up by client request */
+	} else if ((flags & NTP_MODE_MASK) == NTP_MODE_SERVER) {
+		if(nts_tvb_uid_length > 0 && nts_tvb_uid_offset >0 ) {
+			nts_cookie = nts_find_cookie_by_uid(tvb_new_subset_length(tvb, nts_tvb_uid_offset, nts_tvb_uid_length));
+		}
+		if(!nts_cookie)
+			return;
+		ptr_key = nts_cookie->key_s2c;
+	} else {
+		return;
+	}
+
+	/* Stop without valid crypto material */
+	aead = nts_find_aead(nts_cookie->aead);
+	if(!aead || !nts_cookie->keys_present)
+		return;
+
+	/* Create a buffer for the bytes to authenticate (associated data)
+	* from packet start until end of previous extension (ext_start).
+	*/
+	aad_len = ext_start;
+	aad = (uint8_t *)tvb_memdup(pinfo->pool, tvb, nts_aad_start, aad_len);
+
+	decrypted = ntp_decrypt_nts(tvb, pinfo, nonce, nonce_len, ciphertext, ciphertext_len, aad, aad_len, aead, ptr_key);
+	af = proto_tree_add_boolean(nts_tree, hf_ntp_nts_crypto_success, tvb, 0, 0,	(bool)decrypted);
+	proto_item_set_generated(af);
+
+	if(decrypted) {
+		add_new_data_source(pinfo, decrypted, "Decrypted NTP");
+		while ((unsigned)crypto_offset < tvb_reported_length(decrypted)) {
+			crypto_offset = dissect_ntp_ext(decrypted, pinfo, ntp_tree, crypto_offset, flags);
+		}
+	}
+}
+
+static int
+// NOLINTNEXTLINE(misc-no-recursion)
+dissect_ntp_ext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, int offset, uint64_t flags)
+{
+	proto_tree *ext_tree;
+	proto_item *tf, *ti, *ei;
+	uint16_t extlen;
+	uint32_t type;
+	nstime_t correction;
+	int value_length, offset_m = offset;
+	const char *ext_historic;
+
+	increment_dissection_depth(pinfo);
+
+	extlen = tvb_get_ntohs(tvb, offset+2);
+	tf = proto_tree_add_item(ntp_tree, hf_ntp_ext, tvb, offset, extlen, ENC_NA);
+	ext_tree = proto_item_add_subtree(tf, ett_ntp_ext);
+
+	ti = proto_tree_add_item_ret_uint(ext_tree, hf_ntp_ext_type, tvb, offset, 2, ENC_BIG_ENDIAN, &type);
+	offset += 2;
+
+	/* Inform about historic extensions */
+	ext_historic = try_val_to_str(type, ntp_ext_field_types_historic);
+	if(ext_historic) {
+		ei = expert_add_info(pinfo, ti, &ei_ntp_ext_historic);
+		proto_item_append_text(ei, " for %s", ext_historic);
+	}
+
+	offset = dissect_ntp_ext_data(tvb, pinfo, ext_tree, offset, extlen);
+
+	value_length = extlen - 4;
+
+	switch (type) {
+		case 0x0104: /* NTS UID extension -> remember offset and length */
+			nts_tvb_uid_offset = offset;
+			nts_tvb_uid_length = value_length;
+
+			/* Every NTP NTS packet must have this extension, so use it to add INFO */
+			col_append_sep_fstr(pinfo->cinfo, COL_INFO, ",", " NTS");
+			break;
+
+		case 0x0204: /* NTS cookie extension */
+			dissect_nts_cookie(tvb, pinfo, ext_tree, offset, value_length, flags);
+			break;
+
+		case 0x0404: /* NTS authentication and encryption extension */
+			dissect_nts_ext(tvb, pinfo, ext_tree, ntp_tree, offset, value_length, flags, offset_m);
+			break;
+
+		case 0x010A: /* Network Correction */
+			nstime_set_zero(&correction);
+			correction.secs = tvb_get_ntohl(tvb, offset);
+			correction.nsecs = (int)(1000000000*(tvb_get_ntohl(tvb, offset+4)/4294967296.0));
+			proto_tree_add_time(ext_tree, hf_ntp_ext_network_correction, tvb, offset, 8, &correction);
+			break;
+
+		default:
+			break;
+	}
+
 	offset += value_length;
+
+	decrement_dissection_depth(pinfo);
 
 	return offset;
 }
@@ -1159,24 +1494,24 @@ dissect_ntp_ext(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, int off
 static void
 dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_conv_info_t *ntp_conv)
 {
-	guint8 stratum;
-	gint8 ppoll;
-	gint8 precision;
-	guint32 rootdelay;
+	uint8_t stratum;
+	int8_t ppoll;
+	int8_t precision;
+	uint32_t rootdelay;
 	double rootdelay_double;
-	guint32 rootdispersion;
+	uint32_t rootdispersion;
 	double rootdispersion_double;
-	guint32 refid_addr;
-	gchar *buff;
+	uint32_t refid_addr;
+	char *buff;
 	int i;
 	int efs_end;
-	guint16 last_extlen = 0;
+	uint16_t last_extlen = 0;
 	int macofs;
-	guint maclen;
+	unsigned maclen;
 	ntp_trans_info_t *ntp_trans;
 	wmem_tree_key_t key[3];
-	guint64 flags;
-	guint32 seq;
+	uint64_t flags;
+	uint32_t seq;
 
 	proto_tree_add_bitmask_ret_uint64(ntp_tree, tvb, 0, hf_ntp_flags, ett_ntp_flags,
 	                                  ntp_header_fields, ENC_NA, &flags);
@@ -1228,13 +1563,13 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 	/* Stratum, 1byte field represents distance from primary source
 	 */
 	proto_tree_add_item(ntp_tree, hf_ntp_stratum, tvb, 1, 1, ENC_NA);
-	stratum = tvb_get_guint8(tvb, 1);
+	stratum = tvb_get_uint8(tvb, 1);
 
 	/* Poll interval, 1byte field indicating the maximum interval
 	 * between successive messages, in seconds to the nearest
 	 * power of two.
 	 */
-	ppoll = tvb_get_gint8(tvb, 2);
+	ppoll = tvb_get_int8(tvb, 2);
 	proto_tree_add_int_format_value(ntp_tree, hf_ntp_ppoll, tvb, 2, 1,
 		ppoll, ppoll >= 0 ? "%d (%.0f seconds)" : "%d (%5.3f seconds)",
 		ppoll, pow(2, ppoll));
@@ -1242,7 +1577,7 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 	/* Precision, 1 byte field indicating the precision of the
 	 * local clock, in seconds to the nearest power of two.
 	 */
-	precision = tvb_get_gint8(tvb, 3);
+	precision = tvb_get_int8(tvb, 3);
 	proto_tree_add_int_format_value(ntp_tree, hf_ntp_precision, tvb, 3, 1,
 		precision, "%d (%11.9f seconds)", precision, pow(2, precision));
 
@@ -1271,37 +1606,27 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 	 * But, all V3 and V4 servers set this to IP address of their
 	 * higher level server. My decision was to resolve this address.
 	 */
-	buff = (gchar *)wmem_alloc(pinfo->pool, NTP_TS_SIZE);
 	if (stratum == 0) {
-		snprintf (buff, NTP_TS_SIZE, "Unidentified Kiss-o\'-Death message '%s'",
+		buff = wmem_strdup_printf(pinfo->pool, "Unidentified Kiss-o\'-Death message '%s'",
 			tvb_get_string_enc(pinfo->pool, tvb, 12, 4, ENC_ASCII));
 		for (i = 0; kod_messages[i].id; i++) {
-			if (tvb_memeql(tvb, 12, kod_messages[i].id, 4) == 0) {
-				snprintf(buff, NTP_TS_SIZE, "%s",
-					kod_messages[i].data);
+			if (tvb_strneql(tvb, 12, kod_messages[i].id, 4) == 0) {
+				buff = wmem_strdup(pinfo->pool, kod_messages[i].data);
 				break;
 			}
 		}
 	} else if (stratum == 1) {
-		snprintf (buff, NTP_TS_SIZE, "Unidentified reference source '%s'",
+		buff = wmem_strdup_printf(pinfo->pool, "Unidentified reference source '%s'",
 			tvb_get_string_enc(pinfo->pool, tvb, 12, 4, ENC_ASCII));
 		for (i = 0; primary_sources[i].id; i++) {
-			if (tvb_memeql(tvb, 12, (const guint8*)primary_sources[i].id, 4) == 0) {
-				snprintf(buff, NTP_TS_SIZE, "%s",
-					primary_sources[i].data);
+			if (tvb_memeql(tvb, 12, (const uint8_t*)primary_sources[i].id, 4) == 0) {
+				buff = wmem_strdup(pinfo->pool, primary_sources[i].data);
 				break;
 			}
 		}
 	} else {
-		int buffpos;
 		refid_addr = tvb_get_ipv4(tvb, 12);
-		buffpos = snprintf(buff, NTP_TS_SIZE, "%s", get_hostname (refid_addr));
-		if (buffpos >= NTP_TS_SIZE) {
-			buff[NTP_TS_SIZE-4]='.';
-			buff[NTP_TS_SIZE-3]='.';
-			buff[NTP_TS_SIZE-2]='.';
-			buff[NTP_TS_SIZE-1]=0;
-		}
+		buff = wmem_strdup(pinfo->pool, get_hostname (refid_addr));
 	}
 	proto_tree_add_bytes_format_value(ntp_tree, hf_ntp_refid, tvb, 12, 4,
 					NULL, "%s", buff);
@@ -1311,7 +1636,7 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 	 */
 	proto_tree_add_item(ntp_tree, hf_ntp_reftime, tvb, 16, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
 
-	/* Originate Timestamp: This is the time at which the request departed
+	/* Origin Timestamp: This is the time at which the request departed
 	 * the client for the server.
 	 */
 	proto_tree_add_item(ntp_tree, hf_ntp_org, tvb, 24, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
@@ -1349,7 +1674,7 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 	 */
 	efs_end = 48;
 	while (tvb_reported_length_remaining(tvb, efs_end) >= 16) {
-		guint16 extlen = tvb_get_ntohs(tvb, efs_end + 2);
+		uint16_t extlen = tvb_get_ntohs(tvb, efs_end + 2);
 		if (extlen < 16) {
 			break;
 		}
@@ -1372,7 +1697,7 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 
 	macofs = 48;
 	while (macofs < efs_end) {
-		macofs = dissect_ntp_ext(tvb, pinfo, ntp_tree, macofs);
+		macofs = dissect_ntp_ext(tvb, pinfo, ntp_tree, macofs, flags);
 	}
 
 	/* When the NTP authentication scheme is implemented, the
@@ -1391,16 +1716,16 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 static void
 dissect_ntp_ctrl(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, ntp_conv_info_t *ntp_conv)
 {
-	guint8 flags2;
+	uint8_t flags2;
 	proto_tree *data_tree, *item_tree, *auth_tree;
 	proto_item *td, *ti;
-	guint16 associd;
-	guint16 datalen;
-	guint16 data_offset;
-	gint length_remaining;
-	gboolean auth_diss = FALSE;
+	uint16_t associd;
+	uint16_t datalen;
+	uint16_t data_offset;
+	int length_remaining;
+	bool auth_diss = false;
 	ntp_trans_info_t *ntp_trans;
-	guint32 seq;
+	uint32_t seq;
 	wmem_tree_key_t key[3];
 
 	tvbparse_t *tt;
@@ -1415,7 +1740,7 @@ dissect_ntp_ctrl(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 	};
 	proto_tree_add_bitmask(ntp_tree, tvb, 0, hf_ntp_flags, ett_ntp_flags, ntp_header_fields, ENC_NA);
 	proto_tree_add_bitmask(ntp_tree, tvb, 1, hf_ntpctrl_flags2, ett_ntpctrl_flags2, ntpctrl_flags, ENC_NA);
-	flags2 = tvb_get_guint8(tvb, 1);
+	flags2 = tvb_get_uint8(tvb, 1);
 
 	proto_tree_add_item_ret_uint(ntp_tree, hf_ntpctrl_sequence, tvb, 2, 2, ENC_BIG_ENDIAN, &seq);
 	key[0].length = 1;
@@ -1591,19 +1916,19 @@ dissect_ntp_ctrl(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 		case NTPCTRL_OP_CONFIGURE:
 		case NTPCTRL_OP_SAVECONFIG:
 			proto_tree_add_item(data_tree, hf_ntpctrl_configuration, tvb, data_offset, datalen, ENC_ASCII);
-			auth_diss = TRUE;
+			auth_diss = true;
 			break;
 		case NTPCTRL_OP_READ_MRU:
 			proto_tree_add_item(data_tree, hf_ntpctrl_mru, tvb, data_offset, datalen, ENC_ASCII);
-			auth_diss = TRUE;
+			auth_diss = true;
 			break;
 		case NTPCTRL_OP_READ_ORDLIST_A:
 			proto_tree_add_item(data_tree, hf_ntpctrl_ordlist, tvb, data_offset, datalen, ENC_ASCII);
-			auth_diss = TRUE;
+			auth_diss = true;
 			break;
 		case NTPCTRL_OP_REQ_NONCE:
 			proto_tree_add_item(data_tree, hf_ntpctrl_nonce, tvb, data_offset, datalen, ENC_ASCII);
-			auth_diss = TRUE;
+			auth_diss = true;
 			break;
 		/* these opcodes doesn't carry any data: NTPCTRL_OP_SETTRAP, NTPCTRL_OP_UNSETTRAP, NTPCTRL_OP_UNSPEC */
 		}
@@ -1612,9 +1937,9 @@ dissect_ntp_ctrl(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 	data_offset = 12+datalen;
 
 	/* Check if there is authentication */
-	if (((flags2 & NTPCTRL_R_MASK) == 0) || auth_diss == TRUE)
+	if (((flags2 & NTPCTRL_R_MASK) == 0) || auth_diss == true)
 	{
-		gint padding_length;
+		int padding_length;
 
 		length_remaining = tvb_reported_length_remaining(tvb, data_offset);
 		/* Check padding presence */
@@ -1696,11 +2021,11 @@ init_parser(void)
 static void
 dissect_ntp_priv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, ntp_conv_info_t *ntp_conv)
 {
-	guint32 impl, reqcode;
-	guint64 flags, auth_seq;
+	uint32_t impl, reqcode;
+	uint64_t flags, auth_seq;
 	ntp_trans_info_t *ntp_trans;
 	wmem_tree_key_t key[3];
-	guint32 seq;
+	uint32_t seq;
 
 	static int * const priv_flags[] = {
 		&hf_ntppriv_flags_r,
@@ -1775,12 +2100,12 @@ dissect_ntp_priv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 
 	if (impl == XNTPD) {
 
-		guint64 numitems;
-		guint64 itemsize;
-		guint16 offset;
-		guint i;
+		uint64_t numitems;
+		uint64_t itemsize;
+		uint16_t offset;
+		unsigned i;
 
-		guint32 v6_flag = 0;
+		uint32_t v6_flag = 0;
 
 		proto_item *mode7_item;
 		proto_tree *mode7_item_tree = NULL;
@@ -1790,12 +2115,12 @@ dissect_ntp_priv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 		proto_tree_add_bits_item(ntp_tree, hf_ntppriv_mbz, tvb, 48, 4, ENC_BIG_ENDIAN);
 		proto_tree_add_bits_ret_val(ntp_tree, hf_ntppriv_itemsize, tvb, 52, 12, &itemsize, ENC_BIG_ENDIAN);
 
-		for (i = 0; i < (guint16)numitems; i++) {
+		for (i = 0; i < (uint16_t)numitems; i++) {
 
-			offset = 8 + (guint16)itemsize * i;
+			offset = 8 + (uint16_t)itemsize * i;
 
 			if ((reqcode != PRIV_RC_MON_GETLIST) && (reqcode != PRIV_RC_MON_GETLIST_1)) {
-				mode7_item = proto_tree_add_string_format(ntp_tree, hf_ntppriv_mode7_item, tvb, offset,(gint)itemsize,
+				mode7_item = proto_tree_add_string_format(ntp_tree, hf_ntppriv_mode7_item, tvb, offset,(int)itemsize,
 					"", "%s Item", val_to_str_ext_const(reqcode, &priv_rc_types_ext, "Unknown") );
 				mode7_item_tree = proto_item_add_subtree(mode7_item, ett_mode7_item);
 			}
@@ -1805,7 +2130,7 @@ dissect_ntp_priv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 			case PRIV_RC_MON_GETLIST_1:
 
 				mode7_item = proto_tree_add_string_format(ntp_tree, hf_ntppriv_mode7_item, tvb, offset,
-					(gint)itemsize, "Monlist Item", "Monlist item: address: %s:%u",
+					(int)itemsize, "Monlist Item", "Monlist item: address: %s:%u",
 					tvb_ip_to_str(pinfo->pool, tvb, offset + 16), tvb_get_ntohs(tvb, offset + ((reqcode == PRIV_RC_MON_GETLIST_1) ? 28 : 20)));
 				mode7_item_tree = proto_item_add_subtree(mode7_item, ett_mode7_item);
 
@@ -2196,7 +2521,7 @@ dissect_ntp_priv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 				offset += 4;
 				proto_tree_add_item(mode7_item_tree, hf_ntppriv_mode7_demobilizations, tvb, offset, 4, ENC_BIG_ENDIAN);
 				offset += 4;
-				proto_tree_add_item(mode7_item_tree, hf_ntppriv_mode7_hashcount, tvb, offset, (gint)itemsize - 20, ENC_NA);
+				proto_tree_add_item(mode7_item_tree, hf_ntppriv_mode7_hashcount, tvb, offset, (int)itemsize - 20, ENC_NA);
 				break;
 
 			case PRIV_RC_LOOP_INFO:
@@ -2588,7 +2913,7 @@ dissect_ntp_priv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ntp_tree, nt
 	}
 	if ((flags & NTPPRIV_R_MASK) == 0 && (auth_seq & NTPPRIV_AUTH_MASK)) {
 		/* request message with authentication bit */
-		gint len;
+		int len;
 		proto_tree_add_item(ntp_tree, hf_ntppriv_tstamp, tvb, 184, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
 		proto_tree_add_item(ntp_tree, hf_ntp_keyid, tvb, 192, 4, ENC_NA);
 		len = tvb_reported_length_remaining(tvb, 196);
@@ -2607,7 +2932,7 @@ dissect_ntp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_tree *ntp_tree;
 	proto_item *ti = NULL;
-	guint8 flags;
+	uint8_t flags;
 	conversation_t *conversation;
 	ntp_conv_info_t *ntp_conv;
 	void (*dissector)(tvbuff_t *, packet_info *, proto_tree *, ntp_conv_info_t *);
@@ -2616,7 +2941,13 @@ dissect_ntp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	flags = tvb_get_guint8(tvb, 0);
+	/* Reset NTS cookie, UID TVB and AAD reminders */
+	nts_cookie = NULL;
+	nts_tvb_uid_offset = 0;
+	nts_tvb_uid_length = 0;
+	nts_aad_start = 0;
+
+	flags = tvb_get_uint8(tvb, 0);
 	switch (flags & NTP_MODE_MASK) {
 	default:
 		dissector = dissect_ntp_std;
@@ -2733,14 +3064,42 @@ proto_register_ntp(void)
 			"Extension", "ntp.ext", FT_NONE, BASE_NONE,
 			NULL, 0, NULL, HFILL }},
 		{ &hf_ntp_ext_type, {
-			"Field Type", "ntp.ext.type", FT_UINT16, BASE_HEX,
-			VALS(ntp_ext_field_types), 0, NULL, HFILL }},
+			"Field Type", "ntp.ext.type", FT_UINT16, BASE_HEX|BASE_RANGE_STRING,
+			RVALS(ntp_ext_field_types), 0, NULL, HFILL }},
 		{ &hf_ntp_ext_length, {
 			"Length", "ntp.ext.length", FT_UINT16, BASE_DEC,
 			NULL, 0, "Entire extension length including padding", HFILL }},
 		{ &hf_ntp_ext_value, {
 			"Value", "ntp.ext.value", FT_BYTES, BASE_NONE,
 			NULL, 0, "Type-specific value", HFILL }},
+		{ &hf_ntp_ext_network_correction, {
+			"Network Correction", "ntp.ext.correction", FT_RELATIVE_TIME, BASE_NONE,
+			NULL, 0, NULL, HFILL }},
+
+		{ &hf_ntp_ext_nts, {
+			"Network Time Security", "ntp.ext.nts", FT_NONE, BASE_NONE,
+			NULL, 0, NULL, HFILL }},
+		{ &hf_ntp_nts_nonce_length, {
+			"Nonce Length", "ntp.nts.nonce.length", FT_UINT16, BASE_DEC,
+			NULL, 0, "Length of NTS nonce", HFILL }},
+		{ &hf_ntp_nts_ciphertext_length, {
+			"Ciphertext Length", "ntp.nts.ciphertext.length", FT_UINT16, BASE_DEC,
+			NULL, 0, "Length of NTS ciphertext", HFILL }},
+		{ &hf_ntp_nts_nonce, {
+			"Nonce", "ntp.nts.nonce", FT_BYTES, BASE_NONE,
+			NULL, 0, "Length of NTS ciphertext", HFILL }},
+		{ &hf_ntp_nts_ciphertext, {
+			"Ciphertext", "ntp.nts.ciphertext", FT_BYTES, BASE_NONE,
+			NULL, 0, "Length of NTS ciphertext", HFILL }},
+		{ &hf_ntp_nts_cookie_receive_frame, {
+			"Received cookie in", "ntp.nts.cookie.receive_frame", FT_FRAMENUM, BASE_NONE,
+			NULL, 0, "Frame where cookie was received", HFILL }},
+		{ &hf_ntp_nts_cookie_used_frame, {
+			"Used cookie in", "ntp.nts.cookie.use_frame", FT_FRAMENUM, BASE_NONE,
+			NULL, 0, NULL, HFILL }},
+		{ &hf_ntp_nts_crypto_success, {
+			"Cryptography Success", "ntp.nts.crypto_success", FT_BOOLEAN, BASE_NONE,
+			TFS(&tfs_yes_no), 0, "Decryption and authentication was successful", HFILL }},
 
 		{ &hf_ntpctrl_flags2, {
 			"Flags 2", "ntp.ctrl.flags2", FT_UINT8, BASE_HEX,
@@ -3544,11 +3903,12 @@ proto_register_ntp(void)
 		/* Todo */
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_ntp,
 		&ett_ntp_flags,
 		&ett_ntp_ext,
 		&ett_ntp_ext_flags,
+		&ett_ntp_ext_nts,
 		&ett_ntpctrl_flags2,
 		&ett_ntpctrl_status,
 		&ett_ntpctrl_data,
@@ -3563,7 +3923,8 @@ proto_register_ntp(void)
 	};
 
 	static ei_register_info ei[] = {
-		{ &ei_ntp_ext, { "ntp.ext.invalid_length", PI_PROTOCOL, PI_WARN, "Extension invalid length", EXPFILL }},
+		{ &ei_ntp_ext_invalid_length, { "ntp.ext.invalid_length", PI_PROTOCOL, PI_WARN, "Extension invalid length", EXPFILL }},
+		{ &ei_ntp_ext_historic, { "ntp.ext.historic", PI_DEPRECATED, PI_NOTE, "Historic extension type", EXPFILL }},
 	};
 
 	expert_module_t* expert_ntp;
@@ -3584,6 +3945,7 @@ proto_reg_handoff_ntp(void)
 {
 	dissector_add_uint_with_preference("udp.port", UDP_PORT_NTP, ntp_handle);
 	dissector_add_uint_with_preference("tcp.port", TCP_PORT_NTP, ntp_handle);
+	dissector_add_uint("ptp.v2.tlv.oe.iana.organizationSubType", PTP_ORG_SUBTYPE, ntp_handle);
 }
 
 /*

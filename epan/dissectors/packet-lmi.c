@@ -13,7 +13,7 @@
  * References:
  *
  * http://www.techfest.com/networking/wan/frrel.htm
- * https://www.broadband-forum.org/technical/download/FRF.1.2/frf1_2.pdf
+ * http://rfc.nop.hu/frf/frf1_2.pdf
  * http://www.cisco.com/univercd/cc/td/doc/cisintwk/ito_doc/frame.htm#xtocid18
  * http://www.net.aapt.com.au/techref/lmimess.htm
  * http://www.raleigh.ibm.com:80/cgi-bin/bookmgr/BOOKS/EZ305800/1.2.4.4
@@ -23,7 +23,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/nlpid.h>
+#include "packet-osi.h"
 
 void proto_register_lmi(void);
 void proto_reg_handoff_lmi(void);
@@ -44,8 +44,8 @@ static int hf_lmi_dlci_low;
 static int hf_lmi_new;
 static int hf_lmi_act;
 
-static gint ett_lmi;
-static gint ett_lmi_ele;
+static int ett_lmi;
+static int ett_lmi_ele;
 
 #ifdef _OLD_
 /*
@@ -72,7 +72,7 @@ static const value_string element_type_str[] = {
     /*** These are the ITU values ***/
     {0x51, "Report"},
     {0x53, "Keep Alive"},
-    {0x07, "PVC Status"},
+    //{0x07, "PVC Status"},
 
     {0,       NULL }
 };
@@ -128,8 +128,8 @@ dissect_lmi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     proto_tree    *lmi_tree, *lmi_subtree;
     proto_item    *ti;
     int           offset = 2, len;
-    guint8        msg_type;
-    guint8        ele_id;
+    uint32_t       msg_type;
+    uint8_t       ele_id;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "LMI");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -139,32 +139,38 @@ dissect_lmi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     proto_tree_add_item(lmi_tree, hf_lmi_call_ref, tvb, 0, 1, ENC_BIG_ENDIAN);
 
-    msg_type = tvb_get_guint8( tvb, 1);
+    proto_tree_add_item_ret_uint(lmi_tree, hf_lmi_msg_type, tvb, 1, 1, ENC_BIG_ENDIAN, &msg_type);
     col_add_str(pinfo->cinfo, COL_INFO,
-            val_to_str(msg_type, msg_type_str, "Unknown message type (0x%02x)"));
-
-    proto_tree_add_uint(lmi_tree, hf_lmi_msg_type, tvb, 1, 1, msg_type);
+        val_to_str(pinfo->pool, msg_type, msg_type_str, "Unknown message type (0x%02x)"));
 
     /* Display the LMI elements */
     while (tvb_reported_length_remaining(tvb, offset) > 0) {
-        ele_id = tvb_get_guint8( tvb, offset);
-        len =  tvb_get_guint8( tvb, offset + 1);
+        ele_id = tvb_get_uint8( tvb, offset);
+        len =  tvb_get_uint8( tvb, offset + 1);
 
         lmi_subtree = proto_tree_add_subtree_format(lmi_tree, tvb, offset, len + 2,
                 ett_lmi_ele, NULL, "Information Element: %s",
-                val_to_str(ele_id, element_type_str, "Unknown (%u)"));
+                val_to_str(pinfo->pool, ele_id, element_type_str, "Unknown (%u)"));
 
-        proto_tree_add_uint(lmi_subtree, hf_lmi_inf_ele, tvb, offset, 1,
-                ele_id);
+        proto_tree_add_uint(lmi_subtree, hf_lmi_inf_ele, tvb, offset, 1, ele_id);
         ++offset;
         proto_tree_add_uint(lmi_subtree, hf_lmi_inf_len, tvb, offset, 1, len);
         ++offset;
-        if (( ele_id == 1) || (ele_id == 51))
+        switch(ele_id)
+        {
+        case 1:
+        case 51:
             dissect_lmi_report_type( tvb, offset, lmi_subtree);
-        else if (( ele_id == 3) || (ele_id == 53))
+            break;
+        case 3:
+        case 53:
             dissect_lmi_link_int( tvb, offset, lmi_subtree);
-        else if (( ele_id == 7) || (ele_id == 57))
+            break;
+        case 7:
+        case 57:
             dissect_lmi_pvc_status( tvb, offset, lmi_subtree);
+            break;
+        }
         offset += len;
     }
     return tvb_captured_length(tvb);
@@ -212,7 +218,7 @@ proto_register_lmi(void)
             { "DLCI Active","lmi.dlci_act", FT_UINT8, BASE_DEC, VALS(pvc_status_act_str), 0x02,
                 "DLCI Active Flag", HFILL }},
     };
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_lmi,
         &ett_lmi_ele,
     };

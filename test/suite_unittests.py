@@ -11,7 +11,6 @@
 '''EPAN unit tests'''
 
 import subprocess
-import pytest
 
 
 class TestUnitTests:
@@ -40,6 +39,10 @@ class TestUnitTests:
     def test_unit_wscbor_test(self, program, base_env):
         '''wscbor_test'''
         subprocess.check_call(program('wscbor_test'), env=base_env)
+
+    def test_unit_wscbor_enc_test(self, program, base_env):
+        '''wscbor_enc_test'''
+        subprocess.check_call(program('wscbor_enc_test'), env=base_env)
 
     def test_unit_epan(self, program, base_env):
         '''epan unit tests'''
@@ -89,7 +92,7 @@ class TestUnitFtSanity:
 
         lines = tshark_proc.stdout.splitlines()
         # XXX We don't currently check protos.
-        protos = [Proto(x) for x in lines if x[0] == "P"]
+        # protos = [Proto(x) for x in lines if x[0] == "P"]
         fields = [Field(x) for x in lines if x[0] == "F"]
 
         err_list = []

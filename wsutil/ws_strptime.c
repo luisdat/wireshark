@@ -118,7 +118,7 @@ static const unsigned char *find_string(const unsigned char *, int *, const char
 #define HAVE_YEAR(s)		(s & S_YEAR)
 #define HAVE_HOUR(s)		(s & S_HOUR)
 
-static char utc[] = { "UTC" };
+static const char utc[] = { "UTC" };
 /* RFC-822/RFC-2822 */
 static const char * const nast[5] = {
        "EST",    "CST",    "MST",    "PST",    "\0\0\0"
@@ -504,11 +504,11 @@ literal:
 				time_t sse;
 
 				/* Extract the seconds as a 64-bit signed number. */
-				if (!ws_strtoi64(bp, &endptr, &secs)) {
+				if (!ws_strtoi64((const char*)bp, &endptr, &secs)) {
 					bp = NULL;
 					continue;
 				}
-				bp = endptr;
+				bp = (const unsigned char*)endptr;
 
 				/* For now, reject times before the Epoch. */
 				if (secs < 0) {

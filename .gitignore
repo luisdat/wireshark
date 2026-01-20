@@ -20,7 +20,8 @@
 *.lo
 *.obj
 *.pyc
-*.so*
+*.so
+*.so.*
 *.[oa]
 *.dylib
 *grammar.out
@@ -75,21 +76,23 @@ rules.ninja
 epan/dissectors/asn1/*/*-stamp
 epan/dissectors/pidl/*-stamp
 epan/dissectors/dcerpc/*-stamp
+_download
 
 # Doc #
 ########
-doc/*.html
-doc/*.[14]
-doc/ws.css
-docbook/developer-guide*.xml
-docbook/user-guide*.xml
-docbook/*-guide-*.pdf
-docbook/ws?g_html/
-docbook/ws?g_html_chunked/
-docbook/release-notes-*.pdf
-docbook/release-notes.txt
-docbook/wsluarm
-docbook/wsluarm_src/
+doc/man_pages/*.html
+doc/man_pages/*.[14]
+doc/developer-guide*.xml
+doc/user-guide*.xml
+doc/*-guide-*.pdf
+doc/ws?g_html/
+doc/ws?g_html_chunked/
+doc/Wireshark Release Notes.html
+doc/Wireshark Release Notes.txt
+doc/Stratoshark Release Notes.html
+doc/Stratoshark Release Notes.txt
+doc/wsluarm
+doc/wsluarm_src/
 wsar_html/
 wsar_html.zip
 
@@ -168,3 +171,34 @@ vgcore.*
 test/*.log
 *.code-workspace
 __pycache__/
+
+
+# LLM / AI Agent control & context files
+Claude.md
+Agents.md
+Agent.md
+AI.md
+LLM.md
+SYSTEM.md
+PROMPT.md
+
+# Variations & Conventions
+*.agent.md
+*.llm.md
+*.prompt.md
+*.system.md
+*.ai.md
+
+# Tool-specific
+.openai/
+.anthropic/
+.claude/
+.cursor/
+.copilot/
+.aider*
+
+# Session- / Context-Dumps
+*.context
+*.conversation
+*.chat
+*.trace

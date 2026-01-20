@@ -93,7 +93,10 @@ ncp.desegment: FALSE
 ndmp.desegment: FALSE
 ndps.desegment_tcp: FALSE
 ndps.desegment_spx: FALSE
+netperfmeter.desegment: FALSE
 netsync.desegment_netsync_messages: FALSE
+nmf.reassemble_nmf: FALSE
+oran_fh_cus.oran.attempt_reassembly: FALSE
 opa.mad.reassemble_rmpp: FALSE
 openflow.desegment: FALSE
 openwire.desegment: FALSE
@@ -122,6 +125,7 @@ rtsp.desegment_headers: FALSE
 rtsp.desegment_body: FALSE
 sametime.reassemble: FALSE
 sapni.desegment: FALSE
+saprfc.table_reassembly: FALSE
 sasp.desegment_sasp_messages: FALSE
 sctp.reassembly: FALSE
 scylla.desegment: FALSE
@@ -134,6 +138,7 @@ smb.trans_reassembly: FALSE
 smb.dcerpc_reassembly: FALSE
 smb2.pipe_reassembly: FALSE
 smb_direct.reassemble_smb_direct: FALSE
+smb_direct.reassemble_smb_direct_infiniband: FALSE
 sml.reassemble: FALSE
 smp.desegment: FALSE
 smpp.reassemble_smpp_over_tcp: FALSE

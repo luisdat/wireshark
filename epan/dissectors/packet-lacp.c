@@ -18,7 +18,9 @@
 #include <epan/packet.h>
 #include <epan/to_str.h>
 #include <epan/expert.h>
-#include <epan/slow_protocol_subtypes.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
+#include "packet-slowprotocols.h"
 
 /* General declarations */
 void proto_register_lacp(void);
@@ -111,9 +113,9 @@ static int hf_lacp_vendor_hp_unknown;
 
 
 /* Initialise the subtree pointers */
-static gint ett_lacp;
-static gint ett_lacp_a_flags;
-static gint ett_lacp_p_flags;
+static int ett_lacp;
+static int ett_lacp_a_flags;
+static int ett_lacp_p_flags;
 
 /* Expert Items */
 static expert_field ei_lacp_wrong_tlv_type;
@@ -124,11 +126,11 @@ static const true_false_string tfs_short_long_timeout = { "Short Timeout", "Long
 static const true_false_string tfs_aggregatable_individual = { "Aggregatable", "Individual" };
 static const true_false_string tfs_in_sync_out_sync = { "In Sync", "Out of Sync" };
 
-static const char * lacp_state_flags_to_str(wmem_allocator_t *scope, guint32 value)
+static const char * lacp_state_flags_to_str(wmem_allocator_t *scope, uint32_t value)
 {
     wmem_strbuf_t *buf = wmem_strbuf_new(scope, "");
     const unsigned int flags_count = 8;
-    const char first_letters[] = "EFDCSGSA";
+    static const char first_letters[] = "EFDCSGSA";
     unsigned int i;
 
     for (i = 0; i < flags_count; i++) {
@@ -162,11 +164,11 @@ static int
 dissect_lacp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     int          offset = 0, length_remaining;
-    guint        tlv_type, tlv_length;
-    guint        version, port, key;
-    const gchar  *sysidstr, *flagstr;
-    guint32      protodetect;
-    guint8       is_vlacp;
+    unsigned     tlv_type, tlv_length;
+    unsigned     version, port, key;
+    const char   *sysidstr, *flagstr;
+    uint32_t     protodetect;
+    uint8_t      is_vlacp;
 
     proto_tree *lacp_tree;
     proto_item *lacp_item, *tlv_type_item, *tlv_length_item;
@@ -265,7 +267,7 @@ dissect_lacp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
     proto_tree_add_bitmask_with_flags(lacp_tree, tvb, offset, hf_lacp_actor_state,
                            ett_lacp_a_flags, actor_flags, ENC_NA, BMT_NO_INT|BMT_NO_TFS|BMT_NO_FALSE);
-    flagstr = lacp_state_flags_to_str(pinfo->pool, tvb_get_guint8(tvb, offset));
+    flagstr = lacp_state_flags_to_str(pinfo->pool, tvb_get_uint8(tvb, offset));
     ti = proto_tree_add_string(lacp_tree, hf_lacp_actor_state_str, tvb, offset, 1, flagstr);
     proto_item_set_generated(ti);
     offset += 1;
@@ -307,7 +309,7 @@ dissect_lacp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     offset += 2;
 
     proto_tree_add_bitmask_with_flags(lacp_tree, tvb, offset, hf_lacp_partner_state, ett_lacp_p_flags, partner_flags, ENC_NA, BMT_NO_INT|BMT_NO_TFS|BMT_NO_FALSE);
-    flagstr = lacp_state_flags_to_str(pinfo->pool, tvb_get_guint8(tvb, offset));
+    flagstr = lacp_state_flags_to_str(pinfo->pool, tvb_get_uint8(tvb, offset));
     ti = proto_tree_add_string(lacp_tree, hf_lacp_partner_state_str, tvb, offset, 1, flagstr);
     proto_item_set_generated(ti);
     offset += 1;
@@ -376,7 +378,7 @@ dissect_lacp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     if (length_remaining) {
 
         /* HP LACP MAD IRF, first bytes is always 0x64 and second bytes is the rest of length */
-        if (length_remaining > 2 && (tvb_get_guint8(tvb, offset) == 0x64) && ((length_remaining -2) == tvb_get_guint8(tvb, offset+1)) )
+        if (length_remaining > 2 && (tvb_get_uint8(tvb, offset) == 0x64) && ((length_remaining -2) == tvb_get_uint8(tvb, offset+1)) )
         {
             proto_tree_add_item(lacp_tree, hf_lacp_vendor, tvb, offset, length_remaining, ENC_NA);
             proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_unknown, tvb, offset, 1, ENC_NA);
@@ -388,7 +390,7 @@ dissect_lacp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
             proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_unknown, tvb, offset, 2, ENC_NA);
             offset += 2;
 
-            proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_irf_domain, tvb, offset, 2, ENC_NA);
+            proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_irf_domain, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
 
             proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_irf_mac, tvb, offset, 6, ENC_NA);
@@ -397,10 +399,10 @@ dissect_lacp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
             proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_unknown, tvb, offset, 8, ENC_NA);
             offset += 8;
 
-            proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_irf_switch, tvb, offset, 2, ENC_NA);
+            proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_irf_switch, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
 
-            proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_irf_port, tvb, offset, 2, ENC_NA);
+            proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_irf_port, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
 
             proto_tree_add_item(lacp_tree, hf_lacp_vendor_hp_unknown, tvb, offset, 2, ENC_NA);
@@ -623,7 +625,7 @@ proto_register_lacp(void)
         /* HP IRF MAD LACP */
         { &hf_lacp_vendor_hp_length,
           { "Length",        "lacp.vendor.hp.length",
-            FT_UINT16,    BASE_DEC,    NULL,    0x0,
+            FT_UINT8,    BASE_DEC,    NULL,    0x0,
             "The length of HP TLV", HFILL }},
         { &hf_lacp_vendor_hp_irf_domain,
           { "IRF Domain",        "lacp.vendor.hp.irf_domain",
@@ -649,7 +651,7 @@ proto_register_lacp(void)
 
     /* Setup protocol subtree array */
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_lacp,
         &ett_lacp_a_flags,
         &ett_lacp_p_flags,
@@ -665,7 +667,7 @@ proto_register_lacp(void)
 
     /* Register the protocol name and description */
 
-    proto_lacp = proto_register_protocol("LACP", "Link Aggregation Control Protocol", "lacp");
+    proto_lacp = proto_register_protocol("Link Aggregation Control Protocol", "LACP", "lacp");
 
     /* Required function calls to register the header fields and subtrees used */
 

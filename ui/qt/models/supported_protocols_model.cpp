@@ -164,6 +164,7 @@ void SupportedProtocolsModel::populate()
     SupportedProtocolsItem *protoItem, *fieldItem;
     protocol_t *protocol;
 
+    proto_initialize_all_prefixes();
     for (int proto_id = proto_get_first_protocol(&proto_cookie); proto_id != -1;
         proto_id = proto_get_next_protocol(&proto_cookie)) {
 
@@ -200,7 +201,7 @@ bool SupportedProtocolsProxyModel::lessThan(const QModelIndex &left, const QMode
     SupportedProtocolsItem* right_item = static_cast<SupportedProtocolsItem*>(right.internalPointer());
 
     if ((left_item != NULL) && (right_item != NULL)) {
-        int compare_ret = left_item->name().compare(right_item->name());
+        int compare_ret =  QString::compare(left_item->name(), right_item->name(), Qt::CaseInsensitive);
         if (compare_ret < 0)
             return true;
     }
@@ -256,6 +257,13 @@ bool SupportedProtocolsProxyModel::filterAcceptsRow(int sourceRow, const QModelI
 
 void SupportedProtocolsProxyModel::setFilter(const QString& filter)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     filter_ = filter;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }

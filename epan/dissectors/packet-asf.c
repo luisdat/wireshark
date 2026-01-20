@@ -47,9 +47,9 @@ static int hf_asf_auth_alg;
 static int hf_asf_integrity_alg;
 static int hf_asf_reserved;
 
-static gint ett_asf;
-static gint ett_asf_payload;
-static gint ett_asf_alg_payload;
+static int ett_asf;
+static int ett_asf_payload;
+static int ett_asf_alg_payload;
 
 static expert_field ei_asf_payload_too_short;
 
@@ -127,34 +127,34 @@ static const value_string asf_integrity_type_vals[] = {
 };
 
 static void dissect_asf_open_session_request(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, gint offset, gint len);
+	proto_tree *tree, int offset, int len);
 static void dissect_asf_open_session_response(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, gint offset, gint len);
+	proto_tree *tree, int offset, int len);
 static void dissect_asf_payloads(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, gint offset, gint len);
-static void dissect_asf_payload_authentication(tvbuff_t *tvb, proto_tree *tree,
-	gint offset, gint len);
-static void dissect_asf_payload_integrity(tvbuff_t *tvb, proto_tree *tree,
-	gint offset, gint len);
+	proto_tree *tree, int offset, int len);
+static void dissect_asf_payload_authentication(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
+	int offset, int len);
+static void dissect_asf_payload_integrity(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
+	int offset, int len);
 
 static int
 dissect_asf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 	proto_tree *asf_tree = NULL;
 	proto_item *ti;
-	guint8      type;
-	guint8      len;
+	uint8_t     type;
+	uint8_t     len;
 	tvbuff_t   *next_tvb;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "ASF");
 
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	type = tvb_get_guint8(tvb, 4);
-	len = tvb_get_guint8(tvb, 7);
+	type = tvb_get_uint8(tvb, 4);
+	len = tvb_get_uint8(tvb, 7);
 
 	col_add_str(pinfo->cinfo, COL_INFO,
-		val_to_str(type, asf_type_vals, "Unknown (0x%02x)"));
+		val_to_str(pinfo->pool, type, asf_type_vals, "Unknown (0x%02x)"));
 
 	if (tree) {
 		ti = proto_tree_add_item(tree, proto_asf, tvb, 0, 8,ENC_NA);
@@ -187,7 +187,7 @@ dissect_asf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 
 static void
 dissect_asf_open_session_request(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, gint offset, gint len)
+	proto_tree *tree, int offset, int len)
 {
 	proto_tree_add_item(tree, hf_asf_mgt_console_id, tvb, offset, 4,ENC_BIG_ENDIAN);
 	offset += 4;
@@ -197,7 +197,7 @@ dissect_asf_open_session_request(tvbuff_t *tvb, packet_info *pinfo,
 
 static void
 dissect_asf_open_session_response(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, gint offset, gint len)
+	proto_tree *tree, int offset, int len)
 {
 	proto_tree_add_item(tree, hf_asf_rssp_status_code, tvb, offset, 1,ENC_BIG_ENDIAN);
 	proto_tree_add_item(tree, hf_asf_mgt_console_id, tvb, offset + 4, 4,ENC_BIG_ENDIAN);
@@ -209,21 +209,21 @@ dissect_asf_open_session_response(tvbuff_t *tvb, packet_info *pinfo,
 
 static void
 dissect_asf_payloads(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-	gint offset, gint len)
+	int offset, int len)
 {
-	guint8      ptype;
-	guint16     plen;
+	uint8_t     ptype;
+	uint16_t    plen;
 	proto_item *ti;
 	proto_tree *ptree;
 
 	while ( len >= 4 )
 	{
-		ptype = tvb_get_guint8(tvb, offset);
+		ptype = tvb_get_uint8(tvb, offset);
 		plen = tvb_get_ntohs(tvb, offset + 2);
 
 		ti = proto_tree_add_none_format(tree, hf_asf_payload, tvb, offset,
 			plen, "%s: %u bytes",
-			val_to_str(ptype, asf_payload_type_vals, "Unknown (%u)"), plen);
+			val_to_str(pinfo->pool, ptype, asf_payload_type_vals, "Unknown (%u)"), plen);
 		ptree = proto_item_add_subtree(ti, ett_asf_payload);
 		proto_tree_add_item(ptree, hf_asf_payload_type, tvb, offset, 1,ENC_BIG_ENDIAN);
 		ti = proto_tree_add_item(ptree, hf_asf_payload_len, tvb, offset + 2, 2,ENC_BIG_ENDIAN);
@@ -237,11 +237,11 @@ dissect_asf_payloads(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 			switch ( ptype )
 			{
 				case ASF_PAYLOAD_TYPE_AUTHENTICATION:
-					dissect_asf_payload_authentication(tvb, ptree,
+					dissect_asf_payload_authentication(tvb, pinfo, ptree,
 						offset + 4, plen - 4);
 					break;
 				case ASF_PAYLOAD_TYPE_INTEGRITY:
-					dissect_asf_payload_integrity(tvb, ptree,
+					dissect_asf_payload_integrity(tvb, pinfo, ptree,
 						offset + 4, plen - 4);
 					break;
 				default:
@@ -256,34 +256,34 @@ dissect_asf_payloads(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 static void
-dissect_asf_payload_authentication(tvbuff_t *tvb, proto_tree *tree,
-	gint offset, gint len)
+dissect_asf_payload_authentication(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
+	int offset, int len)
 {
-	guint8      alg;
+	uint8_t     alg;
 	proto_item *ti;
 	proto_tree *atree;
 
-	alg = tvb_get_guint8(tvb, offset);
+	alg = tvb_get_uint8(tvb, offset);
 	ti = proto_tree_add_none_format(tree, hf_asf_payload_data, tvb, offset,
 		len, "Authentication Algorithm: %s",
-		val_to_str(alg, asf_authentication_type_vals, "Unknown (%u)"));
+		val_to_str(pinfo->pool, alg, asf_authentication_type_vals, "Unknown (%u)"));
 	atree = proto_item_add_subtree(ti, ett_asf_alg_payload);
 	proto_tree_add_item(atree, hf_asf_auth_alg, tvb, offset, 1,ENC_BIG_ENDIAN);
 	proto_tree_add_item(atree, hf_asf_reserved, tvb, offset + 1, len - 1,ENC_NA);
 }
 
 static void
-dissect_asf_payload_integrity(tvbuff_t *tvb, proto_tree *tree,
-	gint offset, gint len)
+dissect_asf_payload_integrity(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
+	int offset, int len)
 {
-	guint8      alg;
+	uint8_t     alg;
 	proto_item *ti;
 	proto_tree *atree;
 
-	alg = tvb_get_guint8(tvb, offset);
+	alg = tvb_get_uint8(tvb, offset);
 	ti = proto_tree_add_none_format(tree, hf_asf_payload_data, tvb, offset,
 		len, "Integrity Algorithm: %s",
-		val_to_str(alg, asf_integrity_type_vals, "Unknown (%u)"));
+		val_to_str(pinfo->pool, alg, asf_integrity_type_vals, "Unknown (%u)"));
 	atree = proto_item_add_subtree(ti, ett_asf_alg_payload);
 	proto_tree_add_item(atree, hf_asf_integrity_alg, tvb, offset, 1,ENC_BIG_ENDIAN);
 	proto_tree_add_item(atree, hf_asf_reserved, tvb, offset + 1, len - 1,ENC_NA);
@@ -351,7 +351,7 @@ proto_register_asf(void)
 			FT_NONE, BASE_NONE, NULL, 0,
 			NULL, HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_asf,
 		&ett_asf_payload,
 		&ett_asf_alg_payload

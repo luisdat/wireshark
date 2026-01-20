@@ -51,7 +51,7 @@ public:
     BoolPreference(QObject * parent = Q_NULLPTR) : WiresharkPreference(parent) {}
     virtual QWidget * editor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index)
     {
-        const_cast<QAbstractItemModel*>(index.model())->setData(index, QString("BOOL"), Qt::EditRole);
+        const_cast<QAbstractItemModel*>(index.model())->setData(index, QStringLiteral("BOOL"), Qt::EditRole);
         return WiresharkPreference::editor(parent, option, index);
     }
 };
@@ -102,6 +102,20 @@ public:
     UIntPreference(QObject * parent = Q_NULLPTR) : StringPreference(parent) {}
 };
 REGISTER_PREFERENCE_TYPE(PREF_UINT, UIntPreference)
+
+class IntPreference : public StringPreference
+{
+public:
+    IntPreference(QObject* parent = Q_NULLPTR) : StringPreference(parent) {}
+};
+REGISTER_PREFERENCE_TYPE(PREF_INT, IntPreference)
+
+class FloatPreference : public StringPreference
+{
+public:
+    FloatPreference(QObject* parent = Q_NULLPTR) : StringPreference(parent) {}
+};
+REGISTER_PREFERENCE_TYPE(PREF_FLOAT, FloatPreference)
 
 class EnumPreference : public WiresharkPreference
 {

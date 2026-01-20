@@ -9,8 +9,6 @@
 
 #include "config.h"
 
-#include <glib.h>
-
 #include <epan/column.h>
 #include <epan/prefs.h>
 #include <ui/recent.h>
@@ -25,6 +23,7 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QKeyEvent>
+#include <QAbstractItemView>
 
 ColumnEditorFrame::ColumnEditorFrame(QWidget *parent) :
     AccordionFrame(parent),
@@ -32,6 +31,7 @@ ColumnEditorFrame::ColumnEditorFrame(QWidget *parent) :
     cur_column_(-1)
 {
     ui->setupUi(this);
+    ui->fieldsNameLineEdit->setType(CustomColumnToEnter);
 
 #ifdef Q_OS_MAC
     foreach (QWidget *w, findChildren<QWidget *>()) {
@@ -43,10 +43,37 @@ ColumnEditorFrame::ColumnEditorFrame(QWidget *parent) :
         ui->typeComboBox->addItem(col_format_desc(i), QVariant(i));
     }
 
-    connect(ui->fieldsNameLineEdit, &FieldFilterEdit::textChanged,
-            ui->fieldsNameLineEdit, &FieldFilterEdit::checkCustomColumn);
-    connect(ui->fieldsNameLineEdit, &FieldFilterEdit::textChanged,
+    // We want a behavior where the occurrenceLineEdit and type line edit
+    // will shrink, but where they won't expand past their needed space.
+    // Setting a stretch factor will make them expand (ignoring their
+    // SizePolicy) unless we also set the maximum width to their size hints.
+    //
+    ui->horizontalLayout->setStretchFactor(ui->titleLineEdit, 2);
+    ui->horizontalLayout->setStretchFactor(ui->occurrenceLineEdit, 1);
+    ui->occurrenceLineEdit->setMaximumWidth(ui->occurrenceLineEdit->sizeHint().width());
+    // On Windows, this is necessary to make the popup be the width of the
+    // longest item, instead of the width matching the combobox and using
+    // ellipses. (Linux has the popup wider by default.)
+    ui->typeComboBox->view()->setMinimumWidth(ui->typeComboBox->sizeHint().width());
+    // This lets the typeComboBox shrink a bit if the width is very small.
+    ui->typeComboBox->setMinimumContentsLength(20);
+
+    ui->displayComboBox->addItem(tr("Values"), QVariant(COLUMN_DISPLAY_VALUES));
+    ui->displayComboBox->addItem(tr("Strings"), QVariant(COLUMN_DISPLAY_STRINGS));
+    ui->displayComboBox->addItem(tr("Details"), QVariant(COLUMN_DISPLAY_DETAILS));
+
+    connect(ui->fieldsNameLineEdit, &DisplayFilterEdit::textChanged,
+            ui->fieldsNameLineEdit, &DisplayFilterEdit::checkCustomColumn);
+    connect(ui->fieldsNameLineEdit, &DisplayFilterEdit::textChanged,
             this, &ColumnEditorFrame::checkCanResolve);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    connect(ui->typeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &ColumnEditorFrame::typeChanged);
+#else
+    connect(ui->typeComboBox, &QComboBox::currentIndexChanged, this,
+            &ColumnEditorFrame::typeChanged);
+#endif
+
 }
 
 ColumnEditorFrame::~ColumnEditorFrame()
@@ -77,9 +104,36 @@ void ColumnEditorFrame::setFields(int index)
         ui->fieldsNameLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
         ui->occurrenceLineEdit->clear();
         ui->occurrenceLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
-        ui->resolvedCheckBox->setEnabled(false);
     }
     ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(ok);
+}
+
+void ColumnEditorFrame::typeChanged(int index)
+{
+    // The fieldsNameLineEdit and occurrenceLineEdit are only relevant if the
+    // typeComboBox is COL_CUSTOM. The text for "Custom" is small. So when
+    // COL_CUSTOM is selected, shrink the size of the typeComboBox to what is
+    // necessary for "Custom" and give extra space to the fieldsNameLineEdit.
+    // For any other column type, do the reverse.
+    if (index == COL_CUSTOM) {
+        int width = fontMetrics().boundingRect(ui->typeComboBox->currentText()).width();
+        if (!ui->typeComboBox->itemIcon(index).isNull()) {
+            width += ui->typeComboBox->iconSize().width() + 4;
+        }
+        QStyleOptionComboBox opt;
+        opt.initFrom(ui->typeComboBox);
+        QSize sh(width, ui->typeComboBox->height());
+        width = ui->typeComboBox->style()->sizeFromContents(QStyle::CT_ComboBox, &opt, sh, ui->typeComboBox).width();
+        ui->typeComboBox->setMaximumWidth(width);
+        ui->fieldsNameLineEdit->setMaximumWidth(16777215); // Default (no) maximum
+        ui->horizontalLayout->setStretchFactor(ui->typeComboBox, 1);
+        ui->horizontalLayout->setStretchFactor(ui->fieldsNameLineEdit, 4);
+    } else {
+        ui->typeComboBox->setMaximumWidth(ui->typeComboBox->sizeHint().width());
+        ui->fieldsNameLineEdit->setMaximumWidth(ui->fieldsNameLineEdit->sizeHint().width());
+        ui->horizontalLayout->setStretchFactor(ui->typeComboBox, 2);
+        ui->horizontalLayout->setStretchFactor(ui->fieldsNameLineEdit, 1);
+    }
 }
 
 void ColumnEditorFrame::editColumn(int column)
@@ -89,7 +143,7 @@ void ColumnEditorFrame::editColumn(int column)
     saved_fields_ = get_column_custom_fields(column);
     saved_occurrence_ = QString::number(get_column_custom_occurrence(column));
     ui->typeComboBox->setCurrentIndex(get_column_format(column));
-    ui->resolvedCheckBox->setChecked(get_column_resolved(column));
+    ui->displayComboBox->setCurrentIndex(ui->displayComboBox->findData(get_column_display_format(column)));
     setFields(ui->typeComboBox->currentIndex());
 }
 
@@ -151,8 +205,8 @@ void ColumnEditorFrame::on_buttonBox_accepted()
             if (!ui->occurrenceLineEdit->text().isEmpty()) {
                 set_column_custom_occurrence(cur_column_, ui->occurrenceLineEdit->text().toInt());
             }
-            if (ui->resolvedCheckBox->isEnabled()) {
-                set_column_resolved(cur_column_, ui->resolvedCheckBox->isChecked());
+            if (ui->displayComboBox->isEnabled()) {
+                set_column_display_format(cur_column_, ui->displayComboBox->itemData(ui->displayComboBox->currentIndex()).toInt());
             }
         }
         prefs_main_write();
@@ -185,10 +239,39 @@ void ColumnEditorFrame::keyPressEvent(QKeyEvent *event)
 
 void ColumnEditorFrame::checkCanResolve()
 {
-    if (ui->fieldsNameLineEdit->syntaxState() == SyntaxLineEdit::Valid && column_prefs_custom_resolve(ui->fieldsNameLineEdit->text().toUtf8().constData())) {
-        ui->resolvedCheckBox->setEnabled(true);
-    } else  {
-        ui->resolvedCheckBox->setEnabled(false);
-        ui->resolvedCheckBox->setChecked(false);
+    bool canResolve = false;
+
+    if (ui->fieldsNameLineEdit->syntaxState() == SyntaxLineEdit::Valid) {
+        bool displayStrings = column_prefs_custom_display_strings(ui->fieldsNameLineEdit->text().toUtf8().constData());
+        int strings_idx = ui->displayComboBox->findData(COLUMN_DISPLAY_STRINGS);
+
+        if (displayStrings && strings_idx == -1) {
+            ui->displayComboBox->insertItem(1, "Strings", QVariant(COLUMN_DISPLAY_STRINGS));
+        } else if (!displayStrings && strings_idx != -1) {
+            ui->displayComboBox->removeItem(strings_idx);
+        }
+
+        bool displayDetails = column_prefs_custom_display_details(ui->fieldsNameLineEdit->text().toUtf8().constData());
+        int details_idx = ui->displayComboBox->findData(COLUMN_DISPLAY_DETAILS);
+
+        if (displayDetails && details_idx == -1) {
+            ui->displayComboBox->addItem("Details", QVariant(COLUMN_DISPLAY_DETAILS));
+        } else if (!displayDetails && details_idx != -1) {
+            ui->displayComboBox->removeItem(details_idx);
+        }
+
+        canResolve = displayStrings || displayDetails;
+    }
+
+    ui->displayLabel->setEnabled(canResolve);
+    ui->displayComboBox->setEnabled(canResolve);
+    if (canResolve) {
+        int idx = ui->displayComboBox->findData(get_column_display_format(cur_column_));
+        if (idx == -1) {
+            idx = 0;
+        }
+        ui->displayComboBox->setCurrentIndex(idx);
+    } else {
+        ui->displayComboBox->setCurrentIndex(-1);
     }
 }

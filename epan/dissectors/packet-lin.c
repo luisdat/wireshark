@@ -2,7 +2,7 @@
  *
  * LIN dissector.
  * By Dr. Lars Voelker <lars.voelker@technica-engineering.de>
- * Copyright 2021-2023 Dr. Lars Voelker
+ * Copyright 2021-2025 Dr. Lars Völker
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -57,10 +57,11 @@ static int hf_lin_err_checksum;
 static int hf_lin_err_invalidid;
 static int hf_lin_err_overflow;
 static int hf_lin_event_id;
+static int hf_lin_bus_id;
 
-static gint ett_lin;
-static gint ett_lin_pid;
-static gint ett_errors;
+static int ett_lin;
+static int ett_lin_pid;
+static int ett_errors;
 
 static int * const error_fields[] = {
     &hf_lin_err_overflow,
@@ -73,9 +74,6 @@ static int * const error_fields[] = {
 };
 
 static dissector_table_t subdissector_table;
-
-#define LIN_MSG_TYPE_FRAME 0
-#define LIN_MSG_TYPE_EVENT 3
 
 static const value_string lin_msg_type_names[] = {
     { LIN_MSG_TYPE_FRAME, "Frame" },
@@ -96,10 +94,6 @@ static const value_string lin_checksum_type_names[] = {
     {0, NULL}
 };
 
-#define LIN_EVENT_TYPE_GO_TO_SLEEP_EVENT_BY_GO_TO_SLEEP 0xB0B00001
-#define LIN_EVENT_TYPE_GO_TO_SLEEP_EVENT_BY_INACTIVITY  0xB0B00002
-#define LIN_EVENT_TYPE_WAKE_UP_BY_WAKE_UP_SIGNAL        0xB0B00004
-
 static const value_string lin_event_type_names[] = {
     { LIN_EVENT_TYPE_GO_TO_SLEEP_EVENT_BY_GO_TO_SLEEP, "Go-to-Sleep event by Go-to-Sleep frame" },
     { LIN_EVENT_TYPE_GO_TO_SLEEP_EVENT_BY_INACTIVITY,  "Go-to-Sleep event by Inactivity for more than 4s" },
@@ -114,17 +108,17 @@ void proto_register_lin(void);
 
 /* Interface Config UAT */
 typedef struct _interface_config {
-    guint     interface_id;
-    gchar    *interface_name;
-    guint     bus_id;
+    unsigned  interface_id;
+    char     *interface_name;
+    unsigned  bus_id;
 } interface_config_t;
 
 #define DATAFILE_LIN_INTERFACE_MAPPING "LIN_interface_mapping"
 
-static GHashTable *data_lin_interfaces_by_id = NULL;
-static GHashTable *data_lin_interfaces_by_name = NULL;
-static interface_config_t* interface_configs = NULL;
-static guint interface_config_num = 0;
+static GHashTable *data_lin_interfaces_by_id;
+static GHashTable *data_lin_interfaces_by_name;
+static interface_config_t* interface_configs;
+static unsigned interface_config_num;
 
 UAT_HEX_CB_DEF(interface_configs, interface_id, interface_config_t)
 UAT_CSTRING_CB_DEF(interface_configs, interface_name, interface_config_t)
@@ -148,16 +142,16 @@ update_interface_config(void *r, char **err) {
     if (rec->interface_id > 0xffffffff) {
         *err = ws_strdup_printf("We currently only support 32 bit identifiers (ID: 0x%x  Name: %s)",
                                rec->interface_id, rec->interface_name);
-        return FALSE;
+        return false;
     }
 
     if (rec->bus_id > 0xffff) {
         *err = ws_strdup_printf("We currently only support 16 bit bus identifiers (ID: 0x%x  Name: %s  Bus-ID: 0x%x)",
                                 rec->interface_id, rec->interface_name, rec->bus_id);
-        return FALSE;
+        return false;
     }
 
-    return TRUE;
+    return true;
 }
 
 static void
@@ -168,79 +162,41 @@ free_interface_config_cb(void *r) {
     rec->interface_name = NULL;
 }
 
-static interface_config_t *
-ht_lookup_interface_config_by_id(unsigned int identifier) {
-    interface_config_t *tmp = NULL;
-    unsigned int       *id = NULL;
-
-    if (interface_configs == NULL) {
-        return NULL;
-    }
-
-    id = wmem_new(wmem_epan_scope(), unsigned int);
-    *id = (unsigned int)identifier;
-    tmp = (interface_config_t *)g_hash_table_lookup(data_lin_interfaces_by_id, id);
-    wmem_free(wmem_epan_scope(), id);
-
-    return tmp;
-}
-
-static interface_config_t *
-ht_lookup_interface_config_by_name(const gchar *name) {
-    interface_config_t *tmp = NULL;
-    gchar              *key = NULL;
-
-    if (interface_configs == NULL) {
-        return NULL;
-    }
-
-    key = wmem_strdup(wmem_epan_scope(), name);
-    tmp = (interface_config_t *)g_hash_table_lookup(data_lin_interfaces_by_name, key);
-    wmem_free(wmem_epan_scope(), key);
-
-    return tmp;
-}
-
 static void
-lin_free_key(gpointer key) {
-    wmem_free(wmem_epan_scope(), key);
-}
-
-static void
-post_update_lin_interfaces_cb(void) {
-    guint  i;
-    int   *key_id = NULL;
-    gchar *key_name = NULL;
-
+post_update_interface_config_cb(void) {
     /* destroy old hash tables, if they exist */
+    if (data_lin_interfaces_by_id) {
+        g_hash_table_destroy(data_lin_interfaces_by_id);
+    }
+    if (data_lin_interfaces_by_name) {
+        g_hash_table_destroy(data_lin_interfaces_by_name);
+    }
+
+    /* create new hash table */
+    data_lin_interfaces_by_id = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+    data_lin_interfaces_by_name = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+
+    for (unsigned i = 0; i < interface_config_num; i++) {
+        if (interface_configs[i].interface_id != 0xfffffff) {
+            g_hash_table_insert(data_lin_interfaces_by_id, GUINT_TO_POINTER(interface_configs[i].interface_id), &interface_configs[i]);
+        }
+
+        if (interface_configs[i].interface_name != NULL && interface_configs[i].interface_name[0] != 0) {
+            g_hash_table_insert(data_lin_interfaces_by_name, interface_configs[i].interface_name, &interface_configs[i]);
+        }
+    }
+}
+
+static void
+reset_interface_config_cb(void) {
     if (data_lin_interfaces_by_id) {
         g_hash_table_destroy(data_lin_interfaces_by_id);
         data_lin_interfaces_by_id = NULL;
     }
+
     if (data_lin_interfaces_by_name) {
         g_hash_table_destroy(data_lin_interfaces_by_name);
         data_lin_interfaces_by_name = NULL;
-    }
-
-    /* create new hash table */
-    data_lin_interfaces_by_id = g_hash_table_new_full(g_int_hash, g_int_equal, &lin_free_key, NULL);
-    data_lin_interfaces_by_name = g_hash_table_new_full(g_str_hash, g_str_equal, &lin_free_key, NULL);
-
-    if (data_lin_interfaces_by_id == NULL || data_lin_interfaces_by_name == NULL || interface_configs == NULL || interface_config_num == 0) {
-        return;
-    }
-
-    for (i = 0; i < interface_config_num; i++) {
-        if (interface_configs[i].interface_id != 0xfffffff) {
-            key_id = wmem_new(wmem_epan_scope(), int);
-            *key_id = interface_configs[i].interface_id;
-            g_hash_table_insert(data_lin_interfaces_by_id, key_id, &interface_configs[i]);
-        }
-
-        if (interface_configs[i].interface_name != NULL && interface_configs[i].interface_name[0] != 0) {
-            key_name = wmem_strdup(wmem_epan_scope(), interface_configs[i].interface_name);
-            g_hash_table_insert(data_lin_interfaces_by_name, key_name, &interface_configs[i]);
-        }
     }
 }
 
@@ -250,30 +206,35 @@ post_update_lin_interfaces_cb(void) {
  * - interface_name = ""    and interface_id matches
  */
 
-static guint
+static unsigned
 get_bus_id(packet_info *pinfo) {
     if (!(pinfo->rec->presence_flags & WTAP_HAS_INTERFACE_ID)) {
         return 0;
     }
 
-    guint32             interface_id = pinfo->rec->rec_header.packet_header.interface_id;
+    uint32_t            interface_id = pinfo->rec->rec_header.packet_header.interface_id;
     unsigned            section_number = pinfo->rec->presence_flags & WTAP_HAS_SECTION_NUMBER ? pinfo->rec->section_number : 0;
     const char         *interface_name = epan_get_interface_name(pinfo->epan, interface_id, section_number);
-    interface_config_t *tmp = NULL;
 
     if (interface_name != NULL && interface_name[0] != 0) {
-        tmp = ht_lookup_interface_config_by_name(interface_name);
+        interface_config_t *tmp = NULL;
 
-        if (tmp != NULL && (tmp->interface_id == 0xffffffff || tmp->interface_id == interface_id)) {
-            /* name + id match or name match and id = any */
-            return tmp->bus_id;
+        if (data_lin_interfaces_by_name != NULL) {
+            tmp = g_hash_table_lookup(data_lin_interfaces_by_name, interface_name);
+
+            if (tmp != NULL && (tmp->interface_id == 0xffffffff || tmp->interface_id == interface_id)) {
+                /* name + id match or name match and id = any */
+                return tmp->bus_id;
+            }
         }
 
-        tmp = ht_lookup_interface_config_by_id(interface_id);
+        if (data_lin_interfaces_by_id != NULL) {
+            tmp = g_hash_table_lookup(data_lin_interfaces_by_id, GUINT_TO_POINTER(interface_id));
 
-        if (tmp != NULL && (tmp->interface_name == NULL || tmp->interface_name[0] == 0)) {
-            /* id matches and name is any */
-            return tmp->bus_id;
+            if (tmp != NULL && (tmp->interface_name == NULL || tmp->interface_name[0] == 0)) {
+                /* id matches and name is any */
+                return tmp->bus_id;
+            }
         }
     }
 
@@ -283,17 +244,17 @@ get_bus_id(packet_info *pinfo) {
 
 /* Senders and Receivers UAT */
 typedef struct _sender_receiver_config {
-    guint     bus_id;
-    guint     lin_id;
-    gchar    *sender_name;
-    gchar    *receiver_name;
+    unsigned  bus_id;
+    unsigned  lin_id;
+    char     *sender_name;
+    char     *receiver_name;
 } sender_receiver_config_t;
 
 #define DATAFILE_LIN_SENDER_RECEIVER "LIN_senders_receivers"
 
-static GHashTable *data_sender_receiver = NULL;
-static sender_receiver_config_t* sender_receiver_configs = NULL;
-static guint sender_receiver_config_num = 0;
+static GHashTable *data_sender_receiver;
+static sender_receiver_config_t* sender_receiver_configs;
+static unsigned sender_receiver_config_num;
 
 UAT_HEX_CB_DEF(sender_receiver_configs, bus_id, sender_receiver_config_t)
 UAT_HEX_CB_DEF(sender_receiver_configs, lin_id, sender_receiver_config_t)
@@ -318,15 +279,15 @@ update_sender_receiver_config(void *r, char **err) {
 
     if (rec->lin_id > 0x3f) {
         *err = ws_strdup_printf("LIN IDs need to be between 0x00 and 0x3f (Bus ID: %i  LIN ID: %i)", rec->bus_id, rec->lin_id);
-        return FALSE;
+        return false;
     }
 
     if (rec->bus_id > 0xffff) {
         *err = ws_strdup_printf("We currently only support 16 bit bus identifiers (Bus ID: %i  LIN ID: %i)", rec->bus_id, rec->lin_id);
-        return FALSE;
+        return false;
     }
 
-    return TRUE;
+    return true;
 }
 
 static void
@@ -339,62 +300,58 @@ free_sender_receiver_config_cb(void *r) {
     rec->receiver_name = NULL;
 }
 
-static guint64
-sender_receiver_key(guint16 bus_id, guint32 lin_id) {
-    return ((guint64)bus_id << 32) | lin_id;
+static uint64_t
+sender_receiver_key(uint16_t bus_id, uint32_t lin_id) {
+    return ((uint64_t)bus_id << 32) | lin_id;
 }
 
 static sender_receiver_config_t *
-ht_lookup_sender_receiver_config(guint16 bus_id, guint32 lin_id) {
-    sender_receiver_config_t *tmp = NULL;
-    guint64                   key = 0;
-
-    if (sender_receiver_configs == NULL) {
+ht_lookup_sender_receiver_config(uint16_t bus_id, uint32_t lin_id) {
+    if (data_sender_receiver == NULL) {
         return NULL;
     }
 
-    key = sender_receiver_key(bus_id, lin_id);
-    tmp = (sender_receiver_config_t *)g_hash_table_lookup(data_sender_receiver, &key);
+    uint64_t key = sender_receiver_key(bus_id, lin_id);
+    sender_receiver_config_t *tmp = g_hash_table_lookup(data_sender_receiver, &key);
 
     if (tmp == NULL) {
         key = sender_receiver_key(0, lin_id);
-        tmp = (sender_receiver_config_t *)g_hash_table_lookup(data_sender_receiver, &key);
+        tmp = g_hash_table_lookup(data_sender_receiver, &key);
     }
 
     return tmp;
 }
 
 static void
-sender_receiver_free_key(gpointer key) {
-    wmem_free(wmem_epan_scope(), key);
-}
-
-static void
 post_update_sender_receiver_cb(void) {
-    guint    i;
-    guint64 *key_id = NULL;
+    unsigned i;
+    uint64_t *key;
 
     /* destroy old hash table, if it exist */
     if (data_sender_receiver) {
         g_hash_table_destroy(data_sender_receiver);
-        data_sender_receiver = NULL;
     }
 
     /* create new hash table */
-    data_sender_receiver = g_hash_table_new_full(g_int64_hash, g_int64_equal, &sender_receiver_free_key, NULL);
-
-    if (data_sender_receiver == NULL || sender_receiver_configs == NULL || sender_receiver_config_num == 0) {
-        return;
-    }
+    data_sender_receiver = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
 
     for (i = 0; i < sender_receiver_config_num; i++) {
-        key_id = wmem_new(wmem_epan_scope(), guint64);
-        *key_id = sender_receiver_key(sender_receiver_configs[i].bus_id, sender_receiver_configs[i].lin_id);
-        g_hash_table_insert(data_sender_receiver, key_id, &sender_receiver_configs[i]);
+        key = g_new(uint64_t, 1);
+        *key = sender_receiver_key(sender_receiver_configs[i].bus_id, sender_receiver_configs[i].lin_id);
+        g_hash_table_insert(data_sender_receiver, key, &sender_receiver_configs[i]);
     }
 }
 
-gboolean
+static void
+reset_sender_receiver_cb(void) {
+    /* destroy hash table, if it exists */
+    if (data_sender_receiver) {
+        g_hash_table_destroy(data_sender_receiver);
+        data_sender_receiver = NULL;
+    }
+}
+
+bool
 lin_set_source_and_destination_columns(packet_info* pinfo, lin_info_t *lininfo) {
     sender_receiver_config_t *tmp = ht_lookup_sender_receiver_config(lininfo->bus_id, lininfo->id);
 
@@ -407,11 +364,35 @@ lin_set_source_and_destination_columns(packet_info* pinfo, lin_info_t *lininfo) 
         clear_address(&pinfo->dl_dst);
         clear_address(&pinfo->dst);
 
-        col_add_fstr(pinfo->cinfo, COL_DEF_SRC, "%s", tmp->sender_name);
-        col_add_fstr(pinfo->cinfo, COL_DEF_DST, "%s", tmp->receiver_name);
+        col_add_str(pinfo->cinfo, COL_DEF_SRC, tmp->sender_name);
+        col_add_str(pinfo->cinfo, COL_DEF_DST, tmp->receiver_name);
         return true;
     }
     return false;
+}
+
+int
+dissect_lin_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, lin_info_t *lininfo) {
+    /* LIN encodes a sleep frame by setting ID to LIN_DIAG_MASTER_REQUEST_FRAME and the first byte to 0x00 */
+    bool ignore_lin_payload = (lininfo->id == LIN_DIAG_MASTER_REQUEST_FRAME && tvb_get_uint8(tvb, 0) == 0x00);
+
+    int ret = 0;
+    if (!ignore_lin_payload) {
+        uint32_t bus_frame_id = lininfo->id | (lininfo->bus_id << 16);
+        ret = dissector_try_uint_with_data(subdissector_table, bus_frame_id, tvb, pinfo, tree, true, lininfo);
+        if (ret == 0) {
+            ret = dissector_try_uint_with_data(subdissector_table, lininfo->id, tvb, pinfo, tree, true, lininfo);
+            if (ret == 0) {
+                ret = dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, tree, &heur_dtbl_entry, lininfo);
+            }
+        }
+    }
+
+    if (ret == 0) {
+        ret = call_data_dissector(tvb, pinfo, tree);
+    }
+
+    return ret;
 }
 
 static int
@@ -422,16 +403,24 @@ dissect_lin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     proto_tree *lin_id_tree;
     tvbuff_t   *next_tvb;
 
-    guint payload_length;
-    guint msg_type;
+    unsigned payload_length;
+    unsigned msg_type;
     lin_info_t lininfo;
-    guint64 errors;
+    uint64_t errors;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, LIN_NAME);
     col_clear(pinfo->cinfo, COL_INFO);
 
+    lininfo.bus_id = (uint16_t)get_bus_id(pinfo);
+    lininfo.len = 0;
+
     ti_root = proto_tree_add_item(tree, proto_lin, tvb, 0, -1, ENC_NA);
     lin_tree = proto_item_add_subtree(ti_root, ett_lin);
+
+    if (lininfo.bus_id != 0) {
+        ti = proto_tree_add_uint(lin_tree, hf_lin_bus_id, tvb, 0, 0, lininfo.bus_id);
+        proto_item_set_hidden(ti);
+    }
 
     proto_tree_add_item(lin_tree, hf_lin_msg_format_rev, tvb, 0, 1, ENC_BIG_ENDIAN);
     ti = proto_tree_add_item(lin_tree, hf_lin_reserved1, tvb, 1, 3, ENC_BIG_ENDIAN);
@@ -449,27 +438,24 @@ dissect_lin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
         proto_tree_add_item(lin_tree, hf_lin_checksum, tvb, 6, 1, ENC_BIG_ENDIAN);
 
-        lininfo.bus_id = (guint16)get_bus_id(pinfo);
-        lininfo.len = 0;
         lin_set_source_and_destination_columns(pinfo, &lininfo);
     }
     proto_tree_add_bitmask_ret_uint64(lin_tree, tvb, 7, hf_lin_err_errors, ett_errors, error_fields, ENC_BIG_ENDIAN, &errors);
 
-    col_add_fstr(pinfo->cinfo, COL_INFO, "LIN %s", val_to_str(msg_type, lin_msg_type_names, "(0x%02x)"));
+    col_add_fstr(pinfo->cinfo, COL_INFO, "LIN %s", val_to_str(pinfo->pool, msg_type, lin_msg_type_names, "(0x%02x)"));
 
     if (errors != 0) {
-        col_append_fstr(pinfo->cinfo, COL_INFO, " - ERR");
+        col_append_str(pinfo->cinfo, COL_INFO, " - ERR");
         proto_item_set_end(ti_root, tvb, 8);
         return 8;
     }
 
     switch (msg_type) {
     case LIN_MSG_TYPE_EVENT: {
-        guint event_id;
+        unsigned event_id;
         proto_tree_add_item_ret_uint(lin_tree, hf_lin_event_id, tvb, 8, 4, ENC_BIG_ENDIAN, &event_id);
-        col_append_fstr(pinfo->cinfo, COL_INFO, ": %s", val_to_str(event_id, lin_event_type_names, "0x%08x"));
+        col_append_fstr(pinfo->cinfo, COL_INFO, ": %s", val_to_str(pinfo->pool, event_id, lin_event_type_names, "0x%08x"));
         proto_item_set_end(ti_root, tvb, 12);
-        return 12; /* 8 Byte header + 4 Byte payload */
         }
         break;
 
@@ -477,30 +463,19 @@ dissect_lin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         if (payload_length > 0) {
             next_tvb = tvb_new_subset_length(tvb, 8, payload_length);
             proto_item_set_end(ti_root, tvb, 8 + payload_length);
-            lininfo.len = (guint16)payload_length;
+            lininfo.len = (uint16_t)payload_length;
 
-            guint32 bus_frame_id = lininfo.id | (lininfo.bus_id << 16);
-            if (!dissector_try_uint_new(subdissector_table, bus_frame_id, next_tvb, pinfo, tree, TRUE, &lininfo)) {
-                if (!dissector_try_uint_new(subdissector_table, lininfo.id, next_tvb, pinfo, tree, TRUE, &lininfo)) {
-                    if (!dissector_try_heuristic(heur_subdissector_list, next_tvb, pinfo, tree, &heur_dtbl_entry, &lininfo)) {
-                        call_data_dissector(next_tvb, pinfo, tree);
-                    }
-                }
-            }
+            dissect_lin_message(next_tvb, pinfo, tree, &lininfo);
         }
+
+        /* Include padding to a multiple of 4 bytes */
+        if (payload_length <= 4)
+            proto_item_set_end(ti_root, tvb, 12);
+        else if (payload_length <= 8)
+            proto_item_set_end(ti_root, tvb, 16);
         break;
     }
-
-    /* format pads to 4 bytes*/
-    if (payload_length <= 4) {
-        proto_item_set_end(ti_root, tvb, 12);
-        return 12;
-    } else if (payload_length <= 8) {
-        proto_item_set_end(ti_root, tvb, 16);
-        return 16;
-    } else {
-        return tvb_captured_length(tvb);
-    }
+    return tvb_captured_length(tvb);
 }
 
 void
@@ -518,19 +493,19 @@ proto_register_lin(void) {
             FT_UINT24, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_lin_payload_length,
             { "Length", "lin.length",
-            FT_UINT8, BASE_DEC, NULL, 0xf0, NULL, HFILL }},
+            FT_UINT8, BASE_DEC, NULL, LIN_PAYLOAD_LENGTH_MASK, NULL, HFILL }},
         { &hf_lin_message_type,
             { "Message Type", "lin.message_type",
-            FT_UINT8, BASE_DEC, VALS(lin_msg_type_names), 0x0c, NULL, HFILL }},
+            FT_UINT8, BASE_DEC, VALS(lin_msg_type_names), LIN_MSG_TYPE_MASK, NULL, HFILL }},
         { &hf_lin_checksum_type,
             { "Checksum Type", "lin.checksum_type",
-            FT_UINT8, BASE_DEC, VALS(lin_checksum_type_names), 0x03, NULL, HFILL }},
+            FT_UINT8, BASE_DEC, VALS(lin_checksum_type_names), LIN_CHECKSUM_TYPE_MASK, NULL, HFILL }},
         { &hf_lin_pid,
             { "Protected ID", "lin.protected_id",
             FT_UINT8, BASE_HEX_DEC, NULL, 0x00, NULL, HFILL }},
         { &hf_lin_id,
             { "Frame ID", "lin.frame_id",
-            FT_UINT8, BASE_HEX_DEC, NULL, 0x3f, NULL, HFILL }},
+            FT_UINT8, BASE_HEX_DEC, NULL, LIN_FRAME_ID_MASK, NULL, HFILL }},
         { &hf_lin_parity,
             { "Parity", "lin.frame_parity",
             FT_UINT8, BASE_HEX_DEC, NULL, 0xc0, NULL, HFILL }},
@@ -542,28 +517,31 @@ proto_register_lin(void) {
             FT_UINT8, BASE_HEX, NULL, 0x00, NULL, HFILL }},
         { &hf_lin_err_no_slave_response,
             { "No Slave Response Error", "lin.errors.no_slave_response",
-            FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL }},
+            FT_BOOLEAN, 8, NULL, LIN_ERROR_NO_SLAVE_RESPONSE, NULL, HFILL }},
         { &hf_lin_err_framing,
             { "Framing Error", "lin.errors.framing_error",
-            FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL }},
+            FT_BOOLEAN, 8, NULL, LIN_ERROR_FRAMING_ERROR, NULL, HFILL }},
         { &hf_lin_err_parity,
             { "Parity Error", "lin.errors.parity_error",
-            FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL }},
+            FT_BOOLEAN, 8, NULL, LIN_ERROR_PARITY_ERROR, NULL, HFILL }},
         { &hf_lin_err_checksum,
             { "Checksum Error", "lin.errors.checksum_error",
-            FT_BOOLEAN, 8, NULL, 0x08, NULL, HFILL }},
+            FT_BOOLEAN, 8, NULL, LIN_ERROR_CHECKSUM_ERROR, NULL, HFILL }},
         { &hf_lin_err_invalidid,
             { "Invalid ID Error", "lin.errors.invalid_id_error",
-            FT_BOOLEAN, 8, NULL, 0x10, NULL, HFILL }},
+            FT_BOOLEAN, 8, NULL, LIN_ERROR_INVALID_ID_ERROR, NULL, HFILL }},
         { &hf_lin_err_overflow,
             { "Overflow Error", "lin.errors.overflow_error",
-            FT_BOOLEAN, 8, NULL, 0x20, NULL, HFILL }},
+            FT_BOOLEAN, 8, NULL, LIN_ERROR_OVERFLOW_ERROR, NULL, HFILL }},
         { &hf_lin_event_id,
             { "Event ID", "lin.event_id",
             FT_UINT32, BASE_HEX_DEC, VALS(lin_event_type_names), 0x00, NULL, HFILL }},
+        { &hf_lin_bus_id,
+            { "Bus ID", "lin.bus_id",
+            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL }},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_lin,
         &ett_lin_pid,
         &ett_errors,
@@ -591,7 +569,7 @@ proto_register_lin(void) {
     lin_interface_uat = uat_new("LIN Interface Mapping",
         sizeof(interface_config_t),             /* record size           */
         DATAFILE_LIN_INTERFACE_MAPPING,         /* filename              */
-        TRUE,                                   /* from profile          */
+        true,                                   /* from profile          */
         (void**)&interface_configs,             /* data_ptr              */
         &interface_config_num,                  /* numitems_ptr          */
         UAT_AFFECTS_DISSECTION,                 /* but not fields        */
@@ -599,8 +577,8 @@ proto_register_lin(void) {
         copy_interface_config_cb,               /* copy callback         */
         update_interface_config,                /* update callback       */
         free_interface_config_cb,               /* free callback         */
-        post_update_lin_interfaces_cb,          /* post update callback  */
-        NULL,                                   /* reset callback        */
+        post_update_interface_config_cb,        /* post update callback  */
+        reset_interface_config_cb,              /* reset callback        */
         lin_interface_mapping_uat_fields        /* UAT field definitions */
     );
 
@@ -618,7 +596,7 @@ proto_register_lin(void) {
     sender_receiver_uat = uat_new("Sender Receiver Config",
         sizeof(sender_receiver_config_t),       /* record size           */
         DATAFILE_LIN_SENDER_RECEIVER,           /* filename              */
-        TRUE,                                   /* from profile          */
+        true,                                   /* from profile          */
         (void**)&sender_receiver_configs,       /* data_ptr              */
         &sender_receiver_config_num,            /* numitems_ptr          */
         UAT_AFFECTS_DISSECTION,                 /* but not fields        */
@@ -627,7 +605,7 @@ proto_register_lin(void) {
         update_sender_receiver_config,          /* update callback       */
         free_sender_receiver_config_cb,         /* free callback         */
         post_update_sender_receiver_cb,         /* post update callback  */
-        NULL,                                   /* reset callback        */
+        reset_sender_receiver_cb,               /* reset callback        */
         sender_receiver_mapping_uat_fields      /* UAT field definitions */
     );
 

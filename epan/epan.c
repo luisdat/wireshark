@@ -11,6 +11,8 @@
 #include "epan.h"
 
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include <gcrypt.h>
 
@@ -27,6 +29,7 @@
 #include "epan/frame_data.h"
 
 #include "dfilter/dfilter.h"
+#include "dfilter/dfilter-translator.h"
 #include "epan_dissect.h"
 
 #include <wsutil/nstime.h>
@@ -36,12 +39,13 @@
 
 #include "conversation.h"
 #include "except.h"
-#include "packet.h"
+#include <epan/packet.h>
 #include "prefs.h"
 #include "column-info.h"
 #include "tap.h"
 #include "addr_resolv.h"
 #include "oids.h"
+#include "uuid_types.h"
 #include <epan/wmem_scopes.h>
 #include "expert.h"
 #include "print.h"
@@ -55,12 +59,18 @@
 #include "conversation_filter.h"
 #include "conversation_table.h"
 #include "reassemble.h"
+#include "rtd_table.h"
 #include "srt_table.h"
 #include "stats_tree.h"
 #include "secrets.h"
+#include "uat-int.h"
 #include "funnel.h"
 #include "wscbor.h"
-#include <dtd.h>
+#include "read_keytab_file.h"
+
+#ifdef HAVE_PLUGINS
+#include <wsutil/plugins.h>
+#endif
 
 #ifdef HAVE_LUA
 #include <lua.h>
@@ -93,33 +103,47 @@
 #include <brotli/decode.h>
 #endif
 
-#ifdef HAVE_LIBXML2
 #include <libxml/xmlversion.h>
 #include <libxml/parser.h>
-#endif
 
 #ifndef _WIN32
 #include <signal.h>
 #endif
 
-static GSList *epan_plugin_register_all_procotols = NULL;
-static GSList *epan_plugin_register_all_handoffs = NULL;
+static GSList *epan_plugin_register_all_procotols;
+static GSList *epan_plugin_register_all_handoffs;
 
-static wmem_allocator_t *pinfo_pool_cache = NULL;
+static wmem_allocator_t *pinfo_pool_cache;
+static char* epan_env_prefix_cache;
 
 /* Global variables holding the content of the corresponding environment variable
  * to save fetching it repeatedly.
  */
-gboolean wireshark_abort_on_dissector_bug = FALSE;
-gboolean wireshark_abort_on_too_many_items = FALSE;
+bool wireshark_abort_on_dissector_bug;
+bool wireshark_abort_on_too_many_items;
 
+void
+ws_dissector_bug(const char *format, ...)
+{
+	va_list     ap;
+
+	va_start(ap, format);
+	vfprintf(stderr, format, ap);
+	va_end(ap);
+
+	if (wireshark_abort_on_dissector_bug)
+		abort();
+}
+
+#ifdef HAVE_PLUGINS
 /* Used for bookkeeping, includes all libwireshark plugin types (dissector, tap, epan). */
-static plugins_t *libwireshark_plugins = NULL;
+static plugins_t *libwireshark_plugins;
+#endif
 
 /* "epan_plugins" are a specific type of libwireshark plugin (the name isn't the best for clarity). */
-static GSList *epan_plugins = NULL;
+static GSList *epan_plugins;
 
-const gchar*
+const char*
 epan_get_version(void) {
 	return VERSION;
 }
@@ -135,11 +159,20 @@ epan_get_version_number(int *major, int *minor, int *micro)
 		*micro = VERSION_MICRO;
 }
 
-#if defined(_WIN32)
+const char*
+epan_get_environment_prefix(void)
+{
+	return epan_env_prefix_cache;
+}
+
+#if defined(_WIN32) && GCRYPT_VERSION_NUMBER < 0x010b00
 // Libgcrypt prints all log messages to stderr by default. This is noisier
 // than we would like on Windows. In particular slow_gatherer tends to print
 //     "NOTE: you should run 'diskperf -y' to enable the disk statistics"
 // which we don't care about.
+// gcry_set_log_handler was deprecated in libgcrypt 1.11.0, and also that
+// particular log message was quieted when not supported (and hence not useful)
+// https://github.com/gpg/libgcrypt/commit/35abf4d2eb582b78873aa324f6d02976788ffbbc
 static void
 quiet_gcrypt_logger (void *dummy _U_, int level, const char *format, va_list args)
 {
@@ -150,7 +183,6 @@ quiet_gcrypt_logger (void *dummy _U_, int level, const char *format, va_list arg
 	case GCRY_LOG_DEBUG:
 	case GCRY_LOG_INFO:
 		return;
-		break;
 	case GCRY_LOG_WARN:
 	case GCRY_LOG_BUG:
 		log_level = LOG_LEVEL_WARNING;
@@ -169,61 +201,50 @@ quiet_gcrypt_logger (void *dummy _U_, int level, const char *format, va_list arg
 #endif // _WIN32
 
 static void
-epan_plugin_init(gpointer data, gpointer user_data _U_)
+epan_plugin_init(void *data, void *user_data _U_)
 {
 	((epan_plugin *)data)->init();
 }
 
 static void
-epan_plugin_post_init(gpointer data, gpointer user_data _U_)
+epan_plugin_post_init(void *data, void *user_data _U_)
 {
 	((epan_plugin *)data)->post_init();
 }
 
 static void
-epan_plugin_dissect_init(gpointer data, gpointer user_data)
+epan_plugin_dissect_init(void *data, void *user_data)
 {
 	((epan_plugin *)data)->dissect_init((epan_dissect_t *)user_data);
 }
 
 static void
-epan_plugin_dissect_cleanup(gpointer data, gpointer user_data)
+epan_plugin_dissect_cleanup(void *data, void *user_data)
 {
 	((epan_plugin *)data)->dissect_cleanup((epan_dissect_t *)user_data);
 }
 
 static void
-epan_plugin_cleanup(gpointer data, gpointer user_data _U_)
+epan_plugin_cleanup(void *data, void *user_data _U_)
 {
 	((epan_plugin *)data)->cleanup();
 }
 
+#ifdef HAVE_PLUGINS
 void epan_register_plugin(const epan_plugin *plug)
 {
-	if (epan_plugins_supported() != 0) {
-		ws_debug("epan_register_plugin: plugins not enabled or supported by the platform");
-		return;
-	}
 	epan_plugins = g_slist_prepend(epan_plugins, (epan_plugin *)plug);
 	if (plug->register_all_protocols)
 		epan_plugin_register_all_procotols = g_slist_prepend(epan_plugin_register_all_procotols, plug->register_all_protocols);
 	if (plug->register_all_handoffs)
 		epan_plugin_register_all_handoffs = g_slist_prepend(epan_plugin_register_all_handoffs, plug->register_all_handoffs);
 }
-
-void epan_plugins_get_descriptions(plugin_description_callback callback, void *user_data)
+#else /* HAVE_PLUGINS */
+void epan_register_plugin(const epan_plugin *plug _U_)
 {
-	GSList *l;
-
-	for (l = epan_plugins; l != NULL; l = l->next) {
-		((epan_plugin *)l->data)->get_descriptions(callback, user_data);
-	}
+	ws_warning("epan_register_plugin: built without support for binary plugins");
 }
-
-void epan_plugins_dump_all(void)
-{
-	epan_plugins_get_descriptions(plugins_print_description, NULL);
-}
+#endif /* HAVE_PLUGINS */
 
 int epan_plugins_supported(void)
 {
@@ -234,47 +255,57 @@ int epan_plugins_supported(void)
 #endif
 }
 
-gboolean
-epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
+static void epan_plugin_register_all_tap_listeners(void *data, void *user_data _U_)
 {
-	volatile gboolean status = TRUE;
+	epan_plugin *plug = (epan_plugin *)data;
+	if (plug->register_all_tap_listeners)
+		plug->register_all_tap_listeners();
+}
+
+bool
+epan_init(register_cb cb, void *client_data, bool load_plugins, epan_app_data_t* app_data)
+{
+	volatile bool status = true;
+	epan_env_prefix_cache = g_strdup(app_data->env_var_prefix);
 
 	/* Get the value of some environment variables and set corresponding globals for performance reasons*/
 	/* If the WIRESHARK_ABORT_ON_DISSECTOR_BUG environment variable is set,
 	 * it will call abort(), instead, to make it easier to get a stack trace.
 	*/
 	if (getenv("WIRESHARK_ABORT_ON_DISSECTOR_BUG") != NULL) {
-		wireshark_abort_on_dissector_bug = TRUE;
+		wireshark_abort_on_dissector_bug = true;
 	} else {
-		wireshark_abort_on_dissector_bug = FALSE;
+		wireshark_abort_on_dissector_bug = false;
 	}
 
 	if (getenv("WIRESHARK_ABORT_ON_TOO_MANY_ITEMS") != NULL) {
-		wireshark_abort_on_too_many_items = TRUE;
+		wireshark_abort_on_too_many_items = true;
 	} else {
-		wireshark_abort_on_too_many_items = FALSE;
+		wireshark_abort_on_too_many_items = false;
 	}
 
-	/*
-	 * proto_init -> register_all_protocols -> g_async_queue_new which
-	 * requires threads to be initialized. This happens automatically with
-	 * GLib 2.32, before that g_thread_init must be called. But only since
-	 * GLib 2.24, multiple invocations are allowed. Check for an earlier
-	 * invocation just in case.
-	 */
 	/* initialize memory allocation subsystem */
 	wmem_init_scopes();
 
+	/* initialize the tables that store value_strings for
+	   outside of dissectors */
+	value_string_externals_init();
+
 	/* initialize the GUID to name mapping table */
+	uuid_types_initialize();
 	guids_init();
 
 	/* initialize name resolution (addr_resolv.c) */
-	addr_resolv_init();
+	addr_resolv_init(epan_env_prefix_cache);
 
 	except_init();
 
+	dfilter_translator_init();
+
 	if (load_plugins) {
-		libwireshark_plugins = plugins_init(WS_PLUGIN_EPAN);
+#ifdef HAVE_PLUGINS
+		libwireshark_plugins = plugins_init(WS_PLUGIN_EPAN, epan_env_prefix_cache);
+#endif
 	}
 
 	/* initialize libgcrypt (beware, it won't be thread-safe) */
@@ -288,7 +319,7 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 	gcry_control (GCRYCTL_NO_FIPS_MODE);
 #endif
 	gcry_check_version(NULL);
-#if defined(_WIN32)
+#if defined(_WIN32) && GCRYPT_VERSION_NUMBER < 0x010b00
 	gcry_set_log_handler (quiet_gcrypt_logger, NULL);
 #endif
 	gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
@@ -301,10 +332,9 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 	}
 #endif
 #endif
-#ifdef HAVE_LIBXML2
+
 	xmlInitParser();
 	LIBXML_TEST_VERSION;
-#endif
 
 #ifndef _WIN32
 	// We might receive a SIGPIPE due to maxmind_db.
@@ -314,26 +344,39 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 	TRY {
 		export_pdu_init();
 		tap_init();
-		prefs_init();
+		proto_pre_init();
+		prefs_init(app_data->col_fmt, app_data->num_cols);
 		expert_init();
 		packet_init();
 		secrets_init();
 		conversation_init();
+		keytab_file_data_init();
 		capture_dissector_init();
 		reassembly_tables_init();
 		conversation_filters_init();
+		conversation_table_init();
+		export_object_init();
+		follow_init();
+		rtd_table_init();
+		srt_table_init();
+		stats_tree_init();
+		stat_tap_init();
 		g_slist_foreach(epan_plugins, epan_plugin_init, NULL);
-		proto_init(epan_plugin_register_all_procotols, epan_plugin_register_all_handoffs, cb, client_data);
+		proto_init(epan_plugin_register_all_procotols, epan_plugin_register_all_handoffs,
+			(app_data != NULL) ? app_data->register_func : NULL, (app_data != NULL) ? app_data->handoff_func : NULL, cb, client_data);
+		g_slist_foreach(epan_plugins, epan_plugin_register_all_tap_listeners, NULL);
 		packet_cache_proto_handles();
-		dfilter_init();
+		dfilter_init(epan_env_prefix_cache);
 		wscbor_init();
 		final_registration_all_protocols();
 		print_cache_field_handles();
 		expert_packet_init();
 #ifdef HAVE_LUA
-		wslua_init(cb, client_data);
+		wslua_init(cb, client_data, epan_env_prefix_cache);
 #endif
 		g_slist_foreach(epan_plugins, epan_plugin_post_init, NULL);
+		register_all_tap_listeners(app_data->tap_reg_listeners);
+		uat_load_all(epan_env_prefix_cache);
 	}
 	CATCH(DissectorError) {
 		/*
@@ -351,7 +394,7 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 				 dissector_error_nomsg : exception_message);
 		if (getenv("WIRESHARK_ABORT_ON_DISSECTOR_BUG") != NULL)
 			abort();
-		status = FALSE;
+		status = false;
 	}
 	ENDTRY;
 	return status;
@@ -366,15 +409,15 @@ epan_load_settings(void)
 	e_prefs *prefs_p;
 
 	/* load the decode as entries of the current profile */
-	load_decode_as_entries();
+	load_decode_as_entries(epan_env_prefix_cache);
 
-	prefs_p = read_prefs();
+	prefs_p = read_prefs(epan_env_prefix_cache);
 
 	/*
 	 * Read the files that enable and disable protocols and heuristic
 	 * dissectors.
 	 */
-	read_enabled_and_disabled_lists();
+	read_enabled_and_disabled_lists(epan_env_prefix_cache);
 
 	return prefs_p;
 }
@@ -426,18 +469,19 @@ epan_cleanup(void)
 	cleanup_enabled_and_disabled_lists();
 	stats_tree_cleanup();
 	funnel_cleanup();
-	dtd_location(NULL);
 #ifdef HAVE_LUA
 	wslua_cleanup();
 #endif
 #ifdef HAVE_LIBGNUTLS
 	gnutls_global_deinit();
 #endif
-#ifdef HAVE_LIBXML2
+
 	xmlCleanupParser();
-#endif
+
 	except_deinit();
 	addr_resolv_cleanup();
+
+	dfilter_translator_cleanup();
 
 	if (pinfo_pool_cache != NULL) {
 		wmem_destroy_allocator(pinfo_pool_cache);
@@ -446,8 +490,13 @@ epan_cleanup(void)
 
 	wmem_cleanup_scopes();
 
+#ifdef HAVE_PLUGINS
 	plugins_cleanup(libwireshark_plugins);
 	libwireshark_plugins = NULL;
+#endif
+	value_string_externals_cleanup();
+	g_free(epan_env_prefix_cache);
+	epan_env_prefix_cache = NULL;
 }
 
 struct epan_session {
@@ -465,7 +514,7 @@ epan_new(struct packet_provider_data *prov,
 	session->funcs = *funcs;
 
 	/* XXX, it should take session as param */
-	init_dissection();
+	init_dissection(epan_env_prefix_cache);
 
 	return session;
 }
@@ -480,7 +529,7 @@ epan_get_modified_block(const epan_t *session, const frame_data *fd)
 }
 
 const char *
-epan_get_interface_name(const epan_t *session, guint32 interface_id, unsigned section_number)
+epan_get_interface_name(const epan_t *session, uint32_t interface_id, unsigned section_number)
 {
 	if (session->funcs.get_interface_name)
 		return session->funcs.get_interface_name(session->prov, interface_id, section_number);
@@ -489,7 +538,7 @@ epan_get_interface_name(const epan_t *session, guint32 interface_id, unsigned se
 }
 
 const char *
-epan_get_interface_description(const epan_t *session, guint32 interface_id, unsigned section_number)
+epan_get_interface_description(const epan_t *session, uint32_t interface_id, unsigned section_number)
 {
 	if (session->funcs.get_interface_description)
 		return session->funcs.get_interface_description(session->prov, interface_id, section_number);
@@ -498,19 +547,70 @@ epan_get_interface_description(const epan_t *session, guint32 interface_id, unsi
 }
 
 const nstime_t *
-epan_get_frame_ts(const epan_t *session, guint32 frame_num)
+epan_get_frame_ts(const epan_t *session, uint32_t frame_num)
 {
 	const nstime_t *abs_ts = NULL;
 
 	if (session && session->funcs.get_frame_ts)
 		abs_ts = session->funcs.get_frame_ts(session->prov, frame_num);
 
-	if (!abs_ts) {
-		/* This can happen if frame_num doesn't have a ts */
-		ws_debug("!!! couldn't get frame ts for %u !!!\n", frame_num);
-	}
-
+	/* abs_ts will be null if we don't have a session, the session
+	   doesn't have a function to return time stamps, or that
+	   function returns null, e.g. because the frame doesn't
+	   *have* a time stamp. */
 	return abs_ts;
+}
+
+const nstime_t *
+epan_get_start_ts(const epan_t *session)
+{
+	const nstime_t *abs_ts = NULL;
+
+	if (session && session->funcs.get_start_ts)
+		abs_ts = session->funcs.get_start_ts(session->prov);
+
+	/* abs_ts will be null if we don't have a session, the session
+	   doesn't have a function to return time stamps, or that
+	   function returns null, e.g. because the frame doesn't
+	   *have* a time stamp. (It could return unset in the last
+	   case.) */
+	return abs_ts;
+}
+
+int32_t
+epan_get_process_id(const epan_t *session, uint32_t process_info_id, unsigned section_number)
+{
+	if (session->funcs.get_process_id)
+		return session->funcs.get_process_id(session->prov, process_info_id, section_number);
+
+	/* NOTE:
+	 * On UNIX and UNIX-like operating systems, `0` is valid process id
+	 * value, and it is reserved for the kernel.
+	 * On other operating systems, the kernel process id can be mapped
+	 * to a different integer value.
+	 * The common underlying assumption is that on every operating system,
+	 * the value `-1` is not mapped to any valid process id, and hence
+	 * can represent the "not found" case.
+	 */
+	return -1;
+}
+
+const char *
+epan_get_process_name(const epan_t *session, uint32_t process_info_id, unsigned section_number)
+{
+	if (session->funcs.get_process_name)
+		return session->funcs.get_process_name(session->prov, process_info_id, section_number);
+
+	return NULL;
+}
+
+const uint8_t *
+epan_get_process_uuid(const epan_t *session, uint32_t process_info_id, unsigned section_number, size_t *uuid_size)
+{
+	if (session->funcs.get_process_uuid)
+		return session->funcs.get_process_uuid(session->prov, process_info_id, section_number, uuid_size);
+
+	return NULL;
 }
 
 void
@@ -534,10 +634,10 @@ epan_conversation_init(void)
  * This is > 0 if a Lua script wanted to see all fields all the time.
  * This is ref-counted, so clearing it won't override other taps/scripts wanting it.
  */
-static gint always_visible_refcount = 0;
+static int always_visible_refcount;
 
 void
-epan_set_always_visible(gboolean force)
+epan_set_always_visible(bool force)
 {
 	if (force)
 		always_visible_refcount++;
@@ -546,7 +646,7 @@ epan_set_always_visible(gboolean force)
 }
 
 void
-epan_dissect_init(epan_dissect_t *edt, epan_t *session, const gboolean create_proto_tree, const gboolean proto_tree_visible)
+epan_dissect_init(epan_dissect_t *edt, epan_t *session, const bool create_proto_tree, const bool proto_tree_visible)
 {
 	ws_assert(edt);
 
@@ -563,7 +663,7 @@ epan_dissect_init(epan_dissect_t *edt, epan_t *session, const gboolean create_pr
 
 	if (create_proto_tree) {
 		edt->tree = proto_tree_create_root(&edt->pi);
-		proto_tree_set_visible(edt->tree, (always_visible_refcount > 0) ? TRUE : proto_tree_visible);
+		proto_tree_set_visible(edt->tree, (always_visible_refcount > 0) ? true : proto_tree_visible);
 	}
 	else {
 		edt->tree = NULL;
@@ -606,7 +706,7 @@ epan_dissect_reset(epan_dissect_t *edt)
 }
 
 epan_dissect_t*
-epan_dissect_new(epan_t *session, const gboolean create_proto_tree, const gboolean proto_tree_visible)
+epan_dissect_new(epan_t *session, const bool create_proto_tree, const bool proto_tree_visible)
 {
 	epan_dissect_t *edt;
 
@@ -617,7 +717,7 @@ epan_dissect_new(epan_t *session, const gboolean create_proto_tree, const gboole
 }
 
 void
-epan_dissect_fake_protocols(epan_dissect_t *edt, const gboolean fake_protocols)
+epan_dissect_fake_protocols(epan_dissect_t *edt, const bool fake_protocols)
 {
 	if (edt)
 		proto_tree_set_fake_protocols(edt->tree, fake_protocols);
@@ -625,64 +725,57 @@ epan_dissect_fake_protocols(epan_dissect_t *edt, const gboolean fake_protocols)
 
 void
 epan_dissect_run(epan_dissect_t *edt, int file_type_subtype,
-	wtap_rec *rec, tvbuff_t *tvb, frame_data *fd,
-	column_info *cinfo)
+	wtap_rec *rec, frame_data *fd, column_info *cinfo)
 {
 #ifdef HAVE_LUA
+	/* Prime with the fields used by field extractors. We don't need
+	 * to do this when running the taps because the wslua_dfilter is
+	 * registered to a fake tap. */
 	wslua_prime_dfilter(edt); /* done before entering wmem scope */
 #endif
-	wmem_enter_packet_scope();
-	dissect_record(edt, file_type_subtype, rec, tvb, fd, cinfo);
+	dissect_record(edt, file_type_subtype, rec, fd, cinfo);
 
 	/* free all memory allocated */
-	wmem_leave_packet_scope();
 	wtap_block_unref(rec->block);
 	rec->block = NULL;
 }
 
 void
 epan_dissect_run_with_taps(epan_dissect_t *edt, int file_type_subtype,
-	wtap_rec *rec, tvbuff_t *tvb, frame_data *fd,
-	column_info *cinfo)
+	wtap_rec *rec, frame_data *fd, column_info *cinfo)
 {
-	wmem_enter_packet_scope();
 	tap_queue_init(edt);
-	dissect_record(edt, file_type_subtype, rec, tvb, fd, cinfo);
+	dissect_record(edt, file_type_subtype, rec, fd, cinfo);
 	tap_push_tapped_queue(edt);
 
 	/* free all memory allocated */
-	wmem_leave_packet_scope();
 	wtap_block_unref(rec->block);
 	rec->block = NULL;
 }
 
 void
 epan_dissect_file_run(epan_dissect_t *edt, wtap_rec *rec,
-	tvbuff_t *tvb, frame_data *fd, column_info *cinfo)
+	frame_data *fd, column_info *cinfo)
 {
 #ifdef HAVE_LUA
 	wslua_prime_dfilter(edt); /* done before entering wmem scope */
 #endif
-	wmem_enter_packet_scope();
-	dissect_file(edt, rec, tvb, fd, cinfo);
+	dissect_file(edt, rec, fd, cinfo);
 
 	/* free all memory allocated */
-	wmem_leave_packet_scope();
 	wtap_block_unref(rec->block);
 	rec->block = NULL;
 }
 
 void
 epan_dissect_file_run_with_taps(epan_dissect_t *edt, wtap_rec *rec,
-	tvbuff_t *tvb, frame_data *fd, column_info *cinfo)
+	frame_data *fd, column_info *cinfo)
 {
-	wmem_enter_packet_scope();
 	tap_queue_init(edt);
-	dissect_file(edt, rec, tvb, fd, cinfo);
+	dissect_file(edt, rec, fd, cinfo);
 	tap_push_tapped_queue(edt);
 
 	/* free all memory allocated */
-	wmem_leave_packet_scope();
 	wtap_block_unref(rec->block);
 	rec->block = NULL;
 }
@@ -731,6 +824,12 @@ epan_dissect_prime_with_dfilter(epan_dissect_t *edt, const dfilter_t* dfcode)
 }
 
 void
+epan_dissect_prime_with_dfilter_print(epan_dissect_t *edt, const dfilter_t* dfcode)
+{
+	dfilter_prime_proto_tree_print(dfcode, edt->tree);
+}
+
+void
 epan_dissect_prime_with_hfid(epan_dissect_t *edt, int hfid)
 {
 	proto_tree_prime_with_hfid(edt->tree, hfid);
@@ -739,7 +838,7 @@ epan_dissect_prime_with_hfid(epan_dissect_t *edt, int hfid)
 void
 epan_dissect_prime_with_hfid_array(epan_dissect_t *edt, GArray *hfids)
 {
-	guint i;
+	unsigned i;
 
 	for (i = 0; i < hfids->len; i++) {
 		proto_tree_prime_with_hfid(edt->tree,
@@ -748,38 +847,39 @@ epan_dissect_prime_with_hfid_array(epan_dissect_t *edt, GArray *hfids)
 }
 
 /* ----------------------- */
-const gchar *
+const char *
 epan_custom_set(epan_dissect_t *edt, GSList *field_ids,
-			     gint occurrence,
-			     gchar *result,
-			     gchar *expr, const int size )
+			     int occurrence,
+			     bool display_details,
+			     char *result,
+			     char *expr, const int size )
 {
-	return proto_custom_set(edt->tree, field_ids, occurrence, result, expr, size);
+	return proto_custom_set(edt->tree, field_ids, occurrence, display_details, result, expr, size);
 }
 
 void
-epan_dissect_fill_in_columns(epan_dissect_t *edt, const gboolean fill_col_exprs, const gboolean fill_fd_colums)
+epan_dissect_fill_in_columns(epan_dissect_t *edt, const bool fill_col_exprs, const bool fill_fd_colums)
 {
 	col_custom_set_edt(edt, edt->pi.cinfo);
 	col_fill_in(&edt->pi, fill_col_exprs, fill_fd_colums);
 }
 
-gboolean
+bool
 epan_dissect_packet_contains_field(epan_dissect_t* edt,
 				   const char *field_name)
 {
 	GPtrArray* array;
 	int field_id;
-	gboolean contains_field;
+	bool contains_field;
 
 	if (!edt || !edt->tree)
-		return FALSE;
+		return false;
 	field_id = proto_get_id_by_filter_name(field_name);
 	if (field_id < 0)
-		return FALSE;
+		return false;
 	array = proto_find_finfo(edt->tree, field_id);
-	contains_field = (array->len > 0) ? TRUE : FALSE;
-	g_ptr_array_free(array, TRUE);
+	contains_field = (array->len > 0) ? true : false;
+	g_ptr_array_free(array, true);
 	return contains_field;
 }
 
@@ -789,13 +889,15 @@ epan_dissect_packet_contains_field(epan_dissect_t* edt,
 void
 epan_gather_compile_info(feature_list l)
 {
+	gather_xxhash_compile_info(l);
 	gather_zlib_compile_info(l);
+	gather_zlib_ng_compile_info(l);
 	gather_pcre2_compile_info(l);
 
 	/* Lua */
 #ifdef HAVE_LUA
 #ifdef HAVE_LUA_UNICODE
-	with_feature(l, "%s", LUA_RELEASE" (with UfW patches)");
+	with_feature(l, "%s", LUA_RELEASE" (UfW patched)");
 #else /* HAVE_LUA_UNICODE */
 	with_feature(l, "%s", LUA_RELEASE);
 #endif /* HAVE_LUA_UNICODE */
@@ -806,7 +908,7 @@ epan_gather_compile_info(feature_list l)
 	/* GnuTLS */
 #ifdef HAVE_LIBGNUTLS
 #ifdef HAVE_GNUTLS_PKCS11
-	with_feature(l, "GnuTLS %s and PKCS #11 support", LIBGNUTLS_VERSION);
+	with_feature(l, "GnuTLS %s and PKCS#11", LIBGNUTLS_VERSION);
 #else
 	with_feature(l, "GnuTLS %s", LIBGNUTLS_VERSION);
 #endif /* HAVE_GNUTLS_PKCS11 */
@@ -828,7 +930,7 @@ epan_gather_compile_info(feature_list l)
 
 	/* MaxMindDB */
 #ifdef HAVE_MAXMINDDB
-	with_feature(l, "MaxMind");
+	with_feature(l, "MaxMind %s", MAXMINDDB_VERSION);
 #else
 	without_feature(l, "MaxMind");
 #endif /* HAVE_MAXMINDDB */
@@ -856,31 +958,31 @@ epan_gather_compile_info(feature_list l)
 
 	/* LZ4 */
 #ifdef HAVE_LZ4
-	with_feature(l, "LZ4");
+	with_feature(l, "LZ4 %s", LZ4_VERSION_STRING);
 #else
 	without_feature(l, "LZ4");
 #endif /* HAVE_LZ4 */
 
 	/* Zstandard */
 #ifdef HAVE_ZSTD
-	with_feature(l, "Zstandard");
+	with_feature(l, "Zstandard %s", ZSTD_VERSION_STRING);
 #else
 	without_feature(l, "Zstandard");
 #endif /* HAVE_ZSTD */
 
 	/* Snappy */
 #ifdef HAVE_SNAPPY
-	with_feature(l, "Snappy");
+	/*
+	 * snappy-stubs-public.h defines SNAPPY_MAJOR, SNAPPY_MINOR,
+	 * and SNAPPY_PATCHLEVEL, but it's a C++-only header.
+	 */
+	with_feature(l, "Snappy %s", SNAPPY_VERSION);
 #else
 	without_feature(l, "Snappy");
 #endif /* HAVE_SNAPPY */
 
 	/* libxml2 */
-#ifdef HAVE_LIBXML2
 	with_feature(l, "libxml2 %s", LIBXML_DOTTED_VERSION);
-#else
-	without_feature(l, "libxml2");
-#endif /* HAVE_LIBXML2 */
 
 	/* libsmi */
 #ifdef HAVE_LIBSMI
@@ -896,6 +998,7 @@ epan_gather_compile_info(feature_list l)
 void
 epan_gather_runtime_info(feature_list l)
 {
+	gather_xxhash_runtime_info(l);
 	gather_zlib_runtime_info(l);
 	gather_pcre2_runtime_info(l);
 
@@ -929,9 +1032,9 @@ epan_gather_runtime_info(feature_list l)
 #endif
 
 	/* LZ4 */
-#if LZ4_VERSION_NUMBER >= 10703
+#ifdef HAVE_LZ4
 	with_feature(l, "LZ4 %s", LZ4_versionString());
-#endif /* LZ4_VERSION_NUMBER */
+#endif /* HAVE_LZ4 */
 
 	/* Zstandard */
 #if ZSTD_VERSION_NUMBER >= 10300

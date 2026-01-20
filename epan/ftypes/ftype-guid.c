@@ -14,6 +14,7 @@
 #include <ftypes-int.h>
 #include <epan/guid-utils.h>
 #include <epan/to_str.h>
+#include <wsutil/array.h>
 
 static void
 guid_fvalue_set_guid(fvalue_t *fv, const e_guid_t *value)
@@ -90,7 +91,7 @@ guid_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _U_, in
 static enum ft_result
 cmp_order(const fvalue_t *a, const fvalue_t *b, int *cmp)
 {
-    *cmp = memcmp(&a->value.guid, &b->value.guid, sizeof(e_guid_t));
+    *cmp = guid_cmp(&a->value.guid, &b->value.guid);
     return FT_OK;
 }
 
@@ -104,7 +105,7 @@ void
 ftype_register_guid(void)
 {
 
-    static ftype_t guid_type = {
+    static const ftype_t guid_type = {
         FT_GUID,              /* ftype */
         GUID_LEN,            /* wire_size */
         NULL,                /* new_value */
@@ -130,6 +131,7 @@ ftype_register_guid(void)
         NULL,                /* cmp_matches */
 
         value_hash,          /* hash */
+        NULL,
         NULL,
         NULL,
         NULL,

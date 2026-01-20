@@ -23,6 +23,7 @@
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/file_util.h>
 #include <wsutil/filesystem.h>
+#include <app/application_flavor.h>
 #include <wsutil/privileges.h>
 #include <cli_main.h>
 
@@ -30,7 +31,6 @@
 #include <wsutil/plugins.h>
 #endif
 
-#include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
 
 #include <wsutil/ws_getopt.h>
@@ -48,7 +48,7 @@ list_capture_types(void) {
 
     cmdarg_err("The available capture file types for the \"-F\" flag are:\n");
     writable_type_subtypes = wtap_get_writable_file_types_subtypes(FT_SORT_BY_NAME);
-    for (guint i = 0; i < writable_type_subtypes->len; i++) {
+    for (unsigned i = 0; i < writable_type_subtypes->len; i++) {
         int ft = g_array_index(writable_type_subtypes, int, i);
         fprintf(stderr, "    %s - %s\n", wtap_file_type_subtype_name(ft),
             wtap_file_type_subtype_description(ft));
@@ -56,30 +56,9 @@ list_capture_types(void) {
     g_array_free(writable_type_subtypes, TRUE);
 }
 
-/*
- * Report an error in command-line arguments.
- */
-static void
-randpkt_cmdarg_err(const char *msg_format, va_list ap)
-{
-    fprintf(stderr, "randpkt: ");
-    vfprintf(stderr, msg_format, ap);
-    fprintf(stderr, "\n");
-}
-
-/*
- * Report additional information for an error in command-line arguments.
- */
-static void
-randpkt_cmdarg_err_cont(const char *msg_format, va_list ap)
-{
-    vfprintf(stderr, msg_format, ap);
-    fprintf(stderr, "\n");
-}
-
 /* Print usage statement and exit program */
 static void
-usage(gboolean is_error)
+usage(bool is_error)
 {
     FILE *output;
     char** abbrev_list;
@@ -124,18 +103,6 @@ int
 main(int argc, char *argv[])
 {
     char *configuration_init_error;
-    static const struct report_message_routines randpkt_report_routines = {
-        failure_message,
-        failure_message,
-        open_failure_message,
-        read_failure_message,
-        write_failure_message,
-        cfile_open_failure_message,
-        cfile_dump_open_failure_message,
-        cfile_read_failure_message,
-        cfile_write_failure_message,
-        cfile_close_failure_message
-    };
     int opt;
     int produce_type = -1;
     char *produce_filename = NULL;
@@ -143,23 +110,31 @@ main(int argc, char *argv[])
     int produce_count = 1000;
     int file_type_subtype = WTAP_FILE_TYPE_SUBTYPE_UNKNOWN;
     randpkt_example *example;
-    guint8* type = NULL;
-    int allrandom = FALSE;
+    char* type = NULL;
+    bool allrandom = false;
     wtap_dumper *savedump;
     int ret = EXIT_SUCCESS;
     static const struct ws_option long_options[] = {
         {"help", ws_no_argument, NULL, 'h'},
         {"version", ws_no_argument, NULL, 'v'},
+        LONGOPT_WSLOG
         {0, 0, 0, 0 }
     };
+#define OPTSTRING "b:c:F:ht:rv"
+    static const char optstring[] = OPTSTRING;
+    const struct file_extension_info* file_extensions;
+    unsigned num_extensions;
 
-    cmdarg_err_init(randpkt_cmdarg_err, randpkt_cmdarg_err_cont);
+    /* Set the program name. */
+    g_set_prgname("randpkt");
+
+    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init("randpkt", vcmdarg_err);
+    ws_log_init(vcmdarg_err, "Randpkt Debug Console");
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, vcmdarg_err, WS_EXIT_INVALID_OPTION);
+    ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
 
     ws_noisy("Finished log init and parsing command line log arguments");
 
@@ -172,7 +147,7 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0], NULL);
+    configuration_init_error = configuration_init(argv[0], "wireshark");
     if (configuration_init_error != NULL) {
         fprintf(stderr,
             "capinfos: Can't get pathname of directory containing the capinfos program: %s.\n",
@@ -180,20 +155,24 @@ main(int argc, char *argv[])
         g_free(configuration_init_error);
     }
 
-    init_report_message("randpkt", &randpkt_report_routines);
+    init_report_failure_message("randpkt");
 
-    wtap_init(TRUE);
+    application_file_extensions(&file_extensions, &num_extensions);
+    wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
 
 #ifdef _WIN32
     create_app_running_mutex();
 #endif /* _WIN32 */
 
-    ws_init_version_info("Randpkt", NULL, NULL);
+    ws_init_version_info("Randpkt", NULL, application_get_vcs_version_info, NULL, NULL);
 
-    while ((opt = ws_getopt_long(argc, argv, "b:c:F:ht:rv", long_options, NULL)) != -1) {
+    while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
         switch (opt) {
             case 'b':	/* max bytes */
-                produce_max_bytes = get_positive_int(ws_optarg, "max bytes");
+                if (!get_positive_int(ws_optarg, "max bytes", &produce_max_bytes)) {
+                    ret = WS_EXIT_INVALID_OPTION;
+                    goto clean_exit;
+                }
                 if (produce_max_bytes > 65536) {
                     cmdarg_err("max bytes is > 65536");
                     ret = WS_EXIT_INVALID_OPTION;
@@ -202,7 +181,10 @@ main(int argc, char *argv[])
                 break;
 
             case 'c':	/* count */
-                produce_count = get_positive_int(ws_optarg, "count");
+                if (!get_positive_int(ws_optarg, "count", &produce_count)) {
+                    ret = WS_EXIT_INVALID_OPTION;
+                    goto clean_exit;
+                }
                 break;
 
             case 'F':
@@ -220,12 +202,12 @@ main(int argc, char *argv[])
 
             case 'h':
                 show_help_header(NULL);
-                usage(FALSE);
+                usage(false);
                 goto clean_exit;
                 break;
 
             case 'r':
-                allrandom = TRUE;
+                allrandom = true;
                 break;
 
             case 'v':
@@ -238,12 +220,15 @@ main(int argc, char *argv[])
                     case 'F':
                         list_capture_types();
                         return WS_EXIT_INVALID_OPTION;
-                        break;
                 }
                 /* FALLTHROUGH */
 
             default:
-                usage(TRUE);
+                /* wslog arguments are okay */
+                if (ws_log_is_wslog_arg(opt))
+                    break;
+
+                usage(true);
                 ret = WS_EXIT_INVALID_OPTION;
                 goto clean_exit;
                 break;
@@ -254,7 +239,7 @@ main(int argc, char *argv[])
     if (argc > ws_optind) {
         produce_filename = argv[ws_optind];
     } else {
-        usage(TRUE);
+        usage(true);
         ret = WS_EXIT_INVALID_OPTION;
         goto clean_exit;
     }

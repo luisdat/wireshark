@@ -14,6 +14,7 @@
 #include <epan/asn1.h>
 
 #include <wsutil/mpeg-audio.h>
+#include <wsutil/array.h>
 
 #include "packet-per.h"
 
@@ -36,41 +37,40 @@ static int hf_id3v1;
 
 static int ett_mpeg_audio;
 
-static gboolean
+static bool
 test_mpeg_audio(tvbuff_t *tvb, int offset)
 {
-	guint32 hdr;
+	uint32_t hdr;
 	struct mpa mpa;
 
 	if (!tvb_bytes_exist(tvb, offset, 4))
-		return FALSE;
+		return false;
 	if (tvb_strneql(tvb, offset, "TAG", 3) == 0)
-		return TRUE;
+		return true;
 	if (tvb_strneql(tvb, offset, "ID3", 3) == 0)
-		return TRUE;
+		return true;
 
-	hdr = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+	hdr = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
 	MPA_UNMARSHAL(&mpa, hdr);
 	return MPA_VALID(&mpa);
 }
 
-static int
-mpeg_resync(tvbuff_t *tvb, int offset)
+static unsigned
+mpeg_resync(tvbuff_t *tvb, unsigned offset)
 {
-	guint32 hdr;
+	uint32_t hdr;
 	struct mpa mpa;
 
 	/* This only looks to resync on another frame; it doesn't
 	 * look for an ID3 tag.
 	 */
-	offset = tvb_find_guint8(tvb, offset, -1, '\xff');
-	while (offset != -1 && tvb_bytes_exist(tvb, offset, 4)) {
-		hdr = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+	while (tvb_find_uint8_remaining(tvb, offset, '\xff', &offset) && tvb_bytes_exist(tvb, offset, 4)) {
+		hdr = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
 		MPA_UNMARSHAL(&mpa, hdr);
 		if (MPA_VALID(&mpa)) {
 			return offset;
 		}
-		offset = tvb_find_guint8(tvb, offset + 1, -1, '\xff');
+		offset += 1;
 	}
 	return tvb_reported_length(tvb);
 }
@@ -78,11 +78,11 @@ mpeg_resync(tvbuff_t *tvb, int offset)
 static int
 dissect_mpeg_audio_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-	guint32 h;
+	uint32_t h;
 	struct mpa mpa;
-	int data_size = 0;
+	unsigned data_size = 0;
 	asn1_ctx_t asn1_ctx;
-	int offset = 0;
+	unsigned offset = 0;
 	static const char *version_names[] = { "1", "2", "2.5" };
 
 	if (!tvb_bytes_exist(tvb, 0, 4))
@@ -99,14 +99,14 @@ dissect_mpeg_audio_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	col_add_fstr(pinfo->cinfo, COL_INFO,
 				"Audio Layer %d", mpa_layer(&mpa) + 1);
 	if (MPA_BITRATE_VALID(&mpa) && MPA_FREQUENCY_VALID(&mpa)) {
-		data_size = (int)(MPA_DATA_BYTES(&mpa) - sizeof mpa);
+		data_size = (MPA_DATA_BYTES(&mpa) - sizeof mpa);
 		col_append_fstr(pinfo->cinfo, COL_INFO,
 						", %d kb/s, %g kHz",
 						mpa_bitrate(&mpa) / 1000,
 						mpa_frequency(&mpa) / (float)1000);
 	}
 
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, true, pinfo);
 	offset = dissect_mpeg_audio_Audio(tvb, offset, &asn1_ctx,
 			tree, hf_mpeg_audio_header);
 	if (data_size > 0) {
@@ -125,14 +125,14 @@ dissect_mpeg_audio_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	return offset / 8;
 }
 
-static int
+static unsigned
 dissect_id3v1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	asn1_ctx_t asn1_ctx;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "ID3v1");
 	col_clear(pinfo->cinfo, COL_INFO);
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, true, pinfo);
 	return dissect_mpeg_audio_ID3v1(tvb, 0, &asn1_ctx,
 			tree, hf_id3v1);
 }
@@ -143,8 +143,9 @@ dissect_mpeg_audio(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 	proto_item *ti;
 	proto_tree *mpeg_audio_tree;
 
-	int magic, offset = 0;
-	guint32 frame_len;
+	int magic;
+	unsigned offset = 0;
+	uint32_t frame_len;
 	tvbuff_t *next_tvb;
 
 	ti = proto_tree_add_item(tree, proto_mpeg_audio, tvb, offset, -1, ENC_NA);
@@ -170,14 +171,14 @@ dissect_mpeg_audio(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 	return tvb_reported_length(tvb);
 }
 
-static gboolean
+static bool
 dissect_mpeg_audio_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
 	if (!test_mpeg_audio(tvb, 0)) {
-		return FALSE;
+		return false;
 	}
 	dissect_mpeg_audio(tvb, pinfo, tree, data);
-	return TRUE;
+	return true;
 }
 
 void
@@ -200,7 +201,7 @@ proto_register_mpeg_audio(void)
 				FT_NONE, BASE_NONE, NULL, 0, NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_mpeg_audio,
 #include "packet-mpeg-audio-ettarr.c"
 	};

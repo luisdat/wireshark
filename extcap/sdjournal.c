@@ -24,8 +24,10 @@
 #include <wsutil/interface.h>
 #include <wsutil/file_util.h>
 #include <wsutil/filesystem.h>
+#include <app/application_flavor.h>
 #include <wsutil/privileges.h>
 #include <wsutil/wslog.h>
+#include <wsutil/ws_padding_to.h>
 #include <writecap/pcapio.h>
 #include <wiretap/wtap.h>
 
@@ -50,7 +52,7 @@ enum {
 	OPT_START_FROM
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
 	EXTCAP_BASE_OPTIONS,
 	{ "help", ws_no_argument, NULL, OPT_HELP},
 	{ "version", ws_no_argument, NULL, OPT_VERSION},
@@ -66,7 +68,7 @@ static struct ws_option longopts[] = {
 #define ENTRY_BUF_LENGTH WTAP_MAX_PACKET_SIZE_STANDARD
 #define MAX_EXPORT_ENTRY_LENGTH (ENTRY_BUF_LENGTH - 4 - 4 - 4) // Block type - total length - total length
 
-static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
+static int sdj_dump_entries(sd_journal *jnl, ws_cwstream* fp)
 {
 	int ret = EXIT_SUCCESS;
 	uint8_t *entry_buff = g_new(uint8_t, ENTRY_BUF_LENGTH);
@@ -105,7 +107,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			ws_warning("Error fetching cursor: %s", g_strerror(jr));
 			goto end;
 		}
-		data_end += snprintf(entry_buff+data_end, MAX_EXPORT_ENTRY_LENGTH-data_end, "__CURSOR=%s\n", cursor);
+		data_end += snprintf((char*)(entry_buff+data_end), MAX_EXPORT_ENTRY_LENGTH-data_end, "__CURSOR=%s\n", cursor);
 		free(cursor);
 
 		jr = sd_journal_get_realtime_usec(jnl, &pkt_rt_ts);
@@ -113,7 +115,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			ws_warning("Error fetching realtime timestamp: %s", g_strerror(jr));
 			goto end;
 		}
-		data_end += snprintf(entry_buff+data_end, MAX_EXPORT_ENTRY_LENGTH-data_end, "__REALTIME_TIMESTAMP=%" PRIu64 "\n", pkt_rt_ts);
+		data_end += snprintf((char*)(entry_buff+data_end), MAX_EXPORT_ENTRY_LENGTH-data_end, "__REALTIME_TIMESTAMP=%" PRIu64 "\n", pkt_rt_ts);
 
 		jr = sd_journal_get_monotonic_usec(jnl, &mono_ts, &boot_id);
 		if (jr < 0) {
@@ -121,7 +123,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			goto end;
 		}
 		sd_id128_to_string(boot_id, boot_id_str + strlen(FLD_BOOT_ID));
-		data_end += snprintf(entry_buff+data_end, MAX_EXPORT_ENTRY_LENGTH-data_end, "__MONOTONIC_TIMESTAMP=%" PRIu64 "\n%s\n", mono_ts, boot_id_str);
+		data_end += snprintf((char*)(entry_buff+data_end), MAX_EXPORT_ENTRY_LENGTH-data_end, "__MONOTONIC_TIMESTAMP=%" PRIu64 "\n%s\n", mono_ts, boot_id_str);
 		ws_debug("Entry header is %u bytes", data_end);
 
 		SD_JOURNAL_FOREACH_DATA(jnl, fld_data, fld_len) {
@@ -162,7 +164,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 		}
 
 		if (data_end % 4) {
-			size_t pad_len = 4 - (data_end % 4);
+			size_t pad_len = WS_PADDING_TO_4(data_end);
 			memset(entry_buff+data_end, '\0', pad_len);
 			data_end += pad_len;
 		}
@@ -178,7 +180,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			break;
 		}
 
-		fflush(fp);
+		ws_cwstream_flush(fp, &err);
 	}
 
 end:
@@ -188,7 +190,7 @@ end:
 
 static int sdj_start_export(const int start_from_entries, const bool start_from_end, const char* fifo)
 {
-	FILE* fp = stdout;
+	ws_cwstream* fp = NULL;
 	uint64_t bytes_written = 0;
 	int err;
 	sd_journal *jnl = NULL;
@@ -202,12 +204,18 @@ static int sdj_start_export(const int start_from_entries, const bool start_from_
 
 	if (g_strcmp0(fifo, "-")) {
 		/* Open or create the output file */
-		fp = fopen(fifo, "wb");
+		fp = ws_cwstream_open(fifo, WS_FILE_UNCOMPRESSED, &err);
 		if (fp == NULL) {
 			ws_warning("Error creating output file: %s (%s)", fifo, g_strerror(errno));
 			return EXIT_FAILURE;
 		}
-	}
+	} else {
+		fp = ws_cwstream_open_stdout(WS_FILE_UNCOMPRESSED, &err);
+		if (fp == NULL) {
+			ws_warning("Error opening standard out: %s", g_strerror(errno));
+			return EXIT_FAILURE;
+		}
+        }
 
 
 	appname = ws_strdup_printf(SDJOURNAL_EXTCAP_INTERFACE " (Wireshark) %s.%s.%s",
@@ -299,9 +307,7 @@ cleanup:
 	g_free(err_info);
 
 	/* clean up and exit */
-	if (g_strcmp0(fifo, "-")) {
-		fclose(fp);
-	}
+        ws_cwstream_close(fp, NULL);
 	return ret;
 }
 
@@ -341,8 +347,11 @@ int main(int argc, char **argv)
 	char* help_url;
 	char* help_header = NULL;
 
+	/* Set the program name. */
+	g_set_prgname("sdjournal");
+
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init("sdjournal");
+	extcap_log_init();
 
 	/*
 	 * Get credential information for later use.
@@ -353,14 +362,14 @@ int main(int argc, char **argv)
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	configuration_init_error = configuration_init(argv[0], NULL);
+	configuration_init_error = configuration_init(argv[0], "wireshark");
 	if (configuration_init_error != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			configuration_init_error);
 		g_free(configuration_init_error);
 	}
 
-	help_url = data_file_url("sdjournal.html");
+	help_url = data_file_url("sdjournal.html", application_configuration_environment_prefix());
 	extcap_base_set_util_info(extcap_conf, argv[0], SDJOURNAL_VERSION_MAJOR, SDJOURNAL_VERSION_MINOR,
 			SDJOURNAL_VERSION_RELEASE, help_url);
 	g_free(help_url);

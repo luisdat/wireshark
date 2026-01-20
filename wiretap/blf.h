@@ -3,7 +3,7 @@
  * Binary Log File (BLF) file format from Vector Informatik decoder
  * for the Wiretap library.
  *
- * Copyright (c) 2021-2024 by Dr. Lars Voelker <lars.voelker@technica-engineering.de>
+ * Copyright (c) 2021-2025 by Dr. Lars Völker <lars.voelker@technica-engineering.de>
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -18,7 +18,6 @@
 #define __W_BLF_H__
 
 #include "wtap.h"
-#include <epan/value_string.h>
 
 wtap_open_return_val blf_open(wtap *wth, int *err, char **err_info);
 
@@ -34,15 +33,23 @@ wtap_open_return_val blf_open(wtap *wth, int *err, char **err_info);
  *    Object header (object type dependent, may be empty)
  *    Object contents
  *
- * The objects in the sequence appear to be LOG_CONTAINER objects,
- * each of which contains a sequence of objects.
+ * As per
+ *
+ *    https://gitlab.com/wireshark/wireshark/-/issues/19896#note_1967971057
+ *
+ * the sequence may have one (or more?) metadata objects at the beginning.
+ * After those, if present, there are zero or more LOG_CONTAINER objects,
+ * containing data for all subsequent objects.  An object may be split
+ * between LOG_CONTAINER objects, as per
+ *
+ *    https://gitlab.com/wireshark/wireshark/-/issues/19377#note_1651998569
  *
  * A LOG_CONTAINER object's contents are of the form:
  *
  *    Log container header
- *    Sequence of BLF objects
- * 
- * The contents of the container may be compressed using zlib.
+ *    Data for contained objects.
+ *
+ * The data in a LOG_CONTAINER object may be compressed using zlib.
  */
 
 #define BLF_HEADER_TYPE_DEFAULT                   1
@@ -72,19 +79,24 @@ typedef struct blf_fileheader {
     uint8_t magic[4];               /* magic number - "LOGG" */
     uint32_t header_length;         /* length of the file header */
 
-    uint8_t applications[4];
-    uint8_t api[4];
+    uint32_t api_version;           /* decimal encoded */
+
+    uint8_t application;
+    uint8_t compression_level;
+    uint8_t application_major;
+    uint8_t application_minor;
 
     uint64_t len_compressed;        /* size of the file before uncompressing */
     uint64_t len_uncompressed;
 
     uint32_t obj_count;             /* number of objects in the file */
-    uint32_t obj_read;
+    uint32_t application_build;
 
     blf_date_t start_date;
     blf_date_t end_date;
 
-    uint32_t length3;
+    uint32_t restore_point_offset;
+    uint8_t padding[];
 } blf_fileheader_t;
 
 /* BLF Block Header */
@@ -161,6 +173,21 @@ typedef struct blf_ethernetframeheader_ex {
     uint32_t error;
 } blf_ethernetframeheader_ex_t;
 
+#define BLF_ETHERNET_EX_RES             0x0001
+#define BLF_ETHERNET_EX_HARDWARECHANNEL 0x0002
+#define BLF_ETHERNET_EX_FRAMEDURATION   0x0004
+#define BLF_ETHERNET_EX_FRAMEHANDLE     0x0008
+
+typedef struct blf_ethernet_rxerror {
+    uint16_t struct_length;
+    uint16_t channel;
+    uint16_t direction;
+    uint16_t hw_channel;
+    uint32_t frame_checksum;
+    uint16_t frame_length;  /* Number of valid raw Ethernet data bytes */
+    uint32_t error;
+} blf_ethernet_rxerror_t;
+
 typedef struct blf_wlanframeheader {
     uint16_t channel;
     uint16_t flags;
@@ -236,7 +263,7 @@ typedef struct blf_canfdmessage {
 #define BLF_CANFDMESSAGE64_FLAG_EDL                 0x001000
 #define BLF_CANFDMESSAGE64_FLAG_BRS                 0x002000
 #define BLF_CANFDMESSAGE64_FLAG_ESI                 0x004000
-#define BLF_CANFDMESSAGE64_FLAG_BURST               0x200000
+#define BLF_CANFDMESSAGE64_FLAG_BURST               0x020000
 
 typedef struct blf_canfdmessage64 {
     uint8_t  channel;
@@ -324,6 +351,58 @@ typedef struct blf_canfderror64 {
     uint16_t reserved2;
 } blf_canfderror64_t;
 
+
+/* CAN-XL */
+
+#define BLF_CANXLCHANNELFRAME_FLAG_REMOTE_FRAME 0x10
+#define BLF_CANXLCHANNELFRAME_FLAG_SRR          0x200
+#define BLF_CANXLCHANNELFRAME_FLAG_FDF          0x1000
+#define BLF_CANXLCHANNELFRAME_FLAG_BRS          0x2000
+#define BLF_CANXLCHANNELFRAME_FLAG_ESI          0x4000
+#define BLF_CANXLCHANNELFRAME_FLAG_XLF          0x400000
+#define BLF_CANXLCHANNELFRAME_FLAG_RRS          0x800000
+#define BLF_CANXLCHANNELFRAME_FLAG_SEC          0x1000000
+
+typedef struct blf_canxlchannelframe {
+    uint8_t  channel;
+    uint8_t  tx_count;
+    uint8_t  dir;
+    uint8_t  res1;
+    uint32_t frameLength_in_ns;
+
+    uint16_t bitCount;
+    uint16_t res2;
+    uint32_t frameIdentifier;
+
+    uint8_t  serviceDataUnitType;
+    uint8_t  res3;
+    uint16_t dlc;
+    uint16_t dataLength;
+    uint16_t stuffBitCount;
+
+    uint16_t prefaceCRC;
+    uint8_t  virtualControllerAreaNetChannelID;
+    uint8_t  res4;
+    uint32_t acceptanceField;
+
+    uint8_t  stuffCount;
+    uint8_t  res5;
+    uint16_t res6;
+    uint32_t crc;
+
+    uint32_t timeOffsetBrsNs;
+    uint32_t timeOffsetCrcDelNs;
+
+    uint32_t flags;
+    uint32_t reserved;
+
+    uint64_t arbitrationDataBitTimingConfig;
+    uint64_t arbitrationDataHwChannelSettings;
+    uint64_t fdPhaseBitTimingConfig;
+    uint64_t fdPhaseHwChannelSettings;
+    uint64_t xlPhaseBitTimingConfig;
+    uint64_t xlPhaseHwChannelSettings;
+} blf_canxlchannelframe_t;
 
 /* see https://bitbucket.org/tobylorenz/vector_blf/src/master/src/Vector/BLF/FlexRayData.h */
 
@@ -483,6 +562,20 @@ typedef struct blf_linmessage {
 */
 } blf_linmessage_t;
 
+typedef struct blf_linrcverror {
+    uint16_t channel;
+    uint8_t  id;
+    uint8_t  dlc;
+    uint8_t  fsmId;
+    uint8_t  fsmState;
+    uint8_t  headerTime;
+    uint8_t  fullTime;
+    uint8_t  stateReason;
+    uint8_t  offendingByte;
+    uint8_t  shortError;
+    uint8_t  timeoutDuringDlcDetection;
+} blf_linrcverror_t;
+
 typedef struct blf_linsenderror {
     uint16_t channel;
     uint8_t  id;
@@ -492,6 +585,12 @@ typedef struct blf_linsenderror {
     uint8_t  headerTime;
     uint8_t  fullTime;
 } blf_linsenderror_t;
+
+typedef struct blf_linwakeupevent {
+    uint16_t    channel;
+    uint8_t     signal;
+    uint8_t     external;
+} blf_linwakeupevent_t;
 
 typedef struct blf_linbusevent {
     uint64_t sof;
@@ -559,6 +658,26 @@ typedef struct blf_lincrcerror2 {
 */
 } blf_lincrcerror2_t;
 
+typedef struct blf_linrcverror2 {
+    blf_lindatabytetimestampevent_t linDataByteTimestampEvent;
+    uint8_t                         data[8];
+    uint8_t                         fsmId;      /* Obsolete */
+    uint8_t                         fsmState;   /* Obsolete */
+    uint8_t                         stateReason;
+    uint8_t                         offendingByte;
+    uint8_t                         shortError;
+    uint8_t                         timeoutDuringDlcDetection;
+    uint8_t                         isEtf;
+    uint8_t                         hasDataBytes;
+/*  These fields are optional and skipping does not hurt us.
+    uint32_t                        respBaudrate;
+    uint8_t                         res[4];
+    double                          exactHeaderBaudrate;
+    uint32_t                        earlyStopBitOffset;
+    uint32_t                        earlyStopBitOffsetResponse;
+*/
+} blf_linrcverror2_t;
+
 typedef struct blf_linsenderror2 {
     blf_linmessagedescriptor_t  linMessageDescriptor;
     uint64_t                    eoh;
@@ -572,6 +691,29 @@ typedef struct blf_linsenderror2 {
     uint32_t                    earlyStopBitOffset;
 */
 } blf_linsenderror2_t;
+
+typedef struct blf_linwakeupevent2 {
+    blf_linbusevent_t   linBusEvent;
+    uint8_t             lengthInfo; /* Wake-up length: 0 = OK; 1 = Too short; 2 = Too long. */
+    uint8_t             signal;
+    uint8_t             external;
+    uint8_t             res;
+} blf_linwakeupevent2_t;
+
+typedef struct blf_linsleepmodeevent {
+    uint16_t    channel;
+    uint8_t     reason;
+    uint8_t     flags;
+} blf_linsleepmodeevent_t;
+
+#define BLF_LIN_WU_SLEEP_REASON_START_STATE         0   /* Initial state of the interface */
+#define BLF_LIN_SLEEP_REASON_GO_TO_SLEEP_FRAME      1
+#define BLF_LIN_SLEEP_REASON_BUS_IDLE_TIMEOUT       2
+#define BLF_LIN_SLEEP_REASON_SILENT_SLEEPMODE_CMD   3   /* Command to shorten bus idle timeout */
+#define BLF_LIN_WU_REASON_EXTERNAL_WAKEUP_SIG       9
+#define BLF_LIN_WU_REASON_INTERNAL_WAKEUP_SIG       10
+#define BLF_LIN_WU_REASON_BUS_TRAFFIC               11
+#define BLF_LIN_NO_SLEEP_REASON_BUS_TRAFFIC         18  /* LIN hardware does not go into Sleep mode in spite of request to do so */
 
 
 /* see https://bitbucket.org/tobylorenz/vector_blf/src/master/src/Vector/BLF/AppText.h */
@@ -594,6 +736,15 @@ typedef struct blf_apptext {
 #define BLF_APPTEXT_XML_GENERAL     0x01
 #define BLF_APPTEXT_XML_CHANNELS    0x02
 #define BLF_APPTEXT_XML_IDENTITY    0x03
+
+#define BLF_APPTEXT_TAG_DISS_ETHSTATUS      "blf-ethernetstatus-obj"
+#define BLF_APPTEXT_TAG_DISS_ETHPHYSTATUS   "blf-ethernetphystate-obj"
+#define BLF_APPTEXT_TAG_DISS_DEFAULT        "data-text-lines"
+#define BLF_APPTEXT_COL_PROT_TEXT           "BLF App text"
+#define BLF_APPTEXT_COL_INFO_TEXT           "Metadata"
+#define BLF_APPTEXT_COL_INFO_TEXT_GENERAL   "Metadata: General"
+#define BLF_APPTEXT_COL_INFO_TEXT_CHANNELS  "Metadata: Channels"
+#define BLF_APPTEXT_COL_INFO_TEXT_IDENTITY  "Metadata: Identity"
 
 #define BLF_BUSTYPE_CAN 1
 #define BLF_BUSTYPE_LIN 5
@@ -622,6 +773,17 @@ typedef struct blf_ethernet_status {
 */
 } blf_ethernet_status_t;
 
+#define BLF_ETH_STATUS_LINKSTATUS       0x0001
+#define BLF_ETH_STATUS_BITRATE          0x0002
+#define BLF_ETH_STATUS_ETHERNETPHY      0x0004
+#define BLF_ETH_STATUS_DUPLEX           0x0008
+#define BLF_ETH_STATUS_MDITYPE          0x0010
+#define BLF_ETH_STATUS_CONNECTOR        0x0020
+#define BLF_ETH_STATUS_CLOCKMODE        0x0040
+#define BLF_ETH_STATUS_BRPAIR           0x0080
+#define BLF_ETH_STATUS_HARDWARECHANNEL  0x0100
+#define BLF_ETH_STATUS_LINKUPDURATION   0x0200
+
 typedef struct blf_ethernet_phystate {
     uint16_t    channel;
     uint16_t    flags;
@@ -630,6 +792,10 @@ typedef struct blf_ethernet_phystate {
     uint8_t     hardwareChannel;
     uint8_t     res1;
 } blf_ethernet_phystate_t;
+
+#define BLF_PHY_STATE_PHYSTATE          0x0001
+#define BLF_PHY_STATE_PHYEVENT          0x0002
+#define BLF_PHY_STATE_HARDWARECHANNEL   0x0004
 
 
 /* see https://bitbucket.org/tobylorenz/vector_blf/src/master/src/Vector/BLF/ObjectHeaderBase.h */
@@ -660,6 +826,7 @@ typedef struct blf_ethernet_phystate {
 #define BLF_OBJTYPE_MOST_CTRL                    23
 #define BLF_OBJTYPE_MOST_LIGHTLOCK               24
 #define BLF_OBJTYPE_MOST_STATISTIC               25
+
 #define BLF_OBJTYPE_FLEXRAY_DATA                 29
 #define BLF_OBJTYPE_FLEXRAY_SYNC                 30
 #define BLF_OBJTYPE_CAN_DRIVER_ERROR             31
@@ -683,6 +850,7 @@ typedef struct blf_ethernet_phystate {
 #define BLF_OBJTYPE_FLEXRAY_STARTCYCLE           49
 #define BLF_OBJTYPE_FLEXRAY_RCVMESSAGE           50
 #define BLF_OBJTYPE_REALTIMECLOCK                51
+
 #define BLF_OBJTYPE_LIN_STATISTIC                54
 #define BLF_OBJTYPE_J1708_MESSAGE                55
 #define BLF_OBJTYPE_J1708_VIRTUAL_MSG            56
@@ -734,8 +902,10 @@ typedef struct blf_ethernet_phystate {
 #define BLF_OBJTYPE_ETHERNET_RX_ERROR           102
 #define BLF_OBJTYPE_ETHERNET_STATUS             103
 #define BLF_OBJTYPE_CAN_FD_ERROR_64             104
+
 #define BLF_OBJTYPE_AFDX_STATUS                 106
 #define BLF_OBJTYPE_AFDX_BUS_STATISTIC          107
+
 #define BLF_OBJTYPE_AFDX_ERROR_EVENT            109
 #define BLF_OBJTYPE_A429_ERROR                  110
 #define BLF_OBJTYPE_A429_STATUS                 111
@@ -761,21 +931,14 @@ typedef struct blf_ethernet_phystate {
 #define BLF_OBJTYPE_ATTRIBUTE_EVENT             131
 #define BLF_OBJTYPE_DISTRIBUTED_OBJECT_CHANGE   132
 #define BLF_OBJTYPE_ETHERNET_PHY_STATE          133
+#define BLF_OBJTYPE_MACSEC_STATUS               134
 
-#define BLF_ETH_STATUS_LINKSTATUS 0x0001
-#define BLF_ETH_STATUS_BITRATE 0x0002
-#define BLF_ETH_STATUS_ETHERNETPHY 0x0004
-#define BLF_ETH_STATUS_DUPLEX 0x0008
-#define BLF_ETH_STATUS_MDITYPE 0x0010
-#define BLF_ETH_STATUS_CONNECTOR 0x0020
-#define BLF_ETH_STATUS_CLOCKMODE  0x0040
-#define BLF_ETH_STATUS_BRPAIR 0x0080
-#define BLF_ETH_STATUS_HARDWARECHANNEL 0x0100
-#define BLF_ETH_STATUS_LINKUPDURATION 0x0200
+#define BLF_OBJTYPE_10BASET1S_STATUS            136
+#define BLF_OBJTYPE_10BASET1S_STATISTIC         137
+#define BLF_OBJTYPE_TUNNEL_PROTO_DECODER_EVENT  138
+#define BLF_OBJTYPE_CAN_XL_CHANNEL_FRAME        139
+#define BLF_OBJTYPE_CAN_XL_CHANNEL_ERRORFRAME   140
 
-#define BLF_PHY_STATE_PHYSTATE          0x0001
-#define BLF_PHY_STATE_PHYEVENT          0x0002
-#define BLF_PHY_STATE_HARDWARECHANNEL   0x0004
 
 #endif
 

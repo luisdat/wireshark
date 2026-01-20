@@ -61,42 +61,42 @@ static int hf_ath_plen;
 static int hf_ath_payload;
 static int hf_ath_end;
 
-static gint ett_ath;
+static int ett_ath;
 
 static expert_field ei_ath_hlen_invalid;
 static expert_field ei_ath_hmark_invalid;
 
-static gboolean
+static bool
 test_ath(tvbuff_t *tvb)
 {
   /* Apache Tribes packets start with "TRIBES-B" in ASCII.
    * tvb_strneql returns -1 if there aren't enough bytes.
    */
   if (tvb_strneql(tvb, 0, "TRIBES-B", 8) != 0) {
-    return FALSE;
+    return false;
   }
 
-  return TRUE;
+  return true;
 }
 
 static int
 dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  int offset = 0;
+  unsigned offset = 0;
 
   /* various lengths as reported in the packet itself */
-  guint8 hlen = 0;
-  gint32 clen = 0;
-  gint32 dlen = 0;
-  gint32 plen = 0;
+  uint8_t hlen = 0;
+  int32_t clen = 0;
+  int32_t dlen = 0;
+  int32_t plen = 0;
 
   /* detect the Tribes (Tomcat) version */
-  gint   tribes_version_mark;
+  int    tribes_version_mark;
 
   /* store the info */
-  const gchar *info_srcaddr = "";
-  const gchar *info_domain  = "";
-  const gchar *info_command = "";
+  const char *info_srcaddr = "";
+  const char *info_domain  = "";
+  const char *info_command = "";
 
   proto_item *ti, *hlen_item;
   proto_tree *ath_tree;
@@ -153,7 +153,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       /* HOST LENGTH
        */
       hlen_item = proto_tree_add_item(ath_tree, hf_ath_hlen, tvb, offset, 1, ENC_BIG_ENDIAN);
-      hlen = tvb_get_guint8(tvb, offset);
+      hlen = tvb_get_uint8(tvb, offset);
       offset += 1;
 
       /* HOST
@@ -178,7 +178,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_comm, tvb, offset, clen, ENC_ASCII);
       if (clen != -1)
-        info_command = tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
+        info_command = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
       offset += clen;
 
       /* DOMAIN LENGTH
@@ -190,7 +190,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_domain, tvb, offset, dlen, ENC_ASCII);
       if (dlen != 0)
-        info_domain = tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
+        info_domain = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
       offset += dlen;
 
       /* UNIQUEID
@@ -222,7 +222,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       proto_tree_add_item(ath_tree, hf_ath_begin, tvb, offset, 8, ENC_ASCII);
       offset += 8;
 
-      proto_tree_add_item(ath_tree, hf_ath_padding, tvb, offset, 2, ENC_ASCII|ENC_NA);
+      proto_tree_add_item(ath_tree, hf_ath_padding, tvb, offset, 2, ENC_BIG_ENDIAN);
       offset += 2;
 
       /* LENGTH
@@ -253,7 +253,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       /* HOST LENGTH
        */
       hlen_item = proto_tree_add_item(ath_tree, hf_ath_hlen, tvb, offset, 1, ENC_BIG_ENDIAN);
-      hlen = tvb_get_guint8(tvb, offset);
+      hlen = tvb_get_uint8(tvb, offset);
       offset += 1;
 
       /* HOST
@@ -278,7 +278,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_comm, tvb, offset, clen, ENC_ASCII);
       if (clen != -1)
-        info_command = tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
+        info_command = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
       offset += clen;
 
       /* DOMAIN LENGTH
@@ -290,7 +290,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_domain, tvb, offset, dlen, ENC_ASCII);
       if (dlen != 0)
-        info_domain = tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
+        info_domain = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
       offset += dlen;
 
       /* UNIQUEID
@@ -313,7 +313,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       proto_tree_add_item(ath_tree, hf_ath_end, tvb, offset, 8, ENC_ASCII);
 
   } else {
-    proto_tree_add_expert(tree, pinfo, &ei_ath_hmark_invalid, tvb, offset, -1);
+    proto_tree_add_expert_remaining(tree, pinfo, &ei_ath_hmark_invalid, tvb, offset);
     return tvb_captured_length(tvb);
   }
 
@@ -430,7 +430,7 @@ proto_register_ath(void)
     { &ei_ath_hmark_invalid, { "ath.hmark.invalid", PI_MALFORMED, PI_ERROR, "Decode aborted: not an ATH packet", EXPFILL }},
   };
 
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_ath,
   };
 

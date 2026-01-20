@@ -36,7 +36,7 @@
  * model strings.
  */
 static int
-compare_model_names(gconstpointer a, gconstpointer b, void * user_data _U_)
+compare_model_names(const void *a, const void *b, void * user_data _U_)
 {
     return strcmp((const char *)a, (const char *)b);
 }
@@ -69,6 +69,45 @@ add_model_name_to_string(void * key, void * value _U_,
     return false;
 }
 
+static const char *
+get_translator_name(void)
+{
+  #if defined(__APPLE__) /* Darwin */
+    /*
+     * OK, are we running x86(-64) code on Arm(64) under Rosetta?
+     *
+     * See
+     *
+     *    https://developer.apple.com/documentation/apple-silicon/about-the-rosetta-translation-environment#Determine-Whether-Your-App-Is-Running-as-a-Translated-Binary
+     */
+    int proc_translated;
+    size_t proc_translated_len = sizeof proc_translated;
+
+    if (sysctlbyname("sysctl.proc_translated", &proc_translated,
+                     &proc_translated_len, NULL, 0) == -1) {
+        /*
+         * errno = ENOENT means there's no such name; presumably
+         * that means there's no translator to check for, so we're
+         * not running under translation.
+         *
+         * For other errors, we just punt.
+         */
+        return NULL;
+    }
+    return proc_translated ? "Rosetta 2" : NULL;
+  #else
+    /*
+     * XXX - handle Windows x86-64-to-ARM64 translator, possibly with
+     * IsWow64Process2(); see
+     *
+     *    https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2
+     *
+     * Any others?
+     */
+    return NULL;
+  #endif
+}
+
 /*
  * Get the CPU info, and append it to the GString
  *
@@ -84,6 +123,7 @@ void
 get_cpu_info(GString *str)
 {
     GTree *model_names = g_tree_new_full(compare_model_names, NULL, g_free, NULL);
+    const char *translator_name;
 
 #if defined(__linux__)
     /*
@@ -423,13 +463,7 @@ get_cpu_info(GString *str)
         /*
          * We have at least one model name, so add the name(s) to
          * the string.
-         *
-         * If the string is not empty, separate the name(s) from
-         * what precedes it.
          */
-        if (str->len > 0)
-            g_string_append(str, ", with ");
-
         if (num_model_names > 1) {
             /*
              * There's more than one, so put the list inside curly
@@ -455,6 +489,18 @@ get_cpu_info(GString *str)
 
     /* We're done; get rid of the tree. */
     g_tree_destroy(model_names);
+
+    /*
+     * Are we running under a translator?
+     */
+    translator_name = get_translator_name();
+    if (translator_name != NULL) {
+        /*
+         * Yes.
+         */
+         g_string_append(str, " running ");
+         g_string_append(str, translator_name);
+    }
 
     /*
      * We do this on all OSes and instruction sets, so that we don't

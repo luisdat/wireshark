@@ -15,6 +15,7 @@
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 #include <QStyleHints>
+#include <epan/prefs.h>
 #endif
 
 // Colors we use in various parts of the UI.
@@ -148,31 +149,41 @@ QRgb ColorUtils::sequenceColor(int item)
 bool ColorUtils::themeIsDark()
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    return qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark;
-#else
-    return qApp->palette().windowText().color().lightness() > qApp->palette().window().color().lightness();
-#endif
-}
-
-// Qt < 5.12.6 on macOS always uses Qt::blue for the link color, which is
-// unreadable when using a dark theme. Changing the application palette
-// via ...Application::setPalette is problematic, since QGuiApplication
-// sets a flag (ApplicationPaletteExplicitlySet) which keeps us from
-// catching theme changes.
-//
-// themeLinkBrush and themeLinkStyle provide convenience routines for
-// fetching the link brush and style.
-//
-// We could also override MainApplication::palette, but keeping the
-// routines together here seemed to make more sense.
-QBrush ColorUtils::themeLinkBrush()
-{
-#if QT_VERSION < QT_VERSION_CHECK(5, 12, 6)
-    // https://bugreports.qt.io/browse/QTBUG-71740
-    if (themeIsDark()) {
-        return QBrush(tango_sky_blue_2);
+    switch (qApp->styleHints()->colorScheme()) {
+        case Qt::ColorScheme::Dark:
+            return true;
+        case Qt::ColorScheme::Light:
+            return false;
+        case Qt::ColorScheme::Unknown:
+            break;
     }
 #endif
+    return qApp->palette().windowText().color().lightness() > qApp->palette().window().color().lightness();
+}
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+void ColorUtils::setScheme(int scheme)
+{
+    switch (scheme) {
+    case COLOR_SCHEME_LIGHT:
+        qApp->styleHints()->setColorScheme(Qt::ColorScheme::Light);
+        break;
+    case COLOR_SCHEME_DARK:
+        qApp->styleHints()->setColorScheme(Qt::ColorScheme::Dark);
+        break;
+    case COLOR_SCHEME_DEFAULT:
+    default:
+        qApp->styleHints()->setColorScheme(Qt::ColorScheme::Unknown);
+    }
+}
+#else
+void ColorUtils::setScheme(int)
+{
+}
+#endif
+
+QBrush ColorUtils::themeLinkBrush()
+{
     return qApp->palette().link();
 }
 
@@ -181,7 +192,7 @@ QString ColorUtils::themeLinkStyle()
     QString link_style;
 
     if (themeIsDark()) {
-        link_style = QString("<style>a:link { color: %1; }</style>")
+        link_style = QStringLiteral("<style>a:link { color: %1; }</style>")
                 .arg(themeLinkBrush().color().name());
     }
     return link_style;
@@ -191,8 +202,10 @@ const QColor ColorUtils::contrastingTextColor(const QColor color)
 {
     bool background_is_light = color.lightness() > 127;
     if ( (background_is_light && !ColorUtils::themeIsDark()) || (!background_is_light && ColorUtils::themeIsDark()) ) {
+        // usually black/darker color in light mode and white/lighter color in dark mode
         return QApplication::palette().text().color();
     }
+    // usually white/lighter color in light mode and black/darker color in dark mode
     return QApplication::palette().base().color();
 }
 
@@ -213,4 +226,9 @@ const QColor ColorUtils::warningBackground()
         return QColor(tango_butter_6);
     }
     return QColor(tango_butter_2);
+}
+
+const QColor ColorUtils::disabledForeground()
+{
+    return alphaBlend(QApplication::palette().windowText(), QApplication::palette().window(), 0.65);
 }

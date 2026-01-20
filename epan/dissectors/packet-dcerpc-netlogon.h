@@ -61,24 +61,36 @@
 #define NETLOGON_NETRSERVERGETTRUSTINFO			0x2e
 #define NETLOGON_DSRUPDATEREADONLYSERVERDNSRECORDS	0x30
 #define NETLOGON_NETRCHAINSETCLIENTATTRIBUTES		0x36 /* This is documented as 49 (0x31) but it's 54) */
+#define NETLOGON_NETRSERVERAUTHENTICATEKERBEROS		0x3B
 
 
 /* needed to decrypt PAC_LOGON_INFO in kerberos */
-int
-netlogon_dissect_PAC_LOGON_INFO(tvbuff_t *tvb, int offset,
+unsigned
+netlogon_dissect_PAC_LOGON_INFO(tvbuff_t *tvb, unsigned offset,
 			packet_info *pinfo, proto_tree *tree,
-			dcerpc_info *di, guint8 *drep);
+			dcerpc_info *di, uint8_t *drep);
 
 /* needed to decrypt PAC_S4U_DELEGATION_INFO in kerberos */
-int
-netlogon_dissect_PAC_S4U_DELEGATION_INFO(tvbuff_t *tvb, int offset,
+unsigned
+netlogon_dissect_PAC_S4U_DELEGATION_INFO(tvbuff_t *tvb, unsigned offset,
 			packet_info *pinfo, proto_tree *tree,
-			dcerpc_info *di, guint8 *drep);
+			dcerpc_info *di, uint8_t *drep);
 
 /* needed to decrypt PAC_DEVICE_INFO in kerberos */
-int
-netlogon_dissect_PAC_DEVICE_INFO(tvbuff_t *tvb, int offset,
+unsigned
+netlogon_dissect_PAC_DEVICE_INFO(tvbuff_t *tvb, unsigned offset,
 			packet_info *pinfo, proto_tree *tree,
-			dcerpc_info *di, guint8 *drep);
+			dcerpc_info *di, uint8_t *drep);
+
+/* needed to dissect PAC_CLAIMS_INFO in kerberos */
+unsigned
+netlogon_dissect_CLAIMS_SET_METADATA_BLOB(tvbuff_t *tvb,
+                                          unsigned offset,
+                                          unsigned length,
+                                          packet_info *pinfo,
+                                          proto_tree *parent_tree,
+                                          int hf_index,
+                                          int ett_index,
+                                          const char *info_str);
 
 #endif /* packet-dcerpc-netlogon.h */

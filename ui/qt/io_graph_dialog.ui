@@ -72,7 +72,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="TabnavTreeView" name="graphUat">
+     <widget class="RowMoveTreeView" name="graphUat">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
         <horstretch>0</horstretch>
@@ -97,17 +97,37 @@
      <item>
       <widget class="StockIconToolButton" name="deleteToolButton">
        <property name="toolTip">
-        <string>Remove this graph.</string>
+        <string>Remove the selected graphs.</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="StockIconToolButton" name="copyToolButton">
        <property name="toolTip">
-        <string>Duplicate this graph.</string>
+        <string>Duplicate the selected graphs.</string>
        </property>
        <property name="text">
         <string/>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="StockIconToolButton" name="moveUpwardsToolButton">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>Move the selected graphs upwards.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="StockIconToolButton" name="moveDownwardsToolButton">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>Move the selected graphs downwards.</string>
        </property>
       </widget>
      </item>
@@ -118,26 +138,6 @@
        </property>
        <property name="toolTip">
         <string>Clear all graphs.</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="StockIconToolButton" name="moveUpwardsToolButton">
-       <property name="enabled">
-        <bool>false</bool>
-       </property>
-       <property name="toolTip">
-        <string>Move this graph upwards.</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="StockIconToolButton" name="moveDownwardsToolButton">
-       <property name="enabled">
-        <bool>false</bool>
-       </property>
-       <property name="toolTip">
-        <string>Move this graph downwards.</string>
        </property>
       </widget>
      </item>
@@ -211,46 +211,6 @@
       <widget class="QComboBox" name="intervalComboBox"/>
      </item>
      <item>
-      <spacer name="horizontalSpacer_2">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QCheckBox" name="todCheckBox">
-       <property name="text">
-        <string>Time of day</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer_5">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QCheckBox" name="logCheckBox">
-       <property name="text">
-        <string>Log scale</string>
-       </property>
-      </widget>
-     </item>
-     <item>
       <spacer name="horizontalSpacer_1">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
@@ -270,46 +230,6 @@
        </property>
       </widget>
      </item>
-     <item>
-      <spacer name="horizontalSpacer_6">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QCheckBox" name="enableLegendCheckBox">
-       <property name="text">
-        <string>Enable legend</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="resetButton">
-       <property name="text">
-        <string>Reset</string>
-       </property>
-      </widget>
-     </item>
     </layout>
    </item>
    <item>
@@ -318,7 +238,7 @@
       <enum>Qt::Horizontal</enum>
      </property>
      <property name="standardButtons">
-      <set>QDialogButtonBox::Close|QDialogButtonBox::Help|QDialogButtonBox::Save</set>
+      <set>QDialogButtonBox::Close|QDialogButtonBox::Help|QDialogButtonBox::Save|QDialogButtonBox::Reset</set>
      </property>
     </widget>
    </item>
@@ -477,6 +397,28 @@
     <string>T</string>
    </property>
   </action>
+  <action name="actionTimeOfDay">
+   <property name="text">
+    <string>Time of day</string>
+   </property>
+   <property name="toolTip">
+    <string>Toggle X-axis between relative time and time of day</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionLogScale">
+   <property name="text">
+    <string>Log scale</string>
+   </property>
+   <property name="toolTip">
+    <string>Toggle Y-axis between logarithmic and linear scale</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
   <action name="actionCrosshairs">
    <property name="text">
     <string>Crosshairs</string>
@@ -486,6 +428,17 @@
    </property>
    <property name="shortcut">
     <string>Space</string>
+   </property>
+  </action>
+  <action name="actionLegend">
+   <property name="text">
+    <string>Legend</string>
+   </property>
+   <property name="toolTip">
+    <string>Toggle legend</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
    </property>
   </action>
   <action name="actionZoomInX">
@@ -540,9 +493,14 @@
    <header>widgets/elided_label.h</header>
   </customwidget>
   <customwidget>
-   <class>TabnavTreeView</class>
+   <class>RowMoveTreeView</class>
    <extends>QTreeView</extends>
-   <header>widgets/tabnav_tree_view.h</header>
+   <header>widgets/rowmove_tree_view.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ResizeHeaderView</class>
+   <extends>QHeaderView</extends>
+   <header>widgets/resize_header_view.h</header>
   </customwidget>
   <customwidget>
    <class>StockIconToolButton</class>

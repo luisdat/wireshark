@@ -13,7 +13,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/lapd_sapi.h>
+#include "packet-lapd.h"
 
 /* ISDN/LAPD references:
  *
@@ -35,7 +35,7 @@ static int hf_tei_management_message;
 static int hf_tei_management_action;
 static int hf_tei_management_extend;
 
-static gint ett_tei_management_subtree;
+static int ett_tei_management_subtree;
 
 #define TEI_ID_REQUEST    0x01
 #define TEI_ID_ASSIGNED   0x02
@@ -61,7 +61,7 @@ dissect_teimanagement(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void*
 {
     proto_tree *tei_tree = NULL;
     proto_item *tei_ti;
-    guint8 message;
+    uint8_t message;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "TEI");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -74,9 +74,9 @@ dissect_teimanagement(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void*
         proto_tree_add_item(tei_tree, hf_tei_management_reference,  tvb, 1, 2, ENC_BIG_ENDIAN);
     }
 
-    message = tvb_get_guint8(tvb, 3);
+    message = tvb_get_uint8(tvb, 3);
         col_add_str(pinfo->cinfo, COL_INFO,
-            val_to_str(message, tei_msg_vals, "Unknown message type (0x%04x)"));
+            val_to_str(pinfo->pool, message, tei_msg_vals, "Unknown message type (0x%04x)"));
     if (tree) {
         proto_tree_add_uint(tei_tree, hf_tei_management_message, tvb, 3, 1, message);
         proto_tree_add_item(tei_tree, hf_tei_management_action, tvb, 4, 1, ENC_BIG_ENDIAN);
@@ -88,7 +88,7 @@ dissect_teimanagement(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void*
 void
 proto_register_teimanagement(void)
 {
-    static gint *subtree[]={
+    static int *ett[]={
         &ett_tei_management_subtree
     };
 
@@ -117,7 +117,7 @@ proto_register_teimanagement(void)
     proto_tei = proto_register_protocol("TEI Management Procedure, Channel D (LAPD)",
                                          "TEI_MANAGEMENT", "tei_management");
     proto_register_field_array (proto_tei, hf, array_length(hf));
-    proto_register_subtree_array(subtree, array_length(subtree));
+    proto_register_subtree_array(ett, array_length(ett));
 
     teimanagement_handle = register_dissector("tei_management", dissect_teimanagement, proto_tei);
 }

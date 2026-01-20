@@ -85,12 +85,12 @@ static expert_field ei_papi_debug_unknown;
 static dissector_table_t papi_dissector_table;
 
 /* Global PAPI Debug Preference */
-static bool g_papi_debug = false;
+static bool g_papi_debug;
 
 /* Initialize the subtree pointers */
-static gint ett_papi;
-static gint ett_papi_licmgr;
-static gint ett_papi_licmgr_tlv;
+static int ett_papi;
+static int ett_papi_licmgr;
+static int ett_papi_licmgr_tlv;
 
 #define SAMBA_WRAPPER               8442
 #define RESOLVER_PORT               8392
@@ -423,7 +423,7 @@ dissect_papi_license_manager(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 {
     proto_item *ti;
     proto_tree *licmgr_tree, *licmgr_subtree;
-    guint offset_end, payload_len, offset = 0;
+    unsigned offset_end, payload_len, offset = 0;
 
     ti = proto_tree_add_item(tree, hf_papi_licmgr, tvb, offset, -1, ENC_NA);
     licmgr_tree = proto_item_add_subtree(ti, ett_papi_licmgr);
@@ -435,14 +435,14 @@ dissect_papi_license_manager(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     offset_end = offset + payload_len;
 
     while (offset< offset_end) {
-        guint optlen, type;
+        unsigned optlen, type;
         proto_item *tlv_item;
 
         type = tvb_get_ntohs(tvb, offset);
         optlen = tvb_get_ntohs(tvb, offset+2);
         tlv_item = proto_tree_add_item(licmgr_tree, hf_papi_licmgr_tlv, tvb, offset, 2+2+optlen, ENC_NA );
 
-        proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, optlen, val_to_str(type, licmgr_type_vals, "Unknown Type (%02d)") );
+        proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, optlen, val_to_str(pinfo->pool, type, licmgr_type_vals, "Unknown Type (%02d)") );
 
         licmgr_subtree = proto_item_add_subtree(tlv_item, ett_papi_licmgr_tlv);
 
@@ -456,7 +456,7 @@ dissect_papi_license_manager(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 
         switch (type) {
             case 1: /* IP Address */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_ip, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_ip, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %s", tvb_ip_to_str(pinfo->pool, tvb, offset));
             break;
             case 2: /* Serial Number */
@@ -472,43 +472,43 @@ dissect_papi_license_manager(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
                 proto_item_append_text(tlv_item, ": %s", tvb_get_ether_name(tvb, offset));
                 break;
             case 7: /* License AP remaining  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_ap_remaining, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_ap_remaining, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 8: /* License PEF remaining  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_pef_remaining, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_pef_remaining, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 9: /* License RFP remaining  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_rfp_remaining, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_rfp_remaining, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 10: /* License xSec remaining  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_xsec_remaining, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_xsec_remaining, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 11: /* License ACR remaining  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_acr_remaining, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_acr_remaining, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 12: /* License AP used  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_ap_used, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_ap_used, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 13: /* License PEF used  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_pef_used, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_pef_used, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 14: /* License RFP used  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_rfp_used, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_rfp_used, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 15: /* License xSec used  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_xsec_used, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_xsec_used, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
             case 16: /* License ACR used  */
-                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_acr_used, tvb, offset, 4, ENC_NA);
+                proto_tree_add_item(licmgr_subtree, hf_papi_licmgr_license_acr_used, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tlv_item, ": %u", tvb_get_ntohl(tvb, offset));
             break;
         }
@@ -523,7 +523,7 @@ dissect_papi_license_manager(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 
 /* PAPI Debug loop ! */
 static int
-dissect_papi_debug(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree)
+dissect_papi_debug(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree)
 {
     proto_item *ti;
     proto_tree *debug_tree, *debug_sub_tree;
@@ -533,7 +533,7 @@ dissect_papi_debug(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *
     debug_tree = proto_item_add_subtree(ti, ett_papi);
 
     while(offset < tvb_reported_length(tvb)) {
-        switch(tvb_get_guint8(tvb,offset)) {
+        switch(tvb_get_uint8(tvb,offset)) {
         case 0x00:
             ti = proto_tree_add_item(debug_tree, hf_papi_debug_text, tvb, offset+3, tvb_get_ntohs(tvb,offset+1), ENC_ASCII);
             debug_sub_tree = proto_item_add_subtree(ti, ett_papi);
@@ -575,7 +575,7 @@ dissect_papi_debug(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *
             offset += 9;
         break;
         default:
-            proto_tree_add_expert_format(debug_tree, pinfo, &ei_papi_debug_unknown, tvb, offset, 1, "Unknown (%d)", tvb_get_guint8(tvb, offset));
+            proto_tree_add_expert_format(debug_tree, pinfo, &ei_papi_debug_unknown, tvb, offset, 1, "Unknown (%d)", tvb_get_uint8(tvb, offset));
             offset +=1;
            }
     }
@@ -588,14 +588,14 @@ dissect_papi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 {
     proto_item *ti;
     proto_tree *papi_tree;
-    guint     offset = 0;
-    guint32 dest_port, src_port, hdr_version;
+    unsigned  offset = 0;
+    uint32_t dest_port, src_port, hdr_version;
     tvbuff_t *next_tvb;
 
 
     /* All PAPI packet start with 0x4972 !  */
     if ( tvb_get_ntohs(tvb, offset) != 0x4972 )
-        return FALSE;
+        return false;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "PAPI");
     col_set_str(pinfo->cinfo, COL_INFO, "PAPI - Aruba AP Control Protocol");
@@ -658,8 +658,8 @@ dissect_papi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     }
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
-    if (!dissector_try_uint_new(papi_dissector_table, dest_port, next_tvb, pinfo, tree, TRUE, NULL)) {
-        if (!dissector_try_uint_new(papi_dissector_table, src_port, next_tvb, pinfo, tree, TRUE, NULL)) {
+    if (!dissector_try_uint_with_data(papi_dissector_table, dest_port, next_tvb, pinfo, tree, true, NULL)) {
+        if (!dissector_try_uint_with_data(papi_dissector_table, src_port, next_tvb, pinfo, tree, true, NULL)) {
             call_data_dissector(next_tvb, pinfo, tree);
         }
     }
@@ -912,7 +912,7 @@ proto_register_papi(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_papi,
         &ett_papi_licmgr,
         &ett_papi_licmgr_tlv

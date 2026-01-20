@@ -36,7 +36,7 @@ ReturnResult/result/result  resultArgument
 
 #.FN_PARS
 Code         VAL_PTR = &%(ACTX)s->rose_ctx->d.code
-Code/local   VAL_PTR = &%(ACTX)s->rose_ctx->d.code_local
+Code/local   VAL_PTR = (uint32_t*)&%(ACTX)s->rose_ctx->d.code_local
 Code/global  FN_VARIANT = _str  VAL_PTR = &%(ACTX)s->rose_ctx->d.code_global
 #.FN_FTR Code
   actx->rose_ctx->d.code_item = actx->created_item;
@@ -65,7 +65,7 @@ ReturnErrorProblem   VAL_PTR = &problem_val
 Invoke/argument  TYPE = FT_BYTES  DISPLAY = BASE_NONE
 
 #.FN_BODY Invoke/argument
-  gint len;
+  int len;
 
   len = tvb_reported_length_remaining(tvb, offset);
   if (len)
@@ -83,7 +83,7 @@ Invoke/argument  TYPE = FT_BYTES  DISPLAY = BASE_NONE
 ReturnResult/result/result  TYPE = FT_BYTES  DISPLAY = BASE_NONE
 
 #.FN_BODY ReturnResult/result/result
-  gint len;
+  int len;
 
   len = tvb_reported_length_remaining(tvb, offset);
   if (len)
@@ -103,7 +103,7 @@ ReturnError/parameter  TYPE = FT_BYTES  DISPLAY = BASE_NONE
 
 #.FN_BODY ReturnError/parameter
 
-  gint len;
+  int len;
 
   len = tvb_reported_length_remaining(tvb, offset);
   if (len)

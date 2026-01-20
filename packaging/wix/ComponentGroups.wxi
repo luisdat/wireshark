@@ -27,11 +27,11 @@
         <Component Id="cmpLibwsutil_dll" Guid="*">
           <File Id="filLibwsutil_dll" KeyPath="yes" Source="$(var.Staging.Dir)\libwsutil.dll" />
         </Component>
+        <Component Id="cmpLibuiqt_plugin_dll" Guid="*">
+          <File Id="filLibuiqt_plugin_dll" KeyPath="yes" Source="$(var.Staging.Dir)\libuiqt_plugin.dll" />
+        </Component>
         <Component Id="cmpCOPYING_txt" Guid="*">
           <File Id="filCOPYING_txt" KeyPath="yes" Source="$(var.Staging.Dir)\COPYING.txt" />
-        </Component>
-        <Component Id="cmpNEWS_txt" Guid="*">
-          <File Id="filNEWS_txt" KeyPath="yes" Source="$(var.Staging.Dir)\NEWS.txt" />
         </Component>
         <Component Id="cmpREADME_txt" Guid="*">
           <File Id="filREADME_txt" KeyPath="yes" Source="$(var.Staging.Dir)\README.txt" />
@@ -64,7 +64,7 @@
           <File Id="filIpmap_html" KeyPath="yes" Source="$(var.Staging.Dir)\ipmap.html" />
         </Component>
         <Component Id="cmpReleaseNotes_html" Guid="*">
-          <File Id="filReleaseNotes_html" KeyPath="yes" Source="$(var.Staging.Dir)\release-notes.html" />
+          <File Id="filReleaseNotes_html" KeyPath="yes" Source="$(var.Staging.Dir)\Wireshark Release Notes.html" />
         </Component>
       </DirectoryRef>
     </Fragment>
@@ -73,8 +73,8 @@
         <ComponentRef Id="cmpWiretap_dll" />
         <ComponentRef Id="cmpLibwireshark_dll" />
         <ComponentRef Id="cmpLibwsutil_dll" />
+        <ComponentRef Id="cmpLibuiqt_plugin_dll" />
         <ComponentRef Id="cmpCOPYING_txt" />
-        <ComponentRef Id="cmpNEWS_txt" />
         <ComponentRef Id="cmpREADME_txt" />
         <ComponentRef Id="cmpWka" />
         <ComponentRef Id="cmpPdml2html_xsl" />
@@ -457,7 +457,7 @@
 
   <!-- Androiddump -->
   <Fragment>
-    <DirectoryRef Id="dirExtcapWireshark">
+    <DirectoryRef Id="dirExtcap">
       <Component Id="cmpAndroiddump_exe" Guid="*">
         <File Id="filAndroiddump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\androiddump.exe" />
       </Component>
@@ -477,7 +477,7 @@
 
   <!-- Randpktdump -->
   <Fragment>
-    <DirectoryRef Id="dirExtcapWireshark">
+    <DirectoryRef Id="dirExtcap">
       <Component Id="cmpRandpktdump_exe" Guid="*">
         <File Id="filRandpktdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\randpktdump.exe" />
       </Component>
@@ -497,7 +497,7 @@
 
   <!-- Etwdump -->
   <Fragment>
-    <DirectoryRef Id="dirExtcapWireshark">
+    <DirectoryRef Id="dirExtcap">
       <Component Id="cmpEtwdump_exe" Guid="*">
         <File Id="filEtwdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\etwdump.exe" />
       </Component>
@@ -517,7 +517,7 @@
 
   <!-- Sshdump -->
   <Fragment>
-    <DirectoryRef Id="dirExtcapWireshark">
+    <DirectoryRef Id="dirExtcap">
       <Component Id="cmpSshdump_exe" Guid="*">
         <File Id="filSshdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\sshdump.exe" />
       </Component>
@@ -537,7 +537,7 @@
 
   <!-- Ciscodump -->
   <Fragment>
-    <DirectoryRef Id="dirExtcapWireshark">
+    <DirectoryRef Id="dirExtcap">
       <Component Id="cmpCiscodump_exe" Guid="*">
         <File Id="filCiscodump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\Ciscodump.exe" />
       </Component>
@@ -557,7 +557,7 @@
 
   <!-- Wifidump -->
   <Fragment>
-    <DirectoryRef Id="dirExtcapWireshark">
+    <DirectoryRef Id="dirExtcap">
       <Component Id="cmpWifidump_exe" Guid="*">
         <File Id="filWifidump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\wifidump.exe" />
       </Component>
@@ -577,7 +577,7 @@
 
   <!-- Udpdump -->
   <Fragment>
-    <DirectoryRef Id="dirExtcapWireshark">
+    <DirectoryRef Id="dirExtcap">
       <Component Id="cmpUdpdump_exe" Guid="*">
         <File Id="filUdpdump_exe" KeyPath="yes" Source="$(var.Extcap.Dir)\Udpdump.exe" />
       </Component>
@@ -594,23 +594,6 @@
       <ComponentRef Id="cmpUdpdump_html" />
     </ComponentGroup>
   </Fragment>
-
-  <?ifdef DOC_DIR?>
-    <!-- User Guide is created by heat -->
-    <!-- FAQ -->
-    <Fragment>
-      <DirectoryRef Id="INSTALLFOLDER">
-        <Component Id="cmpFAQ_html" Guid="*">
-          <File Id="filFAQ_html" KeyPath="yes" Source="$(var.DOC_DIR)\faq.html" />
-        </Component>
-      </DirectoryRef>
-    </Fragment>
-    <Fragment>
-      <ComponentGroup Id="CG.Documentation">
-        <ComponentRef Id="cmpFAQ_html" />
-      </ComponentGroup>
-    </Fragment>
-  <?endif?>
 
   <!-- Shortcuts -->
   <Fragment>
@@ -905,6 +888,13 @@
         <RegistryValue Root="HKCU" Key="Software\$(var.WiresharkName)" Name="wpz" Type="integer" Value="1" KeyPath="yes"/>
         <Condition>WIRESHARK_FILE_EXTENSIONS = "1"</Condition>
       </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- libgcrypt dummy configuration directory -->
+  <Fragment>
+    <ComponentGroup Id="CG.gcrypt">
+      <ComponentRef Id="gpg4win_etc_gcrypt" />
     </ComponentGroup>
   </Fragment>
 

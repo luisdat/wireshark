@@ -17,7 +17,7 @@
 
 #include "wslua.h"
 #include <wiretap/wtap_opttypes.h>
-#include <wiretap/wtap-int.h>
+#include <wiretap/wtap_module.h>
 
 /* this is way overkill for this one member, but in case we need to add
    more in the future, the plumbing will be here */
@@ -54,7 +54,7 @@ extern CaptureInfo* push_CaptureInfo(lua_State* L, wtap *wth, const bool first_t
 extern CaptureInfoConst* push_CaptureInfoConst(lua_State* L, wtap_dumper *wdh);
 extern File* push_File(lua_State* L, FILE_T ft);
 extern File* push_Wdh(lua_State* L, wtap_dumper *wdh);
-extern FrameInfo* push_FrameInfo(lua_State* L, wtap_rec *rec, Buffer* buf);
+extern FrameInfo* push_FrameInfo(lua_State* L, wtap_rec *rec);
 extern FrameInfoConst* push_FrameInfoConst(lua_State* L, const wtap_rec *rec, const uint8_t *pd);
 
 

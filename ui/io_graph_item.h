@@ -17,6 +17,8 @@
 #include "cfile.h"
 #include <wsutil/ws_assert.h>
 
+#include <epan/epan_dissect.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
@@ -32,6 +34,7 @@ typedef enum {
     IOG_ITEM_UNIT_CALC_MAX,
     IOG_ITEM_UNIT_CALC_MIN,
     IOG_ITEM_UNIT_CALC_AVERAGE,
+    IOG_ITEM_UNIT_CALC_THROUGHPUT,
     IOG_ITEM_UNIT_CALC_LOAD,
     IOG_ITEM_UNIT_LAST = IOG_ITEM_UNIT_CALC_LOAD,
     NUM_IOG_ITEM_UNITS
@@ -157,14 +160,13 @@ reset_io_graph_items(io_graph_item_t *items, size_t count, int hf_index _U_) {
  * It is up to the caller to determine if the return value is valid.
  *
  * @param [in] pinfo Packet of interest.
- * @param [in] interval Time interval in milliseconds.
+ * @param [in] interval Time interval in microseconds
  * @return Array index on success, -1 on failure.
  *
  * @note pinfo->rel_ts, and hence the index, is not affected by ignoring
- * frames, but is affected by time references. (Ignoring frames before
- * a time reference can be useful, though.)
+ * frames.
  */
-int get_io_graph_index(packet_info *pinfo, int interval);
+int64_t get_io_graph_index(packet_info *pinfo, int interval);
 
 /** Check field and item unit compatibility
  *
@@ -172,10 +174,11 @@ int get_io_graph_index(packet_info *pinfo, int interval);
  * @param hf_index [out] Assigned the header field index corresponding to field_name if valid.
  *                       Can be NULL.
  * @param item_unit [in] The type of unit to calculate. From IOG_ITEM_UNITS.
+ * @param type_unit_name [in] The name of the first unit type (i.e. Packets or Events)
  * @return NULL if compatible, otherwise an error string. The string must
  *         be freed by the caller.
  */
-GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_unit_t item_unit);
+GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_unit_t item_unit, const char* type_unit_name);
 
 /** Get the value at the given interval (idx) for the current value unit.
  *
@@ -186,8 +189,9 @@ GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_u
  * @param cap_file [in] Capture file.
  * @param interval [in] Timing interval in ms.
  * @param cur_idx [in] Current index.
+ * @param asAOT [in] Interpret when possible the value as an Average Over Time.
  */
-double get_io_graph_item(const io_graph_item_t *items, io_graph_item_unit_t val_units, int idx, int hf_index, const capture_file *cap_file, int interval, int cur_idx);
+double get_io_graph_item(const io_graph_item_t *items, io_graph_item_unit_t val_units, int idx, int hf_index, const capture_file *cap_file, int interval, int cur_idx, bool asAOT);
 
 /** Update the values of an io_graph_item_t.
  *
@@ -200,7 +204,7 @@ double get_io_graph_item(const io_graph_item_t *items, io_graph_item_unit_t val_
  * @param edt [in] Dissection information for advanced statistics. May be NULL.
  * @param hf_index [in] Header field index for advanced statistics.
  * @param item_unit [in] The type of unit to calculate. From IOG_ITEM_UNITS.
- * @param interval [in] Timing interval in ms.
+ * @param interval [in] Timing interval in μs.
  * @return true if the update was successful, otherwise false.
  */
 static inline bool
@@ -350,7 +354,7 @@ update_io_graph_item(io_graph_item_t *items, int idx, packet_info *pinfo, epan_d
                      * returns an invalid interval if so.
                      */
                     pt = pinfo->rel_ts.secs * 1000000 + pinfo->rel_ts.nsecs / 1000;
-                    pt = pt % (interval * 1000);
+                    pt = pt % interval;
                     if (pt > t) {
                         pt = t;
                     }
@@ -370,8 +374,8 @@ update_io_graph_item(io_graph_item_t *items, int idx, packet_info *pinfo, epan_d
                         }
                         j--;
                         t -= pt;
-                        if (t > (uint64_t) interval * 1000) {
-                            pt = (uint64_t) interval * 1000;
+                        if (t > (uint64_t) interval) {
+                            pt = (uint64_t) interval;
                         } else {
                             pt = t;
                         }

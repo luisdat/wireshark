@@ -12,8 +12,12 @@
 #include <ui_sctp_chunk_statistics_dialog.h>
 #include "uat_dialog.h"
 
+#include <epan/prefs-int.h>
+#include <epan/uat-int.h>
+
 #include <wsutil/strtoi.h>
 #include <wsutil/wslog.h>
+#include <app/application_flavor.h>
 
 #include "ui/tap-sctp-analysis.h"
 #include <ui/qt/utils/qt_ui_utils.h>
@@ -42,7 +46,7 @@ SCTPChunkStatisticsDialog::SCTPChunkStatisticsDialog(QWidget *parent, const sctp
 
     ui->tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
 
-    this->setWindowTitle(QString(tr("SCTP Chunk Statistics: %1 Port1 %2 Port2 %3"))
+    this->setWindowTitle(tr("SCTP Chunk Statistics: %1 Port1 %2 Port2 %3")
             .arg(gchar_free_to_qstring(cf_get_display_name(cap_file_)))
             .arg(assoc->port1).arg(assoc->port2));
 //    connect(ui->tableWidget->verticalHeader(), &QHeaderView::sectionMoved, this, &SCTPChunkStatisticsDialog::on_sectionMoved);
@@ -62,13 +66,13 @@ SCTPChunkStatisticsDialog::~SCTPChunkStatisticsDialog()
 void SCTPChunkStatisticsDialog::initializeChunkMap()
 {
     struct chunkTypes temp;
-    gchar buf[16];
+    char buf[16];
 
     for (int i = 0; i < 256; i++) {
         temp.id = i;
         temp.row = i;
         snprintf(buf, sizeof buf, "%d", i);
-        (void) g_strlcpy(temp.name, val_to_str_const(i, chunk_type_values, "NA"), sizeof temp.name);
+        (void) g_strlcpy(temp.name, val_to_str_const(i, get_external_value_string("chunk_type_values"), "NA"), sizeof temp.name);
         if (strcmp(temp.name, "NA") == 0) {
             temp.hide = 1;
             (void) g_strlcpy(temp.name, buf, sizeof temp.name);
@@ -94,7 +98,7 @@ void SCTPChunkStatisticsDialog::fillTable(bool all, const sctp_assoc_info_t *sel
         return;
     }
     uat_t *uat = prefs_get_uat_value(pref);
-    gchar* fname = uat_get_actual_filename(uat,TRUE);
+    char* fname = uat_get_actual_filename(uat,true,application_configuration_environment_prefix());
     bool init = false;
 
     if (!fname) {
@@ -119,20 +123,20 @@ void SCTPChunkStatisticsDialog::fillTable(bool all, const sctp_assoc_info_t *sel
         for (i = 0; i < chunks.size(); i++) {
             if (!chunks.value(i).hide) {
                 ui->tableWidget->setRowCount(ui->tableWidget->rowCount()+1);
-                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QString("%1").arg(chunks.value(i).name)));
-                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QString("%1").arg(selected_assoc->chunk_count[chunks.value(i).id])));
-                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep1_chunk_count[chunks.value(i).id])));
-                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep2_chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QStringLiteral("%1").arg(chunks.value(i).name)));
+                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep1_chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep2_chunk_count[chunks.value(i).id])));
                 j++;
             }
         }
         for (i = 0; i < chunks.size(); i++) {
             if (chunks.value(i).hide) {
                 ui->tableWidget->setRowCount(ui->tableWidget->rowCount()+1);
-                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QString("%1").arg(chunks.value(i).name)));
-                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QString("%1").arg(selected_assoc->chunk_count[chunks.value(i).id])));
-                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep1_chunk_count[chunks.value(i).id])));
-                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep2_chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QStringLiteral("%1").arg(chunks.value(i).name)));
+                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep1_chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep2_chunk_count[chunks.value(i).id])));
                 ui->tableWidget->hideRow(j);
                 j++;
             }
@@ -171,10 +175,10 @@ void SCTPChunkStatisticsDialog::fillTable(bool all, const sctp_assoc_info_t *sel
             }
             if (!temp.hide) {
                 ui->tableWidget->setRowCount(ui->tableWidget->rowCount()+1);
-                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QString("%1").arg(temp.name)));
-                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QString("%1").arg(selected_assoc->chunk_count[temp.id])));
-                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep1_chunk_count[temp.id])));
-                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep2_chunk_count[temp.id])));
+                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QStringLiteral("%1").arg(temp.name)));
+                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->chunk_count[temp.id])));
+                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep1_chunk_count[temp.id])));
+                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep2_chunk_count[temp.id])));
                 j++;
             }
             chunks.insert(i, temp);
@@ -184,10 +188,10 @@ void SCTPChunkStatisticsDialog::fillTable(bool all, const sctp_assoc_info_t *sel
         for (i = 0; i < chunks.size(); i++) {
             if (chunks.value(i).hide) {
                 ui->tableWidget->setRowCount(ui->tableWidget->rowCount()+1);
-                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QString("%1").arg(chunks.value(i).name)));
-                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QString("%1").arg(selected_assoc->chunk_count[chunks.value(i).id])));
-                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep1_chunk_count[chunks.value(i).id])));
-                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QString("%1").arg(selected_assoc->ep2_chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setVerticalHeaderItem(j, new QTableWidgetItem(QStringLiteral("%1").arg(chunks.value(i).name)));
+                ui->tableWidget->setItem(j,0, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setItem(j,1, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep1_chunk_count[chunks.value(i).id])));
+                ui->tableWidget->setItem(j,2, new QTableWidgetItem(QStringLiteral("%1").arg(selected_assoc->ep2_chunk_count[chunks.value(i).id])));
                 ui->tableWidget->hideRow(j);
                 j++;
             }
@@ -220,7 +224,7 @@ void SCTPChunkStatisticsDialog::on_pushButton_clicked()
 
     uat_t *uat = prefs_get_uat_value(pref);
 
-    gchar* fname = uat_get_actual_filename(uat,TRUE);
+    char* fname = uat_get_actual_filename(uat,true,application_configuration_environment_prefix());
 
     if (!fname) {
         return;
@@ -228,8 +232,8 @@ void SCTPChunkStatisticsDialog::on_pushButton_clicked()
     fp = ws_fopen(fname,"w");
 
     if (!fp && errno == ENOENT) {
-        gchar *pf_dir_path = NULL;
-        if (create_persconffile_dir(&pf_dir_path) != 0) {
+        char *pf_dir_path = NULL;
+        if (create_persconffile_dir(application_configuration_environment_prefix(), &pf_dir_path) != 0) {
             g_free (pf_dir_path);
             return;
         }
@@ -251,7 +255,7 @@ void SCTPChunkStatisticsDialog::on_pushButton_clicked()
         snprintf(str, sizeof str, "\"%d\",\"%s\",\"%s\"\n", tempChunk.id, tempChunk.name, tempChunk.hide==0?"Show":"Hide");
         fputs(str, fp);
         void *rec = g_malloc0(uat->record_size);
-        uat_add_record(uat, rec, TRUE);
+        uat_add_record(uat, rec, true);
         if (uat->free_cb) {
             uat->free_cb(rec);
         }
@@ -287,7 +291,7 @@ void SCTPChunkStatisticsDialog::on_actionHideChunkType_triggered()
 
 void SCTPChunkStatisticsDialog::on_actionChunkTypePreferences_triggered()
 {
-    gchar* err = NULL;
+    char* err = NULL;
 
     pref_t *pref = prefs_find_preference(prefs_find_module("sctp"),"statistics_chunk_types");
     if (!pref) {
@@ -298,7 +302,7 @@ void SCTPChunkStatisticsDialog::on_actionChunkTypePreferences_triggered()
     uat_t *uat = prefs_get_uat_value(pref);
     uat_clear(uat);
 
-    if (!uat_load(uat, NULL, &err)) {
+    if (!uat_load(uat, NULL, application_configuration_environment_prefix(), &err)) {
         /* XXX - report this through the GUI */
         ws_log(LOG_DOMAIN_QTUI, LOG_LEVEL_WARNING, "Error loading table '%s': %s", uat->name, err);
         g_free(err);
@@ -312,9 +316,9 @@ void SCTPChunkStatisticsDialog::on_actionChunkTypePreferences_triggered()
 
     ui->tableWidget->clear();
     ui->tableWidget->setRowCount(0);
-    ui->tableWidget->setHorizontalHeaderItem(0, new QTableWidgetItem(QString(tr("Association"))));
-    ui->tableWidget->setHorizontalHeaderItem(1, new QTableWidgetItem(QString(tr("Endpoint 1"))));
-    ui->tableWidget->setHorizontalHeaderItem(2, new QTableWidgetItem(QString(tr("Endpoint 2"))));
+    ui->tableWidget->setHorizontalHeaderItem(0, new QTableWidgetItem(tr("Association")));
+    ui->tableWidget->setHorizontalHeaderItem(1, new QTableWidgetItem(tr("Endpoint 1")));
+    ui->tableWidget->setHorizontalHeaderItem(2, new QTableWidgetItem(tr("Endpoint 2")));
     fillTable();
 }
 
@@ -322,9 +326,9 @@ void SCTPChunkStatisticsDialog::on_actionShowAllChunkTypes_triggered()
 {
     ui->tableWidget->clear();
     ui->tableWidget->setRowCount(0);
-    ui->tableWidget->setHorizontalHeaderItem(0, new QTableWidgetItem(QString(tr("Association"))));
-    ui->tableWidget->setHorizontalHeaderItem(1, new QTableWidgetItem(QString(tr("Endpoint 1"))));
-    ui->tableWidget->setHorizontalHeaderItem(2, new QTableWidgetItem(QString(tr("Endpoint 2"))));
+    ui->tableWidget->setHorizontalHeaderItem(0, new QTableWidgetItem(tr("Association")));
+    ui->tableWidget->setHorizontalHeaderItem(1, new QTableWidgetItem(tr("Endpoint 1")));
+    ui->tableWidget->setHorizontalHeaderItem(2, new QTableWidgetItem(tr("Endpoint 2")));
     initializeChunkMap();
     fillTable(true);
 }

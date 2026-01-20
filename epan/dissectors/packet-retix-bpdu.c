@@ -12,19 +12,12 @@
 
 #include "config.h"
 
-#if 0
-#endif
 #include <epan/packet.h>
-#if 0
-#include <epan/llcsaps.h>
-#include <epan/ppptypes.h>
-#include <epan/chdlctypes.h>
-#endif
 #include <epan/addr_resolv.h>
 
 void proto_register_retix_bpdu(void);
 
-static gint ett_retix_bpdu;
+static int ett_retix_bpdu;
 static int proto_retix_bpdu;
 
 static int hf_retix_bpdu_root_mac;
@@ -90,7 +83,7 @@ proto_register_retix_bpdu(void)
     NULL, HFILL}},
   };
 
-  static gint *ett[] ={
+  static int *ett[] ={
     &ett_retix_bpdu,
   };
 

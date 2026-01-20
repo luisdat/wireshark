@@ -10,7 +10,7 @@
 #ifndef UI_QT_ADDITIONAL_TOOLBAR_H_
 #define UI_QT_ADDITIONAL_TOOLBAR_H_
 
-#include <epan/plugin_if.h>
+#include <ui/plugins/include/plugin_if.h>
 
 #include <QToolBar>
 #include <QWidgetAction>
@@ -50,7 +50,11 @@ private:
 
 private slots:
     void onButtonClicked();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    void onCheckBoxChecked(Qt::CheckState);
+#else
     void onCheckBoxChecked(int);
+#endif
     void sendTextToCallback();
     void onSelectionInWidgetChanged(int idx);
 

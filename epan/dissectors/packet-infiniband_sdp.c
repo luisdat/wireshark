@@ -74,9 +74,9 @@ static int hf_ib_sdp_srcah;
 static int hf_ib_sdp_data;
 
 /* Initialize the subtree pointers */
-static gint ett_ib_sdp;
-static gint ett_ib_sdp_bsdh;
-static gint ett_ib_sdp_hh;
+static int ett_ib_sdp;
+static int ett_ib_sdp_bsdh;
+static int ett_ib_sdp_hh;
 
 typedef enum {
     Hello = 0x0,
@@ -135,7 +135,7 @@ dissect_ib_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     proto_tree *SDP_BSDH_header_tree;
     proto_item *SDP_EH_header_item;
     proto_tree *SDP_EH_header_tree;
-    guint8 mid;
+    uint8_t mid;
 
     if (tvb_captured_length(tvb) < 16)   /* check this has at least enough bytes for the BSDH */
         return 0;
@@ -148,16 +148,15 @@ dissect_ib_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     SDP_BSDH_header_item = proto_tree_add_item(SDP_header_tree, hf_ib_sdp_bsdh, tvb, local_offset, 16, ENC_NA);
     SDP_BSDH_header_tree = proto_item_add_subtree(SDP_BSDH_header_item, ett_ib_sdp_bsdh);
 
-    mid =  tvb_get_guint8(tvb, local_offset);
-    proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_mid, tvb, local_offset, 1, ENC_BIG_ENDIAN); local_offset += 1;
+    proto_tree_add_item_ret_uint8(SDP_BSDH_header_tree, hf_ib_sdp_mid, tvb, local_offset, 1, ENC_BIG_ENDIAN, &mid); local_offset += 1;
 
     col_append_fstr(pinfo->cinfo, COL_INFO, "(SDP %s)",
                     rval_to_str_const(mid, mid_meanings, "Unknown"));
 
     proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags, tvb, local_offset, 1, ENC_BIG_ENDIAN);
-    proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags_oobpres, tvb, local_offset, 2, ENC_BIG_ENDIAN);
-    proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags_oob_pend, tvb, local_offset, 4, ENC_BIG_ENDIAN);
-    proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags_reqpipe, tvb, local_offset, 4, ENC_BIG_ENDIAN); local_offset += 1;
+    proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags_oobpres, tvb, local_offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags_oob_pend, tvb, local_offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_flags_reqpipe, tvb, local_offset, 1, ENC_BIG_ENDIAN); local_offset += 1;
 
     proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_bufs, tvb, local_offset, 2, ENC_BIG_ENDIAN); local_offset += 2;
     proto_tree_add_item(SDP_BSDH_header_tree, hf_ib_sdp_len, tvb, local_offset, 4, ENC_BIG_ENDIAN); local_offset += 4;
@@ -236,14 +235,14 @@ dissect_ib_sdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     return tvb_captured_length(tvb);
 }
 
-static gboolean
+static bool
 dissect_ib_sdp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     conversation_t *conv;
     conversation_infiniband_data *convo_data = NULL;
 
     if (tvb_captured_length(tvb) < 16)   /* check this has at least enough bytes for the BSDH */
-        return FALSE;
+        return false;
 
     /* first try to find a conversation between the two current hosts. in most cases this
        will not work since we do not have the source QP. this WILL succeed when we're still
@@ -259,19 +258,19 @@ dissect_ib_sdp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
                                  CONVERSATION_IBQP, pinfo->destport, pinfo->destport, NO_ADDR_B|NO_PORT_B);
 
         if (!conv)
-            return FALSE;   /* nothing to do with no conversation context */
+            return false;   /* nothing to do with no conversation context */
     }
 
     convo_data = (conversation_infiniband_data *)conversation_get_proto_data(conv, proto_infiniband);
 
     if (!convo_data)
-        return FALSE;
+        return false;
 
     if (!(convo_data->service_id & SERVICE_ID_MASK))
-        return FALSE;   /* the service id doesn't match that of SDP - nothing for us to do here */
+        return false;   /* the service id doesn't match that of SDP - nothing for us to do here */
 
     dissect_ib_sdp(tvb, pinfo, tree, data);
-    return TRUE;
+    return true;
 }
 
 void
@@ -421,7 +420,7 @@ proto_register_ib_sdp(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_ib_sdp,
         &ett_ib_sdp_bsdh,
         &ett_ib_sdp_hh,

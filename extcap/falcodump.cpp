@@ -27,18 +27,20 @@
 
 #include "config.h"
 
-#include <sinsp.h>
-#include <plugin_manager.h>
+#include <libsinsp/sinsp.h>
+#include <libsinsp/plugin_manager.h>
 
-#include <scap_engines.h>
+#include <libscap/scap_engines.h>
 
 #define WS_LOG_DOMAIN "falcodump"
 
 #include <extcap/extcap-base.h>
 
+#include <app/application_flavor.h>     //Stratoshark only
 #include <wsutil/file_util.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/json_dumper.h>
+#include <wsutil/plugins.h>
 #include <wsutil/privileges.h>
 #include <wsutil/utf8_entities.h>
 #include <wsutil/wsjson.h>
@@ -50,6 +52,9 @@
 
 #define FALCODUMP_PLUGIN_PLACEHOLDER "<plugin name>"
 
+#define SINSP_CHECK_VERSION(major, minor, micro) \
+    (((SINSP_VERSION_MAJOR << 16) + (SINSP_VERSION_MINOR << 8) + SINSP_VERSION_MICRO) >= ((major << 16) + (minor << 8) + micro))
+
 // We load our plugins and fetch their configs before we set our log level.
 // #define DEBUG_JSON_PARSING
 // #define DEBUG_SINSP
@@ -59,10 +64,6 @@ enum {
     OPT_HELP,
     OPT_VERSION,
     OPT_PLUGIN_API_VERSION,
-#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_MODERN_BPF)
-    OPT_INCLUDE_CAPTURE_PROCESSES,
-    OPT_INCLUDE_SWITCH_CALLS,
-#endif
     OPT_PLUGIN_SOURCE,
     OPT_SCHEMA_PROPERTIES_START,
 };
@@ -83,12 +84,6 @@ struct config_properties {
     std::string current_value;
 };
 
-#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_MODERN_BPF)
-struct syscall_configuration {
-    bool include_capture_processes;
-    bool include_switch_calls;
-};
-#endif
 
 struct plugin_configuration {
     std::vector<struct config_properties> property_list;
@@ -125,7 +120,7 @@ struct plugin_configuration {
         json_dumper_finish(&dumper);
         std::string config_blob = dumper.output_string->str;
         ws_debug("configuration: %s", dumper.output_string->str);
-        g_string_free(dumper.output_string, true);
+        g_string_free(dumper.output_string, TRUE);
         return config_blob;
     }
 };
@@ -221,7 +216,7 @@ void print_cloudtrail_aws_profile_config(int arg_num, const char *display, const
     }
 }
 
-void print_cloudtrail_aws_region_config(int arg_num, const char *display, const char *description) {
+static void print_cloudtrail_aws_region_config(int arg_num, const char *display, const char *description) {
     // printf '        "%s",\n' $(aws ec2 describe-regions --all-regions --query "Regions[].{Name:RegionName}" --output text) | sort
     std::set<std::string> regions = {
         "af-south-1",
@@ -235,6 +230,8 @@ void print_cloudtrail_aws_region_config(int arg_num, const char *display, const 
         "ap-southeast-2",
         "ap-southeast-3",
         "ap-southeast-4",
+        "ap-southeast-5",
+        "ap-southeast-7",
         "ca-central-1",
         "ca-west-1",
         "eu-central-1",
@@ -248,6 +245,7 @@ void print_cloudtrail_aws_region_config(int arg_num, const char *display, const 
         "il-central-1",
         "me-central-1",
         "me-south-1",
+        "mx-central-1",
         "sa-east-1",
         "us-east-1",
         "us-east-2",
@@ -286,20 +284,24 @@ void print_cloudtrail_aws_region_config(int arg_num, const char *display, const 
     }
 }
 
-
-// Load our plugins. This should match the behavior of the Falco Bridge dissector.
+// Load our plugins. This should match the behavior of the Falco Events dissector.
 static void load_plugins(sinsp &inspector) {
     WS_DIR *dir;
     WS_DIRENT *file;
     char *plugin_paths[] = {
-        g_build_filename(get_plugins_dir(), "falco", NULL),
-        g_build_filename(get_plugins_pers_dir(), "falco", NULL)
+        // XXX Falco plugins should probably be installed in a path that reflects
+        // the Falco version or its plugin API version.
+        g_build_filename(get_plugins_dir(application_configuration_environment_prefix()), "falco", NULL),
+        g_build_filename(get_plugins_pers_dir(application_configuration_environment_prefix()), "falco", NULL)
     };
 
     for (size_t idx = 0; idx < 2; idx++) {
         char *plugin_path = plugin_paths[idx];
         if ((dir = ws_dir_open(plugin_path, 0, NULL)) != NULL) {
             while ((file = ws_dir_read_name(dir)) != NULL) {
+                if (!is_plugin_filename(file)) {
+                    continue;
+                }
                 char *libname = g_build_filename(plugin_path, ws_dir_get_name(file), NULL);
                 try {
                     auto plugin = inspector.register_plugin(libname);
@@ -317,7 +319,7 @@ static void load_plugins(sinsp &inspector) {
 
 // Given a key, try to find its value in a JSON object.
 // Returns (value, true) on success, or (err_str, false) on failure.
-const std::pair<const std::string,bool> find_json_object_value(const std::string &object_blob, const std::string &key, int value_type) {
+static const std::pair<const std::string,bool> find_json_object_value(const std::string &object_blob, const std::string &key, int value_type) {
     std::vector<jsmntok_t> tokens;
     int num_tokens = json_parse(object_blob.c_str(), NULL, 0);
 
@@ -349,7 +351,7 @@ const std::pair<const std::string,bool> find_json_object_value(const std::string
 
 // Given an RFC 6901-style JSON pointer, try to find its value in a JSON object.
 // Returns (value, true) on success, or (err_str, false) on failure.
-const std::pair<const std::string,bool> find_json_pointer_value(const std::string &object_blob, const std::string &pointer, int value_type) {
+static const std::pair<const std::string,bool> find_json_pointer_value(const std::string &object_blob, const std::string &pointer, int value_type) {
     std::string blob = object_blob;
     std::istringstream ob_stream(pointer);
     std::string token;
@@ -374,7 +376,7 @@ const std::pair<const std::string,bool> find_json_pointer_value(const std::strin
 
 // Convert a JSON array to a string vector.
 // Returns (vector, true) on success, or (err_str, false) on failure.
-const std::pair<std::vector<std::string>,bool> get_json_array(const std::string &array_blob) {
+static const std::pair<std::vector<std::string>,bool> get_json_array(const std::string &array_blob) {
     std::vector<jsmntok_t> tokens;
     int num_tokens = json_parse(array_blob.c_str(), NULL, 0);
 
@@ -405,7 +407,12 @@ const std::pair<std::vector<std::string>,bool> get_json_array(const std::string 
 
 // Given a JSON blob containing a schema properties object, add each property to the
 // given plugin config.
-const std::pair<const std::string,bool> get_schema_properties(const std::string props_blob, int &opt_idx, const std::string option_prefix, const std::string plugin_name, std::vector<struct config_properties> &property_list) {
+// NOLINTNEXTLINE(misc-no-recursion)
+static const std::pair<const std::string,bool> get_schema_properties(const std::string props_blob, int &opt_idx, const std::string option_prefix, const std::string plugin_name, std::vector<struct config_properties> &property_list, int depth) {
+    if (++depth > JSON_DUMPER_MAX_DEPTH) {
+        return std::pair<std::string,bool>("max depth exceeded", false);
+    }
+
     std::vector<jsmntok_t> tokens;
     int num_tokens = json_parse(props_blob.c_str(), NULL, 0);
 
@@ -467,7 +474,7 @@ const std::pair<const std::string,bool> get_schema_properties(const std::string 
                 "",
             };
             property_list.push_back(properties);
-            get_schema_properties(jv.first, opt_idx, option_prefix + "-" + name, plugin_name, property_list);
+            get_schema_properties(jv.first, opt_idx, option_prefix + "-" + name, plugin_name, property_list, depth);
             properties = {
                 name,
                 display,
@@ -676,7 +683,7 @@ static bool get_plugin_config_schema(const std::shared_ptr<sinsp_plugin> &plugin
         return false;
     }
     int opt_idx = OPT_SCHEMA_PROPERTIES_START;
-    jv = get_schema_properties(jv.first, opt_idx, "", plugin->name(), plugin_config.property_list);
+    jv = get_schema_properties(jv.first, opt_idx, "", plugin->name(), plugin_config.property_list, 0);
     if (!jv.second) {
         ws_warning("ERROR: Interface \"%s\" has an unsupported or invalid configuration schema: %s", plugin->name().c_str(), jv.first.c_str());
         return false;
@@ -715,10 +722,6 @@ static const std::vector<ws_option> get_longopts(const std::map<std::string, str
         { "help", ws_no_argument, NULL, OPT_HELP},
         { "version", ws_no_argument, NULL, OPT_VERSION},
         { "plugin-api-version", ws_no_argument, NULL, OPT_PLUGIN_API_VERSION},
-#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_MODERN_BPF)
-        { "include-capture-processes", ws_required_argument, NULL, OPT_INCLUDE_CAPTURE_PROCESSES },
-        { "include-switch-calls", ws_required_argument, NULL, OPT_INCLUDE_SWITCH_CALLS },
-#endif
         { "plugin-source", ws_required_argument, NULL, OPT_PLUGIN_SOURCE },
         { 0, 0, 0, 0}
     };
@@ -736,110 +739,6 @@ static const std::vector<ws_option> get_longopts(const std::map<std::string, str
     longopts.push_back(base_longopts[idx]);
     return longopts;
 }
-
-#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_MODERN_BPF)
-static bool
-get_bool_value(const char *bool_str)
-{
-    if (!bool_str) {
-        return false;
-    }
-    switch (bool_str[0]) {
-        case 'f':
-        case 'F':
-        case '0':
-            return false;
-            break;
-        default:
-            return true;
-    }
-}
-
-// Show the configuration for a given plugin/interface.
-static int show_syscall_config(void)
-{
-    printf(
-        "arg {number=0}"
-        "{call=--include-capture-processes}"
-        "{display=Include capture processes}"
-        "{type=boolean}"
-        "{tooltip=Include system calls made by any capture processes (falcodump, dumpcap, and Logray)}"
-        "{required=false}"
-        "{group=Capture}\n"
-
-        "arg {number=1}"
-        "{call=--include-switch-calls}"
-        "{display=Include \"switch\" calls}"
-        "{type=boolean}"
-        "{tooltip=Include \"switch\" system calls}"
-        "{required=false}"
-        "{group=Capture}\n"
-
-        "value {arg=0}{value=1}\n"
-        );
-
-    return EXIT_SUCCESS;
-}
-
-#include <fstream>
-#include <iostream>
-static const std::string syscall_capture_filter(const struct syscall_configuration &syscall_config, const char *capture_filter)
-{
-    if (syscall_config.include_capture_processes && syscall_config.include_switch_calls) {
-        if (capture_filter) {
-            return std::string(capture_filter);
-        } else {
-            return std::string();
-        }
-    }
-
-    std::string filter;
-
-    if (capture_filter) {
-        filter = "(" + std::string(capture_filter) + ") and (";
-    }
-
-    if (!syscall_config.include_capture_processes) {
-        // We want to exclude Logray and any of its children, including
-        // this one (falcodump).
-
-        std::string pid, comm, _s, ppid;
-
-        // Exclude this process only at a minimum.
-        std::ifstream stat_stream("/proc/self/stat");
-        stat_stream >> pid >> comm >> _s >> ppid;
-        std::string process_filter = "proc.pid != " + pid;
-        if (comm != "(falcodump)") {
-            ws_warning("Our process is named %s, not falcodump", comm.c_str());
-        }
-        stat_stream.close();
-
-        // If our parent is Logray, exclude it and its direct children.
-        std::ifstream pstat_stream("/proc/" + ppid + "/stat");
-        pstat_stream >> _s >> comm;
-        if (comm == "(logray)") {
-            // XXX Use proc.apid instead?
-            process_filter = "proc.pid != " + ppid + " and proc.ppid != " + ppid;
-        }
-        pstat_stream.close();
-
-        filter += process_filter;
-    }
-
-    if (!syscall_config.include_switch_calls) {
-        if (!syscall_config.include_capture_processes) {
-            filter += " and ";
-        }
-        filter += "evt.type != switch";
-    }
-
-    if (capture_filter) {
-        filter += ")";
-    }
-
-    return filter;
-}
-#endif // HAS_ENGINE_KMOD || HAS_ENGINE_MODERN_BPF
 
 // Show the configuration for a given plugin/interface.
 static int show_plugin_config(const std::string &interface, const struct plugin_configuration &plugin_config)
@@ -914,16 +813,16 @@ int main(int argc, char **argv)
     int ret = EXIT_FAILURE;
     extcap_parameters* extcap_conf = g_new0(extcap_parameters, 1);
     std::map<std::string, struct plugin_configuration> plugin_configs;
-#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_MODERN_BPF)
-    struct syscall_configuration syscall_config = {};
-#endif
     char* help_url;
     char* help_header = NULL;
     sinsp inspector;
     std::string plugin_source;
 
+    /* Set the program name. */
+    g_set_prgname("falcodump");
+
     /* Initialize log handler early so we can have proper logging during startup. */
-    extcap_log_init("falcodump");
+    extcap_log_init();
 
     /*
      * Get credential information for later use.
@@ -934,32 +833,12 @@ int main(int argc, char **argv)
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0], "Logray");
+    configuration_init_error = configuration_init(argv[0], "stratoshark");
     if (configuration_init_error != NULL) {
         ws_warning("Can't get pathname of directory containing the extcap program: %s.",
                 configuration_init_error);
         g_free(configuration_init_error);
     }
-
-    // Plain eBPF requires extra configuration, so probe for kmod and modern BPF support only for now.
-#ifdef HAS_ENGINE_KMOD
-    try {
-        inspector.open_kmod();
-        extcap_base_register_interface(extcap_conf, KMOD_ENGINE, "System calls via kernel module", 147, "USER0");
-    } catch (sinsp_exception &e) {
-        ws_warning("Unable to open kmod: %s", e.what());
-    }
-    inspector.close();
-#endif
-#ifdef HAS_ENGINE_MODERN_BPF
-    try {
-        inspector.open_modern_bpf();
-        extcap_base_register_interface(extcap_conf, MODERN_BPF_ENGINE, "System calls via modern eBPF", 147, "USER0");
-    } catch (sinsp_exception &e) {
-        ws_warning("Unable to open kmod: %s", e.what());
-    }
-    inspector.close();
-#endif
 
     load_plugins(inspector);
 
@@ -970,14 +849,18 @@ int main(int argc, char **argv)
             extcap_base_register_interface(extcap_conf, iter->first.c_str(), "Falco plugin", 147, "USER0");
         }
     } else {
-        ws_warning("No source plugins found.");
+        ws_warning("Unable to load plugins.");
     }
 
     if (g_list_length(extcap_conf->interfaces) < 1) {
+        ws_debug("No source plugins found.");
+        // This should maybe be WS_EXIT_NO_INTERFACES from ws_exit_codes.h,
+        // if we updated the tests to allow that as a valid exit code.
+        ret = EXIT_SUCCESS;
         goto end;
     }
 
-    help_url = data_file_url("falcodump.html");
+    help_url = data_file_url("falcodump.html", application_configuration_environment_prefix());
     extcap_base_set_util_info(extcap_conf, argv[0], FALCODUMP_VERSION_MAJOR, FALCODUMP_VERSION_MINOR,
             FALCODUMP_VERSION_RELEASE, help_url);
     g_free(help_url);
@@ -1040,16 +923,6 @@ int main(int argc, char **argv)
                 ret = EXIT_SUCCESS;
                 goto end;
 
-#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_MODERN_BPF)
-            case OPT_INCLUDE_CAPTURE_PROCESSES:
-                syscall_config.include_capture_processes = get_bool_value(ws_optarg);
-                break;
-
-            case OPT_INCLUDE_SWITCH_CALLS:
-                syscall_config.include_switch_calls = get_bool_value(ws_optarg);
-                break;
-#endif
-
             case OPT_PLUGIN_SOURCE:
                 plugin_source = ws_optarg;
                 break;
@@ -1094,22 +967,11 @@ int main(int argc, char **argv)
     }
 
     if (extcap_conf->show_config) {
-#ifdef HAS_ENGINE_KMOD
-        if (strcmp(extcap_conf->interface, KMOD_ENGINE) == 0)
-        {
-            ret = show_syscall_config();
-        }
-        else
-#endif
-#ifdef HAS_ENGINE_MODERN_BPF
-        if (strcmp(extcap_conf->interface, MODERN_BPF_ENGINE) == 0)
-        {
-            ret = show_syscall_config();
-        }
-        else
-#endif
-        {
+        if (extcap_conf->interface) {
             ret = show_plugin_config(extcap_conf->interface, plugin_configs.at(extcap_conf->interface));
+        } else {
+            ws_warning("extcap interface missing");
+            goto end;
         }
         goto end;
     }
@@ -1122,67 +984,45 @@ int main(int argc, char **argv)
         inspector.set_log_stderr();
 #endif
 
-#ifdef HAS_ENGINE_KMOD
-        if (strcmp(extcap_conf->interface, KMOD_ENGINE) == 0)
-        {
-            try {
-                inspector.open_kmod();
-                builtin_capture = true;
-            } catch (sinsp_exception &e) {
-                ws_warning("Unable to open " KMOD_ENGINE ": %s", e.what());
+        if (plugin_source.empty()) {
+            if (extcap_conf->capture) {
+                ws_warning("Missing or invalid parameter: --plugin-source");
+            } else {
+                // XXX Can we bypass this somehow?
+                fprintf(stdout, "Validating a capture filter requires a plugin source");
+            }
+            goto end;
+        }
+
+        std::shared_ptr<sinsp_plugin> plugin_interface;
+        const auto plugin_manager = inspector.get_plugin_manager();
+        for (auto &plugin : plugin_manager->plugins()) {
+            if (plugin->name() == extcap_conf->interface) {
+                plugin_interface = plugin;
             }
         }
-        else
-#endif
-#ifdef HAS_ENGINE_MODERN_BPF
-        if (strcmp(extcap_conf->interface, MODERN_BPF_ENGINE) == 0)
-        {
-            try {
-                inspector.open_modern_bpf();
-                builtin_capture = true;
-            } catch (sinsp_exception &e) {
-                ws_warning("Unable to open " MODERN_BPF_ENGINE ": %s", e.what());
-            }
+
+        if (plugin_interface == nullptr) {
+            ws_warning("Unable to find interface %s", extcap_conf->interface);
+            goto end;
         }
-        else
+
+        try {
+            std::string init_err;
+            plugin_interface->init(plugin_configs[extcap_conf->interface].json_config().c_str(), init_err);
+            if (!init_err.empty()) {
+                ws_warning("%s", init_err.c_str());
+                goto end;
+            }
+#if SINSP_CHECK_VERSION(0, 18, 0)
+            inspector.open_plugin(extcap_conf->interface, plugin_source, sinsp_plugin_platform::SINSP_PLATFORM_HOSTINFO);
+#else
+            inspector.open_plugin(extcap_conf->interface, plugin_source);
 #endif
-        {
-            if (plugin_source.empty()) {
-                if (extcap_conf->capture) {
-                    ws_warning("Missing or invalid parameter: --plugin-source");
-                } else {
-                    // XXX Can we bypass this somehow?
-                    fprintf(stdout, "Validating a capture filter requires a plugin source");
-                }
-                goto end;
-            }
-
-            std::shared_ptr<sinsp_plugin> plugin_interface;
-            const auto plugin_manager = inspector.get_plugin_manager();
-            for (auto &plugin : plugin_manager->plugins()) {
-                if (plugin->name() == extcap_conf->interface) {
-                    plugin_interface = plugin;
-                }
-            }
-
-            if (plugin_interface == nullptr) {
-                ws_warning("Unable to find interface %s", extcap_conf->interface);
-                goto end;
-            }
-
-            try {
-                std::string init_err;
-                plugin_interface->init(plugin_configs[extcap_conf->interface].json_config().c_str(), init_err);
-                if (!init_err.empty()) {
-                    ws_warning("%s", init_err.c_str());
-                    goto end;
-                }
-                inspector.open_plugin(extcap_conf->interface, plugin_source);
-                // scap_dump_open handles "-"
-            } catch (sinsp_exception &e) {
-                ws_warning("%s", e.what());
-                goto end;
-            }
+            // scap_dump_open handles "-"
+        } catch (sinsp_exception &e) {
+            ws_warning("%s", e.what());
+            goto end;
         }
 
         if (!extcap_conf->capture) {
@@ -1206,19 +1046,6 @@ int main(int argc, char **argv)
             ws_warning("%s", e.what());
             goto end;
         }
-
-#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_MODERN_BPF)
-        std::string capture_filter = syscall_capture_filter(syscall_config, extcap_conf->capture_filter);
-        if (!capture_filter.empty()) {
-            ws_debug("Setting filter %s\n", capture_filter.c_str());
-            try {
-                inspector.set_filter(capture_filter);
-            } catch (sinsp_exception &e) {
-                fprintf(stdout, "%s", e.what());
-                goto end;
-            }
-        }
-#endif
 
         if (builtin_capture) {
             inspector.start_capture();

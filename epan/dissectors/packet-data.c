@@ -20,7 +20,9 @@
 #include "packet-dtls.h"
 
 void proto_register_data(void);
+void event_register_data(void);
 void proto_reg_handoff_data(void);
+void event_reg_handoff_data(void);
 
 
 static int proto_data;
@@ -32,19 +34,19 @@ static int hf_data_text;
 static int hf_data_uncompressed_data;
 static int hf_data_uncompressed_len;
 
-static bool new_pane = false;
-static bool uncompress_data = false;
-static bool show_as_text = false;
-static bool generate_md5_hash = false;
+static bool new_pane;
+static bool uncompress_data;
+static bool show_as_text;
+static bool generate_md5_hash;
 
-static gint ett_data;
+static int ett_data;
 
 static dissector_handle_t data_handle;
 
 static int
 dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	gint bytes;
+	int bytes;
 	char *display_str;
 
 	if (tree) {
@@ -52,11 +54,11 @@ dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 		if (bytes > 0) {
 			tvbuff_t   *data_tvb;
 			tvbuff_t   *uncompr_tvb = NULL;
-			gint	    uncompr_len = 0;
+			int	    uncompr_len = 0;
 			proto_item *ti;
 			proto_tree *data_tree;
 			if (new_pane) {
-				guint8 *real_data = (guint8 *)tvb_memdup(pinfo->pool, tvb, 0, bytes);
+				uint8_t *real_data = (uint8_t *)tvb_memdup(pinfo->pool, tvb, 0, bytes);
 				data_tvb = tvb_new_child_real_data(tvb,real_data,bytes,bytes);
 				add_new_data_source(pinfo, data_tvb, "Not dissected data bytes");
 			} else {
@@ -71,7 +73,7 @@ dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 			proto_tree_add_item(data_tree, hf_data_data, data_tvb, 0, bytes, ENC_NA);
 
 			if (uncompress_data) {
-				uncompr_tvb = tvb_child_uncompress(data_tvb, data_tvb, 0, tvb_reported_length(data_tvb));
+				uncompr_tvb = tvb_child_uncompress_zlib(data_tvb, data_tvb, 0, tvb_reported_length(data_tvb));
 
 				if (uncompr_tvb) {
 					uncompr_len = tvb_reported_length(uncompr_tvb);
@@ -97,9 +99,9 @@ dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 			}
 
 			if(generate_md5_hash) {
-				const guint8 *cp;
-				guint8	      digest[HASH_MD5_LENGTH];
-				const gchar  *digest_string;
+				const uint8_t *cp;
+				uint8_t	      digest[HASH_MD5_LENGTH];
+				const char   *digest_string;
 
 				cp = tvb_get_ptr(tvb, 0, bytes);
 
@@ -116,8 +118,8 @@ dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 	return tvb_captured_length(tvb);
 }
 
-void
-proto_register_data(void)
+static void
+common_register_data(void)
 {
 	static hf_register_info hf[] = {
 		{ &hf_data_data,
@@ -152,17 +154,13 @@ proto_register_data(void)
 		},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_data
 	};
 
 	module_t *module_data;
 
-	proto_data = proto_register_protocol (
-		"Data",		/* name */
-		"Data",		/* short name */
-		"data"		/* abbrev */
-		);
+	proto_data = proto_register_protocol ("Data", "Data", "data");
 
 	data_handle = register_dissector("data", dissect_data, proto_data);
 
@@ -175,7 +173,7 @@ proto_register_data(void)
 		"Show not dissected data on new Packet Bytes pane",
 		"Show not dissected data on new Packet Bytes pane",
 		&new_pane);
-#ifdef HAVE_ZLIB
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 	prefs_register_bool_preference(module_data,
 		"uncompress_data",
 		"Try to uncompress zlib compressed data",
@@ -200,25 +198,46 @@ proto_register_data(void)
 	proto_set_cant_toggle(proto_data);
 }
 
-static void
-add_foreach_decode_as(const gchar *table_name, const gchar *ui_name _U_, gpointer user_data)
+void
+proto_register_data(void)
 {
-        dissector_handle_t handle = (dissector_handle_t) user_data;
-        dissector_table_t dissector_table = find_dissector_table(table_name);
+	common_register_data();
+}
+
+void event_register_data(void)
+{
+	common_register_data();
+}
+
+static void
+add_foreach_decode_as(const char *table_name, const char *ui_name _U_, void *user_data)
+{
+	dissector_handle_t handle = (dissector_handle_t) user_data;
+	dissector_table_t dissector_table = find_dissector_table(table_name);
 
 
-        if (dissector_table_supports_decode_as(dissector_table))
-                dissector_add_for_decode_as(table_name, handle);
+	if (dissector_table_supports_decode_as(dissector_table))
+		dissector_add_for_decode_as(table_name, handle);
+}
+
+static void common_reg_handoff_data(void)
+{
+	dissector_add_string("media_type", "application/octet-stream", data_handle);
+	dissector_all_tables_foreach_table(add_foreach_decode_as, (void*)data_handle, NULL);
 }
 
 void
 proto_reg_handoff_data(void)
 {
-	dissector_add_string("media_type", "application/octet-stream", data_handle);
+	common_reg_handoff_data();
 	ssl_dissector_add(0, data_handle);
 	dtls_dissector_add(0, data_handle);
+}
 
-	dissector_all_tables_foreach_table(add_foreach_decode_as, (gpointer)data_handle, NULL);
+void
+event_reg_handoff_data(void)
+{
+	common_reg_handoff_data();
 }
 
 /*

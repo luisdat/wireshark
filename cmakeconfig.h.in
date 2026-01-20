@@ -16,12 +16,11 @@
 #define VERSION_MINOR ${PROJECT_MINOR_VERSION}
 #define VERSION_MICRO ${PROJECT_PATCH_VERSION}
 
-/* Version number of Logray and associated utilities */
-#define LOG_VERSION "${LOG_PROJECT_VERSION}${VERSION_EXTRA}"
+/* Version number of Stratoshark and associated utilities */
+#define STRATOSHARK_VERSION "${STRATOSHARK_VERSION}${VERSION_EXTRA}"
 
+#define PLUGIN_PATH_ID "${PLUGIN_PATH_ID}"
 #define VERSION_FLAVOR "${VERSION_FLAVOR}"
-
-#define SHARED_MODULE_SUFFIX "${CMAKE_SHARED_MODULE_SUFFIX}"
 
 /* Build wsutil with SIMD optimization */
 #cmakedefine HAVE_SSE4_2 1
@@ -32,14 +31,14 @@
 /*  Define to 1 if we check hf conflict */
 #cmakedefine ENABLE_CHECK_FILTER 1
 
-/* Link Wireshark libraries statically */
-#cmakedefine ENABLE_STATIC 1
-
 /* Enable AddressSanitizer (and LeakSanitizer on clang/gcc) */
 #cmakedefine ENABLE_ASAN 1
 
-/* Enable AirPcap */
-#cmakedefine HAVE_AIRPCAP 1
+/* Enable LeakSanitizer standalone */
+#cmakedefine ENABLE_LSAN 1
+
+/* Adapt build products for fuzzing (e.g. accepting incorrect checksums or prioritizing determinism). */
+#cmakedefine FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION 1
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #cmakedefine HAVE_ARPA_INET_H 1
@@ -64,6 +63,9 @@
 
 /* Define to use the MaxMind DB library */
 #cmakedefine HAVE_MAXMINDDB 1
+/* MaxmindDB version */
+#define MAXMINDDB_VERSION "${MAXMINDDB_VERSION}"
+
 
 /* Define to 1 if you have the <ifaddrs.h> header file. */
 #cmakedefine HAVE_IFADDRS_H 1
@@ -104,6 +106,9 @@
 /* Define to 1 if you have the `inflatePrime' function. */
 #cmakedefine HAVE_INFLATEPRIME 1
 
+/* Define to 1 if you have the `zng_gzopen' function. */
+#cmakedefine WITH_GZFILEOP 1
+
 /* Define to 1 if you have the `issetugid' function. */
 #cmakedefine HAVE_ISSETUGID 1
 
@@ -128,12 +133,6 @@
 /* Enable libnl support */
 #cmakedefine HAVE_LIBNL 1
 
-/* libnl version 1 */
-#cmakedefine HAVE_LIBNL1 1
-
-/* libnl version 2 */
-#cmakedefine HAVE_LIBNL2 1
-
 /* libnl version 3 */
 #cmakedefine HAVE_LIBNL3 1
 
@@ -146,11 +145,24 @@
 /* Define to 1 if libsmi exports a version string (and that symbol is visible). */
 #cmakedefine HAVE_SMI_VERSION_STRING 1
 
+/* Define to use xxhash library */
+#cmakedefine HAVE_XXHASH 1
+#define XXHASH_VERSION_STRING "${XXHASH_VERSION_STRING}"
+
 /* Define to use zlib library */
 #cmakedefine HAVE_ZLIB 1
 
+/* Define to use zlib-ng library */
+#cmakedefine HAVE_ZLIBNG 1
+#define ZLIBNG_VERSION_STRING "${ZLIBNG_VERSION_STRING}"
+
 /* Define to use the minizip library */
 #cmakedefine HAVE_MINIZIP 1
+#define MINIZIP_VERSION "${MINIZIP_VERSION}"
+
+/* Define to use the minizip-ng library */
+#cmakedefine HAVE_MINIZIPNG 1
+#define MINIZIPNG_VERSION "${MINIZIPNG_VERSION}"
 
 /* Define if `dos_date' (with underscore) field exists in `zip_fileinfo'  */
 #cmakedefine HAVE_MZCOMPAT_DOS_DATE 1
@@ -166,6 +178,7 @@
 
 /* Define to use snappy library */
 #cmakedefine HAVE_SNAPPY 1
+#define SNAPPY_VERSION "${SNAPPY_VERSION}"
 
 /* Define to use zstd library */
 #cmakedefine HAVE_ZSTD 1
@@ -181,6 +194,12 @@
 
 /* Define to 1 if we have Lua with Unicode for Windows patches. */
 #cmakedefine HAVE_LUA_UNICODE 1
+
+/* The size of the lua_Integer type, if we have Lua. */
+#cmakedefine LUA_INTEGER_SIZE ${LUA_INTEGER_SIZE}
+
+/* Whether the Lua library has a two-argument lua_resetthread(). */
+#cmakedefine HAVE_TWO_ARGUMENT_LUA_RESETTHREAD 1
 
 /* Define to use MIT kerberos */
 #cmakedefine HAVE_MIT_KERBEROS 1
@@ -203,44 +222,29 @@
 /* VHT_CAPABILITY is supported */
 #cmakedefine HAVE_NL80211_VHT_CAPABILITY 1
 
+/* HE_CAPABILITY is supported */
+#cmakedefine HAVE_NL80211_HE_CAPABILITY 1
+
+/* EHT_CAPABILITY is supported */
+#cmakedefine HAVE_NL80211_EHT_CAPABILITY 1
+
 /* Define to 1 if you have macOS frameworks */
 #cmakedefine HAVE_MACOS_FRAMEWORKS 1
 
 /* Define to 1 if you have the macOS CFPropertyListCreateWithStream function */
 #cmakedefine HAVE_CFPROPERTYLISTCREATEWITHSTREAM 1
 
-/* Define to 1 if you have the `pcap_create' function. */
-#cmakedefine HAVE_PCAP_CREATE 1
-
-/* Define to 1 if the capture buffer size can be set. */
-#cmakedefine CAN_SET_CAPTURE_BUFFER_SIZE 1
-
-/* Define to 1 if you have the `pcap_freecode' function. */
-#cmakedefine HAVE_PCAP_FREECODE 1
-
-/* Define to 1 if you have the `pcap_free_datalinks' function. */
-#cmakedefine HAVE_PCAP_FREE_DATALINKS 1
+/* Define to 1 if you have the `pcap_init' function. */
+#cmakedefine HAVE_PCAP_INIT 1
 
 /* Define to 1 if you have the `pcap_open' function. */
 #cmakedefine HAVE_PCAP_OPEN 1
 
-/* Define to 1 if you have libpcap/WinPcap/Npcap remote capturing support. */
+/* Define to 1 if you have libpcap/Npcap remote capturing support. */
 #cmakedefine HAVE_PCAP_REMOTE 1
 
 /* Define to 1 if you have the `pcap_setsampling' function. */
 #cmakedefine HAVE_PCAP_SETSAMPLING 1
-
-/* Define to 1 if you have the `pcap_set_tstamp_precision' function. */
-#cmakedefine HAVE_PCAP_SET_TSTAMP_PRECISION 1
-
-/* Define to 1 if you have the `pcap_set_tstamp_type' function. */
-#cmakedefine HAVE_PCAP_SET_TSTAMP_TYPE 1
-
-/* Define to 1 if you have the `PCAP_ERROR_PROMISC_PERM_DENIED' symbol. */
-#cmakedefine HAVE_PCAP_ERROR_PROMISC_PERM_DENIED 1
-
-/* Define to 1 if you have the `PCAP_WARNING_TSTAMP_TYPE_NOTSUP' symbol. */
-#cmakedefine HAVE_PCAP_WARNING_TSTAMP_TYPE_NOTSUP 1
 
 /* Define to 1 if you have the <pwd.h> header file. */
 #cmakedefine HAVE_PWD_H 1
@@ -262,9 +266,6 @@
 
 /* Define to 1 if you have the opus library. */
 #cmakedefine HAVE_OPUS 1
-
-/* Define to 1 if you have the lixbml2 library. */
-#cmakedefine HAVE_LIBXML2 1
 
 /* Define to 1 if you have the `setresgid' function. */
 #cmakedefine HAVE_SETRESGID 1
@@ -323,8 +324,14 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #cmakedefine HAVE_UNISTD_H 1
 
+/* Define to 1 if you have the <valgrind/valgrind.h> header file. */
+#cmakedefine HAVE_VALGRIND_H 1
+
 /* Define if we have QtMultimedia */
 #cmakedefine QT_MULTIMEDIA_LIB 1
+
+/* Define if we have QtDBus */
+#cmakedefine QT_DBUS_LIB 1
 
 /* Build androiddump with libpcap instead of wireshark stuff */
 #cmakedefine ANDROIDDUMP_USE_LIBPCAP 1
@@ -339,6 +346,15 @@
 
 /* Define to 1 if we are using the msys2 environment to build. */
 #cmakedefine HAVE_MSYSTEM 1
+
+/* Define if we have sinsp and scap */
+#cmakedefine HAVE_SINSP 1
+
+#ifdef HAVE_SINSP
+#define SINSP_VERSION_MAJOR ${SINSP_VERSION_MAJOR}
+#define SINSP_VERSION_MINOR ${SINSP_VERSION_MINOR}
+#define SINSP_VERSION_MICRO ${SINSP_VERSION_MICRO}
+#endif
 
 #if defined(_MSC_VER)
 #  define strncasecmp strnicmp
@@ -365,7 +381,7 @@
  * - The VersionNT parts of packaging\wix\Prerequisites.wxi
  */
 #  ifndef NTDDI_VERSION
-#  define NTDDI_VERSION   NTDDI_WIN10
+#  define NTDDI_VERSION   NTDDI_WIN10_RS5
 #  endif
 
 #  ifndef _WIN32_WINNT
@@ -395,7 +411,7 @@
  * are added if and only if HAVE_REMOTE is defined, and will fill them in,
  * even if they're not there.
  *
- * Yes, this is q WinPcap bug; if your project has a public header file
+ * Yes, this is a WinPcap bug; if your project has a public header file
  * that checks or otherwise uses a #define that's defined by your project's
  * configuration process, and don't ensure that it's always defined
  * appropriately when that header file is included, before its first use,
@@ -419,6 +435,10 @@
  * No version of the WinPcap SDK provided libpcap 1.9.0-or-later headers.
  * The Npcap SDK, as of SDK version 1.04, provides them, so this is
  * only necessary for building with the WinPcap SDK.
+ *
+ * Building against the WinPcap SDK isn't supported anymore, nor is running
+ * with the WinPcap DLL installed, so needing this is very unlikely, though
+ * libpcap 1.9.0 or later is not yet required.
  */
 #ifdef HAVE_PCAP_REMOTE
 #define HAVE_REMOTE

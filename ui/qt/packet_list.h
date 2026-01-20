@@ -10,7 +10,7 @@
 #ifndef PACKET_LIST_H
 #define PACKET_LIST_H
 
-#include "byte_view_tab.h"
+#include "data_source_tab.h"
 #include <ui/qt/models/packet_list_model.h>
 #include "proto_tree.h"
 #include "protocol_preferences_menu.h"
@@ -24,6 +24,7 @@
 
 class PacketListHeader;
 class OverlayScrollBar;
+class ProfileSwitcher;
 
 class QAction;
 class QTimerEvent;
@@ -45,7 +46,8 @@ public:
     enum SummaryCopyType {
         CopyAsText,
         CopyAsCSV,
-        CopyAsYAML
+        CopyAsYAML,
+        CopyAsHTML
     };
     Q_ENUM(SummaryCopyType)
 
@@ -74,18 +76,20 @@ public:
     bool contextMenuActive();
     QString getFilterFromRowAndColumn(QModelIndex idx);
     void resetColorized();
-    QString getPacketComment(guint c_number);
+    QString getPacketComment(unsigned c_number);
     void addPacketComment(QString new_comment);
-    void setPacketComment(guint c_number, QString new_comment);
+    void setPacketComment(unsigned c_number, QString new_comment);
     QString allPacketComments();
     void deleteCommentsFromPackets();
     void deleteAllPacketComments();
     void setVerticalAutoScroll(bool enabled = true);
     void setCaptureInProgress(bool in_progress = false, bool auto_scroll = true) { capture_in_progress_ = in_progress; tail_at_end_ = in_progress && auto_scroll; }
     void captureFileReadFinished();
+    void setColumnDelegate();
     void resetColumns();
     bool haveNextHistory(bool update_cur = false);
     bool havePreviousHistory(bool update_cur = false);
+    void setProfileSwitcher(ProfileSwitcher *profile_switcher);
 
     frame_data * getFDataForRow(int row) const;
 
@@ -96,7 +100,20 @@ public:
     QString createSummaryText(QModelIndex idx, SummaryCopyType type);
     QString createHeaderSummaryText(SummaryCopyType type);
 
+    QStringList createHeaderPartsForAligned();
+    QList<int> createAlignmentPartsForAligned();
+    QList<int> createSizePartsForAligned(bool useHeader, QStringList hdr_parts, QList<int> rows);
+    QString createHeaderSummaryForAligned(QStringList hdr_parts, QList<int> align_parts, QList<int> size_parts);
+    QString createSummaryForAligned(QModelIndex idx, QList<int> align_parts, QList<int> size_parts);
+
+    QString createDefaultStyleForHtml();
+    QString createOpeningTagForHtml();
+    QString createHeaderSummaryForHtml();
+    QString createSummaryForHtml(QModelIndex idx);
+    QString createClosingTagForHtml();
+
     void resizeAllColumns(bool onlyTimeFormatted = false);
+    bool selectRow(const frame_data*, bool = true);
 
 protected:
 
@@ -122,7 +139,6 @@ private:
     capture_file *cap_file_;
     QMenu conv_menu_;
     QMenu colorize_menu_;
-    QMenu proto_prefs_menus_;
     int ctx_column_;
     QByteArray column_state_;
     OverlayScrollBar *overlay_sb_;
@@ -148,10 +164,10 @@ private:
     int cur_history_;
     bool in_history_;
     GPtrArray *finfo_array; // Packet data from the last selected packet entry
+    ProfileSwitcher *profile_switcher_;
 
-    void setFrameReftime(gboolean set, frame_data *fdata);
+    void setFrameReftime(bool set, frame_data *fdata);
     void setColumnVisibility();
-    int sizeHintForColumn(int column) const override;
     void setRecentColumnWidth(int column);
     void drawCurrentPacket();
     void applyRecentColumnWidths();
@@ -164,7 +180,7 @@ signals:
     void editColumn(int column);
     void packetListScrolled(bool at_end);
     void showProtocolPreferences(const QString module_name);
-    void editProtocolPreference(struct preference *pref, struct pref_module *module);
+    void editProtocolPreference(pref_t *pref, module_t *module);
 
     void framesSelected(QList<int>);
     void fieldSelected(FieldInformation *);
@@ -172,6 +188,7 @@ signals:
 public slots:
     void setCaptureFile(capture_file *cf);
     void setMonospaceFont(const QFont &mono_font);
+    void setRegularFont(const QFont &regular_font);
     void goNextPacket();
     void goPreviousPacket();
     void goFirstPacket();
@@ -199,7 +216,6 @@ private slots:
     void columnVisibilityTriggered();
     void sectionResized(int col, int, int new_width);
     void sectionMoved(int, int, int);
-    void updateRowHeights(const QModelIndex &ih_index);
     void copySummary();
     void vScrollBarActionTriggered(int);
     void drawFarOverlay();

@@ -75,6 +75,7 @@ enum ftenum {
 	FT_NUM_TYPES, /* last item number plus one */
 	FT_SCALAR,		/* Pseudo-type used only internally for certain
 				 * arithmetic operations. */
+	FT_ENUM_SIZE = FT_SCALAR	/* Must be equal to last enumeration */
 };
 
 #define FT_IS_INT32(ft) \
@@ -116,7 +117,7 @@ enum ftenum {
 
 #define FT_IS_STRING(ft) \
 	((ft) == FT_STRING || (ft) == FT_STRINGZ || (ft) == FT_STRINGZPAD || \
-	 (ft) == FT_STRINGZTRUNC || (ft) == FT_UINT_STRING)
+	 (ft) == FT_STRINGZTRUNC || (ft) == FT_UINT_STRING || (ft) == FT_AX25)
 
 #define FT_IS_SCALAR(ft) ((ft) == FT_INT64 || (ft) == FT_DOUBLE)
 
@@ -153,6 +154,7 @@ typedef struct _ftype_t ftype_t;
 enum ft_result {
 	FT_OK = 0,
 	FT_OVERFLOW,
+	FT_UNDERFLOW,
 	FT_BADARG,
 	FT_ERROR, /* Generic. */
 };
@@ -165,7 +167,7 @@ enum ft_result {
  *     ft_bool != FT_TRUE
  * are different results (three-state logic).
  */
-typedef bool ft_bool_t;
+typedef int ft_bool_t;
 #define FT_TRUE		1
 #define FT_FALSE	0
 
@@ -174,6 +176,8 @@ enum ftrepr {
 	FTREPR_DISPLAY,
 	FTREPR_DFILTER,
 	FTREPR_JSON,
+	FTREPR_RAW,
+	FTREPR_EK, /* ElasticSearch/OpenSearch JSON */
 };
 
 typedef enum ftrepr ftrepr_t;
@@ -205,6 +209,7 @@ const char*
 ftype_pretty_name(ftenum_t ftype);
 
 /* Returns length of field in packet, or 0 if not determinable/defined. */
+WS_DLL_PUBLIC
 int
 ftype_wire_size(ftenum_t ftype);
 
@@ -270,6 +275,10 @@ ftype_can_is_negative(enum ftenum ftype);
 
 WS_DLL_PUBLIC
 bool
+ftype_can_is_nan(enum ftenum ftype);
+
+WS_DLL_PUBLIC
+bool
 ftype_can_val_to_sinteger(enum ftenum ftype);
 
 WS_DLL_PUBLIC
@@ -283,6 +292,10 @@ ftype_can_val_to_sinteger64(enum ftenum ftype);
 WS_DLL_PUBLIC
 bool
 ftype_can_val_to_uinteger64(enum ftenum ftype);
+
+WS_DLL_PUBLIC
+bool
+ftype_can_val_to_double(enum ftenum ftype);
 
 /* ---------------- FVALUE ----------------- */
 
@@ -430,6 +443,10 @@ fvalue_set_protocol(fvalue_t *fv, tvbuff_t *value, const char *name, int length)
 
 WS_DLL_PUBLIC
 void
+fvalue_set_protocol_length(fvalue_t *fv, int length);
+
+WS_DLL_PUBLIC
+void
 fvalue_set_uinteger(fvalue_t *fv, uint32_t value);
 
 WS_DLL_PUBLIC
@@ -557,6 +574,10 @@ fvalue_is_zero(const fvalue_t *a);
 WS_DLL_PUBLIC
 bool
 fvalue_is_negative(const fvalue_t *a);
+
+WS_DLL_PUBLIC
+bool
+fvalue_is_nan(const fvalue_t *a);
 
 WS_DLL_PUBLIC
 size_t

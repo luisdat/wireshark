@@ -15,7 +15,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/ipproto.h>
+#include "packet-iana-data.h"
 
 void proto_register_swipe(void);
 void proto_reg_handoff_swipe(void);
@@ -39,7 +39,7 @@ static int hf_swipe_packet_seq;
 static int hf_swipe_authenticator;
 
 /* Initialize the subtree pointers */
-static gint ett_swipe;
+static int ett_swipe;
 
 static dissector_handle_t swipe_handle;
 static dissector_handle_t ipv6_handle;
@@ -55,7 +55,7 @@ dissect_swipe(tvbuff_t *tvb, packet_info * pinfo, proto_tree *tree, void* data _
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "swIPe");
     col_clear(pinfo->cinfo, COL_INFO);
 
-    header_len = tvb_get_guint8(tvb, offset + 1);
+    header_len = tvb_get_uint8(tvb, offset + 1);
     if (tree)
     {
         ti = proto_tree_add_item(tree, proto_swipe, tvb, offset, header_len, ENC_NA);
@@ -98,7 +98,7 @@ proto_register_swipe(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_swipe
     };
 
@@ -116,7 +116,7 @@ proto_register_swipe(void)
 void
 proto_reg_handoff_swipe(void)
 {
-    dissector_add_uint("ip.proto", IP_PROTO_SWIPE, swipe_handle);
+    dissector_add_uint("ip.proto", IP_PROTO_SWIPE_DEPRECATED, swipe_handle);
 
     ipv6_handle = find_dissector_add_dependency("ipv6", proto_swipe );
 }

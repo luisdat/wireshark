@@ -128,7 +128,15 @@ ssh_session create_ssh_connection(const ssh_params_t* ssh_params, char** err_inf
 
 	/* Load the configurations already present in the system configuration file. */
 	/* They will be overwritten by the user-provided configurations. */
+#ifdef _WIN32
+	/* On Windows, do not try to read C:\etc\ssh\ssh_config.
+	 * libssh tries to read from /etc/ssh/ssh_config on all OSes by
+	 * default (i.e., if the second parameter is NULL.)
+	 */
+	if (ssh_options_parse_config(sshs, "%d/config") != 0) {
+#else
 	if (ssh_options_parse_config(sshs, NULL) != 0) {
+#endif
 		*err_info = g_strdup("Unable to load the configuration file");
 		goto failure;
 	}
@@ -168,6 +176,16 @@ ssh_session create_ssh_connection(const ssh_params_t* ssh_params, char** err_inf
 	}
 
 	if (ssh_params->proxycommand) {
+#if defined(_WIN32) && (LIBSSH_VERSION_INT < SSH_VERSION_INT(0,11,0))
+		// ProxyCommand isn't supported on Windows:
+		// https://gitlab.com/libssh/libssh-mirror/-/issues/75
+		// ssh_options_set "succeeds" in setting it, though.
+		// On 0.11.0 and later, ssh_connect will fail.
+		// Before 0.11.0, libssh silently ignores the option.
+		// https://gitlab.com/libssh/libssh-mirror/-/commit/bed4438695df2f4635617fc45f802d782fdd8479
+		*err_info = ws_strdup_printf("Can't set the ProxyCommand: %s (libssh does not support proxy commands on Windows.)", ssh_params->proxycommand);
+		goto failure;
+#endif
 		if (ssh_options_set(sshs, SSH_OPTIONS_PROXYCOMMAND, ssh_params->proxycommand)) {
 			*err_info = ws_strdup_printf("Can't set the ProxyCommand: %s", ssh_params->proxycommand);
 			goto failure;

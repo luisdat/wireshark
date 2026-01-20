@@ -10,14 +10,10 @@
 #include "config.h"
 
 #ifdef HAVE_LIBPCAP
-#include <glib.h>
 
-#ifdef __MINGW32__
-#include <_bsd_types.h>
-#endif
-#include <pcap.h>
+#include <pcap/pcap.h>
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 #include "ui/capture_globals.h"
 #endif
 #include "extcap.h"
@@ -29,7 +25,7 @@
 #include <QSet>
 
 // We use a global mutex to protect pcap_compile since it calls gethostbyname.
-// This probably isn't needed on Windows (where pcap_comple calls
+// This probably isn't needed on Windows (where pcap_compile calls
 // EnterCriticalSection + LeaveCriticalSection) or *BSD or macOS where
 // gethostbyname(3) claims that it's thread safe.
 static QMutex pcap_compile_mtx_;
@@ -50,8 +46,8 @@ static QMutex pcap_compile_mtx_;
 void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
 {
 #ifdef HAVE_LIBPCAP
-    QSet<gint> active_dlts;
-    QSet<guint> active_extcap;
+    QSet<int> active_dlts;
+    QSet<unsigned> active_extcap;
     struct bpf_program fcode;
     pcap_t *pd;
     int pc_err;
@@ -60,13 +56,17 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
 
     DEBUG_SYNTAX_CHECK("received", "?");
 
+    if (filter.isEmpty()) {
+        emit syntaxResult(filter, SyntaxLineEdit::Empty, QString());
+    }
+
     if (global_capture_opts.num_selected < 1) {
-        emit syntaxResult(filter, SyntaxLineEdit::Invalid, QString("No interfaces selected"));
+        emit syntaxResult(filter, SyntaxLineEdit::Invalid, QStringLiteral("No interfaces selected"));
         DEBUG_SYNTAX_CHECK("unknown", "no interfaces");
         return;
     }
 
-    for (guint if_idx = 0; if_idx < global_capture_opts.all_ifaces->len; if_idx++) {
+    for (unsigned if_idx = 0; if_idx < global_capture_opts.all_ifaces->len; if_idx++) {
         interface_t *device;
 
         device = &g_array_index(global_capture_opts.all_ifaces, interface_t, if_idx);
@@ -75,7 +75,7 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
                 if ((device->active_dlt >= DLT_USER0 && device->active_dlt <= DLT_USER15) || device->active_dlt == -1) {
                     // Capture filter for DLT_USER is unknown
                     state = SyntaxLineEdit::Deprecated;
-                    err_str = "Unable to check capture filter";
+                    err_str = tr("Unable to check capture filter");
                 } else {
                     active_dlts.insert(device->active_dlt);
                 }
@@ -85,14 +85,25 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
         }
     }
 
-    foreach(gint dlt, active_dlts.values()) {
-        pcap_compile_mtx_.lock();
+    foreach(int dlt, active_dlts.values()) {
+        QMutexLocker locker(&pcap_compile_mtx_);
         pd = pcap_open_dead(dlt, DUMMY_SNAPLENGTH);
         if (pd == NULL)
         {
             //don't have ability to verify capture filter
             break;
         }
+        /*
+         * XXX - There are filters that pcap_compile rejects on a dead handle
+         * but accepts on a live handle for certain devices; e.g. "ifindex",
+         * "inbound", and "outbound" require Linux BPF extensions. (That's
+         * different than the special treatment of "vlan" on Linux and some
+         * versions of Npcap, where the filter will still be accepted, just
+         * compile differently. We only care if it's valid here, unlike in
+         * CompiledFilterDialog.) We don't want to spawn dumpcap to open a
+         * live device every time a few characters are typed, especially on
+         * Windows where that might spawn UAC prompts.
+         */
 #ifdef PCAP_NETMASK_UNKNOWN
         pc_err = pcap_compile(pd, &fcode, filter.toUtf8().data(), 1 /* Do optimize */, PCAP_NETMASK_UNKNOWN);
 #else
@@ -104,24 +115,33 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
 #endif
 
         if (pc_err) {
-            DEBUG_SYNTAX_CHECK("unknown", "known bad");
-            state = SyntaxLineEdit::Invalid;
-            err_str = pcap_geterr(pd);
+            /* Check the error message to see if it implies that this filter
+             * is rejected on a dead interface but may work on a live capture.
+             */
+            const char* err_s = pcap_geterr(pd);
+            if (strstr(err_s, "when reading savefiles") /* libpcap >= 1.3.0 */ ||
+                strstr(err_s, "not a live capture") /* libpcap >= 1.11.0 */ ) {
+
+                state = SyntaxLineEdit::Deprecated;
+                err_str = tr("Unable to check capture filter (BPF extensions require a live handle)");
+            } else {
+                DEBUG_SYNTAX_CHECK("unknown", "known bad");
+                state = SyntaxLineEdit::Invalid;
+                err_str = err_s;
+            }
         } else {
             DEBUG_SYNTAX_CHECK("unknown", "known good");
             pcap_freecode(&fcode);
         }
         pcap_close(pd);
 
-        pcap_compile_mtx_.unlock();
-
         if (state == SyntaxLineEdit::Invalid) break;
     }
     // If it's already invalid, don't bother to check extcap
     if (state != SyntaxLineEdit::Invalid) {
-        foreach(guint extcapif, active_extcap.values()) {
+        foreach(unsigned extcapif, active_extcap.values()) {
             interface_t *device;
-            gchar *error = NULL;
+            char *error = NULL;
 
             device = &g_array_index(global_capture_opts.all_ifaces, interface_t, extcapif);
             extcap_filter_status status = extcap_verify_capture_filter(device->name, filter.toUtf8().constData(), &error);
@@ -134,7 +154,7 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
                 break;
             } else {
                 state = SyntaxLineEdit::Deprecated;
-                err_str = "Unable to check capture filter";
+                err_str = tr("Unable to check capture filter");
             }
             g_free(error);
         }
@@ -143,6 +163,6 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
 
     DEBUG_SYNTAX_CHECK("known", "idle");
 #else
-    emit syntaxResult(filter, SyntaxLineEdit::Deprecated, QString("Syntax checking unavailable"));
+    emit syntaxResult(filter, SyntaxLineEdit::Deprecated, QStringLiteral("Syntax checking unavailable"));
 #endif // HAVE_LIBPCAP
 }

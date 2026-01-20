@@ -2,8 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import pytest
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
 class TestDfilterSyntax:
@@ -23,10 +22,11 @@ class TestDfilterSyntax:
         dfilter = "9p or http"
         checkDFilterCount(dfilter, 1)
 
-    def test_exists_4(self, checkDFilterCount):
+    # The HTTP dissector no longer has a expert Chat
+        # def test_exists_4(self, checkDFilterCount):
         # Protocol with dot
-        dfilter = "_ws.expert"
-        checkDFilterCount(dfilter, 1)
+        # dfilter = "_ws.expert"
+        # checkDFilterCount(dfilter, 1)
 
     def test_exists_5(self, checkDFilterSucceed):
         # Protocol field name with leading digit and minus
@@ -132,7 +132,7 @@ class TestDfilterSyntax:
         dfilter = "tcp.flags.push == True"
         checkDFilterCount(dfilter, 1)
 
-    def test_bool_2(self, checkDFilterCount):
+    def test_bool_3(self, checkDFilterCount):
         dfilter = "tcp.flags.push == FALSE"
         checkDFilterCount(dfilter, 0)
 
@@ -150,6 +150,10 @@ class TestDfilterSyntax:
         error = "Function 'tcp' does not exist"
         dfilter = 'frame == tcp()'
         checkDFilterFail(dfilter, error)
+
+    def test_between_1(self, checkDFilterCount):
+        dfilter = "tcp.dstport <= '\x50' < tcp.srcport"
+        checkDFilterCount(dfilter, 1)
 
 class TestDfilterEquality:
     trace_file = "sip.pcapng"
@@ -337,6 +341,12 @@ class TestDfilterArithmetic:
         dfilter = "udp.length == ip.len - 20"
         checkDFilterCount(dfilter, 4)
 
+    def test_sub_4(self, checkDFilterCount):
+        # The RHS is sometimes negative, sometimes equal to LHS.
+        # LHS is a FT_UINT8. It should match twice.
+        dfilter = "ip.proto == ip.len - 311"
+        checkDFilterCount(dfilter, 2)
+
     def test_sub_no_space_1(self, checkDFilterFail):
         # Minus operator requires whitespace preceding it.
         error = '"68-1" cannot be converted to Unsigned integer'
@@ -429,6 +439,14 @@ class TestDfilterLayer:
         dfilter = 'ip.dst#[-5] == 2.2.2.2'
         checkDFilterCount(dfilter, 1)
 
+    def test_layer_invalid_1(self, checkDFilterFail):
+        dfilter = r"ip.dst#"
+        checkDFilterFail(dfilter, "layer number or range was missing")
+
+    def test_layer_invalid_2(self, checkDFilterFail):
+        dfilter = r"ip.dst#ip"
+        checkDFilterFail(dfilter, "Expected digit or \"[\"")
+
 class TestDfilterQuantifiers:
     trace_file = "ipoipoip.pcap"
 
@@ -498,6 +516,10 @@ class TestDfilterXor:
         dfilter = 'ip.src == 9.9.9.9 ^^ ip.dst == 9.9.9.9'
         checkDFilterCount(dfilter, 0)
 
+    def test_xor_5(self, checkDFilterCount):
+        dfilter = 'eth ^^ ip.proto in {"udp", "tcp"}'
+        checkDFilterCount(dfilter, 2)
+
 class TestDfilterTFSValueString:
     trace_file = "http.pcap"
 
@@ -505,9 +527,11 @@ class TestDfilterTFSValueString:
         dfilter = 'ip.flags.df == True'
         checkDFilterCount(dfilter, 1)
 
-    def test_tfs_2(self, checkDFilterCount):
+    def test_tfs_2(self, checkDFilterFail):
+        # Should this fail or give a warning?
+        error = 'expected "Set" or "Not set", not "True"'
         dfilter = 'ip.flags.df == "True"'
-        checkDFilterCount(dfilter, 1)
+        checkDFilterFail(dfilter, error)
 
     def test_tfs_3(self, checkDFilterCount):
         dfilter = 'ip.flags.df == "Set"'
@@ -525,3 +549,36 @@ class TestDfilterTFSValueString:
         error = 'expected "True" or "False", not "Unset"'
         dfilter = 'frame.ignored == "Unset"'
         checkDFilterFail(dfilter, error)
+
+class TestDfilterValueString:
+    trace_file = "tls-over-tls.pcapng.gz"
+    # This file has VLAN. vlan.priority has multiple hfinfo with the same
+    # abbrev but different value strings (for different versions).
+    # This means that value string tests cannot be optimized, and must
+    # match against the entire string.
+
+    def test_value_string(self, checkDFilterCount):
+        dfilter = 'vlan.priority == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 24)
+
+    def test_value_string_layer(self, checkDFilterCount):
+        dfilter = 'vlan.priority#1 == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 24)
+
+    def test_value_string_layer_2(self, checkDFilterCount):
+        dfilter = 'vlan.priority#2 == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 0)
+
+    # To use "contains" with a value string we must explicitly
+    # convert with the "vals" function. Note that this never
+    # optimizes, so it's always a string comparison.
+    def test_value_string_func(self, checkDFilterCount):
+        dfilter = 'vals(tls.handshake.type) contains "Client"'
+        checkDFilterCount(dfilter, 2)
+
+    # A Client Hello appears in TLS layer 1 in one packet, and
+    # Client Key Exchange appears in TLS layer 1 in another (as
+    # the second record at that layer).
+    def test_value_string_func_layer(self, checkDFilterCount):
+        dfilter = 'vals(tls.handshake.type#1) contains "Client"'
+        checkDFilterCount(dfilter, 2)

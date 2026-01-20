@@ -43,7 +43,7 @@ MessageStructure/_item/repetitionNumber repetitionNumber1
 #.FN_FTR ProtocolIE-ID
   if (tree) {
     proto_item_append_text(proto_item_get_parent_nth(actx->created_item, 2), ": %s",
-                           val_to_str_ext(ProtocolIE_ID, &sabp_ProtocolIE_ID_vals_ext, "unknown (%d)"));
+                           val_to_str_ext(actx->pinfo->pool, ProtocolIE_ID, &sabp_ProtocolIE_ID_vals_ext, "unknown (%d)"));
   }
 #.END
 
@@ -161,12 +161,12 @@ Error-Indication                       N sabp.proc.imsg id-Error-Indication
  proto_tree *subtree;
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       3, 3, FALSE, &parameter_tvb);
+                                       3, 3, false, &parameter_tvb);
 
 	 if (!parameter_tvb)
 		return offset;
 	subtree = proto_item_add_subtree(actx->created_item, ett_sabp_e212);
-	dissect_e212_mcc_mnc(parameter_tvb, actx->pinfo, subtree, 0, E212_SAI, FALSE);
+	dissect_e212_mcc_mnc(parameter_tvb, actx->pinfo, subtree, 0, E212_SAI, false);
 
 #.FN_BODY Data-Coding-Scheme VAL_PTR = &parameter_tvb
  tvbuff_t *parameter_tvb=NULL;
@@ -195,16 +195,6 @@ Error-Indication                       N sabp.proc.imsg id-Error-Indication
 	if (!parameter_tvb)
 		return offset;
 	subtree = proto_item_add_subtree(actx->created_item, ett_sabp_cbs_serial_number);
-        dissect_cbs_serial_number(parameter_tvb, subtree, 0);
-
-#.FN_BODY New-Serial-Number VAL_PTR = &parameter_tvb
- tvbuff_t *parameter_tvb=NULL;
- proto_tree *subtree;
-
-%(DEFAULT_BODY)s
-	if (!parameter_tvb)
-		return offset;
-	subtree = proto_item_add_subtree(actx->created_item, ett_sabp_cbs_new_serial_number);
         dissect_cbs_serial_number(parameter_tvb, subtree, 0);
 
 #.FN_BODY Broadcast-Message-Content VAL_PTR = &parameter_tvb

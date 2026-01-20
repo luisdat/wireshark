@@ -54,30 +54,30 @@ void proto_register_tftp(void);
 
 /* Things we may want to remember for a whole conversation */
 typedef struct _tftp_conv_info_t {
-  guint16      blocksize;
-  const guint8 *source_file, *destination_file;
-  guint32      request_frame;
-  gboolean     tsize_requested;
-  gboolean     dynamic_windowing_active;
-  guint16      windowsize;
-  guint16      prev_opcode;
+  uint16_t     blocksize;
+  const char  *source_file, *destination_file;
+  uint32_t     request_frame;
+  bool         tsize_requested;
+  bool         dynamic_windowing_active;
+  uint16_t     windowsize;
+  uint16_t     prev_opcode;
 
   /* Sequence analysis */
-  guint32      next_block_num;
-  gboolean     blocks_missing;
-  guint        file_length;
-  gboolean     last_package_available;
+  uint32_t     next_block_num;
+  bool         blocks_missing;
+  unsigned     file_length;
+  bool         last_package_available;
 
   /* When exporting file object, build data here */
-  guint32      next_tap_block_num;
-  guint8       *payload_data;
+  uint32_t     next_tap_block_num;
+  uint8_t      *payload_data;
 
   /* Assembly of fragments */
-  guint32      reassembly_id;
-  guint32      last_reassembly_package;
+  uint32_t     reassembly_id;
+  uint32_t     last_reassembly_package;
 
   /* Is the TFTP payload a regular file, or a frame of a higher protocol */
-  gboolean     is_simple_file;
+  bool         is_simple_file;
 } tftp_conv_info_t;
 
 
@@ -108,11 +108,11 @@ static int hf_tftp_reassembled_in;
 static int hf_tftp_reassembled_length;
 static int hf_tftp_reassembled_data;
 
-static gint ett_tftp;
-static gint ett_tftp_option;
+static int ett_tftp;
+static int ett_tftp_option;
 
-static gint ett_tftp_fragment;
-static gint ett_tftp_fragments;
+static int ett_tftp_fragment;
+static int ett_tftp_fragments;
 
 static expert_field ei_tftp_error;
 static expert_field ei_tftp_likely_tsize_probe;
@@ -154,7 +154,7 @@ static const fragment_items tftp_frag_items = {
 void proto_reg_handoff_tftp (void);
 
 /* User definable values */
-static range_t *global_tftp_port_range = NULL;
+static range_t *global_tftp_port_range;
 
 /* minimum length is an ACK message of 4 bytes */
 #define MIN_HDR_LEN  4
@@ -208,13 +208,13 @@ static const value_string tftp_error_code_vals[] = {
 static int tftp_eo_tap;
 
 /* Preference setting - defragment fragmented TFTP files */
-static bool tftp_defragment = false;
+static bool tftp_defragment;
 
 /* Used for TFTP Export Object feature */
 typedef struct _tftp_eo_t {
-  gchar    *filename;
-  guint32  payload_len;
-  guint8   *payload_data;
+  char     *filename;
+  uint32_t payload_len;
+  uint8_t  *payload_data;
 } tftp_eo_t;
 
 /* Tap function */
@@ -253,7 +253,7 @@ tftp_eo_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const
 
 static void
 tftp_dissect_options(tvbuff_t *tvb, packet_info *pinfo, int offset,
-                     proto_tree *tree, guint16 opcode, tftp_conv_info_t *tftp_info)
+                     proto_tree *tree, uint16_t opcode, tftp_conv_info_t *tftp_info)
 {
   int         option_len, value_len;
   int         value_offset;
@@ -291,24 +291,24 @@ tftp_dissect_options(tvbuff_t *tvb, packet_info *pinfo, int offset,
           expert_add_info(pinfo, opt_tree, &ei_tftp_msftwindow_unrecognized);
         }
       } else if (!g_ascii_strcasecmp((const char *)optionname, "windowsize")) {
-        gint windowsize = (gint)strtol((const char *)optionvalue, NULL, 10);
+        int windowsize = (int)strtol((const char *)optionvalue, NULL, 10);
         if (windowsize < 1 || windowsize > 65535) {
           expert_add_info(pinfo, opt_tree, &ei_tftp_windowsize_range);
         }
       } else if (!g_ascii_strcasecmp((const char *)optionname, "tsize") &&
                opcode == TFTP_RRQ) {
-        tftp_info->tsize_requested = TRUE;
+        tftp_info->tsize_requested = true;
       }
     } else if (opcode == TFTP_OACK) {
       if (!g_ascii_strcasecmp((const char *)optionname, "blksize")) {
-        gint blocksize = (gint)strtol((const char *)optionvalue, NULL, 10);
+        int blocksize = (int)strtol((const char *)optionvalue, NULL, 10);
         if (blocksize < 8 || blocksize > 65464) {
           expert_add_info(pinfo, opt_tree, &ei_tftp_blocksize_range);
         } else {
           tftp_info->blocksize = blocksize;
         }
       } else if (!g_ascii_strcasecmp((const char *)optionname, "windowsize")) {
-        gint windowsize = (gint)strtol((const char *)optionvalue, NULL, 10);
+        int windowsize = (int)strtol((const char *)optionvalue, NULL, 10);
         if (windowsize < 1 || windowsize > 65535) {
           expert_add_info(pinfo, opt_tree, &ei_tftp_windowsize_range);
         } else {
@@ -316,7 +316,7 @@ tftp_dissect_options(tvbuff_t *tvb, packet_info *pinfo, int offset,
         }
       } else if (!g_ascii_strcasecmp((const char *)optionname, "msftwindow")) {
         if (!g_strcmp0((const char *)optionvalue, "27182")) {
-          tftp_info->dynamic_windowing_active = TRUE;
+          tftp_info->dynamic_windowing_active = true;
         } else {
           expert_add_info(pinfo, opt_tree, &ei_tftp_msftwindow_unrecognized);
         }
@@ -325,8 +325,8 @@ tftp_dissect_options(tvbuff_t *tvb, packet_info *pinfo, int offset,
   }
 }
 
-static gboolean
-error_is_likely_tsize_probe(guint16 error, const tftp_conv_info_t *tftp_info)
+static bool
+error_is_likely_tsize_probe(uint16_t error, const tftp_conv_info_t *tftp_info)
 {
   /*
    * The TFTP protocol does not define an explicit "close" for non-error
@@ -343,32 +343,32 @@ error_is_likely_tsize_probe(guint16 error, const tftp_conv_info_t *tftp_info)
    * size query.
    */
   if (error != TFTP_ERR_OPT_FAIL && error != TFTP_ERR_NOT_DEF) {
-    return FALSE;
+    return false;
   }
 
   if (tftp_info->source_file != NULL && tftp_info->tsize_requested) {
     /* There was an earlier RRQ requesting the transfer size. */
     if (tftp_info->prev_opcode == TFTP_OACK) {
       /* Response to RRQ when server supports Option Negotiation. */
-      return TRUE;
+      return true;
     }
     if (tftp_info->prev_opcode == TFTP_DATA && tftp_info->next_block_num == 2) {
       /* Response to RRQ when server doesn't support Option Negotiation. */
-      return TRUE;
+      return true;
     }
   }
-  return FALSE;
+  return false;
 }
 
-static guint32
-determine_full_blocknum(guint16 blocknum, const tftp_conv_info_t *tftp_info)
+static uint32_t
+determine_full_blocknum(uint16_t blocknum, const tftp_conv_info_t *tftp_info)
 {
   /*
    * 'blocknum' might have wrapped around after extending beyond 16 bits.  Use
    * the rest of the conversation state to recover any missing bits.
    */
-  gint16 delta = (gint16)(tftp_info->next_block_num - blocknum);
-  if (delta > (gint32)tftp_info->next_block_num) {
+  int16_t delta = (int16_t)(tftp_info->next_block_num - blocknum);
+  if (delta > (int32_t)tftp_info->next_block_num) {
     /* Avoid wrapping back across 0. */
     return blocknum;
   }
@@ -383,21 +383,21 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
   proto_item *root_ti;
   proto_item *ti;
   proto_item *blocknum_item;
-  gint        offset    = 0;
-  guint16     opcode;
+  int         offset    = 0;
+  uint16_t    opcode;
   const char  *filename = NULL;
-  guint16     bytes;
-  guint32     blocknum;
-  guint       i1;
-  guint16     error;
-  gboolean    likely_tsize_probe;
-  gboolean    is_last_package;
-  gboolean    is_fragmented;
+  uint16_t    bytes;
+  uint32_t    blocknum;
+  unsigned    i1;
+  uint16_t    error;
+  bool        likely_tsize_probe;
+  bool        is_last_package;
+  bool        is_fragmented;
   tvbuff_t    *next_tvb;
   fragment_head *tftpfd_head = NULL;
   heur_dtbl_entry_t *hdtbl_entry;
   struct tftpinfo tftpinfo;
-  guint32     payload_data_offset;
+  uint32_t    payload_data_offset;
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "TFTP");
 
@@ -409,7 +409,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
   opcode = tvb_get_ntohs(tvb, offset);
   proto_tree_add_uint(tftp_tree, hf_tftp_opcode, tvb, offset, 2, opcode);
   col_add_str(pinfo->cinfo, COL_INFO,
-              val_to_str(opcode, tftp_opcode_vals, "Unknown (0x%04x)"));
+              val_to_str(pinfo->pool, opcode, tftp_opcode_vals, "Unknown (0x%04x)"));
   offset += 2;
 
   /* read and write requests contain file names
@@ -437,7 +437,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
   case TFTP_RRQ:
     i1 = tvb_strsize(tvb, offset);
     proto_tree_add_item_ret_string(tftp_tree, hf_tftp_source_file,
-                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), &tftp_info->source_file);
+                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), (const uint8_t**)&tftp_info->source_file);
 
     /* we either have a source file name (for read requests) or a
        destination file name (for write requests)
@@ -466,7 +466,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
   case TFTP_WRQ:
     i1 = tvb_strsize(tvb, offset);
     proto_tree_add_item_ret_string(tftp_tree, hf_tftp_destination_file,
-                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), &tftp_info->destination_file);
+                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), (const uint8_t**)&tftp_info->destination_file);
 
     tftp_info->source_file = NULL; /* see above */
     tftp_info->request_frame = pinfo->num;
@@ -521,7 +521,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
       if (blocknum > tftp_info->next_block_num) {
         /* There is a gap.  Don't try to recover from this. */
         tftp_info->next_block_num = blocknum + 1;
-        tftp_info->blocks_missing = TRUE;
+        tftp_info->blocks_missing = true;
         /* TODO: add info to a result table for showing expert info in later passes */
       }
       else if (blocknum == tftp_info->next_block_num) {
@@ -571,7 +571,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
                                      tree, &hdtbl_entry, &tftpinfo)) {
           call_data_dissector(next_tvb, pinfo, tree);
         } else {
-          tftp_info->is_simple_file = FALSE;
+          tftp_info->is_simple_file = false;
         }
       }
     }
@@ -596,14 +596,14 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
 
       if (PINFO_FD_VISITED(pinfo)) {
         if (blocknum == 1 && !tftp_info->payload_data) {
-          tftp_info->payload_data = (guint8 *)g_try_malloc((gsize)tftp_info->file_length);
+          tftp_info->payload_data = (uint8_t *)g_try_malloc((size_t)tftp_info->file_length);
         }
       } else {
         /* We allocate this in file scope so that it doesn't leak if it
          * turns out we don't have all the blocks so we never send this
          * to the tap.
          */
-        tftp_info->payload_data = (guint8 *)wmem_realloc(wmem_file_scope(), tftp_info->payload_data, (gsize)tftp_info->file_length);
+        tftp_info->payload_data = (uint8_t *)wmem_realloc(wmem_file_scope(), tftp_info->payload_data, (size_t)tftp_info->file_length);
       }
 
       if (tftp_info->payload_data == NULL ||
@@ -665,8 +665,8 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
     offset += 2;
 
     if (tftp_info->dynamic_windowing_active && tvb_bytes_exist(tvb, offset, 1)) {
-      gboolean windowsize_changed;
-      guint8 windowsize = tvb_get_guint8(tvb, offset);
+      bool windowsize_changed;
+      uint8_t windowsize = tvb_get_uint8(tvb, offset);
       ti = proto_tree_add_uint(tftp_tree, hf_tftp_nextwindowsize, tvb,
                                offset, 1, windowsize);
       if (!PINFO_FD_VISITED(pinfo)) {
@@ -697,7 +697,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
                         error);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ", Code: %s",
-                    val_to_str(error, tftp_error_code_vals, "Unknown (%u)"));
+                    val_to_str(pinfo->pool, error, tftp_error_code_vals, "Unknown (%u)"));
 
     offset += 2;
 
@@ -751,61 +751,61 @@ tftp_info_for_conversation(conversation_t *conversation)
     tftp_info->source_file = NULL;
     tftp_info->destination_file = NULL;
     tftp_info->request_frame = 0;
-    tftp_info->tsize_requested = FALSE;
-    tftp_info->dynamic_windowing_active = FALSE;
+    tftp_info->tsize_requested = false;
+    tftp_info->dynamic_windowing_active = false;
     tftp_info->windowsize = 0;
     tftp_info->prev_opcode = TFTP_NO_OPCODE;
     tftp_info->next_block_num = 1;
-    tftp_info->blocks_missing = FALSE;
+    tftp_info->blocks_missing = false;
     tftp_info->file_length = 0;
-    tftp_info->last_package_available = FALSE;
+    tftp_info->last_package_available = false;
     tftp_info->next_tap_block_num = 1;
     tftp_info->payload_data = NULL;
     tftp_info->reassembly_id = conversation->conv_index;
-    tftp_info->last_reassembly_package = G_MAXUINT32;
-    tftp_info->is_simple_file = TRUE;
+    tftp_info->last_reassembly_package = UINT32_MAX;
+    tftp_info->is_simple_file = true;
     conversation_add_proto_data(conversation, proto_tftp, tftp_info);
   }
   return tftp_info;
 }
 
-static gboolean
+static bool
 is_valid_request_body(tvbuff_t *tvb, packet_info *pinfo)
 {
-  gint offset = 2;
-  guint zeros_counter = 0;
-  for (gint i = offset; i < (gint)tvb_captured_length(tvb); ++i) {
-    gchar c = (gchar)tvb_get_guint8(tvb, i);
+  int offset = 2;
+  unsigned zeros_counter = 0;
+  for (int i = offset; i < (int)tvb_captured_length(tvb); ++i) {
+    char c = (char)tvb_get_uint8(tvb, i);
     if (c == '\0') {
       zeros_counter++;
     } else if (!g_ascii_isprint(c)) {
-      return FALSE;
+      return false;
     }
   }
 
   if (zeros_counter % 2 != 0 || zeros_counter == 0)
-    return FALSE;
+    return false;
 
   offset += tvb_strsize(tvb, offset);
-  guint len = tvb_strsize(tvb, offset);
-  const gchar* mode = tvb_format_stringzpad(pinfo->pool, tvb, offset, len);
+  unsigned len = tvb_strsize(tvb, offset);
+  const char* mode = tvb_format_stringzpad(pinfo->pool, tvb, offset, len);
 
-  const gchar* modes[] = {"netascii", "octet", "mail"};
-  for(guint i = 0; i < array_length(modes); ++i) {
-    if (g_ascii_strcasecmp(mode, modes[i]) == 0) return TRUE;
+  const char* modes[] = {"netascii", "octet", "mail"};
+  for(unsigned i = 0; i < array_length(modes); ++i) {
+    if (g_ascii_strcasecmp(mode, modes[i]) == 0) return true;
   }
 
-  return FALSE;
+  return false;
 }
 
-static gboolean
+static bool
 is_valid_request(tvbuff_t *tvb, packet_info *pinfo)
 {
   if (tvb_captured_length(tvb) < MIN_HDR_LEN)
-    return FALSE;
-  guint16 opcode = tvb_get_ntohs(tvb, 0);
+    return false;
+  uint16_t opcode = tvb_get_ntohs(tvb, 0);
   if ((opcode != TFTP_RRQ) && (opcode != TFTP_WRQ))
-    return FALSE;
+    return false;
   return is_valid_request_body(tvb, pinfo);
 }
 
@@ -814,8 +814,12 @@ static conversation_t* create_tftp_conversation(packet_info *pinfo)
   conversation_t* conversation = NULL;
   if (!PINFO_FD_VISITED(pinfo)) {
     /* New read or write request on first pass, so create conversation with client port only */
-    conversation = conversation_new(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_UDP,
-                                    pinfo->srcport, 0, NO_PORT2);
+    /* XXX - We might want to create one conversation for the addresses and
+     * port, and have a wmem_tree_t of tftp_conv_info_t, which is the
+     * information for a single transfer.
+     */
+    conversation = conversation_new_strat(pinfo, CONVERSATION_UDP, NO_PORT2);
+
     conversation_set_dissector(conversation, tftp_handle);
     /* Store conversation in this frame */
     p_add_proto_data(wmem_file_scope(), pinfo, proto_tftp, CONVERSATION_KEY,
@@ -828,32 +832,32 @@ static conversation_t* create_tftp_conversation(packet_info *pinfo)
   return conversation;
 }
 
-static gboolean
+static bool
 dissect_tftp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   if (is_valid_request_body(tvb, pinfo)) {
     conversation_t* conversation = create_tftp_conversation(pinfo);
     dissect_tftp_message(tftp_info_for_conversation(conversation), tvb, pinfo, tree);
-    return TRUE;
+    return true;
   }
-  return FALSE;
+  return false;
 }
 
-static gboolean
+static bool
 dissect_embeddedtftp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   /* Used to dissect TFTP packets where one can not assume
      that the TFTP is the only protocol used by that port, and
      that TFTP may not be carried by UDP */
   conversation_t   *conversation;
-  guint16           opcode;
+  uint16_t          opcode;
 
   /*
    * We need to verify it could be a TFTP message before creating a conversation
    */
 
   if (tvb_captured_length(tvb) < MIN_HDR_LEN)
-    return FALSE;
+    return false;
 
   opcode = tvb_get_ntohs(tvb, 0);
 
@@ -862,7 +866,7 @@ dissect_embeddedtftp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     case TFTP_WRQ:
       /* These 2 opcodes have a NULL-terminated source file name after opcode. Verify */
       if (!is_valid_request_body(tvb, pinfo))
-        return FALSE;
+        return false;
      /* Intentionally dropping through here... */
     case TFTP_DATA:
     case TFTP_ACK:
@@ -883,16 +887,16 @@ dissect_embeddedtftp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
         case TFTP_ERR_OPT_FAIL:
           break;
         default:
-          return FALSE;
+          return false;
       }
       break;
     default:
-      return FALSE;
+      return false;
   }
 
   conversation = find_or_create_conversation(pinfo);
   dissect_tftp_message(tftp_info_for_conversation(conversation), tvb, pinfo, tree);
-  return TRUE;
+  return true;
 }
 
 static int
@@ -901,27 +905,24 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   conversation_t   *conversation = NULL;
 
   /*
-   * The first TFTP packet goes to the TFTP port; the second one
-   * comes from some *other* port, but goes back to the same
-   * IP address and port as the ones from which the first packet
-   * came; all subsequent packets go between those two IP addresses
-   * and ports.
+   * The first TFTP packet (which is always a read or write request)
+   * goes to the TFTP port; the second one comes from some *other* port,
+   * but goes back to the same IP address and port as the ones from which
+   * the first packet came; all subsequent packets go between those two
+   * IP addresses and ports.
    *
-   * If this packet went to the TFTP port (either to one of the ports
-   * set in the preferences or to a port set via Decode As), we check
-   * to see if there's already a conversation with one address/port pair
-   * matching the source IP address and port of this packet,
-   * the other address matching the destination IP address of this
-   * packet, and any destination port.
-   *
-   * If not, we create one, with its address 1/port 1 pair being
+   * If this packet looks like the first of a transfer, we create
+   * a conversation, with its address 1/port 1 pair being
    * the source address/port of this packet, its address 2 being
    * the destination address of this packet, and its port 2 being
    * wildcarded, and give it the TFTP dissector as a dissector.
+   *
+   * By checking if it looks like a request, we handle the case where
+   * the same port is reused for another file transfer later in the
+   * capture, and also handle the (rare but apparently existing) case
+   * where the *other* port is still the TFTP port.
    */
-  if ((value_is_in_range(global_tftp_port_range, pinfo->destport) ||
-       (pinfo->match_uint == pinfo->destport)) &&
-      is_valid_request(tvb, pinfo))
+  if (is_valid_request(tvb, pinfo))
   {
     conversation = create_tftp_conversation(pinfo);
   }
@@ -929,9 +930,10 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   if (conversation == NULL)
   {
     /* Not the initial read or write request */
-    /* Look for wildcarded conversation based upon client port */
-    if ((conversation = find_conversation(pinfo->num, &pinfo->dst, &pinfo->src, CONVERSATION_UDP,
-                                     pinfo->destport, 0, NO_PORT_B)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
+    /* Look for wildcarded conversation based upon client port, checking
+     * both directions (we don't know which side *is* the client port.) */
+    if ((conversation = find_conversation_strat(pinfo, CONVERSATION_UDP,
+                                     NO_PORT_B, true)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
 #if 0
       /* XXX: While setting the wildcarded port makes sense, if we do that,
        * it's more complicated to find the correct conversation if ports are
@@ -944,8 +946,8 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
       if (pinfo->destport == conversation_key_port1(conversation->key_ptr))
         conversation_set_port2(conversation, pinfo->srcport);
 #endif
-    } else if ((conversation = find_conversation(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_UDP,
-                                     pinfo->srcport, 0, NO_PORT_B)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
+    } else if ((conversation = find_conversation_strat(pinfo, CONVERSATION_UDP,
+                                     NO_PORT_B, false)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
 
     } else {
       /* How did we get here? We must have matched one of the TFTP ports
@@ -954,7 +956,7 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
        * such servers out there (issue #18122), and since the default port
        * is IANA assigned it doesn't do harm to process it. Note that in
        * that case the conversation won't have the tftp dissector set. */
-      conversation = find_conversation_pinfo(pinfo, 0);
+      conversation = find_conversation_pinfo_strat(pinfo, 0);
       if (conversation == NULL) {
         return 0;
       }
@@ -1099,7 +1101,7 @@ proto_register_tftp(void)
         FT_BYTES, BASE_NONE, NULL, 0x0,
         "The reassembled payload", HFILL }},
   };
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_tftp,
     &ett_tftp_option,
     &ett_tftp_fragment,

@@ -15,10 +15,17 @@
 
 #include <epan/epan_dissect.h>
 
+#include <app/application_flavor.h>
+
 #include "ui/io_graph_item.h"
 
-int get_io_graph_index(packet_info *pinfo, int interval) {
+// XXX - constant defined elsewhere, any benefit to store it in a global .h ?
+#define MICROSECS_PER_SEC 1000000
+
+int64_t get_io_graph_index(packet_info *pinfo, int interval) {
     nstime_t time_delta;
+
+    ws_return_val_if(interval <= 0, -1);
 
     /*
      * Find in which interval this is supposed to go and store the interval index as idx
@@ -31,19 +38,10 @@ int get_io_graph_index(packet_info *pinfo, int interval) {
     if (time_delta.secs<0) {
         return -1;
     }
-    /* XXX - The IOGraph ignores indices over a certain value (or negative),
-     * but in a sufficiently large file this can overflow and so, after a
-     * large gap of ignored values, values can be added to earlier intervals.
-     * That doesn't matter too much for current values but it could matter
-     * if we changed this to allow smaller intervals (with an interval of 1 s
-     * it takes ~49.71 days to overflow, but 1 μs only takes about 72 minutes.)
-     *
-     * To be safe we could just make this a 64 bit value.
-     */
-    return (int) ((time_delta.secs*INT64_C(1000) + time_delta.nsecs/1000000) / interval);
+    return ((time_delta.secs*INT64_C(1000000) + time_delta.nsecs/1000) / interval);
 }
 
-GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_unit_t item_unit)
+GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_unit_t item_unit, const char* type_unit_name)
 {
     GString *err_str = NULL;
     if (item_unit >= IOG_ITEM_UNIT_CALC_SUM) {
@@ -59,9 +57,13 @@ GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_u
             "MAX",
             "MIN",
             "AVG",
+            "THROUGHPUT",
             "LOAD",
             NULL
         };
+
+        //Overwrite the first entry with the type-specific name
+        item_unit_names[0] = type_unit_name;
 
         /* There was no field specified */
         if ((field_name == NULL) || (field_name[0] == 0)) {
@@ -111,6 +113,7 @@ GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_u
             case IOG_ITEM_UNIT_CALC_MAX:
             case IOG_ITEM_UNIT_CALC_MIN:
             case IOG_ITEM_UNIT_CALC_AVERAGE:
+            case IOG_ITEM_UNIT_CALC_THROUGHPUT:
             case IOG_ITEM_UNIT_CALC_LOAD:
                 break;
             default:
@@ -136,23 +139,28 @@ GString *check_field_unit(const char *field_name, int *hf_index, io_graph_item_u
 }
 
 // Adapted from get_it_value in gtk/io_stat.c.
-double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val_units_, int idx, int hf_index_, const capture_file *cap_file, int interval_, int cur_idx_)
+double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val_units_, int idx, int hf_index_, const capture_file *cap_file, int interval_, int cur_idx_, bool asAOT)
 {
     double     value = 0;          /* FIXME: loss of precision, visible on the graph for small values */
     int        adv_type;
     const io_graph_item_t *item;
     uint32_t   interval;
 
+    ws_return_val_if(idx < 0, 0);
+
     item = &items_[idx];
 
     // Basic units
+    // XXX - Should we divide these counted values by the interval
+    // so that they measure rates (as done with LOAD)? That might be
+    // more meaningful and consistent.
     switch (val_units_) {
     case IOG_ITEM_UNIT_PACKETS:
-        return item->frames;
+        return asAOT ? MICROSECS_PER_SEC*item->frames/interval_ : item->frames;
     case IOG_ITEM_UNIT_BYTES:
-        return (double) item->bytes;
+        return (double)(asAOT ? MICROSECS_PER_SEC*item->bytes/interval_ : item->bytes);
     case IOG_ITEM_UNIT_BITS:
-        return (double) (item->bytes * 8);
+        return (double)(asAOT ? MICROSECS_PER_SEC*item->bytes*8/interval_ : item->bytes*8);
     case IOG_ITEM_UNIT_CALC_FRAMES:
         return item->frames;
     case IOG_ITEM_UNIT_CALC_FIELDS:
@@ -184,10 +192,13 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
             value = item->double_tot;
             break;
         case IOG_ITEM_UNIT_CALC_MAX:
-            value = item->int_max;
+            value = (double)item->int_max;
             break;
         case IOG_ITEM_UNIT_CALC_MIN:
-            value = item->int_min;
+            value = (double)item->int_min;
+            break;
+        case IOG_ITEM_UNIT_CALC_THROUGHPUT:
+            value = item->double_tot*MICROSECS_PER_SEC/interval_;
             break;
         case IOG_ITEM_UNIT_CALC_AVERAGE:
             if (item->fields) {
@@ -214,10 +225,13 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
             value = item->double_tot;
             break;
         case IOG_ITEM_UNIT_CALC_MAX:
-            value = item->uint_max;
+            value = (double)item->uint_max;
             break;
         case IOG_ITEM_UNIT_CALC_MIN:
-            value = item->uint_min;
+            value = (double)item->uint_min;
+            break;
+        case IOG_ITEM_UNIT_CALC_THROUGHPUT:
+            value = item->double_tot*MICROSECS_PER_SEC/interval_;
             break;
         case IOG_ITEM_UNIT_CALC_AVERAGE:
             if (item->fields) {
@@ -276,17 +290,17 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
         case IOG_ITEM_UNIT_CALC_LOAD:
             // "LOAD graphs plot the QUEUE-depth of the connection over time"
             // (for response time fields such as smb.time, rpc.time, etc.)
-            // This interval is expressed in milliseconds.
+            // This interval is expressed in microseconds.
             if (idx == cur_idx_ && cap_file) {
                 // If this is the last interval, it may not be full width.
-                uint64_t start_ms = (uint64_t)interval_ * idx;
-                nstime_t timediff = { start_ms / 1000, (start_ms % 1000) * 1000000 };
+                uint64_t start_us = (uint64_t)interval_ * idx;
+                nstime_t timediff = NSTIME_INIT_SECS_USECS(start_us / 1000000, start_us % 1000000);
                 nstime_delta(&timediff, &cap_file->elapsed_time, &timediff);
-                interval = (uint32_t)(nstime_to_msec(&timediff) + 0.5);
+                interval = (uint32_t)(1000*nstime_to_msec(&timediff) + 0.5);
             } else {
                 interval = interval_;
             }
-            value = nstime_to_msec(&item->time_tot) / interval;
+            value = (1000 * nstime_to_msec(&item->time_tot)) / interval;
             break;
         default:
             break;

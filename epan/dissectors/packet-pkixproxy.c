@@ -19,9 +19,9 @@
 #include <epan/packet.h>
 #include <epan/oids.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
-#include "packet-pkixproxy.h"
 
 #define PNAME  "PKIXProxy (RFC3820)"
 #define PSNAME "PKIXPROXY"
@@ -39,13 +39,13 @@ static int hf_pkixproxy_policyLanguage;           /* OBJECT_IDENTIFIER */
 static int hf_pkixproxy_policy;                   /* OCTET_STRING */
 
 /* Initialize the subtree pointers */
-static gint ett_pkixproxy_ProxyCertInfoExtension;
-static gint ett_pkixproxy_ProxyPolicy;
+static int ett_pkixproxy_ProxyCertInfoExtension;
+static int ett_pkixproxy_ProxyPolicy;
 
 
 
-static int
-dissect_pkixproxy_ProxyCertPathLengthConstraint(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_pkixproxy_ProxyCertPathLengthConstraint(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -54,8 +54,8 @@ dissect_pkixproxy_ProxyCertPathLengthConstraint(bool implicit_tag _U_, tvbuff_t 
 
 
 
-static int
-dissect_pkixproxy_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_pkixproxy_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 
   return offset;
@@ -63,8 +63,8 @@ dissect_pkixproxy_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, in
 
 
 
-static int
-dissect_pkixproxy_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_pkixproxy_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        NULL);
 
@@ -78,8 +78,8 @@ static const ber_sequence_t ProxyPolicy_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_pkixproxy_ProxyPolicy(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_pkixproxy_ProxyPolicy(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ProxyPolicy_sequence, hf_index, ett_pkixproxy_ProxyPolicy);
 
@@ -93,8 +93,8 @@ static const ber_sequence_t ProxyCertInfoExtension_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_pkixproxy_ProxyCertInfoExtension(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_pkixproxy_ProxyCertInfoExtension(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ProxyCertInfoExtension_sequence, hf_index, ett_pkixproxy_ProxyCertInfoExtension);
 
@@ -104,10 +104,10 @@ dissect_pkixproxy_ProxyCertInfoExtension(bool implicit_tag _U_, tvbuff_t *tvb _U
 /*--- PDUs ---*/
 
 static int dissect_ProxyCertInfoExtension_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_pkixproxy_ProxyCertInfoExtension(FALSE, tvb, offset, &asn1_ctx, tree, hf_pkixproxy_ProxyCertInfoExtension_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_pkixproxy_ProxyCertInfoExtension(false, tvb, offset, &asn1_ctx, tree, hf_pkixproxy_ProxyCertInfoExtension_PDU);
   return offset;
 }
 
@@ -141,7 +141,7 @@ void proto_register_pkixproxy(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_pkixproxy_ProxyCertInfoExtension,
     &ett_pkixproxy_ProxyPolicy,
   };

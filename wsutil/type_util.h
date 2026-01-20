@@ -28,17 +28,34 @@
  *
  */
 
+/**
+ * @brief Converts a double-precision floating-point value to a 64-bit unsigned integer.
+ *
+ * Safely casts a `double` to a `uint64_t`, truncating any fractional part.
+ *
+ * @param value The double value to convert.
+ * @return The corresponding `uint64_t` value.
+ */
 WS_DLL_PUBLIC
-uint64_t        type_util_gdouble_to_guint64(double value);
+uint64_t type_util_double_to_uint64(double value);
+
+/**
+ * @brief Converts a 64-bit unsigned integer to a double-precision floating-point value.
+ *
+ * Casts a `uint64_t` to a `double`, preserving the full integer value.
+ *
+ * @param value The `uint64_t` value to convert.
+ * @return The corresponding `double` value.
+ */
 WS_DLL_PUBLIC
-double          type_util_guint64_to_gdouble(uint64_t value);
+double type_util_uint64_to_double(uint64_t value);
 
 #ifdef _WIN32
-#define         gdouble_to_guint64(value)   type_util_gdouble_to_guint64(value)
-#define         guint64_to_gdouble(value)   type_util_guint64_to_gdouble(value)
+#define         double_to_uint64(value)   type_util_double_to_uint64(value)
+#define         uint64_to_double(value)   type_util_uint64_to_double(value)
 #else
-#define         gdouble_to_guint64(value)   ((uint64_t)(value))
-#define         guint64_to_gdouble(value)   ((double)(value))
+#define         double_to_uint64(value)   ((uint64_t)(value))
+#define         uint64_to_double(value)   ((double)(value))
 #endif
 
 #endif /* __TYPE_UTIL_H__ */

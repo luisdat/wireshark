@@ -125,6 +125,7 @@ Exec '"$SYSDIR\ie4uinit.exe" -ClearIconCache'
   Push ".5vw"
   Push ".rtp"
   Push ".ems"
+  Push ".ttl"
 !macroend
 
 !macro IsWiresharkRunning

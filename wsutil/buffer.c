@@ -15,8 +15,7 @@
 #include <wsutil/ws_assert.h>
 #include <wsutil/wslog.h>
 
-#define SMALL_BUFFER_SIZE (2 * 1024) /* Everyone still uses 1500 byte frames, right? */
-static GPtrArray *small_buffers = NULL; /* Guaranteed to be at least SMALL_BUFFER_SIZE */
+static GPtrArray *small_buffers; /* Guaranteed to be at least DEFAULT_INIT_BUFFER_SIZE_2048 */
 /* XXX - Add medium and large buffers? */
 
 /* Initializes a buffer with a certain amount of allocated space */
@@ -26,14 +25,14 @@ ws_buffer_init(Buffer* buffer, size_t space)
 	ws_assert(buffer);
 	if (G_UNLIKELY(!small_buffers)) small_buffers = g_ptr_array_sized_new(1024);
 
-	if (space <= SMALL_BUFFER_SIZE) {
+	if (space <= DEFAULT_INIT_BUFFER_SIZE_2048) {
 		if (small_buffers->len > 0) {
 			buffer->data = (uint8_t*) g_ptr_array_remove_index(small_buffers, small_buffers->len - 1);
 			ws_assert(buffer->data);
 		} else {
-			buffer->data = (uint8_t*)g_malloc(SMALL_BUFFER_SIZE);
+			buffer->data = (uint8_t*)g_malloc(DEFAULT_INIT_BUFFER_SIZE_2048);
 		}
-		buffer->allocated = SMALL_BUFFER_SIZE;
+		buffer->allocated = DEFAULT_INIT_BUFFER_SIZE_2048;
 	} else {
 		buffer->data = (uint8_t*)g_malloc(space);
 		buffer->allocated = space;
@@ -47,7 +46,7 @@ void
 ws_buffer_free(Buffer* buffer)
 {
 	ws_assert(buffer);
-	if (buffer->allocated == SMALL_BUFFER_SIZE) {
+	if (buffer->allocated == DEFAULT_INIT_BUFFER_SIZE_2048) {
 		ws_assert(buffer->data);
 		g_ptr_array_add(small_buffers, buffer->data);
 	} else {
@@ -66,7 +65,6 @@ ws_buffer_assure_space(Buffer* buffer, size_t space)
 {
 	ws_assert(buffer);
 	size_t available_at_end = buffer->allocated - buffer->first_free;
-	size_t space_used;
 	bool space_at_beginning;
 
 	/* If we've got the space already, good! */
@@ -84,7 +82,7 @@ ws_buffer_assure_space(Buffer* buffer, size_t space)
 
 	space_at_beginning = buffer->start >= space;
 	if (space_at_beginning || buffer->start > 0) {
-		space_used = buffer->first_free - buffer->start;
+		size_t space_used = buffer->first_free - buffer->start;
 		/* this memory copy better be safe for overlapping memory regions! */
 		memmove(buffer->data, buffer->data + buffer->start, space_used);
 		buffer->start = 0;
@@ -101,7 +99,7 @@ ws_buffer_assure_space(Buffer* buffer, size_t space)
 }
 
 void
-ws_buffer_append(Buffer* buffer, uint8_t *from, size_t bytes)
+ws_buffer_append(Buffer* buffer, const uint8_t *from, size_t bytes)
 {
 	ws_assert(buffer);
 	ws_buffer_assure_space(buffer, bytes);
@@ -121,61 +119,54 @@ ws_buffer_remove_start(Buffer* buffer, size_t bytes)
 	}
 	buffer->start += bytes;
 
-	if (buffer->start == buffer->first_free) {
-		buffer->start = 0;
-		buffer->first_free = 0;
-	}
+	/*
+	 * If we've removed everything in the buffer, just reset
+	 * the buffer.
+	 */
+	if (buffer->start == buffer->first_free)
+		ws_buffer_clean(buffer);
 }
 
 
-#ifndef SOME_FUNCTIONS_ARE_DEFINES
+#ifndef SOME_FUNCTIONS_ARE_INLINE
 void
 ws_buffer_clean(Buffer* buffer)
 {
 	ws_assert(buffer);
-	ws_buffer_remove_start(buffer, ws_buffer_length(buffer));
+	buffer->start = 0;
+	buffer->first_free = 0;
 }
-#endif
 
-#ifndef SOME_FUNCTIONS_ARE_DEFINES
 void
 ws_buffer_increase_length(Buffer* buffer, size_t bytes)
 {
 	ws_assert(buffer);
 	buffer->first_free += bytes;
 }
-#endif
 
-#ifndef SOME_FUNCTIONS_ARE_DEFINES
 size_t
-ws_buffer_length(Buffer* buffer)
+ws_buffer_length(const Buffer* buffer)
 {
 	ws_assert(buffer);
 	return buffer->first_free - buffer->start;
 }
-#endif
 
-#ifndef SOME_FUNCTIONS_ARE_DEFINES
 uint8_t *
-ws_buffer_start_ptr(Buffer* buffer)
+ws_buffer_start_ptr(const Buffer* buffer)
 {
 	ws_assert(buffer);
 	return buffer->data + buffer->start;
 }
-#endif
 
-#ifndef SOME_FUNCTIONS_ARE_DEFINES
 uint8_t *
-ws_buffer_end_ptr(Buffer* buffer)
+ws_buffer_end_ptr(const Buffer* buffer)
 {
 	ws_assert(buffer);
 	return buffer->data + buffer->first_free;
 }
-#endif
 
-#ifndef SOME_FUNCTIONS_ARE_DEFINES
 void
-ws_buffer_append_buffer(Buffer* buffer, Buffer* src_buffer)
+ws_buffer_append_buffer(Buffer* buffer, const Buffer* src_buffer)
 {
 	ws_assert(buffer);
 	ws_buffer_append(buffer, ws_buffer_start_ptr(src_buffer), ws_buffer_length(src_buffer));

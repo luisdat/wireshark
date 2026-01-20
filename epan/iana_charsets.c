@@ -20,7 +20,7 @@
 #include <glib.h>
 
 #include <epan/proto.h>
-#include <epan/value_string.h>
+#include <wsutil/value_string.h>
 #include <epan/params.h>
 
 #include <epan/iana_charsets.h>
@@ -30,8 +30,8 @@
 /*
  * Map a MIBenum code for a charset to a Wireshark string encoding.
  */
-guint
-mibenum_charset_to_encoding (guint charset)
+unsigned
+mibenum_charset_to_encoding (unsigned charset)
 {
     switch (charset) {
         /* Expand macro result in:

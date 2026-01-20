@@ -46,7 +46,7 @@ SCTPGraphDialog::SCTPGraphDialog(QWidget *parent, const sctp_assoc_info_t *assoc
             | Qt::WindowMaximizeButtonHint
             | Qt::WindowCloseButtonHint;
     this->setWindowFlags(flags);
-    this->setWindowTitle(QString(tr("SCTP TSNs and SACKs over Time: %1 Port1 %2 Port2 %3"))
+    this->setWindowTitle(tr("SCTP TSNs and SACKs over Time: %1 Port1 %2 Port2 %3")
             .arg(gchar_free_to_qstring(cf_get_display_name(cap_file_))).arg(assoc->port1).arg(assoc->port2));
     if ((direction == 1 && assoc->n_array_tsn1 == 0) || (direction == 2 && assoc->n_array_tsn2 == 0)) {
         QMessageBox msgBox;
@@ -67,13 +67,13 @@ void SCTPGraphDialog::drawNRSACKGraph(const sctp_assoc_info_t* selected_assoc)
 {
     tsn_t *sack = Q_NULLPTR;
     GList *list = Q_NULLPTR, *tlist = Q_NULLPTR;
-    guint16 gap_start=0, gap_end=0, i, numberOf_gaps, numberOf_nr_gaps;
-    guint8 type;
-    guint32 tsnumber, j = 0, min_tsn, rel = 0;
+    uint16_t gap_start=0, gap_end=0, i, numberOf_gaps, numberOf_nr_gaps;
+    uint8_t type;
+    uint32_t tsnumber, j = 0, min_tsn, rel = 0;
     struct nr_sack_chunk_header *nr_sack_header = Q_NULLPTR;
     struct gaps *nr_gap = Q_NULLPTR;
     /* This holds the sum of gap acks and nr gap acks */
-    guint16 total_gaps = 0;
+    uint16_t total_gaps = 0;
 
     if (direction == 1) {
         list = g_list_last(selected_assoc->sack1);
@@ -133,14 +133,14 @@ void SCTPGraphDialog::drawNRSACKGraph(const sctp_assoc_info_t* selected_assoc)
 void SCTPGraphDialog::drawSACKGraph(const sctp_assoc_info_t* selected_assoc)
 {
     GList *listSACK = Q_NULLPTR, *tlist = Q_NULLPTR;
-    guint16 gap_start=0, gap_end=0, nr, dup_nr;
+    uint16_t gap_start=0, gap_end=0, nr, dup_nr;
     struct sack_chunk_header *sack_header = Q_NULLPTR;
     struct gaps *gap = Q_NULLPTR;
     tsn_t *tsn = Q_NULLPTR;
-    guint8 type;
-    guint32 tsnumber=0, rel = 0;
-    guint32 minTSN;
-    guint32 *dup_list = Q_NULLPTR;
+    uint8_t type;
+    uint32_t tsnumber=0, rel = 0;
+    uint32_t minTSN;
+    uint32_t *dup_list = Q_NULLPTR;
     int i, j;
 
     if (direction == 1) {
@@ -164,8 +164,17 @@ void SCTPGraphDialog::drawSACKGraph(const sctp_assoc_info_t* selected_assoc)
                 tsnumber = g_ntohl(sack_header->cum_tsn_ack);
                 dup_nr=g_ntohs(sack_header->nr_of_dups);
                 if (nr>0) {  // Gap Reports green
+                    // Flexible Array Member #1.  XXX - UB in C++ technically;
+                    // also are we checking at any point that all the data is
+                    // there, since this was just copied straight from the TVB
+                    // and the overall chunk length might be inconsistent with
+                    // the number of gaps and duplicated TSNs indicated and/or
+                    // present.
                     gap = &sack_header->gaps[0];
                     for (i=0;i<nr; i++) {
+                        // Really we're just doing this, but as FAMs are UB
+                        // in C++ some compilers or run-times might complain.
+                        //gap = &sack_header->gaps[i];
                         gap_start=g_ntohs(gap->start);
                         gap_end = g_ntohs(gap->end);
                         for (j=gap_start; j<=gap_end; j++) {
@@ -183,7 +192,10 @@ void SCTPGraphDialog::drawSACKGraph(const sctp_assoc_info_t* selected_assoc)
                     fs.append(tsn->frame_number);
                 }
                 if (dup_nr > 0) { // Duplicates cyan
-                    dup_list = &sack_header->a_rwnd + 2 + nr;
+                    // XXX - Flexible Array Member #2, basically. This is sort
+                    // of horrifying. Jump over the gaps array to where the
+                    // duplicated TSN array should be.
+                    dup_list = (uint32_t*)(&sack_header->gaps[0] + nr);
                     for (i = 0; i < dup_nr; i++) {
                         tsnumber = g_ntohl(dup_list[i]);
                         if (tsnumber >= minTSN) {
@@ -209,52 +221,52 @@ void SCTPGraphDialog::drawSACKGraph(const sctp_assoc_info_t* selected_assoc)
     // Add SACK graph
     if (xs.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QString("SACK"));
+        gr->setName(QStringLiteral("SACK"));
         myScatter.setPen(QPen(Qt::red));
         myScatter.setBrush(Qt::red);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xs, ys);
-        typeStrings.insert(graphcount, QString(tr("CumTSNAck")));
+        typeStrings.insert(graphcount, tr("CumTSNAck"));
         graphcount++;
     }
 
     // Add Gap Acks
     if (xg.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QString("GAP"));
+        gr->setName(QStringLiteral("GAP"));
         myScatter.setPen(QPen(Qt::green));
         myScatter.setBrush(Qt::green);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xg, yg);
-        typeStrings.insert(graphcount, QString(tr("Gap Ack")));
+        typeStrings.insert(graphcount, tr("Gap Ack"));
         graphcount++;
     }
 
     // Add NR Gap Acks
     if (xn.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QString("NR_GAP"));
+        gr->setName(QStringLiteral("NR_GAP"));
         myScatter.setPen(QPen(Qt::blue));
         myScatter.setBrush(Qt::blue);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xn, yn);
-        typeStrings.insert(graphcount, QString(tr("NR Gap Ack")));
+        typeStrings.insert(graphcount, tr("NR Gap Ack"));
         graphcount++;
     }
 
     // Add Duplicates
     if (xd.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QString("DUP"));
+        gr->setName(QStringLiteral("DUP"));
         myScatter.setPen(QPen(Qt::cyan));
         myScatter.setBrush(Qt::cyan);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xd, yd);
-        typeStrings.insert(graphcount, QString(tr("Duplicate Ack")));
+        typeStrings.insert(graphcount, tr("Duplicate Ack"));
     }
 }
 
@@ -262,8 +274,8 @@ void SCTPGraphDialog::drawTSNGraph(const sctp_assoc_info_t* selected_assoc)
 {
     GList *listTSN = Q_NULLPTR,*tlist = Q_NULLPTR;
     tsn_t *tsn = Q_NULLPTR;
-    guint8 type;
-    guint32 tsnumber=0, rel = 0, minTSN;
+    uint8_t type;
+    uint32_t tsnumber=0, rel = 0, minTSN;
 
     if (direction == 1) {
         listTSN = g_list_last(selected_assoc->tsn1);
@@ -304,13 +316,13 @@ void SCTPGraphDialog::drawTSNGraph(const sctp_assoc_info_t* selected_assoc)
     // Add TSN graph
     if (xt.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QString("TSN"));
+        gr->setName(QStringLiteral("TSN"));
         myScatter.setPen(QPen(Qt::black));
         myScatter.setBrush(Qt::black);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xt, yt);
-        typeStrings.insert(graphcount, QString(tr("TSN")));
+        typeStrings.insert(graphcount, tr("TSN"));
     }
 }
 
@@ -321,7 +333,7 @@ void SCTPGraphDialog::drawGraph(const sctp_assoc_info_t* selected_assoc)
         if (!selected_assoc) return;
     }
 
-    guint32 maxTSN, minTSN;
+    uint32_t maxTSN, minTSN;
 
     if (direction == 1) {
         maxTSN = selected_assoc->max_tsn1;
@@ -467,9 +479,9 @@ void SCTPGraphDialog::graphClicked(QCPAbstractPlottable* plottable, int, QMouseE
         }
     }
     if (cap_file_ && frame_num > 0) {
-        cf_goto_frame(cap_file_, frame_num, FALSE);
+        cf_goto_frame(cap_file_, frame_num, false);
     }
-    ui->hintLabel->setText(QString(tr("<small><i>%1: %2 Time: %3 secs </i></small>"))
+    ui->hintLabel->setText(tr("<small><i>%1: %2 Time: %3 secs </i></small>")
                            .arg(plottable->name())
                            .arg(floor(ui->sctpPlot->yAxis->pixelToCoord(event->pos().y()) + 0.5))
                            .arg(ui->sctpPlot->xAxis->pixelToCoord(event->pos().x())));
@@ -477,18 +489,20 @@ void SCTPGraphDialog::graphClicked(QCPAbstractPlottable* plottable, int, QMouseE
 
 void SCTPGraphDialog::save_graph(QDialog *dlg, QCustomPlot *plot)
 {
-    QString file_name, extension;
+    QString file_name;
     QDir path(mainApp->openDialogInitialDir());
     QString pdf_filter = tr("Portable Document Format (*.pdf)");
     QString png_filter = tr("Portable Network Graphics (*.png)");
     QString bmp_filter = tr("Windows Bitmap (*.bmp)");
     // Gaze upon my beautiful graph with lossy artifacts!
     QString jpeg_filter = tr("JPEG File Interchange Format (*.jpeg *.jpg)");
-    QString filter = QString("%1;;%2;;%3;;%4")
-            .arg(pdf_filter)
-            .arg(png_filter)
-            .arg(bmp_filter)
-            .arg(jpeg_filter);
+    QString filter = QStringLiteral("%1;;%2;;%3;;%4").arg(
+        pdf_filter,
+        png_filter,
+        bmp_filter,
+        jpeg_filter
+    );
+    QString extension = png_filter;
 
     file_name = WiresharkFileDialog::getSaveFileName(dlg, mainApp->windowTitleString(tr("Save Graph As…")),
                                              path.canonicalPath(), filter, &extension);

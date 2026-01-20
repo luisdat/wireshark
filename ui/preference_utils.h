@@ -9,8 +9,11 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#ifndef __PREFRENCE_UTILS_H__
-#define __PREFRENCE_UTILS_H__
+#ifndef __PREFERENCE_UTILS_H__
+#define __PREFERENCE_UTILS_H__
+
+#include <glib.h>
+typedef struct capture_options_tag capture_options;
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,7 +30,7 @@ extern bool auto_scroll_live;
 
 /** Fill in capture options with values from the preferences
  */
-extern void prefs_to_capture_opts(void);
+extern void prefs_to_capture_opts(capture_options* capture_opts);
 
 /** Save all preferences
  */
@@ -84,7 +87,7 @@ int column_prefs_has_custom(const char *custom_field);
  * resolved or unresolved, e.g. it has a field with a value string.
  *
  * This is for when adding or editing custom columns. Compare with
- * resolve_column() in packet_list_utils.h, which is for columns
+ * display_column_strings() in packet_list_utils.h, which is for columns
  * that have already been added.
  *
  * @param custom_field column custom field
@@ -93,7 +96,18 @@ int column_prefs_has_custom(const char *custom_field);
  * would support being displayed differently resolved or unresolved,
  * false otherwise.
  */
-bool column_prefs_custom_resolve(const char *custom_field);
+bool column_prefs_custom_display_strings(const char *custom_field);
+
+/** Check if a custom column's data can be displayed with details,
+ * e.g. it has a field.
+ *
+ * This is for when adding or editing custom columns.
+ *
+ * @param custom_field column custom field
+ *
+ * @return true if a custom column has at least one single field.
+ */
+bool column_prefs_custom_display_details(const char *custom_field);
 
 /** Remove a column.
  *
@@ -116,4 +130,4 @@ void save_migrated_uat(const char *uat_name, bool *old_pref);
 }
 #endif /* __cplusplus */
 
-#endif /* __PREFRENCE_UTILS_H__ */
+#endif /* __PREFERENCE_UTILS_H__ */

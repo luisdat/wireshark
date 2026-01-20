@@ -18,7 +18,7 @@
 /*
  * Linux with libnl.
  *
- * Use Netlink to get indications of new/removed intrfaces.
+ * Use Netlink to get indications of new/removed interfaces.
  */
 
 #include <stdio.h>
@@ -43,22 +43,6 @@ DIAG_ON_PEDANTIC
  */
 #include <net/if.h>
 #endif
-
-/* libnl 1.x compatibility code */
-#ifdef HAVE_LIBNL1
-#define nl_sock nl_handle
-#define nl_socket_disable_seq_check nl_disable_sequence_check
-
-static inline struct nl_handle *nl_socket_alloc(void)
-{
-    return nl_handle_alloc();
-}
-
-static inline void nl_socket_free(struct nl_sock *h)
-{
-    nl_handle_destroy(h);
-}
-#endif /* HAVE_LIBNL1 */
 
 static struct nl_sock *iface_mon_sock;
 
@@ -99,9 +83,6 @@ iface_mon_handler2(struct nl_object *obj, void *arg)
      */
     up = (flags & IFF_UP) ? 1 : 0;
 
-#ifdef HAVE_LIBNL1
-    cb(ifname, 0, up);
-#else
     int msg_type = nl_object_get_msgtype(obj);
 
     switch (msg_type) {
@@ -115,7 +96,6 @@ iface_mon_handler2(struct nl_object *obj, void *arg)
         /* Ignore other events */
         break;
     }
-#endif
 
     rtnl_link_put(filter);
 
@@ -179,12 +159,25 @@ iface_mon_stop(void)
     iface_mon_sock = NULL;
 }
 
+void
+iface_mon_enable(bool enable)
+{
+    if (!iface_mon_sock)
+        return;
+
+    if (enable) {
+        nl_socket_add_membership(iface_mon_sock, RTNLGRP_LINK);
+    } else {
+        nl_socket_drop_membership(iface_mon_sock, RTNLGRP_LINK);
+    }
+}
+
 #elif defined(__APPLE__)
 
 /*
  * macOS.
  *
- * Use a PF_SYSTEM socket to get indications of new/removed intrfaces.
+ * Use a PF_SYSTEM socket to get indications of new/removed interfaces.
  */
 
 #include <stddef.h>
@@ -358,12 +351,17 @@ iface_mon_event(void)
     }
 }
 
+void
+iface_mon_enable(bool enable _U_)
+{
+}
+
 #elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 
 /*
  * FreeBSD, NetBSD, OpenBSD, DragonFly BSD.
  *
- * Use a PF_ROUTE socket to get indications of new/removed intrfaces.
+ * Use a PF_ROUTE socket to get indications of new/removed interfaces.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -528,6 +526,11 @@ iface_mon_event(void)
     }
 }
 
+void
+iface_mon_enable(bool enable _U_)
+{
+}
+
 #else /* don't have something we support */
 
 int
@@ -549,6 +552,11 @@ iface_mon_get_sock(void)
 
 void
 iface_mon_event(void)
+{
+}
+
+void
+iface_mon_enable(bool enable _U_)
 {
 }
 

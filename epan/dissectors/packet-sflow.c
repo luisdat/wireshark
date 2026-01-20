@@ -42,8 +42,16 @@
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/to_str.h>
-#include <epan/ipproto.h>
+#include <epan/etypes.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
+
+#include <wsutil/array.h>
+#include <wsutil/ws_roundup.h>
+#include <wsutil/ws_padding_to.h>
+
 #include "packet-sflow.h"
+#include "packet-iana-data.h"
 
 #define SFLOW_UDP_PORTS "6343"
 
@@ -55,7 +63,7 @@ static dissector_handle_t sflow_handle;
  *  sflow_245_ports : holds the currently used range of ports for sflow
  */
 static bool global_dissect_samp_headers = true;
-static bool global_analyze_samp_ip_headers = false;
+static bool global_analyze_samp_ip_headers;
 
 #define ENTERPRISE_DEFAULT 0
 
@@ -329,24 +337,134 @@ static const value_string interface_discard[] = {
     { 260, "RED"},
     { 261, "traffic shaping/rate limiting"},
     { 262, "packet too big (for protocols that don't support fragmentation)"},
+    { 263, "Source MAC is multicast"},
+    { 264, "VLAN tag mismatch"},
+    { 265, "Ingress VLAN filter"},
+    { 266, "Ingress spanning tree filter"},
+    { 267, "Port list is empty"},
+    { 268, "Port loopback filter"},
+    { 269, "Blackhole route"},
+    { 270, "Non IP"},
+    { 271, "Unicast destination IP over multicast destination MAC"},
+    { 272, "Destination IP is loopback address"},
+    { 273, "Source IP is multicast"},
+    { 274, "Source IP is looback address"},
+    { 275, "IP header corrupted"},
+    { 276, "IPv4 source address is limited broadcast"},
+    { 277, "IPv6 multicast destination IP reserved scope"},
+    { 278, "IPv6 multicast destination IP interface local scope"},
+    { 279, "Unresolved neighbor"},
+    { 280, "Multicast reverse path forwarding"},
+    { 281, "Non routable packet"},
+    { 282, "Decap error"},
+    { 283, "Overlay source MAC is multicast"},
+    { 284, "Unknown L2"},
+    { 285, "Unknown L3"},
+    { 286, "Unknown L3 exception"},
+    { 287, "Unknown buffer"},
+    { 288, "Unknown tunnel"},
+    { 289, "Unknown L4"},
+    { 290, "Source IP in unspecified"},
+    { 291, "Mlag port isolation"},
+    { 292, "Blackhole ARP neighbor"},
+    { 293, "Source MAC is destination MAC"},
+    { 294, "Destination MAC is reserved"},
+    { 295, "Source IP class E"},
+    { 296, "Multicast destination MAC mismatch"},
+    { 297, "Source IP is destination IP"},
+    { 298, "Destination IP is local network"},
+    { 299, "Destination IP is link local"},
+    { 300, "Overlay source MAC is destination MAC"},
+    { 301, "Egress VLAN filter"},
+    { 302, "Unicast reverse path forwarding"},
+    { 303, "Split horizon"},
+    { 304, "locked_port"},
+    { 305, "dmac_filter"},
+    { 306, "blackhole_nexthop"},
+    { 307, "vxlan_parsing"},
+    { 308, "llc_snap_parsing"},
+    { 309, "vlan_parsing"},
+    { 310, "pppoe_ppp_parsing"},
+    { 311, "mpls_parsing"},
+    { 312, "arp_parsing"},
+    { 313, "ip_1_parsing"},
+    { 314, "ip_n_parsing"},
+    { 315, "gre_parsing"},
+    { 316, "udp_parsing"},
+    { 317, "tcp_parsing"},
+    { 318, "ipsec_parsing"},
+    { 319, "sctp_parsing"},
+    { 320, "dccp_parsing"},
+    { 321, "gtp_parsing"},
+    { 322, "esp_parsing"},
+    { 323, "unknown_parsing"},
+    { 324, "pkt_too_small"},
+    { 325, "unhandled_proto"},
+    { 326, "ipv6disabled"},
+    { 327, "invalid_proto"},
+    { 328, "ip_noproto"},
+    { 329, "skb_csum"},
+    { 330, "skb_ucopy_fault"},
+    { 331, "dev_ready"},
+    { 332, "dev_hdr"},
+    { 333, "dup_frag"},
+    { 334, "skb_gso_seg"},
+    { 335, "reverse_path_forwarding"},
+    { 336, "icmp_parsing"},
+    { 337, "tcp_md5notfound"},
+    { 338, "tcp_md5unexpected"},
+    { 339, "tcp_md5failure"},
+    { 340, "tcp_flags"},
+    { 341, "tcp_zerowindow"},
+    { 342, "tcp_old_data"},
+    { 343, "tcp_overwindow"},
+    { 344, "tcp_ofomerge"},
+    { 345, "tcp_rfc7323_paws"},
+    { 346, "tcp_invalid_sequence"},
+    { 347, "tcp_reset"},
+    { 348, "tcp_invalid_syn"},
+    { 349, "tcp_close"},
+    { 350, "tcp_fastopen"},
+    { 351, "tcp_old_ack"},
+    { 352, "tcp_too_old_ack"},
+    { 353, "tcp_ack_unsent_data"},
+    { 354, "tcp_ofo_queue_prune"},
+    { 355, "tcp_ofo_drop"},
+    { 356, "tcp_minttl"},
+    { 357, "ipv6_bad_exthdr"},
+    { 358, "ipv6_ndisc_frag"},
+    { 359, "ipv6_ndisc_hop_limit"},
+    { 360, "ipv6_ndisc_bad_code"},
+    { 361, "ipv6_ndisc_bad_options"},
+    { 362, "ipv6_ndisc_ns_otherhost"},
+    { 363, "tap_filter"},
+    { 364, "tap_txfilter"},
+    { 365, "tc_ingress"},
+    { 366, "tc_egress"},
+    { 367, "xdp"},
+    { 368, "cpu_backlog"},
+    { 369, "bpf_cgroup_egress"},
+    { 370, "xfrm_policy"},
+    { 371, "socket_filter"},
+    { 372, "bgp_flowspec"},
     { 0, NULL}
 };
 
 /* ethernet counters.  These will be preceded by generic counters. */
 struct ethernet_counters {
-    guint32 dot3StatsAlignmentErrors;
-    guint32 dot3StatsFCSErrors;
-    guint32 dot3StatsSingleCollisionFrames;
-    guint32 dot3StatsMultipleCollisionFrames;
-    guint32 dot3StatsSQETestErrors;
-    guint32 dot3StatsDeferredTransmissions;
-    guint32 dot3StatsLateCollisions;
-    guint32 dot3StatsExcessiveCollisions;
-    guint32 dot3StatsInternalMacTransmitErrors;
-    guint32 dot3StatsCarrierSenseErrors;
-    guint32 dot3StatsFrameTooLongs;
-    guint32 dot3StatsInternalMacReceiveErrors;
-    guint32 dot3StatsSymbolErrors;
+    uint32_t dot3StatsAlignmentErrors;
+    uint32_t dot3StatsFCSErrors;
+    uint32_t dot3StatsSingleCollisionFrames;
+    uint32_t dot3StatsMultipleCollisionFrames;
+    uint32_t dot3StatsSQETestErrors;
+    uint32_t dot3StatsDeferredTransmissions;
+    uint32_t dot3StatsLateCollisions;
+    uint32_t dot3StatsExcessiveCollisions;
+    uint32_t dot3StatsInternalMacTransmitErrors;
+    uint32_t dot3StatsCarrierSenseErrors;
+    uint32_t dot3StatsFrameTooLongs;
+    uint32_t dot3StatsInternalMacReceiveErrors;
+    uint32_t dot3StatsSymbolErrors;
 };
 
 struct sflow_address_type {
@@ -379,7 +497,7 @@ static int hf_sflow_245_packet_information_type;
 static int hf_sflow_245_extended_information_type;
 static int hf_sflow_245_vlan_in; /* incoming 802.1Q VLAN ID */
 static int hf_sflow_245_vlan_out; /* outgoing 802.1Q VLAN ID */
-static int hf_sflow_245_pri_in; /* incominging 802.1p priority */
+static int hf_sflow_245_pri_in; /* incoming 802.1p priority */
 static int hf_sflow_245_pri_out; /* outgoing 802.1p priority */
 static int hf_sflow_245_nexthop_v4; /* nexthop address */
 static int hf_sflow_245_nexthop_v6; /* nexthop address */
@@ -583,7 +701,7 @@ static int hf_sflow_5_extended_80211_tx_power;
 static int hf_sflow_24_flow_sample_multiple_outputs;
 static int hf_sflow_5_extended_user_source_user_string_length;
 static int hf_sflow_5_extended_80211_payload_length;
-static int hf_sflow_24_flow_sample_output_interface_format;
+static int hf_sflow_5_flow_sample_output_interface_expanded_format;
 static int hf_sflow_245_ethernet_packet_type;
 static int hf_sflow_counters_sample_expanded_source_id_type;
 static int hf_sflow_245_ip_source_port;
@@ -613,6 +731,10 @@ static int hf_sflow_counters_sample_counters_records;
 static int hf_sflow_5_extended_mpls_tunnel_cos_value;
 static int hf_sflow_5_extended_mpls_vc_id;
 static int hf_sflow_24_flow_sample_output_interface_value;
+static int hf_sflow_5_flow_sample_output_interface_expanded_value;
+static int hf_sflow_5_flow_sample_output_interface_expanded_value_discarded;
+static int hf_sflow_5_flow_sample_output_interface_expanded_value_number;
+static int hf_sflow_5_flow_sample_output_interface_expanded_value_ifindex;
 static int hf_sflow_5_extended_user_destination_user;
 static int hf_sflow_245_as_type;
 static int hf_sflow_counters_sample_index;
@@ -653,21 +775,22 @@ static int hf_sflow_lag_port_stats_markerpdustx;
 static int hf_sflow_lag_port_stats_markerresponsepdustx;
 
 /* Initialize the subtree pointers */
-static gint ett_sflow_245;
-static gint ett_sflow_245_sample;
-static gint ett_sflow_5_flow_record;
-static gint ett_sflow_5_counters_record;
-static gint ett_sflow_5_mpls_in_label_stack;
-static gint ett_sflow_5_mpls_out_label_stack;
-static gint ett_sflow_245_extended_data;
-static gint ett_sflow_245_gw_as_dst;
-static gint ett_sflow_245_gw_as_dst_seg;
-static gint ett_sflow_245_gw_community;
-static gint ett_sflow_245_sampled_header;
-static gint ett_sflow_lag_port_state_flags;
-static gint ett_sflow_5_output_interface;
+static int ett_sflow_245;
+static int ett_sflow_245_sample;
+static int ett_sflow_5_flow_record;
+static int ett_sflow_5_counters_record;
+static int ett_sflow_5_mpls_in_label_stack;
+static int ett_sflow_5_mpls_out_label_stack;
+static int ett_sflow_245_extended_data;
+static int ett_sflow_245_gw_as_dst;
+static int ett_sflow_245_gw_as_dst_seg;
+static int ett_sflow_245_gw_community;
+static int ett_sflow_245_sampled_header;
+static int ett_sflow_lag_port_state_flags;
+static int ett_sflow_5_output_interface;
 
 static expert_field ei_sflow_invalid_address_type;
+static expert_field ei_sflow_unknown_record_format;
 
 static dissector_table_t   header_subdissector_table;
 
@@ -676,26 +799,25 @@ static const unit_name_string units_total_packets = { " total packet", " total p
 void proto_reg_handoff_sflow_245(void);
 
 /* dissect a sampled header - layer 2 protocols */
-static gint
+static int
 dissect_sflow_245_sampled_header(tvbuff_t *tvb, packet_info *pinfo,
-                                 proto_tree *tree, volatile gint offset) {
-    guint32           version, header_proto, frame_length;
-    guint32  header_length;
+                                 proto_tree *tree, volatile int offset) {
+    uint32_t          version, header_proto, frame_length;
+    uint32_t header_length;
     tvbuff_t         *next_tvb;
     proto_tree       *sflow_245_header_tree;
     proto_item       *ti;
     /* stuff for saving column state before calling other dissectors.
      * Thanks to Guy Harris for the tip. */
-    gboolean          save_writable;
-    gboolean          save_in_error_pkt;
+    bool              save_writable;
+    bool              save_in_error_pkt;
     address           save_dl_src, save_dl_dst, save_net_src, save_net_dst, save_src, save_dst;
 
     version = tvb_get_ntohl(tvb, 0);
     header_proto = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_245_header_protocol, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
-    frame_length = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_245_header_frame_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_245_header_frame_length, tvb, offset, 4, ENC_BIG_ENDIAN, &frame_length);
     offset += 4;
 
     if (version == 5) {
@@ -705,10 +827,6 @@ dissect_sflow_245_sampled_header(tvbuff_t *tvb, packet_info *pinfo,
 
     proto_tree_add_item_ret_uint(tree, hf_sflow_245_sampled_header_length, tvb, offset, 4, ENC_BIG_ENDIAN, &header_length);
     offset += 4;
-
-    if (header_length % 4) /* XDR requires 4-byte alignment */
-        header_length += (4 - (header_length % 4));
-
 
     ti = proto_tree_add_item(tree, hf_sflow_245_header, tvb, offset, header_length, ENC_NA);
     sflow_245_header_tree = proto_item_add_subtree(ti, ett_sflow_245_sampled_header);
@@ -741,10 +859,10 @@ dissect_sflow_245_sampled_header(tvbuff_t *tvb, packet_info *pinfo,
      */
     save_in_error_pkt = pinfo->flags.in_error_pkt;
     if (!global_analyze_samp_ip_headers) {
-        pinfo->flags.in_error_pkt = TRUE;
+        pinfo->flags.in_error_pkt = true;
     }
 
-    col_set_writable(pinfo->cinfo, -1, FALSE);
+    col_set_writable(pinfo->cinfo, -1, false);
     copy_address_shallow(&save_dl_src, &pinfo->dl_src);
     copy_address_shallow(&save_dl_dst, &pinfo->dl_dst);
     copy_address_shallow(&save_net_src, &pinfo->net_src);
@@ -754,7 +872,7 @@ dissect_sflow_245_sampled_header(tvbuff_t *tvb, packet_info *pinfo,
 
     TRY
     {
-        if ((global_dissect_samp_headers == FALSE) ||
+        if ((global_dissect_samp_headers == false) ||
             !dissector_try_uint(header_subdissector_table, header_proto, next_tvb, pinfo, sflow_245_header_tree))
         {
             call_data_dissector(next_tvb, pinfo, sflow_245_header_tree);
@@ -775,16 +893,17 @@ dissect_sflow_245_sampled_header(tvbuff_t *tvb, packet_info *pinfo,
     copy_address_shallow(&pinfo->src, &save_src);
     copy_address_shallow(&pinfo->dst, &save_dst);
 
-    offset += header_length;
+    /* XDR requires 4-byte alignment */
+    offset += WS_ROUNDUP_4(header_length);
     return offset;
 }
 
-static gint
+static int
 dissect_sflow_245_address_type(tvbuff_t *tvb, packet_info *pinfo,
-                               proto_tree *tree, gint offset,
+                               proto_tree *tree, int offset,
                                struct sflow_address_type *hf_type,
                                address *addr) {
-    guint32 addr_type;
+    uint32_t addr_type;
     int len;
 
     addr_type = tvb_get_ntohl(tvb, offset);
@@ -831,8 +950,8 @@ dissect_sflow_245_address_type(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 /* extended switch data, after the packet data */
-static gint
-dissect_sflow_245_extended_switch(tvbuff_t *tvb, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_245_extended_switch(tvbuff_t *tvb, proto_tree *tree, int offset) {
     proto_tree_add_item(tree, hf_sflow_245_vlan_in, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
     proto_tree_add_item(tree, hf_sflow_245_pri_in, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -846,8 +965,8 @@ dissect_sflow_245_extended_switch(tvbuff_t *tvb, proto_tree *tree, gint offset) 
 }
 
 /* extended router data, after the packet data */
-static gint
-dissect_sflow_245_extended_router(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_245_extended_router(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset) {
     struct sflow_address_type addr_type;
 
     addr_type.hf_addr_v4 = hf_sflow_245_nexthop_v4;
@@ -862,9 +981,9 @@ dissect_sflow_245_extended_router(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 }
 
 /* extended MPLS data */
-static gint
-dissect_sflow_5_extended_mpls_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset) {
-    guint32     in_label_count, out_label_count, label, i, j;
+static int
+dissect_sflow_5_extended_mpls_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset) {
+    uint32_t    in_label_count, out_label_count, label, i, j;
     proto_tree *in_stack;
     proto_tree *out_stack;
     struct sflow_address_type addr_type;
@@ -908,8 +1027,8 @@ dissect_sflow_5_extended_mpls_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 }
 
 /* extended NAT data */
-static gint
-dissect_sflow_5_extended_nat(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_5_extended_nat(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset) {
     struct sflow_address_type addr_type;
 
     addr_type.hf_addr_v4 = hf_sflow_245_ipv4_src;
@@ -926,14 +1045,14 @@ dissect_sflow_5_extended_nat(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 }
 
 /* extended gateway data, after the packet data */
-static gint
-dissect_sflow_245_extended_gateway(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset) {
-    gint32  len = 0;
-    gint32  i, j, comm_len, dst_len, dst_seg_len;
-    guint32 path_type;
-    gint32  kludge;
+static int
+dissect_sflow_245_extended_gateway(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset) {
+    int32_t len = 0;
+    int32_t i, j, comm_len, dst_len, dst_seg_len;
+    uint32_t path_type;
+    int32_t kludge;
 
-    guint32 version = tvb_get_ntohl(tvb, 0); /* get sFlow version */
+    uint32_t version = tvb_get_ntohl(tvb, 0); /* get sFlow version */
     proto_item *ti;
     proto_tree *sflow_245_dst_as_tree;
     proto_tree *sflow_245_comm_tree;
@@ -1023,8 +1142,8 @@ dissect_sflow_245_extended_gateway(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 }
 
 /* sflow v5 ethernet frame data */
-static gint
-dissect_sflow_5_ethernet_frame(tvbuff_t *tvb, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_5_ethernet_frame(tvbuff_t *tvb, proto_tree *tree, int offset) {
 
     proto_tree_add_item(tree, hf_sflow_245_ethernet_length_of_mac_packet, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1044,8 +1163,8 @@ dissect_sflow_5_ethernet_frame(tvbuff_t *tvb, proto_tree *tree, gint offset) {
 }
 
 /* sflow v5 IPv4 data */
-static gint
-dissect_sflow_5_ipv4(tvbuff_t *tvb, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_5_ipv4(tvbuff_t *tvb, proto_tree *tree, int offset) {
 
     proto_tree_add_item(tree, hf_sflow_245_length_of_ip_packet, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1087,8 +1206,8 @@ dissect_sflow_5_ipv4(tvbuff_t *tvb, proto_tree *tree, gint offset) {
 }
 
 /* sflow v5 IPv6 data */
-static gint
-dissect_sflow_5_ipv6(tvbuff_t *tvb, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_5_ipv6(tvbuff_t *tvb, proto_tree *tree, int offset) {
 
     proto_tree_add_item(tree, hf_sflow_245_length_of_ip_packet, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1132,47 +1251,43 @@ dissect_sflow_5_ipv6(tvbuff_t *tvb, proto_tree *tree, gint offset) {
 }
 
 /* sflow v5 user data */
-static gint
-dissect_sflow_5_extended_user(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 src_length, dest_length;
+static int
+dissect_sflow_5_extended_user(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t src_length, dest_length;
 
     /* charset is not processed here, all chars are assumed to be ASCII */
     proto_tree_add_item(tree, hf_sflow_5_extended_user_source_character_set, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
-    src_length = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_5_extended_user_source_user_string_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_5_extended_user_source_user_string_length, tvb, offset, 4, ENC_BIG_ENDIAN, &src_length);
     offset += 4;
 
     /* extract source user info char by char */
-    proto_tree_add_item(tree, hf_sflow_5_extended_user_source_user, tvb, offset, src_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_user_source_user, tvb, offset, src_length, ENC_ASCII);
     offset += src_length;
     /* get the correct offset by adding padding byte count */
-    if (src_length % 4)
-        offset += (4 - src_length % 4);
+    offset += WS_PADDING_TO_4(src_length);
 
     /* charset is not processed here, all chars are assumed to be ASCII */
     proto_tree_add_item(tree, hf_sflow_5_extended_user_destination_character_set, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
-    dest_length = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_5_extended_user_destination_user_string_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_5_extended_user_destination_user_string_length, tvb, offset, 4, ENC_BIG_ENDIAN, &dest_length);
     offset += 4;
 
     /* extract destination user info char by char */
-    proto_tree_add_item(tree, hf_sflow_5_extended_user_destination_user, tvb, offset, dest_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_user_destination_user, tvb, offset, dest_length, ENC_ASCII);
     offset += dest_length;
     /* get the correct offset by adding padding byte count */
-    if (dest_length % 4)
-        offset += (4 - dest_length % 4);
+    offset += WS_PADDING_TO_4(dest_length);
 
     return offset;
 }
 
 /* sflow v5 URL data */
-static gint
-dissect_sflow_5_extended_url(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 direction, url_length, host_length;
+static int
+dissect_sflow_5_extended_url(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t direction, url_length, host_length;
 
     direction = tvb_get_ntohl(tvb, offset);
     switch (direction) {
@@ -1191,46 +1306,41 @@ dissect_sflow_5_extended_url(tvbuff_t *tvb, proto_tree *tree, gint offset) {
     }
     offset += 4;
 
-    url_length = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_5_extended_url_url_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_5_extended_url_url_length, tvb, offset, 4, ENC_BIG_ENDIAN, &url_length);
     offset += 4;
 
     /* extract URL char by char */
-    proto_tree_add_item(tree, hf_sflow_5_extended_url_url, tvb, offset, url_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_url_url, tvb, offset, url_length, ENC_ASCII);
     offset += url_length;
     /* get the correct offset by adding padding byte count */
-    if (url_length % 4)
-        offset += (4 - url_length % 4);
+    offset += WS_PADDING_TO_4(url_length);
 
-    host_length = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_5_extended_url_host_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_5_extended_url_host_length, tvb, offset, 4, ENC_BIG_ENDIAN, &host_length);
     offset += 4;
 
     /* extract host info char by char */
-    proto_tree_add_item(tree, hf_sflow_5_extended_url_host, tvb, offset, host_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_url_host, tvb, offset, host_length, ENC_ASCII);
     offset += host_length;
     /* get the correct offset by adding padding byte count */
-    if (host_length % 4)
-        offset += (4 - host_length % 4);
+    offset += WS_PADDING_TO_4(host_length);
 
     return offset;
 }
 
 /* sflow v5 MPLS tunnel */
-static gint
-dissect_sflow_5_extended_mpls_tunnel(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 name_length;
+static int
+dissect_sflow_5_extended_mpls_tunnel(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t name_length;
 
     name_length = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_5_extended_mpls_tunnel_name_length, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     /* extract tunnel name char by char */
-    proto_tree_add_item(tree, hf_sflow_5_extended_mpls_tunnel_name, tvb, offset, name_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_mpls_tunnel_name, tvb, offset, name_length, ENC_ASCII);
     offset += name_length;
     /* get the correct offset by adding padding byte count */
-    if (name_length % 4)
-        offset += (4 - name_length % 4);
+    offset += WS_PADDING_TO_4(name_length);
 
     proto_tree_add_item(tree, hf_sflow_5_extended_mpls_tunnel_id, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1242,20 +1352,19 @@ dissect_sflow_5_extended_mpls_tunnel(tvbuff_t *tvb, proto_tree *tree, gint offse
 }
 
 /* sflow v5 MPLS VC */
-static gint
-dissect_sflow_5_extended_mpls_vc(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 name_length;
+static int
+dissect_sflow_5_extended_mpls_vc(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t name_length;
 
     name_length = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_5_extended_mpls_vc_instance_name_length, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     /* extract source user info char by char */
-    proto_tree_add_item(tree, hf_sflow_5_extended_mpls_vc_instance_name, tvb, offset, name_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_mpls_vc_instance_name, tvb, offset, name_length, ENC_ASCII);
     offset += name_length;
     /* get the correct offset by adding padding byte count */
-    if (name_length % 4)
-        offset += (4 - name_length % 4);
+    offset += WS_PADDING_TO_4(name_length);
 
     proto_tree_add_item(tree, hf_sflow_5_extended_mpls_vc_id, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1267,20 +1376,18 @@ dissect_sflow_5_extended_mpls_vc(tvbuff_t *tvb, proto_tree *tree, gint offset) {
 }
 
 /* sflow v5 MPLS FEC */
-static gint
-dissect_sflow_5_extended_mpls_fec(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 length;
+static int
+dissect_sflow_5_extended_mpls_fec(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t length;
 
-    length = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_5_extended_mpls_ftn_description_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_5_extended_mpls_ftn_description_length, tvb, offset, 4, ENC_BIG_ENDIAN, &length);
     offset += 4;
 
     /* extract MPLS FTN description char by char */
-    proto_tree_add_item(tree, hf_sflow_5_extended_mpls_ftn_description, tvb, offset, length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_mpls_ftn_description, tvb, offset, length, ENC_ASCII);
     offset += length;
     /* get the correct offset by adding padding byte count */
-    if (length % 4)
-        offset += (4 - length % 4);
+    offset += WS_PADDING_TO_4(length);
 
     proto_tree_add_item(tree, hf_sflow_5_extended_mpls_ftn_mask, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1289,8 +1396,8 @@ dissect_sflow_5_extended_mpls_fec(tvbuff_t *tvb, proto_tree *tree, gint offset) 
 }
 
 /* sflow v5 MPLS LVP FEC */
-static gint
-dissect_sflow_5_extended_mpls_lvp_fec(tvbuff_t *tvb, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_5_extended_mpls_lvp_fec(tvbuff_t *tvb, proto_tree *tree, int offset) {
 
     proto_tree_add_item(tree, hf_sflow_5_extended_mpls_fec_address_prefix_length, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1298,9 +1405,9 @@ dissect_sflow_5_extended_mpls_lvp_fec(tvbuff_t *tvb, proto_tree *tree, gint offs
 }
 
 /* sflow v5 extended VLAN tunnel */
-static gint
-dissect_sflow_5_extended_vlan_tunnel(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 num, i;
+static int
+dissect_sflow_5_extended_vlan_tunnel(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t num, i;
 
     num = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_5_extended_vlan_tunnel_number_of_layers, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1317,9 +1424,9 @@ dissect_sflow_5_extended_vlan_tunnel(tvbuff_t *tvb, proto_tree *tree, gint offse
 }
 
 /* sflow v5 extended 802.11 payload */
-static gint
-dissect_sflow_5_extended_80211_payload(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 cipher_suite, OUI, suite_type, length;
+static int
+dissect_sflow_5_extended_80211_payload(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t cipher_suite, OUI, suite_type, length;
 
     cipher_suite = tvb_get_ntohl(tvb, offset);
     OUI = cipher_suite >> 8;
@@ -1337,33 +1444,30 @@ dissect_sflow_5_extended_80211_payload(tvbuff_t *tvb, proto_tree *tree, gint off
     }
     offset++;
 
-    length = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_5_extended_80211_payload_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_5_extended_80211_payload_length, tvb, offset, 4, ENC_BIG_ENDIAN, &length);
     offset += 4;
 
     /* extract data byte by byte */
     proto_tree_add_item(tree, hf_sflow_5_extended_80211_payload, tvb, offset, length, ENC_NA);
     offset += length;
     /* get the correct offset by adding padding byte count */
-    if (length % 4)
-        offset += (4 - length % 4);
+    offset += WS_PADDING_TO_4(length);
 
     return offset;
 }
 
 /* sflow v5 extended 802.11 rx */
-static gint
-dissect_sflow_5_extended_80211_rx(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 ssid_length, duration;
+static int
+dissect_sflow_5_extended_80211_rx(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t ssid_length, duration;
 
     /* extract SSID char by char. max char count = 32 */
     ssid_length = tvb_get_ntohl(tvb, offset);
     offset += 4;
-    proto_tree_add_item(tree, hf_sflow_5_extended_80211_rx_ssid, tvb, offset, ssid_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_80211_rx_ssid, tvb, offset, ssid_length, ENC_ASCII);
     offset += ssid_length;
     /* get the correct offset by adding padding byte count */
-    if (ssid_length % 4)
-        offset += (4 - ssid_length % 4);
+    offset += WS_PADDING_TO_4(ssid_length);
 
     proto_tree_add_item(tree, hf_sflow_5_extended_80211_rx_bssid, tvb, offset, 6, ENC_NA);
     /* Padded to 4 byte offset */
@@ -1396,20 +1500,19 @@ dissect_sflow_5_extended_80211_rx(tvbuff_t *tvb, proto_tree *tree, gint offset) 
 }
 
 /* sflow v5 extended 802.11 tx */
-static gint
-dissect_sflow_5_extended_80211_tx(tvbuff_t *tvb, proto_tree *tree, gint offset) {
-    guint32 ssid_length, transmissions, packet_duration, retrans_duration;
+static int
+dissect_sflow_5_extended_80211_tx(tvbuff_t *tvb, proto_tree *tree, int offset) {
+    uint32_t ssid_length, transmissions, packet_duration, retrans_duration;
 
     /* extract SSID char by char. max char count = 32 */
     ssid_length = tvb_get_ntohl(tvb, offset);
     if (ssid_length > 32)
         ssid_length = 32;
     offset += 4;
-    proto_tree_add_item(tree, hf_sflow_5_extended_80211_tx_ssid, tvb, offset, ssid_length, ENC_NA|ENC_ASCII);
+    proto_tree_add_item(tree, hf_sflow_5_extended_80211_tx_ssid, tvb, offset, ssid_length, ENC_ASCII);
     offset += ssid_length;
     /* get the correct offset by adding padding byte count */
-    if (ssid_length % 4)
-        offset += (4 - ssid_length % 4);
+    offset += WS_PADDING_TO_4(ssid_length);
 
     proto_tree_add_item(tree, hf_sflow_5_extended_80211_tx_bssid, tvb, offset, 6, ENC_NA);
     /* Padded to 4 byte offset */
@@ -1463,21 +1566,21 @@ dissect_sflow_5_extended_80211_tx(tvbuff_t *tvb, proto_tree *tree, gint offset) 
 }
 
 /* sflow v5 extended 802.11 aggregation */
-static gint
-dissect_sflow_5_extended_80211_aggregation(tvbuff_t *tvb _U_, proto_tree *tree _U_, gint offset) {
+static int
+dissect_sflow_5_extended_80211_aggregation(tvbuff_t *tvb _U_, proto_tree *tree _U_, int offset) {
 
     return offset;
 }
 
 /* dissect an sflow v2/4 flow sample */
-static gint
+static int
 dissect_sflow_24_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
-        proto_tree *tree, gint offset, proto_item *parent) {
-    guint32     sequence_number, sampling_rate, output;
+        proto_tree *tree, int offset, proto_item *parent) {
+    uint32_t    sequence_number, sampling_rate, output;
 
     proto_tree *extended_data_tree;
     proto_item *ti;
-    guint32     packet_type, extended_data, ext_type, i;
+    uint32_t    packet_type, extended_data, ext_type, i;
 
     sequence_number = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_flow_sample_sequence_number, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1556,11 +1659,11 @@ dissect_sflow_24_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 /* dissect an sflow v5 flow record */
-static gint
-dissect_sflow_5_flow_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_5_flow_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset) {
     proto_tree *flow_data_tree;
-    proto_item *ti;
-    guint32     enterprise_format, enterprise, format;
+    proto_item *ti, *expert_ti;
+    uint32_t    enterprise_format, enterprise, format, length;
 
     /* what kind of flow sample is it? */
     enterprise_format = tvb_get_ntohl(tvb, offset);
@@ -1577,7 +1680,7 @@ dissect_sflow_5_flow_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_item(flow_data_tree, hf_sflow_5_flow_record_format, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
 
-        proto_tree_add_item(flow_data_tree, hf_sflow_5_flow_data_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(flow_data_tree, hf_sflow_5_flow_data_length, tvb, offset, 4, ENC_BIG_ENDIAN, &length);
         offset += 4;
 
         switch (format) {
@@ -1642,12 +1745,13 @@ dissect_sflow_5_flow_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 offset = dissect_sflow_5_extended_80211_aggregation(tvb, flow_data_tree, offset);
                 break;
             default:
+                expert_ti = proto_tree_add_item(flow_data_tree, hf_sflow_enterprise_data, tvb, offset, length, ENC_NA);
+                expert_add_info(pinfo, expert_ti, &ei_sflow_unknown_record_format);
+                offset += WS_ROUNDUP_4(length);
                 break;
         }
     } else {
         /* unknown enterprise format, what to do?? */
-        guint32 length;
-
         flow_data_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
             ett_sflow_5_flow_record, &ti, "Unknown enterprise format");
         proto_tree_add_uint_format_value(flow_data_tree, hf_sflow_enterprise, tvb, offset, 4,
@@ -1660,8 +1764,7 @@ dissect_sflow_5_flow_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_item(flow_data_tree, hf_sflow_enterprise_data, tvb, offset, length, ENC_NA);
         offset += length;
         /* get the correct offset by adding padding byte count */
-        if (length % 4)
-            offset += (4 - length % 4);
+        offset += WS_PADDING_TO_4(length);
     }
     proto_item_set_end(ti, tvb, offset);
 
@@ -1669,8 +1772,8 @@ dissect_sflow_5_flow_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 /* dissect generic interface counters */
-static gint
-dissect_sflow_5_generic_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_generic_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_245_ifindex, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1716,8 +1819,8 @@ dissect_sflow_5_generic_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, 
 }
 
 /* dissect ethernet interface counters */
-static gint
-dissect_sflow_5_ethernet_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_ethernet_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_245_dot3StatsAlignmentErrors, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1750,8 +1853,8 @@ dissect_sflow_5_ethernet_interface(proto_tree *counter_data_tree, tvbuff_t *tvb,
 }
 
 /* dissect token ring counters */
-static gint
-dissect_sflow_5_token_ring(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_token_ring(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_245_dot5StatsLineErrors, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1794,8 +1897,8 @@ dissect_sflow_5_token_ring(proto_tree *counter_data_tree, tvbuff_t *tvb, gint of
 }
 
 /* dissect 100 BaseVG interface counters */
-static gint
-dissect_sflow_5_vg_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_vg_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_245_dot12InHighPriorityFrames, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1830,8 +1933,8 @@ dissect_sflow_5_vg_interface(proto_tree *counter_data_tree, tvbuff_t *tvb, gint 
 }
 
 /* dissect VLAN counters */
-static gint
-dissect_sflow_5_vlan(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_vlan(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_245_vlan_id, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1857,8 +1960,8 @@ static int * const sflow_5_lag_port_state_flags[] = {
     NULL
 };
 
-static gint
-dissect_sflow_5_lag(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_lag(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
     proto_tree_add_item(counter_data_tree, hf_sflow_lag_port_actorsystemid, tvb, offset, 6, ENC_NA);
     offset += 6;
     /* XDR requires 4-byte alignment */
@@ -1894,8 +1997,8 @@ dissect_sflow_5_lag(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
 }
 
 /* dissect 802.11 counters */
-static gint
-dissect_sflow_5_80211_counters(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_80211_counters(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_5_dot11TransmittedFragmentCount, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1942,8 +2045,8 @@ dissect_sflow_5_80211_counters(proto_tree *counter_data_tree, tvbuff_t *tvb, gin
 }
 
 /* dissect processor information */
-static gint
-dissect_sflow_5_processor_information(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_processor_information(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_5_cpu_5s, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1960,8 +2063,8 @@ dissect_sflow_5_processor_information(proto_tree *counter_data_tree, tvbuff_t *t
 }
 
 /* dissect radio utilization */
-static gint
-dissect_sflow_5_radio_utilization(proto_tree *counter_data_tree, tvbuff_t *tvb, gint offset) {
+static int
+dissect_sflow_5_radio_utilization(proto_tree *counter_data_tree, tvbuff_t *tvb, int offset) {
 
     proto_tree_add_item(counter_data_tree, hf_sflow_5_elapsed_time, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1974,11 +2077,11 @@ dissect_sflow_5_radio_utilization(proto_tree *counter_data_tree, tvbuff_t *tvb, 
 }
 
 /* dissect an sflow v5 counters record */
-static gint
-dissect_sflow_5_counters_record(tvbuff_t *tvb, proto_tree *tree, gint offset) {
+static int
+dissect_sflow_5_counters_record(tvbuff_t *tvb, proto_tree *tree, int offset) {
     proto_tree *counter_data_tree;
-    proto_item *ti;
-    guint32     enterprise_format, enterprise, format;
+    proto_item *ti, *expert_ti;
+    uint32_t    enterprise_format, enterprise, format, length;
 
     /* what kind of flow sample is it? */
     enterprise_format = tvb_get_ntohl(tvb, offset);
@@ -1995,7 +2098,7 @@ dissect_sflow_5_counters_record(tvbuff_t *tvb, proto_tree *tree, gint offset) {
         proto_tree_add_item(counter_data_tree, hf_sflow_5_counters_record_format, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
 
-        proto_tree_add_item(counter_data_tree, hf_sflow_5_flow_data_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(counter_data_tree, hf_sflow_5_flow_data_length, tvb, offset, 4, ENC_BIG_ENDIAN, &length);
         offset += 4;
 
         switch (format) {
@@ -2027,11 +2130,12 @@ dissect_sflow_5_counters_record(tvbuff_t *tvb, proto_tree *tree, gint offset) {
                 offset = dissect_sflow_5_radio_utilization(counter_data_tree, tvb, offset);
                 break;
             default:
+                expert_ti = proto_tree_add_item(counter_data_tree, hf_sflow_enterprise_data, tvb, offset, length, ENC_NA);
+                expert_add_info(NULL, expert_ti, &ei_sflow_unknown_record_format);
+                offset += WS_ROUNDUP_4(length);
                 break;
         }
     } else { /* unknown enterprise format, what to do?? */
-        guint32 length;
-
         counter_data_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
             ett_sflow_5_counters_record, &ti, "Unknown enterprise format");
         proto_tree_add_uint_format_value(counter_data_tree, hf_sflow_enterprise, tvb, offset, 4,
@@ -2044,8 +2148,7 @@ dissect_sflow_5_counters_record(tvbuff_t *tvb, proto_tree *tree, gint offset) {
         proto_tree_add_item(counter_data_tree, hf_sflow_enterprise_data, tvb, offset, length, ENC_NA);
         offset += length;
         /* get the correct offset by adding padding byte count */
-        if (length % 4)
-            offset += (4 - length % 4);
+        offset += WS_PADDING_TO_4(length);
     }
     proto_item_set_end(ti, tvb, offset);
 
@@ -2055,9 +2158,9 @@ dissect_sflow_5_counters_record(tvbuff_t *tvb, proto_tree *tree, gint offset) {
 /* dissect an sflow v5 flow sample */
 static void
 dissect_sflow_5_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
-        proto_tree *tree, gint offset, proto_item *parent) {
+        proto_tree *tree, int offset, proto_item *parent) {
 
-    guint32 sequence_number, sampling_rate,
+    uint32_t sequence_number, sampling_rate,
             output, records, i, output_format;
     proto_item *ti;
     proto_tree *output_interface_tree;
@@ -2100,8 +2203,7 @@ dissect_sflow_5_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
             break;
     }
     offset += 4;
-    records = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_flow_sample_flow_record, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_flow_sample_flow_record, tvb, offset, 4, ENC_BIG_ENDIAN, &records);
     offset += 4;
 
     /* start loop processing flow records */
@@ -2116,9 +2218,10 @@ dissect_sflow_5_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
 /* dissect an expanded flow sample */
 static void
 dissect_sflow_5_expanded_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
-        proto_tree *tree, gint offset, proto_item *parent) {
+        proto_tree *tree, int offset, proto_item *parent) {
 
-    guint32 sequence_number, sampling_rate, records, i;
+    proto_item *ti;
+    uint32_t sequence_number, sampling_rate, records, i, output_format, output_value;
 
     sequence_number = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_flow_sample_sequence_number, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2140,12 +2243,27 @@ dissect_sflow_5_expanded_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
     offset += 4;
     proto_tree_add_item(tree, hf_sflow_flow_sample_input_interface_value, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
-    proto_tree_add_item(tree, hf_sflow_24_flow_sample_output_interface_format, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_5_flow_sample_output_interface_expanded_format, tvb, offset, 4, ENC_BIG_ENDIAN, &output_format);
     offset += 4;
-    proto_tree_add_item(tree, hf_sflow_24_flow_sample_output_interface_value, tvb, offset, 4, ENC_BIG_ENDIAN);
+    switch(output_format) {
+        case SFLOW_5_INT_FORMAT_DISCARD:
+            proto_tree_add_item(tree, hf_sflow_5_flow_sample_output_interface_expanded_value_discarded, tvb, offset, 4, ENC_BIG_ENDIAN);
+            break;
+        case SFLOW_5_INT_FORMAT_MULTIPLE:
+            ti =proto_tree_add_item_ret_uint(tree, hf_sflow_5_flow_sample_output_interface_expanded_value_number, tvb, offset, 4, ENC_BIG_ENDIAN, &output_value);
+            if (output_value == 0x0) {
+                proto_item_append_text(ti, " unknown number of interfaces greater than 1");
+            }
+            break;
+        case SFLOW_5_INT_FORMAT_IFINDEX:
+            proto_tree_add_item(tree, hf_sflow_5_flow_sample_output_interface_expanded_value_ifindex, tvb, offset, 4, ENC_BIG_ENDIAN);
+            break;
+        default:
+            proto_tree_add_item(tree, hf_sflow_5_flow_sample_output_interface_expanded_value, tvb, offset, 4, ENC_BIG_ENDIAN);
+            break;
+    }
     offset += 4;
-    records = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_flow_sample_flow_record, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_flow_sample_flow_record, tvb, offset, 4, ENC_BIG_ENDIAN, &records);
     offset += 4;
 
     /* start loop processing flow records
@@ -2156,10 +2274,10 @@ dissect_sflow_5_expanded_flow_sample(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 /* dissect an sflow v2/4 counters sample */
-static gint
-dissect_sflow_24_counters_sample(tvbuff_t *tvb, proto_tree *tree, gint offset, proto_item *parent) {
+static int
+dissect_sflow_24_counters_sample(tvbuff_t *tvb, proto_tree *tree, int offset, proto_item *parent) {
 
-    guint32 sequence_number, counters_type;
+    uint32_t sequence_number, counters_type;
 
     sequence_number = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_counters_sample_sequence_number, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2246,20 +2364,18 @@ dissect_sflow_24_counters_sample(tvbuff_t *tvb, proto_tree *tree, gint offset, p
 
 /* dissect an sflow v5 counters sample */
 static void
-dissect_sflow_5_counters_sample(tvbuff_t *tvb, proto_tree *tree, gint offset, proto_item *parent) {
-    guint32 sequence_number, records, i;
+dissect_sflow_5_counters_sample(tvbuff_t *tvb, proto_tree *tree, int offset, proto_item *parent) {
+    uint32_t sequence_number, records, i;
 
     /* grab the flow header.  This will remain in network byte
        order, so must convert each item before use */
-    sequence_number = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_counters_sample_sequence_number, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_counters_sample_sequence_number, tvb, offset, 4, ENC_BIG_ENDIAN, &sequence_number);
     proto_item_append_text(parent, ", seq %u", sequence_number);
     offset += 4;
     proto_tree_add_item(tree, hf_sflow_counters_sample_source_id_type, tvb, offset, 4, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_sflow_counters_sample_source_id_index, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
-    records = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_sflow_counters_sample_counters_records, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_sflow_counters_sample_counters_records, tvb, offset, 4, ENC_BIG_ENDIAN, &records);
     offset += 4;
 
     /* start loop processing counters records
@@ -2271,8 +2387,8 @@ dissect_sflow_5_counters_sample(tvbuff_t *tvb, proto_tree *tree, gint offset, pr
 
 /* dissect an expanded counters sample */
 static void
-dissect_sflow_5_expanded_counters_sample(tvbuff_t *tvb, proto_tree *tree, gint offset, proto_item *parent) {
-    guint32 sequence_number, records, i;
+dissect_sflow_5_expanded_counters_sample(tvbuff_t *tvb, proto_tree *tree, int offset, proto_item *parent) {
+    uint32_t sequence_number, records, i;
 
     sequence_number = tvb_get_ntohl(tvb, offset);
     proto_tree_add_item(tree, hf_sflow_counters_sample_sequence_number, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2304,7 +2420,7 @@ static int * const sflow_lag_port_state_flags[] = {
 
 /* dissect an LAG Port Stats ( http://www.sflow.org/sflow_lag.txt ) */
 static void
-dissect_sflow_5_lag_port_stats(tvbuff_t *tvb, proto_tree *tree, gint offset, proto_item *parent _U_) {
+dissect_sflow_5_lag_port_stats(tvbuff_t *tvb, proto_tree *tree, int offset, proto_item *parent _U_) {
 
     proto_tree_add_item(tree, hf_sflow_lag_port_actorsystemid, tvb, offset, 6, ENC_NA);
     offset += 6;
@@ -2344,11 +2460,11 @@ dissect_sflow_5_lag_port_stats(tvbuff_t *tvb, proto_tree *tree, gint offset, pro
 }
 
 /* Code to dissect the sflow v2/4/5 samples */
-static gint
-dissect_sflow_245_samples(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset, guint32 version) {
+static int
+dissect_sflow_245_samples(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint32_t version) {
     proto_tree *sflow_245_sample_tree;
     proto_item *ti;             /* tree item */
-    guint32     sample_type, enterprise, format, length;
+    uint32_t    sample_type, enterprise, format, length;
 
     /* decide what kind of sample it is. */
     sample_type = tvb_get_ntohl(tvb, offset);
@@ -2364,8 +2480,7 @@ dissect_sflow_245_samples(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
             proto_tree_add_item(sflow_245_sample_tree, hf_sflow_245_sampletype12, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
 
-            length = tvb_get_ntohl(tvb, offset);
-            proto_tree_add_item(sflow_245_sample_tree, hf_sflow_5_sample_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(sflow_245_sample_tree, hf_sflow_5_sample_length, tvb, offset, 4, ENC_BIG_ENDIAN, &length);
             offset += 4;
 
             switch (format) {
@@ -2429,15 +2544,15 @@ dissect_sflow_245(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
     /* Set up structures needed to add the protocol subtree and manage it */
     proto_item                   *ti;
     proto_tree                   *sflow_245_tree;
-    guint32                       version, sub_agent_id, seqnum;
+    uint32_t                      version, sub_agent_id, seqnum;
     address                       addr_details;
     int                           sflow_addr_type;
     struct sflow_address_type     addr_type;
-    guint32                       uptime;
+    uint32_t                      uptime;
 
-    guint32        numsamples;
-    guint          offset = 0;
-    guint          i      = 0;
+    uint32_t       numsamples;
+    unsigned       offset = 0;
+    unsigned       i      = 0;
 
     addr_type.hf_addr_v4 = hf_sflow_agent_address_v4;
     addr_type.hf_addr_v6 = hf_sflow_agent_address_v6;
@@ -2603,7 +2718,7 @@ proto_register_sflow(void) {
                 "IPv4 Precedence Type", HFILL}},
         { &hf_sflow_5_flow_record_format,
             { "Format", "sflow_245.flow_record_format",
-                FT_UINT32, BASE_DEC | BASE_EXT_STRING, &sflow_5_flow_record_type_ext, 0x0,
+                FT_UINT32, BASE_DEC | BASE_EXT_STRING, &sflow_5_flow_record_type_ext, 0x00000FFF,
                 "Format of sFlow flow record", HFILL}},
         { &hf_sflow_5_counters_record_format,
             { "Format", "sflow_245.counters_record_format",
@@ -3159,7 +3274,7 @@ proto_register_sflow(void) {
       },
       { &hf_sflow_245_ethernet_packet_type,
         { "Ethernet Packet Type", "sflow_245.ethernet.packet_type",
-          FT_UINT32, BASE_DEC, NULL, 0x0,
+          FT_UINT32, BASE_HEX, VALS(etype_vals), 0x0,
           NULL, HFILL }
       },
       { &hf_sflow_245_length_of_ip_packet,
@@ -3434,7 +3549,7 @@ proto_register_sflow(void) {
       },
       { &hf_sflow_flow_sample_sample_pool,
         { "Sample pool", "sflow.flow_sample.sample_pool",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_total_packets, 0x0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_total_packets), 0x0,
           NULL, HFILL }
       },
       { &hf_sflow_flow_sample_dropped_packets,
@@ -3452,9 +3567,9 @@ proto_register_sflow(void) {
           FT_UINT32, BASE_DEC, NULL, 0x0,
           NULL, HFILL }
       },
-      { &hf_sflow_24_flow_sample_output_interface_format,
-        { "Output interface format", "sflow.flow_sample.output_interface.format",
-          FT_UINT32, BASE_DEC, NULL, 0x7fffffff,
+      { &hf_sflow_5_flow_sample_output_interface_expanded_format,
+        { "Output interface expanded format", "sflow.flow_sample.output_interface.expanded.format",
+          FT_UINT32, BASE_DEC, VALS(interface_format), 0x0,
           NULL, HFILL }
       },
       { &hf_sflow_24_flow_sample_output_interface,
@@ -3524,6 +3639,26 @@ proto_register_sflow(void) {
       },
       { &hf_sflow_24_flow_sample_output_interface_value,
         { "Output interface value", "sflow.flow_sample.output_interface_value",
+          FT_UINT32, BASE_DEC, NULL, 0x0,
+          NULL, HFILL }
+      },
+      { &hf_sflow_5_flow_sample_output_interface_expanded_value,
+        { "Output interface expanded value", "sflow.flow_sample.output_interface_expanded.value",
+          FT_UINT32, BASE_DEC, NULL, 0x0,
+          NULL, HFILL }
+      },
+      { &hf_sflow_5_flow_sample_output_interface_expanded_value_discarded,
+        { "Output interface packet discarded", "sflow.flow_sample.output_interface_expanded.value_discarded",
+          FT_UINT32, BASE_DEC, VALS(interface_discard), 0x0,
+          NULL, HFILL }
+      },
+      { &hf_sflow_5_flow_sample_output_interface_expanded_value_number,
+        { "Output inferface number of interfaces", "sflow.flow_sample.output_interface_expanded.number",
+          FT_UINT32, BASE_DEC, NULL, 0x0,
+          NULL, HFILL }
+      },
+      { &hf_sflow_5_flow_sample_output_interface_expanded_value_ifindex,
+        { "Output interface ifIndex", "sflow.flow_sample.output_interface_expanded.ifindex",
           FT_UINT32, BASE_DEC, NULL, 0x0,
           NULL, HFILL }
       },
@@ -3761,7 +3896,7 @@ proto_register_sflow(void) {
     };
 
     /* Setup protocol subtree array */
-    static gint * ett[] = {
+    static int * ett[] = {
         &ett_sflow_245,
         &ett_sflow_245_sample,
         &ett_sflow_5_flow_record,
@@ -3779,6 +3914,7 @@ proto_register_sflow(void) {
 
     static ei_register_info ei[] = {
         { &ei_sflow_invalid_address_type, { "sflow.invalid_address_type", PI_MALFORMED, PI_ERROR, "Unknown/invalid address type", EXPFILL }},
+        { &ei_sflow_unknown_record_format, { "sflow.unknown_record_format", PI_UNDECODED, PI_NOTE, "Unknown/invalid record type", EXPFILL }},
     };
 
     expert_module_t* expert_sflow;

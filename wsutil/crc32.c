@@ -16,6 +16,7 @@
 #include "config.h"
 
 #include <wsutil/crc32.h>
+#include <wsutil/zlib_compat.h>
 
 #define CRC32_ACCUMULATE(c,d,table) (c=(c>>8)^(table)[(c^(d))&0xFF])
 
@@ -395,6 +396,9 @@ crc32_ccitt(const uint8_t *buf, unsigned len)
 uint32_t
 crc32_ccitt_seed(const uint8_t *buf, unsigned len, uint32_t seed)
 {
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
+	return (unsigned)ZLIB_PREFIX(crc32)(~seed, buf, len);
+#else /* USE_ZLIB_OR_ZLIBNG */
 	unsigned i;
 	uint32_t crc32 = seed;
 
@@ -402,6 +406,7 @@ crc32_ccitt_seed(const uint8_t *buf, unsigned len, uint32_t seed)
 		CRC32_ACCUMULATE(crc32, buf[i], crc32_ccitt_table);
 
 	return ( ~crc32 );
+#endif /* USE_ZLIB_OR_ZLIBNG */
 }
 
 uint32_t

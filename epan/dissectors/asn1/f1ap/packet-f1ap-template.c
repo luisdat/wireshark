@@ -1,6 +1,6 @@
 /* packet-f1ap.c
  * Routines for E-UTRAN F1 Application Protocol (F1AP) packet dissection
- * Copyright 2018-2024, Pascal Quantin <pascal@wireshark.org>
+ * Copyright 2018-2026, Pascal Quantin <pascal@wireshark.org>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -8,7 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * References: 3GPP TS 38.473 V17.7.0 (2023-12)
+ * References: 3GPP TS 38.473 V19.1.0 (2025-12)
  */
 
 #include "config.h"
@@ -16,9 +16,11 @@
 #include <epan/packet.h>
 
 #include <epan/asn1.h>
-#include <epan/sctpppids.h>
 #include <epan/proto_data.h>
 #include <epan/stats_tree.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
+#include <wsutil/array.h>
 
 #include "packet-per.h"
 #include "packet-f1ap.h"
@@ -28,6 +30,8 @@
 #include "packet-pdcp-nr.h"
 #include "packet-lte-rrc.h"
 #include "packet-nrppa.h"
+#include "packet-lpp.h"
+#include "packet-sctp.h"
 
 #define PNAME  "F1 Application Protocol"
 #define PSNAME "F1AP"
@@ -70,85 +74,122 @@ static int hf_f1ap_ReportCharacteristics_Reserved;
 #include "packet-f1ap-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_f1ap;
-static gint ett_f1ap_ResourceCoordinationTransferContainer;
-static gint ett_f1ap_PLMN_Identity;
-static gint ett_f1ap_MIB_message;
-static gint ett_f1ap_SIB1_message;
-static gint ett_f1ap_CG_ConfigInfo;
-static gint ett_f1ap_CellGroupConfig;
-static gint ett_f1ap_TransportLayerAddress;
-static gint ett_f1ap_UE_CapabilityRAT_ContainerList;
-static gint ett_f1ap_measurementTimingConfiguration;
-static gint ett_f1ap_DUtoCURRCContainer;
-static gint ett_f1ap_requestedP_MaxFR1;
-static gint ett_f1ap_HandoverPreparationInformation;
-static gint ett_f1ap_MeasConfig;
-static gint ett_f1ap_MeasGapConfig;
-static gint ett_f1ap_MeasGapSharingConfig;
-static gint ett_f1ap_EUTRA_NR_CellResourceCoordinationReq_Container;
-static gint ett_f1ap_EUTRA_NR_CellResourceCoordinationReqAck_Container;
-static gint ett_f1ap_ProtectedEUTRAResourceIndication;
-static gint ett_f1ap_RRCContainer;
-static gint ett_f1ap_RRCContainer_RRCSetupComplete;
-static gint ett_f1ap_sIBmessage;
-static gint ett_f1ap_UplinkTxDirectCurrentListInformation;
-static gint ett_f1ap_DRX_Config;
-static gint ett_f1ap_Ph_InfoSCG;
-static gint ett_f1ap_RequestedBandCombinationIndex;
-static gint ett_f1ap_RequestedFeatureSetEntryIndex;
-static gint ett_f1ap_RequestedP_MaxFR2;
-static gint ett_f1ap_UEAssistanceInformation;
-static gint ett_f1ap_CG_Config;
-static gint ett_f1ap_Ph_InfoMCG;
-static gint ett_f1ap_BurstArrivalTime;
-static gint ett_f1ap_cSI_RS_Configuration;
-static gint ett_f1ap_sR_Configuration;
-static gint ett_f1ap_pDCCH_ConfigSIB1;
-static gint ett_f1ap_sCS_Common;
-static gint ett_f1ap_IABTNLAddressIPv4Address;
-static gint ett_f1ap_IABTNLAddressIPv6Address;
-static gint ett_f1ap_IABTNLAddressIPv6Prefix;
-static gint ett_f1ap_InterfacesToTrace;
-static gint ett_f1ap_MeasurementsToActivate;
-static gint ett_f1ap_NRUERLFReportContainer;
-static gint ett_f1ap_RACH_Config_Common;
-static gint ett_f1ap_RACH_Config_Common_IAB;
-static gint ett_f1ap_RACHReportContainer;
-static gint ett_f1ap_ReferenceTime;
-static gint ett_f1ap_ReportCharacteristics;
-static gint ett_f1ap_SIB10_message;
-static gint ett_f1ap_SIB12_message;
-static gint ett_f1ap_SIB13_message;
-static gint ett_f1ap_SIB14_message;
-static gint ett_f1ap_SIB15_message;
-static gint ett_f1ap_SIB17_message;
-static gint ett_f1ap_SIB20_message;
-static gint ett_f1ap_SL_PHY_MAC_RLC_Config;
-static gint ett_f1ap_SL_RLC_ChannelToAddModList;
-static gint ett_f1ap_SL_ConfigDedicatedEUTRA_Info;
-static gint ett_f1ap_TDD_UL_DLConfigCommonNR;
-static gint ett_f1ap_UEAssistanceInformationEUTRA;
-static gint ett_f1ap_PosAssistance_Information;
-static gint ett_f1ap_LocationMeasurementInformation;
-static gint ett_f1ap_MUSIM_GapConfig;
-static gint ett_f1ap_SDT_MAC_PHY_CG_Config;
-static gint ett_f1ap_SDTRLCBearerConfiguration;
-static gint ett_f1ap_MBSInterestIndication;
-static gint ett_f1ap_NeedForGapsInfoNR;
-static gint ett_f1ap_NeedForGapNCSGInfoNR;
-static gint ett_f1ap_NeedForGapNCSGInfoEUTRA;
-static gint ett_f1ap_MBS_Broadcast_NeighbourCellList;
-static gint ett_f1ap_mRB_PDCP_Config_Broadcast;
-static gint ett_f1ap_posMeasGapPreConfigToAddModList;
-static gint ett_f1ap_posMeasGapPreConfigToReleaseList;
-static gint ett_f1ap_SidelinkConfigurationContainer;
-static gint ett_f1ap_SRSPosRRCInactiveConfig;
-static gint ett_f1ap_successfulHOReportContainer;
-static gint ett_f1ap_UL_GapFR2_Config;
-static gint ett_f1ap_ConfigRestrictInfoDAPS;
-static gint ett_f1ap_UplinkTxDirectCurrentTwoCarrierListInfo;
-static gint ett_f1ap_Ncd_SSB_RedCapInitialBWP_SDT;
+static int ett_f1ap;
+static int ett_f1ap_ResourceCoordinationTransferContainer;
+static int ett_f1ap_PLMN_Identity;
+static int ett_f1ap_MIB_message;
+static int ett_f1ap_SIB1_message;
+static int ett_f1ap_CG_ConfigInfo;
+static int ett_f1ap_CellGroupConfig;
+static int ett_f1ap_TransportLayerAddress;
+static int ett_f1ap_UE_CapabilityRAT_ContainerList;
+static int ett_f1ap_measurementTimingConfiguration;
+static int ett_f1ap_DUtoCURRCContainer;
+static int ett_f1ap_requestedP_MaxFR1;
+static int ett_f1ap_HandoverPreparationInformation;
+static int ett_f1ap_MeasConfig;
+static int ett_f1ap_MeasGapConfig;
+static int ett_f1ap_MeasGapSharingConfig;
+static int ett_f1ap_EUTRA_NR_CellResourceCoordinationReq_Container;
+static int ett_f1ap_EUTRA_NR_CellResourceCoordinationReqAck_Container;
+static int ett_f1ap_ProtectedEUTRAResourceIndication;
+static int ett_f1ap_RRCContainer;
+static int ett_f1ap_RRCContainer_RRCSetupComplete;
+static int ett_f1ap_sIBmessage;
+static int ett_f1ap_UplinkTxDirectCurrentListInformation;
+static int ett_f1ap_DRX_Config;
+static int ett_f1ap_Ph_InfoSCG;
+static int ett_f1ap_RequestedBandCombinationIndex;
+static int ett_f1ap_RequestedFeatureSetEntryIndex;
+static int ett_f1ap_RequestedP_MaxFR2;
+static int ett_f1ap_UEAssistanceInformation;
+static int ett_f1ap_CG_Config;
+static int ett_f1ap_Ph_InfoMCG;
+static int ett_f1ap_BurstArrivalTime;
+static int ett_f1ap_cSI_RS_Configuration;
+static int ett_f1ap_sR_Configuration;
+static int ett_f1ap_pDCCH_ConfigSIB1;
+static int ett_f1ap_sCS_Common;
+static int ett_f1ap_IABTNLAddressIPv4Address;
+static int ett_f1ap_IABTNLAddressIPv6Address;
+static int ett_f1ap_IABTNLAddressIPv6Prefix;
+static int ett_f1ap_InterfacesToTrace;
+static int ett_f1ap_MeasurementsToActivate;
+static int ett_f1ap_NRUERLFReportContainer;
+static int ett_f1ap_RACH_Config_Common;
+static int ett_f1ap_RACH_Config_Common_IAB;
+static int ett_f1ap_RAReportContainer;
+static int ett_f1ap_ReferenceTime;
+static int ett_f1ap_ReportCharacteristics;
+static int ett_f1ap_SIB10_message;
+static int ett_f1ap_SIB12_message;
+static int ett_f1ap_SIB13_message;
+static int ett_f1ap_SIB14_message;
+static int ett_f1ap_SIB15_message;
+static int ett_f1ap_SIB17_message;
+static int ett_f1ap_SIB17bis_message;
+static int ett_f1ap_SIB20_message;
+static int ett_f1ap_SIB22_message;
+static int ett_f1ap_SIB23_message;
+static int ett_f1ap_SIB24_message;
+static int ett_f1ap_SL_PHY_MAC_RLC_Config;
+static int ett_f1ap_SL_PHY_MAC_RLC_ConfigExt;
+static int ett_f1ap_SL_RLC_ChannelToAddModList;
+static int ett_f1ap_SL_ConfigDedicatedEUTRA_Info;
+static int ett_f1ap_TDD_UL_DLConfigCommonNR;
+static int ett_f1ap_UEAssistanceInformationEUTRA;
+static int ett_f1ap_PosAssistance_Information;
+static int ett_f1ap_LocationMeasurementInformation;
+static int ett_f1ap_MUSIM_GapConfig;
+static int ett_f1ap_SDT_MAC_PHY_CG_Config;
+static int ett_f1ap_SDTRLCBearerConfiguration;
+static int ett_f1ap_MBSInterestIndication;
+static int ett_f1ap_NeedForGapsInfoNR;
+static int ett_f1ap_NeedForGapNCSGInfoNR;
+static int ett_f1ap_NeedForGapNCSGInfoEUTRA;
+static int ett_f1ap_MBS_Broadcast_NeighbourCellList;
+static int ett_f1ap_mRB_PDCP_Config_Broadcast;
+static int ett_f1ap_posMeasGapPreConfigToAddModList;
+static int ett_f1ap_posMeasGapPreConfigToReleaseList;
+static int ett_f1ap_SidelinkConfigurationContainer;
+static int ett_f1ap_SRSPosRRCInactiveConfig;
+static int ett_f1ap_successfulHOReportContainer;
+static int ett_f1ap_UL_GapFR2_Config;
+static int ett_f1ap_ConfigRestrictInfoDAPS;
+static int ett_f1ap_UplinkTxDirectCurrentTwoCarrierListInfo;
+static int ett_f1ap_Ncd_SSB_RedCapInitialBWP_SDT;
+static int ett_f1ap_JointorDLTCIStateID;
+static int ett_f1ap_ULTCIStateID;
+static int ett_f1ap_ReferenceConfigurationInformation;
+static int ett_f1ap_LTMCFRAResourceConfig;
+static int ett_f1ap_location_Information;
+static int ett_f1ap_velocity_Information;
+static int ett_f1ap_successfulPSCellChangeReportContainer;
+static int ett_f1ap_cSIResourceConfigToAddModList;
+static int ett_f1ap_cSIResourceConfigToReleaseList;
+static int ett_f1ap_mbs_NeighbourCellList;
+static int ett_f1ap_mtch_NeighbourCellprovided;
+static int ett_f1ap_thresholdMBSList;
+static int ett_f1ap_mBSMulticastConfiguration;
+static int ett_f1ap_MusimCandidateBandList;
+static int ett_f1ap_NeedForInterruptionInfoNR;
+static int ett_f1ap_RACHConfiguration;
+static int ett_f1ap_SRSPosRRCInactiveValidityAreaConfig;
+static int ett_f1ap_TCIStatesConfigurationsList;
+static int ett_f1ap_executionCondition;
+static int ett_f1ap_noSecurityChangeID;
+static int ett_f1ap_servingCellNoSecurityChangeID;
+static int ett_f1ap_nZP_CSI_RS_ResourceSet;
+static int ett_f1ap_nZP_CSI_RS_Resource;
+static int ett_f1ap_cSI_RSResourceToAddModList;
+static int ett_f1ap_cSI_RSResourceToReleaseList;
+static int ett_f1ap_cSI_RSResourceSetToAddModList;
+static int ett_f1ap_cSI_IMResourceToAddModList;
+static int ett_f1ap_cSI_IMResourceSetToAddModList;
+static int ett_f1ap_OndemandSIB1Config;
+static int ett_f1ap_SBFD_Frequency_Configuration;
+static int ett_f1ap_SSB_resource_config;
+static int ett_f1ap_sRS_Resource;
 #include "packet-f1ap-ett.c"
 
 enum{
@@ -161,15 +202,15 @@ enum{
 
 static void set_stats_message_type(packet_info *pinfo, int type);
 
-static const guint8 *st_str_packets        = "Total Packets";
-static const guint8 *st_str_packet_types   = "F1AP Packet Types";
+static const char *st_str_packets        = "Total Packets";
+static const char *st_str_packet_types   = "F1AP Packet Types";
 
 static int st_node_packets = -1;
 static int st_node_packet_types = -1;
 static int f1ap_tap;
 
 struct f1ap_tap_t {
-    gint f1ap_mtype;
+    int f1ap_mtype;
 };
 
 #define MTYPE_RESET                                        1
@@ -308,6 +349,33 @@ struct f1ap_tap_t {
 #define MTYPE_MEASUREMENT_ACTIVATION                       134
 #define MTYPE_QOE_INFORMATION_TRANSFER                     135
 #define MTYPE_POS_SYSTEM_INFORMATION_DELIVERY_COMMAND      136
+#define MTYPE_DU_CU_CELL_SWITCH_NOTIFICATION               137
+#define MTYPE_CU_DU_CELL_SWITCH_NOTIFICATION               138
+#define MTYPE_DU_CU_TA_INFORMATION_TRANSFER                139
+#define MTYPE_CU_DU_TA_INFORMATION_TRANSFER                140
+#define MTYPE_QOE_INFORMATION_TRANSFER_CONTROL             141
+#define MTYPE_RACH_INDICATION                              142
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_REQUEST        143
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_RESPONSE       144
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_FAILURE        145
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_REPORT         146
+#define MTYPE_MIAB_F1_SETUP_TRIGGERING                     147
+#define MTYPE_MIAB_F1_SETUP_OUTCOME_NOTIFICATION           148
+#define MTYPE_MULTICAST_CONTEXT_NOTIFICATION_INDICATION    149
+#define MTYPE_MULTICAST_CONTEXT_NOTIFICATION_CONFIRM       150
+#define MTYPE_MULTICAST_CONTEXT_NOTIFICATION_REFUSE        151
+#define MTYPE_MULTICAST_COMMON_CONFIGURATION_REQUEST       152
+#define MTYPE_MULTICAST_COMMON_CONFIGURATION_RESPONSE      153
+#define MTYPE_MULTICAST_COMMON_CONFIGURATION_REFUSE        154
+#define MTYPE_BROADCAST_TRANSPORT_RESOURCE_REQUEST         155
+#define MTYPE_DU_CU_ACCESS_AND_MOBILITY_INDICATION         156
+#define MTYPE_SRS_INFORMATION_RESERVATION_NOTIFICATION     157
+#define MTYPE_CU_DU_MOBILITY_INITIATION_REQUEST            158
+#define MTYPE_CLI_INDICATION                               159
+#define MTYPE_DU_CU_CSI_RS_COORDINATION_REQUEST            160
+#define MTYPE_DU_CU_CSI_RS_COORDINATION_RESPONSE           161
+#define MTYPE_CU_DU_CSI_RS_COORDINATION_REQUEST            162
+#define MTYPE_CU_DU_CSI_RS_COORDINATION_RESPONSE           163
 
 static const value_string mtype_names[] = {
     { MTYPE_RESET,     "Reset" },
@@ -446,34 +514,62 @@ static const value_string mtype_names[] = {
     { MTYPE_MEASUREMENT_ACTIVATION, "MeasurementActivation" },
     { MTYPE_QOE_INFORMATION_TRANSFER, "QoEInformationTransfer" },
     { MTYPE_POS_SYSTEM_INFORMATION_DELIVERY_COMMAND, "PosSystemInformationDeliveryCommand" },
+    { MTYPE_DU_CU_CELL_SWITCH_NOTIFICATION, "DUCUCellSwitchNotification" },
+    { MTYPE_CU_DU_CELL_SWITCH_NOTIFICATION, "CUDUCellSwitchNotification" },
+    { MTYPE_DU_CU_TA_INFORMATION_TRANSFER, "DUCUTAInformationTransfer" },
+    { MTYPE_CU_DU_TA_INFORMATION_TRANSFER, "CUDUTAInformationTransfer" },
+    { MTYPE_QOE_INFORMATION_TRANSFER_CONTROL, "QoEInformationTransferControl" },
+    { MTYPE_RACH_INDICATION, "RachIndication" },
+    { MTYPE_TIMING_SYNCHRONISATION_STATUS_REQUEST, "TimingSynchronisationStatusRequest" },
+    { MTYPE_TIMING_SYNCHRONISATION_STATUS_RESPONSE, "TimingSynchronisationStatusResponse" },
+    { MTYPE_TIMING_SYNCHRONISATION_STATUS_FAILURE, "TimingSynchronisationStatusFailure" },
+    { MTYPE_TIMING_SYNCHRONISATION_STATUS_REPORT, "TimingSynchronisationStatusReport" },
+    { MTYPE_MIAB_F1_SETUP_TRIGGERING, "MIABF1SetupTriggering" },
+    { MTYPE_MIAB_F1_SETUP_OUTCOME_NOTIFICATION, "MIABF1SetupOutcomeNotification" },
+    { MTYPE_MULTICAST_CONTEXT_NOTIFICATION_INDICATION, "MulticastContextNotificationIndication" },
+    { MTYPE_MULTICAST_CONTEXT_NOTIFICATION_CONFIRM, "MulticastContextNotificationConfirm" },
+    { MTYPE_MULTICAST_CONTEXT_NOTIFICATION_REFUSE, "MulticastContextNotificationRefuse" },
+    { MTYPE_MULTICAST_COMMON_CONFIGURATION_REQUEST, "MulticastCommonConfigurationRequest" },
+    { MTYPE_MULTICAST_COMMON_CONFIGURATION_RESPONSE, "MulticastCommonConfigurationResponse" },
+    { MTYPE_MULTICAST_COMMON_CONFIGURATION_REFUSE, "MulticastCommonConfigurationRefuse" },
+    { MTYPE_BROADCAST_TRANSPORT_RESOURCE_REQUEST, "BroadcastTransportResourceRequest" },
+    { MTYPE_DU_CU_ACCESS_AND_MOBILITY_INDICATION, "DUCUAccessAndMobilityIndication" },
+    { MTYPE_SRS_INFORMATION_RESERVATION_NOTIFICATION, "SRSInformationReservationNotification" },
+    { MTYPE_CU_DU_MOBILITY_INITIATION_REQUEST, "CUDUMobilityInitiationRequest" },
+    { MTYPE_CLI_INDICATION, "CLI-Indication" },
+    { MTYPE_DU_CU_CSI_RS_COORDINATION_REQUEST, "DUCUCSIRSCoordinationRequest" },
+    { MTYPE_DU_CU_CSI_RS_COORDINATION_RESPONSE, "DUCUCSIRSCoordinationResponse" },
+    { MTYPE_CU_DU_CSI_RS_COORDINATION_REQUEST, "CUDUCSIRSCoordinationRequest" },
+    { MTYPE_CU_DU_CSI_RS_COORDINATION_RESPONSE, "CUDUCSIRSCoordinationResponse" },
     { 0,  NULL }
 };
 static value_string_ext mtype_names_ext = VALUE_STRING_EXT_INIT(mtype_names);
 
 
 typedef struct {
-  guint32 message_type;
-  guint32 procedure_code;
-  guint32 protocol_ie_id;
-  guint32 protocol_extension_id;
+  uint32_t message_type;
+  uint32_t procedure_code;
+  uint32_t protocol_ie_id;
+  uint32_t protocol_extension_id;
   const char *obj_id;
-  guint32 sib_type;
-  guint32 srb_id;
-  guint32 gdb_cu_ue_f1ap_id;
+  uint32_t sib_type;
+  uint32_t srb_id;
+  uint32_t gdb_cu_ue_f1ap_id;
   e212_number_type_t number_type;
   struct f1ap_tap_t  *stats_tap;
 } f1ap_private_data_t;
 
 typedef struct {
-  guint32 message_type;
-  guint32 ProcedureCode;
-  guint32 ProtocolIE_ID;
-  guint32 ProtocolExtensionID;
+  uint32_t message_type;
+  uint32_t ProcedureCode;
+  uint32_t ProtocolIE_ID;
+  uint32_t ProtocolExtensionID;
 } f1ap_ctx_t;
 
 /* Global variables */
 static dissector_handle_t f1ap_handle;
 static dissector_handle_t nr_rrc_ul_ccch_handle;
+static dissector_handle_t nr_rrc_ul_ccch1_handle;
 static dissector_handle_t nr_rrc_dl_ccch_handle;
 static dissector_handle_t nr_rrc_ul_dcch_handle;
 static dissector_handle_t nr_pdcp_handle;
@@ -493,7 +589,7 @@ static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, pro
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
 
 
-static proto_tree *top_tree = NULL;
+static proto_tree *top_tree;
 
 static void set_message_label(asn1_ctx_t *actx, int type)
 {
@@ -506,21 +602,27 @@ static void set_message_label(asn1_ctx_t *actx, int type)
 
 
 static void
-f1ap_MaxPacketLossRate_fmt(gchar *s, guint32 v)
+f1ap_MaxPacketLossRate_fmt(char *s, uint32_t v)
 {
   snprintf(s, ITEM_LABEL_LENGTH, "%.1f%% (%u)", (float)v/10, v);
 }
 
 static void
-f1ap_PacketDelayBudget_fmt(gchar *s, guint32 v)
+f1ap_PacketDelayBudget_fmt(char *s, uint32_t v)
 {
   snprintf(s, ITEM_LABEL_LENGTH, "%.1fms (%u)", (float)v/2, v);
 }
 
 static void
-f1ap_ExtendedPacketDelayBudget_fmt(gchar *s, guint32 v)
+f1ap_ExtendedPacketDelayBudget_fmt(char *s, uint32_t v)
 {
   snprintf(s, ITEM_LABEL_LENGTH, "%.2fms (%u)", (float)v/100, v);
+}
+
+static void
+f1ap_N6Jitter_fmt(char *s, uint32_t v)
+{
+  snprintf(s, ITEM_LABEL_LENGTH, "%.1fms (%d)", (float)v/2, (int32_t)v);
 }
 
 static f1ap_private_data_t*
@@ -537,7 +639,7 @@ f1ap_get_private_data(packet_info *pinfo)
 }
 
 static void
-add_nr_pdcp_meta_data(packet_info *pinfo, guint8 direction, guint8 srb_id)
+add_nr_pdcp_meta_data(packet_info *pinfo, uint8_t direction, uint8_t srb_id)
 {
   pdcp_nr_info *p_pdcp_nr_info;
 
@@ -555,7 +657,7 @@ add_nr_pdcp_meta_data(packet_info *pinfo, guint8 direction, guint8 srb_id)
   p_pdcp_nr_info->bearerId = srb_id;
   p_pdcp_nr_info->plane = NR_SIGNALING_PLANE;
   p_pdcp_nr_info->seqnum_length = PDCP_NR_SN_LENGTH_12_BITS;
-  p_pdcp_nr_info->maci_present = TRUE;
+  p_pdcp_nr_info->maci_present = true;
   set_pdcp_nr_proto_data(pinfo, p_pdcp_nr_info);
 }
 
@@ -571,7 +673,7 @@ static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto
   f1ap_ctx.ProtocolIE_ID       = f1ap_data->protocol_ie_id;
   f1ap_ctx.ProtocolExtensionID = f1ap_data->protocol_extension_id;
 
-  return (dissector_try_uint_new(f1ap_ies_dissector_table, f1ap_data->protocol_ie_id, tvb, pinfo, tree, FALSE, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(f1ap_ies_dissector_table, f1ap_data->protocol_ie_id, tvb, pinfo, tree, false, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
@@ -584,47 +686,47 @@ static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_in
   f1ap_ctx.ProtocolIE_ID       = f1ap_data->protocol_ie_id;
   f1ap_ctx.ProtocolExtensionID = f1ap_data->protocol_extension_id;
 
-  return (dissector_try_uint_new(f1ap_extension_dissector_table, f1ap_data->protocol_extension_id, tvb, pinfo, tree, FALSE, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(f1ap_extension_dissector_table, f1ap_data->protocol_extension_id, tvb, pinfo, tree, false, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   f1ap_private_data_t *f1ap_data = f1ap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(f1ap_proc_imsg_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, FALSE, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(f1ap_proc_imsg_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   f1ap_private_data_t *f1ap_data = f1ap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(f1ap_proc_sout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, FALSE, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(f1ap_proc_sout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   f1ap_private_data_t *f1ap_data = f1ap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(f1ap_proc_uout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, FALSE, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(f1ap_proc_uout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 
 static void
 f1ap_stats_tree_init(stats_tree *st)
 {
-    st_node_packets = stats_tree_create_node(st, st_str_packets, 0, STAT_DT_INT, TRUE);
+    st_node_packets = stats_tree_create_node(st, st_str_packets, 0, STAT_DT_INT, true);
     st_node_packet_types = stats_tree_create_pivot(st, st_str_packet_types, st_node_packets);
 }
 
 static tap_packet_status
-f1ap_stats_tree_packet(stats_tree* st, packet_info* pinfo _U_,
+f1ap_stats_tree_packet(stats_tree* st, packet_info* pinfo,
                        epan_dissect_t* edt _U_ , const void* p, tap_flags_t flags _U_)
 {
     const struct f1ap_tap_t *pi = (const struct f1ap_tap_t *) p;
 
-    tick_stat_node(st, st_str_packets, 0, FALSE);
+    tick_stat_node(st, st_str_packets, 0, false);
     stats_tree_tick_pivot(st, st_node_packet_types,
-                          val_to_str_ext(pi->f1ap_mtype, &mtype_names_ext,
+                          val_to_str_ext(pinfo->pool, pi->f1ap_mtype, &mtype_names_ext,
                                          "Unknown packet type (%d)"));
     return TAP_PACKET_REDRAW;
 }
@@ -773,7 +875,7 @@ void proto_register_f1ap(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_f1ap,
     &ett_f1ap_ResourceCoordinationTransferContainer,
     &ett_f1ap_PLMN_Identity,
@@ -818,7 +920,7 @@ void proto_register_f1ap(void) {
     &ett_f1ap_NRUERLFReportContainer,
     &ett_f1ap_RACH_Config_Common,
     &ett_f1ap_RACH_Config_Common_IAB,
-    &ett_f1ap_RACHReportContainer,
+    &ett_f1ap_RAReportContainer,
     &ett_f1ap_ReferenceTime,
     &ett_f1ap_ReportCharacteristics,
     &ett_f1ap_SIB10_message,
@@ -827,8 +929,13 @@ void proto_register_f1ap(void) {
     &ett_f1ap_SIB14_message,
     &ett_f1ap_SIB15_message,
     &ett_f1ap_SIB17_message,
+    &ett_f1ap_SIB17bis_message,
     &ett_f1ap_SIB20_message,
+    &ett_f1ap_SIB22_message,
+    &ett_f1ap_SIB23_message,
+    &ett_f1ap_SIB24_message,
     &ett_f1ap_SL_PHY_MAC_RLC_Config,
+    &ett_f1ap_SL_PHY_MAC_RLC_ConfigExt,
     &ett_f1ap_SL_RLC_ChannelToAddModList,
     &ett_f1ap_SL_ConfigDedicatedEUTRA_Info,
     &ett_f1ap_TDD_UL_DLConfigCommonNR,
@@ -853,6 +960,38 @@ void proto_register_f1ap(void) {
     &ett_f1ap_ConfigRestrictInfoDAPS,
     &ett_f1ap_UplinkTxDirectCurrentTwoCarrierListInfo,
     &ett_f1ap_Ncd_SSB_RedCapInitialBWP_SDT,
+    &ett_f1ap_JointorDLTCIStateID,
+    &ett_f1ap_ULTCIStateID,
+    &ett_f1ap_ReferenceConfigurationInformation,
+    &ett_f1ap_LTMCFRAResourceConfig,
+    &ett_f1ap_location_Information,
+    &ett_f1ap_velocity_Information,
+    &ett_f1ap_successfulPSCellChangeReportContainer,
+    &ett_f1ap_cSIResourceConfigToAddModList,
+    &ett_f1ap_cSIResourceConfigToReleaseList,
+    &ett_f1ap_mbs_NeighbourCellList,
+    &ett_f1ap_mtch_NeighbourCellprovided,
+    &ett_f1ap_thresholdMBSList,
+    &ett_f1ap_mBSMulticastConfiguration,
+    &ett_f1ap_MusimCandidateBandList,
+    &ett_f1ap_NeedForInterruptionInfoNR,
+    &ett_f1ap_RACHConfiguration,
+    &ett_f1ap_SRSPosRRCInactiveValidityAreaConfig,
+    &ett_f1ap_TCIStatesConfigurationsList,
+    &ett_f1ap_executionCondition,
+    &ett_f1ap_noSecurityChangeID,
+    &ett_f1ap_servingCellNoSecurityChangeID,
+    &ett_f1ap_nZP_CSI_RS_ResourceSet,
+    &ett_f1ap_nZP_CSI_RS_Resource,
+    &ett_f1ap_cSI_RSResourceToAddModList,
+    &ett_f1ap_cSI_RSResourceToReleaseList,
+    &ett_f1ap_cSI_RSResourceSetToAddModList,
+    &ett_f1ap_cSI_IMResourceToAddModList,
+    &ett_f1ap_cSI_IMResourceSetToAddModList,
+    &ett_f1ap_OndemandSIB1Config,
+    &ett_f1ap_SBFD_Frequency_Configuration,
+    &ett_f1ap_SSB_resource_config,
+    &ett_f1ap_sRS_Resource,
 #include "packet-f1ap-ettarr.c"
   };
 
@@ -881,6 +1020,7 @@ proto_reg_handoff_f1ap(void)
   dissector_add_uint_with_preference("sctp.port", SCTP_PORT_F1AP, f1ap_handle);
   dissector_add_uint("sctp.ppi", F1AP_PROTOCOL_ID, f1ap_handle);
   nr_rrc_ul_ccch_handle = find_dissector_add_dependency("nr-rrc.ul.ccch", proto_f1ap);
+  nr_rrc_ul_ccch1_handle = find_dissector_add_dependency("nr-rrc.ul.ccch1", proto_f1ap);
   nr_rrc_dl_ccch_handle = find_dissector_add_dependency("nr-rrc.dl.ccch", proto_f1ap);
   nr_rrc_ul_dcch_handle = find_dissector_add_dependency("nr-rrc.ul.dcch", proto_f1ap);
   nr_pdcp_handle = find_dissector_add_dependency("pdcp-nr", proto_f1ap);

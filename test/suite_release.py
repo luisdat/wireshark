@@ -37,7 +37,7 @@ def wireshark_features(request, cmd_wireshark, make_env):
         print('Failed to detect Wireshark features: %s' % (ex,))
         wireshark_v = ''
     return types.SimpleNamespace(
-        have_automatic_updates='with automatic updates' in wireshark_v,
+        have_automatic_updates='+automatic updates' in wireshark_v,
     )
 
 class TestReleaseAutomaticUpdates:
@@ -45,3 +45,11 @@ class TestReleaseAutomaticUpdates:
         '''Checks whether Wireshark was built with automatic updates.'''
 
         assert wireshark_features.have_automatic_updates
+
+class TestReleaseLua:
+    def test_lua_present(self, request, features):
+        '''Checks whether Wireshark was built with Lua support.'''
+        enabled = request.config.getoption('--enable-release', default=False)
+        if not enabled:
+            pytest.skip('Release tests are not enabled via --enable-release')
+        assert features.have_lua

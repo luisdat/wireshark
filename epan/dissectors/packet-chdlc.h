@@ -10,6 +10,11 @@
 #ifndef __PACKET_CHDLC_H__
 #define __PACKET_CHDLC_H__
 
+/* Cisco HDLC packet types that aren't just Ethernet types */
+#define CHDLCTYPE_FRARP		0x0808	/* Frame Relay ARP */
+#define CHDLCTYPE_BPDU		0x4242	/* IEEE spanning tree protocol */
+#define CHDLCTYPE_OSI 	        0xfefe  /* ISO network-layer protocols */
+
 /*
  * See section 4.3.1 of RFC 1547, and
  *
@@ -22,7 +27,7 @@
 extern const value_string chdlc_vals[];
 
 void
-chdlctype(dissector_handle_t sub_dissector, guint16 chdlctype,
+chdlctype(dissector_handle_t sub_dissector, uint16_t chdlctype,
           tvbuff_t *tvb, int offset_after_chdlctype,
 	  packet_info *pinfo, proto_tree *tree, proto_tree *fh_tree,
 	  int chdlctype_id);

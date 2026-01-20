@@ -1,6 +1,11 @@
-#
+# Create macros for using the lemon parser generator.
 
-find_program(LEMON_EXECUTABLE lemon)
+# If we're cross-compiling and /usr/share/lemon/lempar.c exists, try to
+# find the system lemon and use it. We need to build our own lemon
+# otherwise.
+if (CMAKE_CROSSCOMPILING AND EXISTS /usr/share/lemon/lempar.c)
+	find_program(LEMON_EXECUTABLE lemon)
+endif()
 
 if(LEMON_EXECUTABLE)
 	# Use system lemon
@@ -54,13 +59,5 @@ macro(ADD_LEMON_FILES _source _generated)
 
 		list(APPEND ${_source} ${_in})
 		list(APPEND ${_generated} ${_out}.c)
-
-		if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
-			set_source_files_properties(${_out}.c PROPERTIES COMPILE_OPTIONS "/w")
-		elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-			set_source_files_properties(${_out}.c PROPERTIES COMPILE_OPTIONS "-Wno-unused-parameter")
-		else()
-			# Build with some warnings for lemon generated code
-		endif()
 	endforeach(_current_FILE)
 endmacro(ADD_LEMON_FILES)

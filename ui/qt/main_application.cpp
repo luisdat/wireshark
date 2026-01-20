@@ -21,6 +21,7 @@
 #include <errno.h>
 
 #include "wsutil/filesystem.h"
+#include "app/application_flavor.h"
 
 #include "epan/addr_resolv.h"
 #include "epan/column-utils.h"
@@ -100,9 +101,7 @@
 #endif
 #include <QMimeDatabase>
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
 #include <QStyleHints>
-#endif
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
 #include <QStyleFactory>
@@ -112,7 +111,7 @@
 #pragma warning(pop)
 #endif
 
-MainApplication *mainApp = NULL;
+MainApplication *mainApp;
 
 // XXX - Copied from ui/gtk/file_dlg.c
 
@@ -163,7 +162,7 @@ topic_action(topic_action_e action)
  * https://stackoverflow.com/questions/437212/how-do-you-register-a-most-recently-used-list-with-windows-in-preparation-for-win
  */
 extern "C" void
-add_menu_recent_capture_file(const gchar *cf_name, bool force) {
+add_menu_recent_capture_file(const char *cf_name, bool force) {
     QString normalized_cf_name = QString::fromUtf8(cf_name);
     QDir cf_path;
 
@@ -284,7 +283,7 @@ void MainApplication::colorSchemeChanged() {
 
 void MainApplication::updateTaps()
 {
-    draw_tap_listeners(FALSE);
+    draw_tap_listeners(false);
 }
 
 QDir MainApplication::openDialogInitialDir() {
@@ -293,7 +292,8 @@ QDir MainApplication::openDialogInitialDir() {
 
 void MainApplication::setLastOpenDirFromFilename(const QString file_name)
 {
-    QString directory = QFileInfo(file_name).absolutePath();
+    /* XXX - Use canonicalPath() instead of absolutePath()? */
+    QString directory = QDir::toNativeSeparators(QFileInfo(file_name).absolutePath());
     /* XXX - printable? */
     set_last_open_dir(qUtf8Printable(directory));
 }
@@ -303,7 +303,7 @@ void MainApplication::helpTopicAction(topic_action_e action)
     QString url = gchar_free_to_qstring(topic_action_url(action));
 
     if (!url.isEmpty()) {
-        QDesktopServices::openUrl(QUrl(url));
+        QDesktopServices::openUrl(QUrl(QDir::fromNativeSeparators(url)));
     }
 }
 
@@ -395,8 +395,8 @@ void MainApplication::setMonospaceFont(const char *font_string) {
     // Retrieve the effective font and apply it.
     mono_font_.setFamily(QFontInfo(mono_font_).family());
 
-    g_free(prefs.gui_font_name);
-    prefs.gui_font_name = qstring_strdup(mono_font_.toString());
+    wmem_free(wmem_epan_scope(), prefs.gui_font_name);
+    prefs.gui_font_name = wmem_strdup(wmem_epan_scope(), mono_font_.toString().toUtf8().constData());
 }
 
 int MainApplication::monospaceTextSize(const char *str)
@@ -404,21 +404,22 @@ int MainApplication::monospaceTextSize(const char *str)
     return QFontMetrics(mono_font_).horizontalAdvance(str);
 }
 
-void MainApplication::setConfigurationProfile(const gchar *profile_name, bool write_recent_file)
+void MainApplication::setConfigurationProfile(const char *profile_name, bool write_recent_file)
 {
     char  *rf_path;
     int    rf_open_errno;
-    gchar *err_msg = NULL;
+    char *err_msg = NULL;
+    const char* env_prefix = application_configuration_environment_prefix();
 
     bool prev_capture_no_interface_load;
     bool prev_capture_no_extcap;
 
     /* First check if profile exists */
-    if (!profile_exists(profile_name, FALSE)) {
-        if (profile_exists(profile_name, TRUE)) {
+    if (!profile_exists(env_prefix, profile_name, false)) {
+        if (profile_exists(env_prefix, profile_name, true)) {
             char  *pf_dir_path, *pf_dir_path2, *pf_filename;
             /* Copy from global profile */
-            if (create_persconffile_profile(profile_name, &pf_dir_path) == -1) {
+            if (create_persconffile_profile(env_prefix, profile_name, &pf_dir_path) == -1) {
                 simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK,
                     "Can't create directory\n\"%s\":\n%s.",
                     pf_dir_path, g_strerror(errno));
@@ -426,7 +427,7 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
                 g_free(pf_dir_path);
             }
 
-            if (copy_persconffile_profile(profile_name, profile_name, TRUE, &pf_filename,
+            if (copy_persconffile_profile(env_prefix, profile_name, profile_name, true, &pf_filename,
                     &pf_dir_path, &pf_dir_path2) == -1) {
                 simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK,
                     "Can't copy file \"%s\" in directory\n\"%s\" to\n\"%s\":\n%s.",
@@ -453,11 +454,15 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
     /* Get the current geometry, before writing it to disk */
     emit profileChanging();
 
-    if (write_recent_file && profile_exists(get_profile_name(), FALSE))
+    if (write_recent_file && profile_exists(env_prefix, get_profile_name(), false))
     {
         /* Write recent file for profile we are leaving, if it still exists */
         write_profile_recent();
     }
+
+    // Freeze the packet list early to avoid updating column data before doing a
+    // full redissection. The packet list will be thawed when redissection is done.
+    emit freezePacketList(true);
 
     /* Set profile name and update the status bar */
     set_profile_name (profile_name);
@@ -466,10 +471,8 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
     /* Apply new preferences */
     readConfigurationFiles(true);
 
-    /* Should we reapply command line options now or drop them (so that
-     * they don't get reapplied later, e.g. when reloading Lua plugins)?
-     */
-    commandline_options_free();
+    /* Apply command-line preferences */
+    commandline_options_reapply();
     extcap_register_preferences();
 
     /* Switching profile requires reloading the macro list. */
@@ -490,17 +493,14 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
     timestamp_set_seconds_type (recent.gui_seconds_format);
     tap_update_timer_.setInterval(prefs.tap_update_interval);
 
-    prefs_to_capture_opts();
+    prefs_to_capture_opts(&global_capture_opts);
     prefs_apply_all();
 #ifdef HAVE_LIBPCAP
-    update_local_interfaces();
+    update_local_interfaces(&global_capture_opts);
 #endif
 
     setMonospaceFont(prefs.gui_font_name);
-
-    // Freeze the packet list early to avoid updating column data before doing a
-    // full redissection. The packet list will be thawed when redissection is done.
-    emit freezePacketList(true);
+    ColorUtils::setScheme(prefs.gui_color_scheme);
 
     emit columnsChanged();
     emit colorsChanged();
@@ -512,7 +512,7 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
     emit displayFilterListChanged();
 
     /* Reload color filters */
-    if (!color_filters_reload(&err_msg, color_filter_add_cb)) {
+    if (!color_filters_reload(&err_msg, color_filter_add_cb, application_configuration_environment_prefix())) {
         simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err_msg);
         g_free(err_msg);
     }
@@ -533,7 +533,7 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
 
 void MainApplication::reloadLuaPluginsDelayed()
 {
-    QTimer::singleShot(0, this, SIGNAL(reloadLuaPlugins()));
+    QTimer::singleShot(0, this, &MainApplication::reloadLuaPlugins);
 }
 
 const QIcon &MainApplication::normalIcon()
@@ -575,16 +575,16 @@ void MainApplication::applyCustomColorsFromRecent()
     }
 }
 
-// Return the first top-level QMainWindow.
-QWidget *MainApplication::mainWindow()
+// Return the first top-level MainWindow.
+MainWindow *MainApplication::mainWindow()
 {
     foreach (QWidget *tlw, topLevelWidgets()) {
-        QMainWindow *tlmw = qobject_cast<QMainWindow *>(tlw);
+        MainWindow *tlmw = qobject_cast<MainWindow *>(tlw);
         if (tlmw && tlmw->isVisible()) {
             return tlmw;
         }
     }
-    return 0;
+    return nullptr;
 }
 
 void MainApplication::storeCustomColorsInRecent()
@@ -656,7 +656,11 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     initialized_(false),
     is_reloading_lua_(false),
     if_notifier_(NULL),
-    active_captures_(0)
+    active_captures_(0),
+    refresh_interfaces_pending_(false)
+#if defined(Q_OS_MAC) || defined(Q_OS_WIN)
+    , normal_icon_(windowIcon())
+#endif
 #ifdef HAVE_LIBPCAP
     , cached_if_list_(NULL)
 #endif
@@ -685,10 +689,6 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     setAttribute(Qt::AA_UseHighDpiPixmaps);
 #endif
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0) && defined(Q_OS_WIN)
-    setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
-#endif
-
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
@@ -696,9 +696,7 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     // Throw various settings at the wall with the hope that one of them will
     // enable context menu shortcuts QTBUG-69452, QTBUG-109590
     setAttribute(Qt::AA_DontShowShortcutsInContextMenus, false);
-#if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
     styleHints()->setShowShortcutsInContextMenus(true);
-#endif
 
     //
     // XXX - this means we try to check for the existence of all files
@@ -708,7 +706,7 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     // QFileSystemWatcher should allow us to watch for files being
     // removed or renamed.  It uses kqueues and EVFILT_VNODE on FreeBSD,
     // NetBSD, FSEvents on macOS, inotify on Linux if available, and
-    // FindFirstChagneNotification() on Windows.  On all other platforms,
+    // FindFirstChangeNotification() on Windows.  On all other platforms,
     // it just periodically polls, as we're doing now.
     //
     // For unmounts:
@@ -787,27 +785,33 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     // I'm not sure what can be done on Linux.
     //
     recent_timer_.setParent(this);
-    connect(&recent_timer_, SIGNAL(timeout()), this, SLOT(refreshRecentCaptures()));
+    connect(&recent_timer_, &QTimer::timeout, this, &MainApplication::refreshRecentCaptures);
     recent_timer_.start(2000);
 
     packet_data_timer_.setParent(this);
-    connect(&packet_data_timer_, SIGNAL(timeout()), this, SLOT(refreshPacketData()));
+    connect(&packet_data_timer_, &QTimer::timeout, this, &MainApplication::refreshPacketData);
     packet_data_timer_.start(1000);
 
     tap_update_timer_.setParent(this);
     tap_update_timer_.setInterval(TAP_UPDATE_DEFAULT_INTERVAL);
-    connect(this, SIGNAL(appInitialized()), &tap_update_timer_, SLOT(start()));
-    connect(&tap_update_timer_, SIGNAL(timeout()), this, SLOT(updateTaps()));
+    connect(this, &MainApplication::appInitialized, &tap_update_timer_, [&]() { tap_update_timer_.start(); });
+    connect(this, &MainApplication::appInitialized, [this] { emit aggregationVisiblity(); });
+    connect(&tap_update_timer_, &QTimer::timeout, this, &MainApplication::updateTaps);
 
     // Application-wide style sheet
     QString app_style_sheet = qApp->styleSheet();
+    app_style_sheet += QStringLiteral(
+        "QMessageBox { "
+        "  messagebox-text-interaction-flags: %1;"
+        "}"
+        ).arg(Qt::TextSelectableByMouse);
     qApp->setStyleSheet(app_style_sheet);
 
     // If our window text is lighter than the window background, assume the theme is dark.
     prefs_set_gui_theme_is_dark(ColorUtils::themeIsDark());
 
 #if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-    connect(this, SIGNAL(softwareUpdateQuit()), this, SLOT(quit()), Qt::QueuedConnection);
+    connect(this, &MainApplication::softwareUpdateQuit, this, &MainApplication::quit, Qt::QueuedConnection);
 #endif
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
@@ -815,7 +819,7 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     connect(styleHints(), &QStyleHints::colorSchemeChanged, this, &MainApplication::colorSchemeChanged);
 #endif
 
-    connect(qApp, SIGNAL(aboutToQuit()), this, SLOT(cleanup()));
+    connect(qApp, &QApplication::aboutToQuit, this, &MainApplication::cleanup);
 }
 
 MainApplication::~MainApplication()
@@ -876,6 +880,12 @@ void MainApplication::emitAppSignal(AppSignal signal)
         break;
     case FreezePacketList:
         emit freezePacketList(false);
+        break;
+    case AggregationVisiblity:
+        emit aggregationVisiblity();
+        break;
+    case AggregationChanged:
+        emit aggregationChanged();
         break;
     default:
         break;
@@ -1002,7 +1012,7 @@ static void
 iface_mon_event_cb(const char *iface, int added, int up)
 {
     int present = 0;
-    guint ifs, j;
+    unsigned ifs, j;
     interface_t *device;
     interface_options *interface_opts;
 
@@ -1080,6 +1090,12 @@ void MainApplication::emitLocalInterfaceEvent(const char *ifname, int added, int
 
 void MainApplication::refreshLocalInterfaces()
 {
+    if (active_captures_ > 0) {
+        refresh_interfaces_pending_ = true;
+        return;
+    }
+
+    refresh_interfaces_pending_ = false;
     extcap_clear_interfaces();
 
 #ifdef HAVE_LIBPCAP
@@ -1090,17 +1106,17 @@ void MainApplication::refreshLocalInterfaces()
 #ifdef HAVE_LIBPCAP
 GList* MainApplication::getInterfaceList() const
 {
-     return interface_list_copy(cached_if_list_);
+    return interface_list_copy(cached_if_list_);
 }
 
 void MainApplication::setInterfaceList(GList *if_list)
 {
-     free_interface_list(cached_if_list_);
-     cached_if_list_ = interface_list_copy(if_list);
+    free_interface_list(cached_if_list_);
+    cached_if_list_ = interface_list_copy(if_list);
 }
 #endif
 
-void MainApplication::allSystemsGo()
+void MainApplication::allSystemsGo(const char* name_proper, const char* version)
 {
     QString display_filter = NULL;
     initialized_ = true;
@@ -1109,7 +1125,7 @@ void MainApplication::allSystemsGo()
         emit openCaptureFile(pending_open_files_.front(), display_filter, WTAP_TYPE_AUTO);
         pending_open_files_.pop_front();
     }
-    software_update_init();
+    software_update_init(name_proper, version);
 
 #ifdef HAVE_LIBPCAP
     int err;
@@ -1117,7 +1133,7 @@ void MainApplication::allSystemsGo()
     if (err == 0) {
         if_notifier_ = new QSocketNotifier(iface_mon_get_sock(),
                                            QSocketNotifier::Read, this);
-        connect(if_notifier_, SIGNAL(activated(int)), SLOT(ifChangeEventsAvailable()));
+        connect(if_notifier_, &QSocketNotifier::activated, this, &MainApplication::ifChangeEventsAvailable);
     }
 #endif
 }
@@ -1132,7 +1148,7 @@ _e_prefs *MainApplication::readConfigurationFiles(bool reset)
         // heuristic dissectors before reading.
         // (Needed except when this is called at startup.)
         //
-        prefs_reset();
+        prefs_reset(application_configuration_environment_prefix(), application_columns(), application_num_columns());
         proto_reenable_all();
     }
 
@@ -1198,6 +1214,7 @@ void MainApplication::loadLanguage(const QString newLanguage)
 {
     QLocale locale;
     QString localeLanguage;
+    const char* env_prefix = application_configuration_environment_prefix();
 
     if (newLanguage.isEmpty() || newLanguage == USE_SYSTEM_LANGUAGE) {
         locale = QLocale::system();
@@ -1209,30 +1226,30 @@ void MainApplication::loadLanguage(const QString newLanguage)
 
     QLocale::setDefault(locale);
     switchTranslator(mainApp->translator,
-            QString("wireshark_%1.qm").arg(localeLanguage), QString(":/i18n/"));
-    if (QFile::exists(QString("%1/%2/wireshark_%3.qm")
-            .arg(get_datafile_dir()).arg("languages").arg(localeLanguage)))
+            QStringLiteral("wireshark_%1.qm").arg(localeLanguage), QStringLiteral(":/i18n/"));
+    if (QFile::exists(QStringLiteral("%1/%2/wireshark_%3.qm")
+            .arg(get_datafile_dir(env_prefix)).arg("languages").arg(localeLanguage)))
         switchTranslator(mainApp->translator,
-                QString("wireshark_%1.qm").arg(localeLanguage), QString(get_datafile_dir()) + QString("/languages"));
-    if (QFile::exists(QString("%1/wireshark_%3.qm")
-            .arg(gchar_free_to_qstring(get_persconffile_path("languages", FALSE))).arg(localeLanguage)))
+                QStringLiteral("wireshark_%1.qm").arg(localeLanguage), QStringLiteral("%1/languages").arg(get_datafile_dir(env_prefix)));
+    if (QFile::exists(QStringLiteral("%1/wireshark_%3.qm")
+            .arg(gchar_free_to_qstring(get_persconffile_path("languages", false, env_prefix))).arg(localeLanguage)))
         switchTranslator(mainApp->translator,
-                QString("wireshark_%1.qm").arg(localeLanguage), gchar_free_to_qstring(get_persconffile_path("languages", FALSE)));
-    if (QFile::exists(QString("%1/qt_%2.qm")
-            .arg(get_datafile_dir()).arg(localeLanguage))) {
+                QStringLiteral("wireshark_%1.qm").arg(localeLanguage), gchar_free_to_qstring(get_persconffile_path("languages", false, env_prefix)));
+    if (QFile::exists(QStringLiteral("%1/qt_%2.qm")
+            .arg(get_datafile_dir(env_prefix)).arg(localeLanguage))) {
         switchTranslator(mainApp->translatorQt,
-                QString("qt_%1.qm").arg(localeLanguage), QString(get_datafile_dir()));
-    } else if (QFile::exists(QString("%1/qt_%2.qm")
-            .arg(get_datafile_dir()).arg(localeLanguage.left(localeLanguage.lastIndexOf('_'))))) {
+                QStringLiteral("qt_%1.qm").arg(localeLanguage), QString(get_datafile_dir(env_prefix)));
+    } else if (QFile::exists(QStringLiteral("%1/qt_%2.qm")
+            .arg(get_datafile_dir(env_prefix)).arg(localeLanguage.left(localeLanguage.lastIndexOf('_'))))) {
         switchTranslator(mainApp->translatorQt,
-                QString("qt_%1.qm").arg(localeLanguage.left(localeLanguage.lastIndexOf('_'))), QString(get_datafile_dir()));
+                QStringLiteral("qt_%1.qm").arg(localeLanguage.left(localeLanguage.lastIndexOf('_'))), QString(get_datafile_dir(env_prefix)));
     } else {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QString translationPath = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
 #else
         QString translationPath = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
 #endif
-        switchTranslator(mainApp->translatorQt, QString("qt_%1.qm").arg(localeLanguage), translationPath);
+        switchTranslator(mainApp->translatorQt, QStringLiteral("qt_%1.qm").arg(localeLanguage), translationPath);
     }
 }
 
@@ -1308,6 +1325,9 @@ void MainApplication::captureEventHandler(CaptureEvent ev)
     case CaptureEvent::Fixed:
         switch (ev.eventType())
         {
+        case CaptureEvent::Prepared:
+            iface_mon_enable(true);
+            break;
         case CaptureEvent::Started:
             active_captures_++;
             emit captureActive(active_captures_);
@@ -1315,6 +1335,9 @@ void MainApplication::captureEventHandler(CaptureEvent ev)
         case CaptureEvent::Finished:
             active_captures_--;
             emit captureActive(active_captures_);
+            if (refresh_interfaces_pending_ && !global_capture_opts.restart) {
+                refreshLocalInterfaces();
+            }
             break;
         default:
             break;
@@ -1344,14 +1367,15 @@ void MainApplication::captureEventHandler(CaptureEvent ev)
 
 void MainApplication::pushStatus(StatusInfo status, const QString &message, const QString &messagetip)
 {
-    if (! mainWindow() || ! qobject_cast<MainWindow *>(mainWindow()))
+    MainWindow * mw = mainWindow();
+    if (! mw) {
         return;
-
-    MainWindow * mw = qobject_cast<MainWindow *>(mainWindow());
-    if (! mw->statusBar())
-        return;
+    }
 
     MainStatusBar * bar = mw->statusBar();
+    if (! bar) {
+        return;
+    }
 
     switch(status)
     {
@@ -1378,14 +1402,15 @@ void MainApplication::pushStatus(StatusInfo status, const QString &message, cons
 
 void MainApplication::popStatus(StatusInfo status)
 {
-    if (! mainWindow() || ! qobject_cast<MainWindow *>(mainWindow()))
+    MainWindow * mw = mainWindow();
+    if (! mw) {
         return;
-
-    MainWindow * mw = qobject_cast<MainWindow *>(mainWindow());
-    if (! mw->statusBar())
-        return;
+    }
 
     MainStatusBar * bar = mw->statusBar();
+    if (! bar) {
+        return;
+    }
 
     switch(status)
     {
@@ -1412,16 +1437,17 @@ void MainApplication::popStatus(StatusInfo status)
 
 void MainApplication::gotoFrame(int frame)
 {
-    if (! mainWindow() || ! qobject_cast<MainWindow *>(mainWindow()))
+    MainWindow * mw = mainWindow();
+    if (! mw) {
         return;
+    }
 
-    MainWindow * mw = qobject_cast<MainWindow *>(mainWindow());
     mw->gotoFrame(frame);
 }
 
 void MainApplication::reloadDisplayFilterMacros()
 {
-    dfilter_macro_reload();
+    dfilter_macro_reload(application_configuration_environment_prefix());
     // The signal is needed when the display filter grammar changes for
     // any reason (not just "fields".)
     mainApp->emitAppSignal(MainApplication::FieldsChanged);

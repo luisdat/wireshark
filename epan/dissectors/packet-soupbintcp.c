@@ -61,14 +61,14 @@ struct conv_data {
      *
      * Set by the Login Accepted packet, and then updated for each
      * subsequent Sequenced Data packet during dissection. */
-    guint next_seq;
+    unsigned next_seq;
 };
 
 
 /** Per-PDU data, stored in the frame's private data pointer */
 struct pdu_data {
     /** Sequence number for this PDU */
-    guint seq_num;
+    unsigned seq_num;
 };
 
 
@@ -105,7 +105,7 @@ static heur_dissector_list_t heur_subdissector_list;
 static bool soupbintcp_desegment = true;
 
 /* Initialize the subtree pointers */
-static gint ett_soupbintcp;
+static int ett_soupbintcp;
 
 /* Header field formatting */
 static int hf_soupbintcp_packet_length;
@@ -133,29 +133,29 @@ dissect_soupbintcp_common(
     struct conv_data *conv_data;
     struct pdu_data  *pdu_data;
     const char       *pkt_name;
-    gint32            seq_num;
-    gboolean          seq_num_valid;
+    int32_t           seq_num;
+    bool              seq_num_valid;
     proto_item       *ti;
     proto_tree       *soupbintcp_tree = NULL;
     conversation_t   *conv            = NULL;
-    guint16           expected_len;
-    guint8            pkt_type;
-    gint              offset          = 0;
-    guint             this_seq        = 0, next_seq = 0, key;
+    uint16_t          expected_len;
+    uint8_t           pkt_type;
+    int               offset          = 0;
+    unsigned          this_seq        = 0, next_seq = 0, key;
     heur_dtbl_entry_t *hdtbl_entry;
     proto_item       *pi;
 
     /* Record the start of the packet to use as a sequence number key */
-    key = (guint)tvb_raw_offset(tvb);
+    key = (unsigned)tvb_raw_offset(tvb);
 
     /* Get the 16-bit big-endian SOUP packet length */
     expected_len = tvb_get_ntohs(tvb, 0);
 
     /* Get the 1-byte SOUP message type */
-    pkt_type = tvb_get_guint8(tvb, 2);
+    pkt_type = tvb_get_uint8(tvb, 2);
 
     /* Since we use the packet name a few times, get and save that value */
-    pkt_name = val_to_str(pkt_type, pkt_type_val, "Unknown (%u)");
+    pkt_name = val_to_str(pinfo->pool, pkt_type, pkt_type_val, "Unknown (%u)");
 
     /* Set the protocol name in the summary display */
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "SoupBinTCP");
@@ -192,7 +192,7 @@ dissect_soupbintcp_common(
 
     /* If first dissection of Login Accept, save sequence number */
     if (pkt_type == 'A' && !PINFO_FD_VISITED(pinfo)) {
-        ws_strtou32(tvb_get_string_enc(pinfo->pool, tvb, 13, 20, ENC_ASCII),
+        ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, 13, 20, ENC_ASCII),
             NULL, &next_seq);
 
         /* Create new conversation for this session */
@@ -262,7 +262,7 @@ dissect_soupbintcp_common(
         /* Type */
         proto_tree_add_item(soupbintcp_tree,
                             hf_soupbintcp_packet_type,
-                            tvb, offset, 1, ENC_ASCII|ENC_NA);
+                            tvb, offset, 1, ENC_ASCII);
         offset += 1;
 
         switch (pkt_type) {
@@ -278,7 +278,7 @@ dissect_soupbintcp_common(
                                 tvb, offset, 10, ENC_ASCII);
             offset += 10;
 
-            seq_num_valid = ws_strtoi32(tvb_get_string_enc(pinfo->pool,
+            seq_num_valid = ws_strtoi32((char*)tvb_get_string_enc(pinfo->pool,
                 tvb, offset, 20, ENC_ASCII), NULL, &seq_num);
             pi = proto_tree_add_string_format_value(soupbintcp_tree,
                                                hf_soupbintcp_next_seq_num,
@@ -292,7 +292,7 @@ dissect_soupbintcp_common(
         case 'J': /* Login Reject */
             proto_tree_add_item(soupbintcp_tree,
                                 hf_soupbintcp_reject_code,
-                                tvb, offset, 1, ENC_ASCII|ENC_NA);
+                                tvb, offset, 1, ENC_ASCII);
             break;
 
         case 'U': /* Unsequenced Data */
@@ -327,7 +327,7 @@ dissect_soupbintcp_common(
                                 tvb, offset, 10, ENC_ASCII);
             offset += 10;
 
-            seq_num_valid = ws_strtoi32(tvb_get_string_enc(pinfo->pool,
+            seq_num_valid = ws_strtoi32((char*)tvb_get_string_enc(pinfo->pool,
                 tvb, offset, 20, ENC_ASCII), NULL, &seq_num);
             pi = proto_tree_add_string_format_value(soupbintcp_tree,
                                                hf_soupbintcp_req_seq_num,
@@ -388,7 +388,7 @@ dissect_soupbintcp_common(
 
 
 /** Return the size of the PDU in @p tvb, starting at @p offset */
-static guint
+static unsigned
 get_soupbintcp_pdu_len(
     packet_info *pinfo _U_,
     tvbuff_t    *tvb,
@@ -400,7 +400,7 @@ get_soupbintcp_pdu_len(
        least two bytes here because we told tcp_dissect_pdus() that we
        needed them.  Add 2 to the retrieved value, because the SOUP
        length doesn't include the length field itself. */
-    return (guint)tvb_get_ntohs(tvb, offset) + 2;
+    return (unsigned)tvb_get_ntohs(tvb, offset) + 2;
 }
 
 
@@ -509,7 +509,7 @@ proto_register_soupbintcp(void)
             HFILL }}
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_soupbintcp
     };
 

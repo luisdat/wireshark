@@ -71,6 +71,11 @@ SearchFrame::~SearchFrame()
     delete sf_ui_;
 }
 
+QComboBox* SearchFrame::searchInComboBox() const
+{
+    return sf_ui_->searchInComboBox;
+}
+
 void SearchFrame::animatedShow()
 {
     AccordionFrame::animatedShow();
@@ -259,7 +264,7 @@ void SearchFrame::updateWidgets()
         if (sf_ui_->searchLineEdit->text().isEmpty()) {
             sf_ui_->searchLineEdit->setSyntaxState(SyntaxLineEdit::Invalid);
         } else {
-            guint8 *bytes;
+            uint8_t *bytes;
             size_t nbytes;
             bytes = convert_string_to_hex(sf_ui_->searchLineEdit->text().toUtf8().constData(), &nbytes);
             if (bytes == nullptr)
@@ -362,8 +367,10 @@ void SearchFrame::on_searchTypeComboBox_currentIndexChanged(int idx)
     sf_ui_->searchLineEdit->allowCompletion(idx == df_search_);
 
     if (idx == df_search_) {
+        sf_ui_->searchLineEdit->setPlaceholderText(DisplayFilterEdit::tr("Enter a display filter %1").arg(UTF8_HORIZONTAL_ELLIPSIS));
         sf_ui_->searchLineEdit->checkFilter();
     } else {
+        sf_ui_->searchLineEdit->setPlaceholderText(QString());
         sf_ui_->searchLineEdit->setToolTip(QString());
         mainApp->popStatus(MainApplication::FilterSyntax);
     }
@@ -388,24 +395,24 @@ void SearchFrame::on_multipleCheckBox_toggled(bool checked)
 
 void SearchFrame::on_findButton_clicked()
 {
-    guint8 *bytes = nullptr;
+    uint8_t *bytes = nullptr;
     size_t nbytes = 0;
     char *string = nullptr;
     dfilter_t *dfp = nullptr;
-    gboolean found_packet = FALSE;
+    bool found_packet = false;
     QString err_string;
 
     if (!cap_file_) {
         return;
     }
 
-    cap_file_->hex = FALSE;
-    cap_file_->string = FALSE;
-    cap_file_->case_type = FALSE;
+    cap_file_->hex = false;
+    cap_file_->string = false;
+    cap_file_->case_type = false;
     cap_file_->regex = nullptr;
-    cap_file_->packet_data  = FALSE;
-    cap_file_->decode_data  = FALSE;
-    cap_file_->summary_data = FALSE;
+    cap_file_->packet_data  = false;
+    cap_file_->decode_data  = false;
+    cap_file_->summary_data = false;
     cap_file_->scs_type = SCS_NARROW_AND_WIDE;
     cap_file_->dir = sf_ui_->dirCheckBox->isChecked() ? SD_BACKWARD : SD_FORWARD;
     bool multiple_occurrences = sf_ui_->multipleCheckBox->isChecked();
@@ -429,7 +436,7 @@ void SearchFrame::on_findButton_clicked()
             err_string = tr("That's not a valid hex string.");
             goto search_done;
         }
-        cap_file_->hex = TRUE;
+        cap_file_->hex = true;
         break;
     case string_search_:
     case regex_search_:
@@ -437,8 +444,8 @@ void SearchFrame::on_findButton_clicked()
             err_string = tr("You didn't specify any text for which to search.");
             goto search_done;
         }
-        cap_file_->string = TRUE;
-        cap_file_->case_type = sf_ui_->caseCheckBox->isChecked() ? FALSE : TRUE;
+        cap_file_->string = true;
+        cap_file_->case_type = sf_ui_->caseCheckBox->isChecked() ? false : true;
         cap_file_->regex = (search_type == regex_search_ ? regex_ : nullptr);
         switch (sf_ui_->charEncodingComboBox->currentIndex()) {
         case narrow_and_wide_chars_:
@@ -463,13 +470,13 @@ void SearchFrame::on_findButton_clicked()
 
     switch (sf_ui_->searchInComboBox->currentIndex()) {
     case in_packet_list_:
-        cap_file_->summary_data = TRUE;
+        cap_file_->summary_data = true;
         break;
     case in_proto_tree_:
-        cap_file_->decode_data  = TRUE;
+        cap_file_->decode_data  = true;
         break;
     case in_bytes_:
-        cap_file_->packet_data  = TRUE;
+        cap_file_->packet_data  = true;
         break;
     default:
         err_string = tr("No valid search area selected. Please report this to the development team.");
@@ -513,7 +520,7 @@ void SearchFrame::on_findButton_clicked()
             }
         } else if (cap_file_->packet_data && string) {
             /* String in the ASCII-converted packet data */
-            found_packet = cf_find_packet_data(cap_file_, (guint8 *) string, strlen(string), cap_file_->dir, multiple_occurrences);
+            found_packet = cf_find_packet_data(cap_file_, (uint8_t *) string, strlen(string), cap_file_->dir, multiple_occurrences);
             g_free(string);
             if (!found_packet) {
                 err_string = tr("No packet contained that string in its converted data.");
@@ -522,7 +529,7 @@ void SearchFrame::on_findButton_clicked()
         }
     } else {
         /* Search via display filter */
-        found_packet = cf_find_packet_dfilter(cap_file_, dfp, cap_file_->dir);
+        found_packet = cf_find_packet_dfilter(cap_file_, dfp, cap_file_->dir, true);
         dfilter_free(dfp);
         if (!found_packet) {
             err_string = tr("No packet matched that filter.");

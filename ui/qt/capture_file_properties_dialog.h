@@ -14,8 +14,6 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include <string.h>
 #include <time.h>
 
@@ -45,7 +43,20 @@ class CaptureFilePropertiesDialog : public WiresharkDialog
 
 public:
     explicit CaptureFilePropertiesDialog(QWidget &parent, CaptureFile& capture_file);
-    ~CaptureFilePropertiesDialog();
+    virtual ~CaptureFilePropertiesDialog();
+
+protected:
+    virtual QString getStartTextString() const;
+    virtual QString getFirstItemString() const;
+    virtual QString getLastItemString() const;
+    virtual QString getEndTextString() const;
+    virtual QString getDroppedItemString() const;
+    virtual QString getItemSizeLimitString() const;
+    virtual QString getRowTitleString() const;
+    virtual QString getAvgItemSizeString() const;
+    virtual QString getItemCommentString() const;
+    virtual QString getCreatedByString() const;
+
 
 signals:
     void captureCommentChanged();

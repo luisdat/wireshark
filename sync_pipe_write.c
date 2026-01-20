@@ -15,6 +15,7 @@
 
 #include <wsutil/file_util.h>
 #include <wsutil/ws_assert.h>
+#include <wsutil/pint.h>
 
 #include "sync_pipe.h"
 
@@ -26,15 +27,13 @@
 static ssize_t
 sync_pipe_write_header(int pipe_fd, char indicator, unsigned int length)
 {
-    guchar header[1+3]; /* indicator + 3-byte len */
+    unsigned char header[1+3]; /* indicator + 3-byte len */
 
     ws_assert(length <= SP_MAX_MSG_LEN);
 
     /* write header (indicator + 3-byte len) */
-    header[0] = indicator;
-    header[1] = (length >> 16) & 0xFF;
-    header[2] = (length >> 8) & 0xFF;
-    header[3] = (length >> 0) & 0xFF;
+    phtonu8(&header[0], indicator);
+    phtonu24(&header[1], length);
 
     /* write header */
     return ws_write(pipe_fd, header, sizeof header);

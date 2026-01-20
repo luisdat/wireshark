@@ -30,65 +30,66 @@
  *-------------------------------------
  */
 static int   dissect_zbee_tlv_default(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_);
-static guint dissect_zdp_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, guint cmd_id);
-static guint dissect_aps_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, void *data, guint cmd_id);
-static guint dissect_zbd_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, void* data _U_, guint cmd_id);
-static guint dissect_unknown_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
+static unsigned dissect_zdp_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, unsigned cmd_id);
+static unsigned dissect_aps_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, void *data, unsigned cmd_id);
+static unsigned dissect_zbd_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, void* data _U_, unsigned cmd_id);
+static unsigned dissect_unknown_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
 
 //Global TLV Dissector Routines
-static guint dissect_zbee_tlv_manufacturer_specific(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, guint8 length);
-static guint dissect_zbee_tlv_supported_key_negotiation_methods(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_configuration_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_dev_cap_ext(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_panid_conflict_report(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_next_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_next_channel_change(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_passphrase(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_router_information(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_fragmentation_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_potential_parents(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
+static unsigned dissect_zbee_tlv_manufacturer_specific(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t length);
+static unsigned dissect_zbee_tlv_supported_key_negotiation_methods(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_configuration_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_dev_cap_ext(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_panid_conflict_report(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_next_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_next_channel_change(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_passphrase(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_router_information(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_fragmentation_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_potential_parents(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
 
 //Local TLV Dissector Routines
-static guint dissect_zbee_tlv_selected_key_negotiation_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_public_point(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, guint8 length);
-static guint dissect_zbee_tlv_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_clear_all_bindigs_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_requested_auth_token_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_target_ieee_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_device_auth_level(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, guint offset, int hf_page, int hf_channel);
-static guint dissect_zbee_tlv_ext_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_short_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_nwk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_dev_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_nwk_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_join_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_tc_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_nwk_upd_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_adm_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_mj_prov_lnk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_mj_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_mj_cmd(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_nwk_channel_list(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_link_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_nwk_status_map(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_status_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_tunneling_npdu_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, guint8 length);
-static guint dissect_zbee_tlv_key_neg_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
-static guint dissect_zbee_tlv_mac_tag(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, guint8 mac_tag_size);
-static guint dissect_zbee_tlv_nwk_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_selected_key_negotiation_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_public_point(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t length);
+static unsigned dissect_zbee_tlv_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_clear_all_bindigs_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_requested_auth_token_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_target_ieee_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_device_auth_level(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, unsigned offset, int hf_page, int hf_channel);
+static unsigned dissect_zbee_tlv_ext_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_short_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_nwk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_dev_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_nwk_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_join_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_tc_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_nwk_upd_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_adm_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_mj_prov_lnk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_mj_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_mj_cmd(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_nwk_channel_list(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_link_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_nwk_status_map(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_status_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_tunneling_npdu_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint8_t length);
+static unsigned dissect_zbee_tlv_key_neg_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbee_tlv_mac_tag(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t mac_tag_size);
+static unsigned dissect_zbee_tlv_nwk_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
 
 //Dissectors for ZB Direct
-static guint dissect_zbd_msg_status_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbd_msg_tunneling_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbd_msg_manage_joiners_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbd_msg_join_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbd_msg_formation_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
-static guint dissect_zbd_msg_secur_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset);
+static unsigned dissect_zbd_msg_status_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbd_msg_tunneling_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbd_msg_manage_joiners_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbd_msg_join_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbd_msg_formation_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static unsigned dissect_zbd_msg_secur_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
 
 void proto_register_zbee_tlv(void);
+void proto_reg_handoff_zbee_tlv(void);
 
 /* Initialize Protocol and Registered fields */
 static int proto_zbee_tlv;
@@ -108,6 +109,9 @@ static int hf_zbee_tlv_local_type_rsp_beacon_survey;
 static int hf_zbee_tlv_local_type_req_challenge;
 static int hf_zbee_tlv_local_type_rsp_challenge;
 static int hf_zbee_tlv_local_type_rsp_set_configuration;
+static int hf_zbee_tlv_local_type_lk_features;
+static int hf_zbee_tlv_local_type_lk_features_capabilities;
+static int hf_zbee_tlv_local_type_lk_features_capabilities_aps_fc_sync;
 
 static int hf_zbee_tlv_length;
 static int hf_zbee_tlv_type;
@@ -220,22 +224,26 @@ static int hf_zbee_tlv_relay_msg_type;
 static int hf_zbee_tlv_relay_msg_length;
 static int hf_zbee_tlv_relay_msg_joiner_ieee;
 
-static gint ett_zbee_aps_tlv;
-static gint ett_zbee_aps_relay;
-static gint ett_zbee_tlv;
-static gint ett_zbee_tlv_supported_key_negotiation_methods;
-static gint ett_zbee_tlv_supported_secrets;
-static gint ett_zbee_tlv_router_information;
-static gint ett_zbee_tlv_configuration_param;
-static gint ett_zbee_tlv_capability_information;
+static int ett_zbee_aps_tlv;
+static int ett_zbee_aps_relay;
+static int ett_zbee_tlv;
+static int ett_zbee_tlv_supported_key_negotiation_methods;
+static int ett_zbee_tlv_supported_secrets;
+static int ett_zbee_tlv_router_information;
+static int ett_zbee_tlv_configuration_param;
+static int ett_zbee_tlv_capability_information;
 
-static gint ett_zbee_tlv_zbd_tunneling_npdu;
-static gint ett_zbee_tlv_zbd_tunneling_npdu_flags;
+static int ett_zbee_tlv_zbd_tunneling_npdu;
+static int ett_zbee_tlv_zbd_tunneling_npdu_flags;
 
-static gint ett_zbee_tlv_link_key_flags;
-static gint ett_zbee_tlv_network_status_map;
+static int ett_zbee_tlv_link_key_flags;
+static int ett_zbee_tlv_network_status_map;
+static int ett_zbee_tlv_lk_features_capabilities;
 
 static expert_field ei_zbee_tlv_max_recursion_depth_reached;
+
+/* Cached protocol identifier */
+static int proto_zbee_nwk;
 
 static const value_string zbee_tlv_local_types_key_method_str[] =
 {
@@ -389,6 +397,7 @@ static const value_string zbee_tlv_global_types[] = {
     { ZBEE_TLV_TYPE_JOINER_ENCAPSULATION_GLOBAL,          "Joiner Encapsulation Global TLV" },
     { ZBEE_TLV_TYPE_BEACON_APPENDIX_ENCAPSULATION_GLOBAL, "Beacon Appendix Encapsulation Global TLV" },
     { ZBEE_TLV_TYPE_CONFIGURATION_MODE_PARAMETERS,        "Configuration Mode Parameters Global TLV" },
+    { ZBEE_TLV_TYPE_DEVICE_CAPABILITY_EXTENSION,          "Device Capability Extension Global TLV" },
     { 0, NULL }
 };
 
@@ -488,13 +497,13 @@ static const value_string zbee_active_lk_types[] = {
     { 0, NULL }
 };
 
-static guint
-dissect_aps_relay_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, void *data)
+static unsigned
+dissect_aps_relay_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, void *data)
 {
   tvbuff_t    *relay_tvb;
   proto_item  *relayed_frame_root;
   proto_tree  *relayed_frame_tree;
-  guint8      length;
+  uint8_t     length;
   zbee_nwk_hints_t *nwk_hints;
 
   zigbee_aps_handle = find_dissector("zbee_aps");
@@ -502,13 +511,12 @@ dissect_aps_relay_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
   proto_tree_add_item(tree, hf_zbee_tlv_relay_msg_type, tvb, offset, 1, ENC_NA);
   offset += 1;
 
-  length = tvb_get_guint8(tvb, offset) + 1;
+  length = tvb_get_uint8(tvb, offset) + 1;
   proto_tree_add_item(tree, hf_zbee_tlv_relay_msg_length, tvb, offset, 1, ENC_NA);
   offset += 1;
 
   proto_tree_add_item(tree, hf_zbee_tlv_relay_msg_joiner_ieee, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-  nwk_hints = (zbee_nwk_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo,
-                                                   proto_get_id_by_filter_name(ZBEE_PROTOABBREV_NWK), 0);
+  nwk_hints = (zbee_nwk_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_zbee_nwk, 0);
   nwk_hints->joiner_addr64 = tvb_get_letoh64(tvb, offset);
   offset += 8;
 
@@ -524,20 +532,59 @@ dissect_aps_relay_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
   return tvb_captured_length(tvb);
 }
 
+/**
+ *Dissector for Link-Key Features & Capabilities TLV
+ *
+ *@param tvb pointer to buffer containing raw packet.
+ *@param pinfo pointer to packet information fields
+ *@param tree pointer to data tree Wireshark uses to display packet.
+ *@param  offset into the tvb to begin dissection.
+ *@return offset after command dissection.
+ */
+static unsigned
+dissect_lk_features_capabilities_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+{
+    static int * const features_capabilities_flags[] = {
+        &hf_zbee_tlv_local_type_lk_features_capabilities_aps_fc_sync,
+        NULL
+    };
 
-static guint
-dissect_aps_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, void *data, guint cmd_id)
+    /* Type */
+    proto_tree_add_item(tree, hf_zbee_tlv_local_type_lk_features_capabilities, tvb, offset, 1, ENC_NA);
+    offset += 1;
+
+    /* Length */
+    proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
+    offset += 1;
+
+    /* Features and Capabilities bitmask. */
+    proto_tree_add_bitmask(tree, tvb, offset, hf_zbee_tlv_local_type_lk_features,
+        ett_zbee_tlv_lk_features_capabilities, features_capabilities_flags, ENC_NA);
+    offset += 1;
+
+    return offset;
+}
+
+
+static unsigned
+dissect_aps_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, void *data, unsigned cmd_id)
 {
     switch (cmd_id) {
         case ZBEE_APS_CMD_RELAY_MSG_UPSTREAM:
+        /* fallthrough */
         case ZBEE_APS_CMD_RELAY_MSG_DOWNSTREAM:
         {
-            zbee_nwk_hints_t *nwk_hints  = (zbee_nwk_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo,
-                      proto_get_id_by_filter_name(ZBEE_PROTOABBREV_NWK), 0);
+            zbee_nwk_hints_t *nwk_hints  = (zbee_nwk_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_zbee_nwk, 0);
             nwk_hints->relay_type = (cmd_id == ZBEE_APS_CMD_RELAY_MSG_DOWNSTREAM ? ZBEE_APS_RELAY_DOWNSTREAM : ZBEE_APS_RELAY_UPSTREAM);
-        }
             offset = dissect_aps_relay_local_tlv(tvb, pinfo, tree, offset, data);
             break;
+        }
+
+        case ZBEE_APS_CMD_TRANSPORT_KEY:
+        {
+            offset = dissect_lk_features_capabilities_tlv(tvb, pinfo, tree, offset);
+            break;
+        }
 
         default:
         {
@@ -558,18 +605,16 @@ dissect_aps_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_req_security_decommission_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_req_security_decommission_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
-    proto_tree_add_item(tree, hf_zbee_tlv_local_type_req_security_decommission, tvb, offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(tree, hf_zbee_tlv_local_type_req_security_decommission, tvb, offset, 1, ENC_NA, &type);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
-    proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA, &length);
     offset += 1;
 
     length += 1;
@@ -596,17 +641,17 @@ dissect_zdp_req_security_decommission_local_tlv (tvbuff_t *tvb, packet_info *pin
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_req_security_get_auth_level_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_req_security_get_auth_level_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_req_security_get_auth_level, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -633,17 +678,17 @@ dissect_zdp_req_security_get_auth_level_local_tlv (tvbuff_t *tvb, packet_info *p
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_req_security_get_auth_token_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_req_security_get_auth_token_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_req_security_get_auth_token, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -671,17 +716,17 @@ dissect_zdp_req_security_get_auth_token_local_tlv (tvbuff_t *tvb, packet_info *p
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_req_clear_all_bindings_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_req_clear_all_bindings_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_clear_all_bindings_req, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -709,17 +754,17 @@ dissect_zdp_req_clear_all_bindings_local_tlv (tvbuff_t *tvb, packet_info *pinfo 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_req_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_req_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_req_beacon_survey, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -727,10 +772,10 @@ dissect_zdp_req_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, 
     switch (type) {
         case ZBEE_TLV_TYPE_BEACON_SURVEY_CONFIGURATION:
         {
-            guint8  cnt;
-            guint8  i;
+            uint8_t cnt;
+            uint8_t i;
 
-            cnt = tvb_get_guint8(tvb, offset);
+            cnt = tvb_get_uint8(tvb, offset);
             proto_tree_add_item(tree, hf_zbee_zdp_beacon_survey_scan_mask_cnt, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
 
@@ -762,17 +807,17 @@ dissect_zdp_req_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_rsp_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_rsp_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_rsp_beacon_survey, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -780,13 +825,13 @@ dissect_zdp_rsp_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, 
     switch (type) {
         case ZBEE_TLV_TYPE_BEACON_SURVEY_CONFIGURATION:
         {
-            guint8  cnt;
-            guint8  i;
+            uint8_t cnt;
+            uint8_t i;
 
             proto_tree_add_item(tree, hf_zbee_zdp_beacon_survey_conf_mask, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
 
-            cnt = tvb_get_guint8(tvb, offset);
+            cnt = tvb_get_uint8(tvb, offset);
             proto_tree_add_item(tree, hf_zbee_zdp_beacon_survey_scan_mask_cnt, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
 
@@ -838,17 +883,17 @@ dissect_zdp_rsp_beacon_survey_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_req_security_challenge_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_req_security_challenge_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_req_challenge, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -881,17 +926,17 @@ dissect_zdp_req_security_challenge_local_tlv (tvbuff_t *tvb, packet_info *pinfo 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_rsp_security_challenge_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_rsp_security_challenge_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_rsp_challenge, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -911,7 +956,8 @@ dissect_zdp_rsp_security_challenge_local_tlv (tvbuff_t *tvb, packet_info *pinfo 
            proto_tree_add_item(tree, hf_zbee_tlv_challenge_counter, tvb, offset, 4, ENC_LITTLE_ENDIAN);
            offset += 4;
 
-           proto_tree_add_item(tree, hf_zbee_tlv_mic64, tvb, offset, 8, ENC_NA);
+           /* TODO: should this really be shown as big endian? */
+           proto_tree_add_item(tree, hf_zbee_tlv_mic64, tvb, offset, 8, ENC_BIG_ENDIAN);
            offset += 8;
            break;
        }
@@ -934,17 +980,17 @@ dissect_zdp_rsp_security_challenge_local_tlv (tvbuff_t *tvb, packet_info *pinfo 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_rsp_security_set_configuration_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_rsp_security_set_configuration_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-  guint8  type;
-  guint8  length;
+  uint8_t type;
+  uint8_t length;
 
-  type = tvb_get_guint8(tvb, offset);
+  type = tvb_get_uint8(tvb, offset);
   proto_tree_add_item(tree, hf_zbee_tlv_local_type_rsp_set_configuration, tvb, offset, 1, ENC_NA);
   offset += 1;
 
-  length = tvb_get_guint8(tvb, offset);
+  length = tvb_get_uint8(tvb, offset);
   proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
   offset += 1;
 
@@ -952,10 +998,10 @@ dissect_zdp_rsp_security_set_configuration_local_tlv(tvbuff_t *tvb, packet_info 
   switch (type) {
      case 0:
      {
-         guint8      count;
-         guint8      i;
+         uint8_t     count;
+         uint8_t     i;
 
-         count = tvb_get_guint8(tvb, offset);
+         count = tvb_get_uint8(tvb, offset);
          proto_tree_add_item(tree, hf_zbee_tlv_local_status_count, tvb, offset, 1, ENC_NA);
          offset += 1;
 
@@ -987,17 +1033,17 @@ dissect_zdp_rsp_security_set_configuration_local_tlv(tvbuff_t *tvb, packet_info 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_security_start_key_neg_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_security_start_key_neg_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_key_negotiation_req_rsp, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -1027,17 +1073,17 @@ dissect_zdp_security_start_key_neg_local_tlv (tvbuff_t *tvb, packet_info *pinfo 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_security_key_upd_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_security_key_upd_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-  guint8  type;
-      guint8  length;
+  uint8_t type;
+      uint8_t length;
 
-      type = tvb_get_guint8(tvb, offset);
+      type = tvb_get_uint8(tvb, offset);
       proto_tree_add_item(tree, hf_zbee_tlv_local_type_key_update_req_rsp, tvb, offset, 1, ENC_NA);
       offset += 1;
 
-      length = tvb_get_guint8(tvb, offset);
+      length = tvb_get_uint8(tvb, offset);
       proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
       offset += 1;
 
@@ -1066,17 +1112,17 @@ dissect_zdp_security_key_upd_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, pr
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_rsp_security_get_auth_level_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zdp_rsp_security_get_auth_level_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_local_type_get_auth_level_rsp, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -1106,11 +1152,11 @@ dissect_zdp_rsp_security_get_auth_level_local_tlv (tvbuff_t *tvb, packet_info *p
  *@param  cmd_id - ZDP command id .
  *@return offset after command dissection.
 */
-static guint
-dissect_zdp_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, guint cmd_id)
+static unsigned
+dissect_zdp_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, unsigned cmd_id)
 {
-    guint8  total_tlv_length = 2 /*type + len fields*/ + tvb_get_guint8(tvb, offset + 1) + 1;
-    guint8  tmp_offset = offset;
+    uint8_t total_tlv_length = 2 /*type + len fields*/ + tvb_get_uint8(tvb, offset + 1) + 1;
+    uint8_t tmp_offset = offset;
 
     switch (cmd_id) {
         case ZBEE_ZDP_REQ_CLEAR_ALL_BINDINGS:
@@ -1190,18 +1236,18 @@ dissect_zdp_local_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, 
  * @param  hf_channel  channel field index
  * @return mask
  */
-static guint
-dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, guint offset, int hf_page, int hf_channel)
+static unsigned
+dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, unsigned offset, int hf_page, int hf_channel)
 {
-    gint        i;
-    guint32     mask;
-    guint8      page;
+    uint32_t    i;
+    uint32_t    mask;
+    uint8_t     page;
     proto_item *ti;
 
     /* Get and display the channel mask. */
     mask = tvb_get_letohl(tvb, offset);
 
-    page = (guint8)((mask >> 27) & 0x07);
+    page = (uint8_t)((mask >> 27) & 0x07);
     mask &= 0x07FFFFFFUL;
 
     proto_tree_add_uint(tree, hf_page, tvb, offset, 4, page);
@@ -1245,12 +1291,12 @@ dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, guint offset, int hf_
          */
         if ((2 << i) & mask)
         {
-            while ((2 << i) & mask) i++;
+            while ((i<32) && ((2 << i) & mask)) i++;
             proto_item_append_text(ti, "-%d", i);
         }
     }
 
-    offset += sizeof(guint32);
+    offset += sizeof(uint32_t);
 
     return offset;
 }
@@ -1265,14 +1311,14 @@ dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, guint offset, int hf_
  * @return offset after dissection
  */
 
-static guint
+static unsigned
 dissect_zbee_tlv_ext_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_ext_pan_id, tvb, offset, 8, ENC_NA);
+    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_ext_pan_id, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
 
     return offset;
-};
+}
 
 /**
  * Dissector Short PAN ID TLV.
@@ -1284,14 +1330,14 @@ dissect_zbee_tlv_ext_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
  * @return offset after dissection
  */
 
-static guint
+static unsigned
 dissect_zbee_tlv_short_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_short_pan_id, tvb, offset, 2, ENC_NA);
+    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_short_pan_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
 
     return offset;
-};
+}
 
 /**
  * Dissector NWK Key TLV.
@@ -1303,13 +1349,13 @@ dissect_zbee_tlv_short_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree 
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_nwk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_nwk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_nwk_key, tvb, offset, 16, ENC_NA);
     offset += 16;
 
     return offset;
-};
+}
 
 /**
  * Dissector Device Type TLV.
@@ -1321,13 +1367,13 @@ static guint dissect_zbee_tlv_nwk_key(tvbuff_t *tvb, packet_info *pinfo _U_, pro
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_dev_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_dev_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_dev_type, tvb, offset, 1, ENC_NA);
     offset += 1;
 
     return offset;
-};
+}
 
 /**
  * Dissector NWK Address TLV.
@@ -1339,13 +1385,13 @@ static guint dissect_zbee_tlv_dev_type(tvbuff_t *tvb, packet_info *pinfo _U_, pr
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_nwk_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_nwk_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_nwk_addr, tvb, offset, 2, ENC_NA);
+    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_nwk_addr, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
 
     return offset;
-};
+}
 
 /**
  * Dissector Joining Method TLV.
@@ -1357,13 +1403,13 @@ static guint dissect_zbee_tlv_nwk_addr(tvbuff_t *tvb, packet_info *pinfo _U_, pr
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_join_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_join_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_join_method, tvb, offset, 1, ENC_NA);
     offset += 1;
 
     return offset;
-};
+}
 
 /**
  * Dissector IEEE Address TLV.
@@ -1375,13 +1421,13 @@ static guint dissect_zbee_tlv_join_method(tvbuff_t *tvb, packet_info *pinfo _U_,
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    proto_tree_add_item(tree, hf_zbee_tlv_local_ieee_addr, tvb, offset, 8, ENC_NA);
+    proto_tree_add_item(tree, hf_zbee_tlv_local_ieee_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
 
     return offset;
-};
+}
 
 /**
  * Dissector Trust Center Address TLV.
@@ -1393,13 +1439,13 @@ static guint dissect_zbee_tlv_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, p
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_tc_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_tc_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_tc_addr, tvb, offset, 8, ENC_NA);
+    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_tc_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
 
     return offset;
-};
+}
 
 /**
  * Dissector NWK Update ID TLV.
@@ -1411,13 +1457,13 @@ static guint dissect_zbee_tlv_tc_addr(tvbuff_t *tvb, packet_info *pinfo _U_, pro
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_nwk_upd_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_nwk_upd_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_nwk_upd_id, tvb, offset, 1, ENC_NA);
     offset += 1;
 
     return offset;
-};
+}
 
 /**
  * Dissector NWK Active Key Seq Number TLV.
@@ -1429,13 +1475,13 @@ static guint dissect_zbee_tlv_nwk_upd_id(tvbuff_t *tvb, packet_info *pinfo _U_, 
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_key_seq_num, tvb, offset, 1, ENC_NA);
     offset += 1;
 
     return offset;
-};
+}
 
 /**
  * Dissector Admin Key TLV.
@@ -1447,13 +1493,13 @@ static guint dissect_zbee_tlv_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_,
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_adm_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_adm_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_adm_key, tvb, offset, 16, ENC_NA);
     offset += 16;
 
     return offset;
-};
+}
 
 /**
  * Dissector (Manager Joiners) Provisional Link Key TLV.
@@ -1465,13 +1511,13 @@ static guint dissect_zbee_tlv_adm_key(tvbuff_t *tvb, packet_info *pinfo _U_, pro
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_mj_prov_lnk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_mj_prov_lnk_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_mj_prov_lnk_key, tvb, offset, 16, ENC_NA);
     offset += 16;
 
     return offset;
-};
+}
 
 /**
  * Dissector (Manager Joiners) IEEE Address TLV.
@@ -1483,13 +1529,13 @@ static guint dissect_zbee_tlv_mj_prov_lnk_key(tvbuff_t *tvb, packet_info *pinfo 
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_mj_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_mj_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_mj_ieee_addr, tvb, offset, 8, ENC_NA);
+    proto_tree_add_item(tree, hf_zbee_tlv_local_comm_mj_ieee_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
 
     return offset;
-};
+}
 
 /**
  * Dissector (Manager Joiners) Command TLV.
@@ -1501,13 +1547,13 @@ static guint dissect_zbee_tlv_mj_ieee_addr(tvbuff_t *tvb, packet_info *pinfo _U_
  * @return offset after dissection
  */
 
-static guint dissect_zbee_tlv_mj_cmd(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
+static unsigned dissect_zbee_tlv_mj_cmd(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_mj_cmd, tvb, offset, 1, ENC_NA);
     offset += 1;
 
     return offset;
-};
+}
 
 /**
  * Dissector Channel List TLV.
@@ -1518,15 +1564,15 @@ static guint dissect_zbee_tlv_mj_cmd(tvbuff_t *tvb, packet_info *pinfo _U_, prot
  * @param  offset  offset into the tvb to begin dissection
  * @return offset after dissection
  */
-static guint
+static unsigned
 dissect_zbee_tlv_nwk_channel_list(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint32 count = 0;
+    uint32_t count = 0;
 
     proto_tree_add_item_ret_uint(tree, hf_zbee_tlv_local_comm_channel_page_count, tvb, offset, 1, ENC_LITTLE_ENDIAN, &count);
     offset += 1;
 
-    for (guint i = 0; i < count; i++)
+    for (unsigned i = 0; i < count; i++)
     {
         offset = dissect_zbee_tlv_chanmask(tree, tvb, offset, hf_zbee_tlv_local_comm_channel_page, hf_zbee_tlv_local_comm_channel_mask);
     }
@@ -1543,7 +1589,7 @@ dissect_zbee_tlv_nwk_channel_list(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
  * @param  offset  offset into the tvb to begin dissection
  * @return offset after dissection
  */
-static guint
+static unsigned
 dissect_zbee_tlv_link_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     static int * const link_key_flags[] = {
@@ -1570,11 +1616,11 @@ dissect_zbee_tlv_link_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tre
  * @param  offset  offset into the tvb to begin dissection
  * @return offset after dissection
  */
-static guint
+static unsigned
 dissect_zbee_tlv_nwk_status_map(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  mask;
-    guint   joined, opened, centralized;
+    uint8_t mask;
+    unsigned   joined, opened, centralized;
 
     static int * const network_status_map[] = {
         &hf_zbee_tlv_local_comm_network_status_map_joined_status,
@@ -1583,7 +1629,7 @@ dissect_zbee_tlv_nwk_status_map(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
         NULL
     };
 
-    mask = tvb_get_guint8(tvb, offset);
+    mask = tvb_get_uint8(tvb, offset);
     proto_tree_add_bitmask(tree, tvb, offset, hf_zbee_tlv_local_comm_network_status_map, ett_zbee_tlv_network_status_map, network_status_map, ENC_LITTLE_ENDIAN);
 
     offset += 1;
@@ -1619,10 +1665,10 @@ dissect_zbee_tlv_nwk_status_map(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
  * @param  offset  offset into the tvb to begin dissection
  * @return offset after dissection
  */
-static guint
+static unsigned
 dissect_zbee_tlv_status_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint32 code;
+    uint32_t code;
     proto_item *code_item;
 
     proto_tree_add_item(tree, hf_zbee_tlv_local_comm_status_code_domain, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1644,17 +1690,17 @@ dissect_zbee_tlv_status_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
  * @param  tree    pointer to subtree
  * @return offset after dissection
  */
-static guint
+static unsigned
 dissect_zbee_tlv_tunneling_npdu_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset,
-                                               guint8       length)
+                                               uint8_t      length)
 {
-    guint32 npdu_len = 0;
+    uint32_t npdu_len = 0;
 
     /* Parse NPDU Message TLV */
     {
         proto_item *npdu_flags_item = proto_tree_add_item(tree, hf_zbee_tlv_local_tunneling_npdu_flags, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         proto_tree *npdu_flags_tree = proto_item_add_subtree(npdu_flags_item, ett_zbee_tlv_zbd_tunneling_npdu_flags);
-        gboolean secur;
+        bool secur;
 
         proto_tree_add_item_ret_boolean(npdu_flags_tree, hf_zbee_tlv_local_tunneling_npdu_flags_security, tvb, offset, 1, ENC_LITTLE_ENDIAN, &secur);
         proto_tree_add_item_ret_uint(tree, hf_zbee_tlv_local_tunneling_npdu_length, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN, &npdu_len);
@@ -1692,7 +1738,7 @@ dissect_zbee_tlv_tunneling_npdu_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tre
  * @param  offset  offset into the tvb to begin dissection
  * @return offset after command dissection
  */
-static guint
+static unsigned
 dissect_zbee_tlv_key_neg_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_selected_key_method, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1713,8 +1759,8 @@ dissect_zbee_tlv_key_neg_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
  * @param  offset  offset into the tvb to begin dissection
  * @return offset after command dissection
  */
-static guint
-dissect_zbee_tlv_mac_tag(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, guint8 mac_tag_size)
+static unsigned
+dissect_zbee_tlv_mac_tag(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t mac_tag_size)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_mac_tag, tvb, offset, mac_tag_size, ENC_NA);
     offset += mac_tag_size;
@@ -1731,7 +1777,7 @@ dissect_zbee_tlv_mac_tag(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree
  * @param  offset  offset into the tvb to begin dissection
  * @return offset after command dissection
  */
-static guint
+static unsigned
 dissect_zbee_tlv_nwk_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_nwk_key_seq_num, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1749,17 +1795,17 @@ dissect_zbee_tlv_nwk_key_seq_num(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zbd_msg_status_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbd_msg_status_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_zbd_comm_tlv, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -1833,16 +1879,16 @@ dissect_zbd_msg_status_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zbd_msg_tunneling_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbd_msg_tunneling_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8 opcode = tvb_get_guint8(tvb, offset);
-    guint8 length;
+    uint8_t opcode = tvb_get_uint8(tvb, offset);
+    uint8_t length;
 
     proto_tree_add_item(tree, hf_zbee_tlv_zbd_tunneling_npdu_msg_tlv, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -1875,18 +1921,18 @@ dissect_zbd_msg_tunneling_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zbd_msg_manage_joiners_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbd_msg_manage_joiners_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8 type;
-    guint8 length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
 
     proto_tree_add_item(tree, hf_zbee_tlv_zbd_comm_mj_cmd_tlv, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -1924,17 +1970,17 @@ dissect_zbd_msg_manage_joiners_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zbd_msg_join_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbd_msg_join_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_zbd_comm_tlv, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -2004,17 +2050,17 @@ dissect_zbd_msg_join_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zbd_msg_formation_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbd_msg_formation_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_zbd_comm_tlv, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -2080,17 +2126,17 @@ dissect_zbd_msg_formation_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
 */
-static guint
-dissect_zbd_msg_secur_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbd_msg_secur_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
+    uint8_t type;
+    uint8_t length;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_zbd_secur_tlv, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -2134,11 +2180,11 @@ dissect_zbd_msg_secur_local_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
  *@param  cmd_id - ZB Direct local Message ID
  *@return offset after command dissection
 */
-static guint
-dissect_zbd_local_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, void* data _U_, guint cmd_id)
+static unsigned
+dissect_zbd_local_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, void* data _U_, unsigned cmd_id)
 {
-    guint8  total_tlv_length = 2 /*type + len fields*/ + tvb_get_guint8(tvb, offset + 1) + 1;
-    guint8  tmp_offset = offset;
+    uint8_t total_tlv_length = 2 /*type + len fields*/ + tvb_get_uint8(tvb, offset + 1) + 1;
+    uint8_t tmp_offset = offset;
 
     switch (cmd_id)
     {
@@ -2193,8 +2239,8 @@ dissect_zbd_local_tlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
  *@param  length of TLV data
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_manufacturer_specific(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, guint8 length)
+static unsigned
+dissect_zbee_tlv_manufacturer_specific(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t length)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_manufacturer_specific, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
@@ -2214,8 +2260,8 @@ dissect_zbee_tlv_manufacturer_specific(tvbuff_t *tvb, packet_info *pinfo _U_, pr
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_supported_key_negotiation_methods(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_supported_key_negotiation_methods(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     static int * const supported_key_negotiation_methods[] = {
         &hf_zbee_tlv_supported_key_negotiation_methods_key_request,
@@ -2254,8 +2300,8 @@ dissect_zbee_tlv_supported_key_negotiation_methods(tvbuff_t *tvb, packet_info *p
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_panid_conflict_report(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_panid_conflict_report(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_panid_conflict_cnt, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
@@ -2273,8 +2319,8 @@ dissect_zbee_tlv_panid_conflict_report(tvbuff_t *tvb, packet_info *pinfo _U_, pr
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_configuration_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_configuration_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     static int * const bitmask[] = {
         &hf_zbee_tlv_configuration_param_restricted_mode,
@@ -2299,8 +2345,8 @@ dissect_zbee_tlv_configuration_parameters(tvbuff_t *tvb, packet_info *pinfo _U_,
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_dev_cap_ext(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_dev_cap_ext(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     static int * const bitmask[] = {
         &hf_zbee_tlv_dev_cap_ext_zbdirect_virt_device,
@@ -2322,10 +2368,10 @@ dissect_zbee_tlv_dev_cap_ext(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_potential_parents(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_potential_parents(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-  guint8 count, i;
+  uint8_t count, i;
 
   proto_tree_add_item(tree, hf_zbee_zdp_beacon_survey_current_parent, tvb, offset, 2, ENC_LITTLE_ENDIAN);
   offset += 2;
@@ -2333,7 +2379,7 @@ dissect_zbee_tlv_potential_parents(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
   proto_tree_add_item(tree, hf_zbee_tlv_lqa, tvb, offset, 1, ENC_LITTLE_ENDIAN);
   offset += 1;
 
-  count = tvb_get_guint8(tvb, offset);
+  count = tvb_get_uint8(tvb, offset);
   proto_tree_add_item(tree, hf_zbee_zdp_beacon_survey_cnt_parents, tvb, offset, 1, ENC_LITTLE_ENDIAN);
   offset += 1;
 
@@ -2358,8 +2404,8 @@ dissect_zbee_tlv_potential_parents(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_next_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_next_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_next_pan_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
@@ -2376,8 +2422,8 @@ dissect_zbee_tlv_next_pan_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_next_channel_change(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_next_channel_change(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     /* todo: fix this (do channel mask) */
     proto_tree_add_item(tree, hf_zbee_tlv_next_channel_change, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -2395,8 +2441,8 @@ dissect_zbee_tlv_next_channel_change(tvbuff_t *tvb, packet_info *pinfo _U_, prot
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_passphrase(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_passphrase(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_passphrase, tvb, offset, 16, ENC_NA);
     offset += 16;
@@ -2414,8 +2460,8 @@ dissect_zbee_tlv_passphrase(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_router_information(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_router_information(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     static int * const router_information[] = {
         &hf_zbee_tlv_router_information_hub_connectivity,
@@ -2444,8 +2490,8 @@ dissect_zbee_tlv_router_information(tvbuff_t *tvb, packet_info *pinfo _U_, proto
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_fragmentation_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_fragmentation_parameters(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_node_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
@@ -2468,8 +2514,8 @@ dissect_zbee_tlv_fragmentation_parameters(tvbuff_t *tvb, packet_info *pinfo _U_,
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_selected_key_negotiation_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_selected_key_negotiation_method(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_selected_key_negotiation_method, tvb, offset, 1, ENC_NA);
     offset += 1;
@@ -2493,10 +2539,10 @@ dissect_zbee_tlv_selected_key_negotiation_method(tvbuff_t *tvb, packet_info *pin
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_public_point(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, guint8 length)
+static unsigned
+dissect_zbee_tlv_public_point(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t length)
 {
-    guint8 public_point_length = length - 8;
+    uint8_t public_point_length = length - 8;
 
     proto_tree_add_item(tree, hf_zbee_tlv_device_eui64, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
@@ -2516,13 +2562,13 @@ dissect_zbee_tlv_public_point(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8 eui64_count;
-    guint8 i;
+    uint8_t eui64_count;
+    uint8_t i;
 
-    eui64_count = tvb_get_guint8(tvb, offset);
+    eui64_count = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_count, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -2544,8 +2590,8 @@ dissect_zbee_tlv_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_clear_all_bindigs_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_clear_all_bindigs_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     return dissect_zbee_tlv_eui64(tvb, pinfo, tree, offset);
 }
@@ -2559,8 +2605,8 @@ dissect_zbee_tlv_clear_all_bindigs_eui64(tvbuff_t *tvb, packet_info *pinfo _U_, 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_requested_auth_token_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_requested_auth_token_id(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_global_tlv_id, tvb, offset, 1, ENC_NA);
     offset += 1;
@@ -2577,8 +2623,8 @@ dissect_zbee_tlv_requested_auth_token_id(tvbuff_t *tvb, packet_info *pinfo _U_, 
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_target_ieee_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_target_ieee_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_zbee_tlv_local_ieee_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
@@ -2595,8 +2641,8 @@ dissect_zbee_tlv_target_ieee_address(tvbuff_t *tvb, packet_info *pinfo _U_, prot
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_zbee_tlv_device_auth_level(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_zbee_tlv_device_auth_level(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
 
     proto_tree_add_item(tree, hf_zbee_tlv_local_ieee_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
@@ -2614,19 +2660,19 @@ dissect_zbee_tlv_device_auth_level(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 /*
  * ToDo: descr
  */
-static guint
+static unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_global_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+dissect_global_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-    guint8  type;
-    guint8  length;
-    guint   tmp_offset;
+    uint8_t type;
+    uint8_t length;
+    unsigned   tmp_offset;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_global_type, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    length = tvb_get_guint8(tvb, offset);
+    length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
     offset += 1;
 
@@ -2706,15 +2752,15 @@ dissect_global_tlv (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, gui
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
-dissect_unknown_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset)
+static unsigned
+dissect_unknown_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset)
 {
-  guint8       length;
+  uint8_t      length;
 
   proto_tree_add_item(tree, hf_zbee_tlv_type, tvb, offset, 1, ENC_NA);
   offset += 1;
 
-  length = tvb_get_guint8(tvb, offset);
+  length = tvb_get_uint8(tvb, offset);
   proto_tree_add_item(tree, hf_zbee_tlv_length, tvb, offset, 1, ENC_NA);
   offset += 1;
 
@@ -2734,13 +2780,13 @@ dissect_unknown_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, gui
  *@param  offset into the tvb to begin dissection.
  *@return offset after command dissection.
  */
-static guint
+static unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_zbee_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, void *data, guint8 source_type, guint cmd_id)
+dissect_zbee_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, void *data, uint8_t source_type, unsigned cmd_id)
 {
-    guint8       type;
+    uint8_t      type;
 
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
 
     if (type >= ZBEE_TLV_GLOBAL_START_NUMBER)
     {
@@ -2785,23 +2831,23 @@ dissect_zbee_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint 
 
 #define ZBEE_TLV_MAX_RECURSION_DEPTH 5 // Arbitrarily chosen
 
-guint
+unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_zbee_tlvs(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset, void *data, guint8 source_type, guint cmd_id)
+dissect_zbee_tlvs(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, void *data, uint8_t source_type, unsigned cmd_id)
 {
     proto_tree  *subtree;
-    guint8       length;
+    uint8_t      length;
     unsigned     recursion_depth = p_get_proto_depth(pinfo, proto_zbee_tlv);
 
-   if (++recursion_depth >= ZBEE_TLV_MAX_RECURSION_DEPTH) {
-      proto_tree_add_expert(tree, pinfo, &ei_zbee_tlv_max_recursion_depth_reached, tvb, 0, 0);
-      return tvb_reported_length_remaining(tvb, offset);
-   }
+    if (++recursion_depth >= ZBEE_TLV_MAX_RECURSION_DEPTH) {
+        proto_tree_add_expert(tree, pinfo, &ei_zbee_tlv_max_recursion_depth_reached, tvb, 0, 0);
+        return offset;
+    }
 
-   p_set_proto_depth(pinfo, proto_zbee_tlv, recursion_depth);
+    p_set_proto_depth(pinfo, proto_zbee_tlv, recursion_depth);
 
     while (tvb_bytes_exist(tvb, offset, ZBEE_TLV_HEADER_LENGTH)) {
-        length = tvb_get_guint8(tvb, offset + 1) + 1;
+        length = tvb_get_uint8(tvb, offset + 1) + 1;
         subtree = proto_tree_add_subtree(tree, tvb, offset, ZBEE_TLV_HEADER_LENGTH + length, ett_zbee_tlv, NULL, "TLV");
         offset = dissect_zbee_tlv(tvb, pinfo, subtree, offset, data, source_type, cmd_id);
     }
@@ -2822,7 +2868,7 @@ dissect_zbee_tlvs(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint
 static int
 dissect_zbee_tlv_default(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  guint offset = 0;
+  unsigned offset = 0;
 
   offset = dissect_zbee_tlvs(tvb, pinfo, tree, offset, data, ZBEE_TLV_SRC_TYPE_DEFAULT, 0);
 
@@ -3138,7 +3184,7 @@ void proto_register_zbee_tlv(void)
                 NULL, 0x0, NULL, HFILL }
         },
         { &hf_zbee_tlv_local_comm_ext_pan_id,
-            { "Extended PAN ID", "zbee_tlv.zbd.comm.ext_pan_id", FT_BYTES, SEP_COLON,
+            { "Extended PAN ID", "zbee_tlv.zbd.comm.ext_pan_id", FT_UINT64, BASE_HEX,
                 NULL, 0x0, NULL, HFILL }
         },
         { &hf_zbee_tlv_local_comm_short_pan_id,
@@ -3257,6 +3303,18 @@ void proto_register_zbee_tlv(void)
             { "Provisional", "zbee_tlv.zbd.comm.join.link_key.provisional", FT_UINT8, BASE_DEC,
                 VALS(zbee_tlv_local_types_lnk_key_provisional_str), ZBEE_TLV_LINK_KEY_PROVISIONAL, NULL, HFILL }
         },
+        { &hf_zbee_tlv_local_type_lk_features,
+            { "Features", "zbee_tlv.lk_features", FT_UINT8, BASE_HEX,
+                NULL, 0x0, NULL, HFILL }
+        },
+        { &hf_zbee_tlv_local_type_lk_features_capabilities,
+            { "Link-Key Features & Capabilities TLV", "zbee_tlv.lk_features_capabilities", FT_UINT8, BASE_HEX,
+                NULL, 0x0, NULL, HFILL }
+        },
+        { &hf_zbee_tlv_local_type_lk_features_capabilities_aps_fc_sync,
+            { "Frame Counter Synchronization Support", "zbee_tlv.lk_features_capabilities.aps_fc_sync", FT_BOOLEAN, 8,
+                NULL, ZBEE_TLV_LK_FEATURES_CAPABILITIES_FC_SYNC_SUPPORTED, NULL, HFILL }
+        },
         { &hf_zbee_tlv_local_comm_network_status_map,
             { "Network Status Map", "zbee_tlv.zbd.comm.status_map", FT_UINT8, BASE_HEX,
                 NULL, 0x0, NULL, HFILL }
@@ -3276,7 +3334,7 @@ void proto_register_zbee_tlv(void)
     };
 
     /* Protocol subtrees */
-    static gint *ett[] =
+    static int *ett[] =
         {
             &ett_zbee_aps_tlv,
             &ett_zbee_aps_relay,
@@ -3289,6 +3347,7 @@ void proto_register_zbee_tlv(void)
             &ett_zbee_tlv_zbd_tunneling_npdu,
             &ett_zbee_tlv_zbd_tunneling_npdu_flags,
             &ett_zbee_tlv_link_key_flags,
+            &ett_zbee_tlv_lk_features_capabilities,
             &ett_zbee_tlv_network_status_map
         };
 
@@ -3308,3 +3367,8 @@ void proto_register_zbee_tlv(void)
     register_dissector("zbee_tlv", dissect_zbee_tlv_default, proto_zbee_tlv);
     zbee_nwk_handle = find_dissector("zbee_nwk");
 } /* proto_register_zbee_tlv */
+
+void proto_reg_handoff_zbee_tlv(void)
+{
+    proto_zbee_nwk = proto_get_id_by_filter_name(ZBEE_PROTOABBREV_NWK);
+}

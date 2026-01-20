@@ -42,9 +42,9 @@ RTSE-apdus
 
   if(session != NULL)
         session->ros_op = (ROS_OP_BIND | ROS_OP_ARGUMENT);
-  open_request=TRUE;
+  open_request=true;
   %(DEFAULT_BODY)s
-  open_request=FALSE;
+  open_request=false;
 
 #.FN_BODY RTOACapdu
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE*)actx->private_data;
@@ -86,7 +86,7 @@ RTSE-apdus
         tvbuff_t *next_tvb = NULL;
     struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE*)actx->private_data;
 
-        offset = dissect_ber_octet_string(FALSE, actx, tree, tvb, offset, hf_index, &next_tvb);
+        offset = dissect_ber_octet_string(false, actx, tree, tvb, offset, hf_index, &next_tvb);
 
         if(next_tvb) {
 
@@ -96,13 +96,13 @@ RTSE-apdus
                 if(session)
                         session->ros_op = (ROS_OP_INVOKE | ROS_OP_ARGUMENT);
 
-                offset = dissect_ber_external_type(FALSE, tree, next_tvb, 0, actx,  -1, call_rtse_external_type_callback);
+                offset = dissect_ber_external_type(false, tree, next_tvb, 0, actx,  -1, call_rtse_external_type_callback);
         }
 
 
 #.FN_BODY RTORQapdu/applicationProtocol
 
-  offset = dissect_ber_integer(TRUE, actx, tree, tvb, offset, hf_index, &app_proto);
+  offset = dissect_ber_integer(true, actx, tree, tvb, offset, hf_index, &app_proto);
 
 #.FN_BODY SessionConnectionIdentifier
   if(open_request){
@@ -125,10 +125,10 @@ CallingSSuserReference/t61String DISPLAY = BASE_NONE
 #.FN_PARS CommonReference
   VAL_PTR=&string
 #.FN_BODY CommonReference
-  tvbuff_t *string = NULL;
+  char *string = NULL;
   %(DEFAULT_BODY)s
   if(open_request && string)
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %%s", tvb_format_text(actx->pinfo->pool, string, 0, tvb_reported_length(string)));
+    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %%s", string);
 
 #.END
 
@@ -138,15 +138,14 @@ CallingSSuserReference/t61String DISPLAY = BASE_NONE
   if(open_request && string)
     col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %%s", tvb_format_text(actx->pinfo->pool, string, 0, tvb_reported_length(string)));
 
-#.FN_BODY RTTPapdu  VAL_PTR=&priority
-  int priority = -1;
+#.FN_BODY RTTPapdu  VAL_PTR=(uint32_t*)&priority
+  int32_t priority;
 
   col_append_str(actx->pinfo->cinfo, COL_INFO, "Turn-Please");
 
   %(DEFAULT_BODY)s
 
-  if(priority != -1)
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%%d)", priority);
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%%d)", priority);
 
 #.FN_BODY RTORJapdu
   col_append_str(actx->pinfo->cinfo, COL_INFO, "Refuse");
@@ -154,15 +153,14 @@ CallingSSuserReference/t61String DISPLAY = BASE_NONE
   %(DEFAULT_BODY)s
 
 #.FN_PARS RefuseReason
-  VAL_PTR=&reason
+  VAL_PTR=(uint32_t*)&reason
 
 #.FN_BODY RefuseReason
-  int reason = -1;
+  int32_t reason;
 
   %(DEFAULT_BODY)s
 
-  if(reason != -1)
-   col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%%s)", val_to_str(reason, rtse_RefuseReason_vals, "reason(%%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%%s)", val_to_str(actx->pinfo->pool, reason, rtse_RefuseReason_vals, "reason(%%d)"));
 
 #.FN_BODY RTABapdu
   col_append_str(actx->pinfo->cinfo, COL_INFO, "Abort");
@@ -170,15 +168,14 @@ CallingSSuserReference/t61String DISPLAY = BASE_NONE
   %(DEFAULT_BODY)s
 
 #.FN_PARS AbortReason
-  VAL_PTR=&reason
+  VAL_PTR=(uint32_t*)&reason
 
 #.FN_BODY AbortReason
-  int reason = -1;
+  int32_t reason = -1;
 
   %(DEFAULT_BODY)s
 
-  if(reason != -1)
-   col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%%s)", val_to_str(reason, rtse_AbortReason_vals, "reason(%%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (%%s)", val_to_str(actx->pinfo->pool, reason, rtse_AbortReason_vals, "reason(%%d)"));
 
 #.TYPE_ATTR
 AdditionalReferenceInformation DISPLAY = BASE_NONE

@@ -13,6 +13,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 
 #include "wslua_file_common.h"
 
@@ -27,8 +28,6 @@ WSLUA_CLASS_DEFINE(FileHandler,NOP);
     A FileHandler object, created by a call to FileHandler.new(arg1, arg2, ...).
     The FileHandler object lets you create a file-format reader, or writer, or
     both, by setting your own read_open/read or write_open/write functions.
-
-    @since 1.11.3
  */
 
 static int filehandler_cb_error_handler(lua_State* L) {
@@ -52,7 +51,7 @@ static GSList *registered_file_handlers;
 /* During file routines, we cannot allow the FileHandler to get deregistered, since
    that would change the GArray's in file_access.c and hilarity would ensue. So we
    set this to true right before pcall(), and back to false afterwards */
-static bool in_routine = false;
+static bool in_routine;
 
 static void
 report_error(int *err, char **err_info, const char *fmt, ...)
@@ -133,10 +132,10 @@ report_error(int *err, char **err_info, const char *fmt, ...)
 
 /* some declarations */
 static bool
-wslua_filehandler_read(wtap *wth, wtap_rec *rec, Buffer *buf,
-                       int *err, char **err_info, int64_t *offset);
+wslua_filehandler_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+                       int64_t *offset);
 static bool
-wslua_filehandler_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf,
+wslua_filehandler_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
                             int *err, char **err_info);
 static void
 wslua_filehandler_close(wtap *wth);
@@ -236,7 +235,7 @@ wslua_filehandler_open(wtap *wth, int *err, char **err_info)
 }
 
 static bool
-wslua_filehandler_read_packet(wtap *wth, FILE_T wth_fh, wtap_rec *rec, Buffer *buf,
+wslua_filehandler_read_packet(wtap *wth, FILE_T wth_fh, wtap_rec *rec,
                               int *err, char **err_info, int64_t *offset)
 {
     FileHandler fh = (FileHandler)(wth->wslua_data);
@@ -256,9 +255,11 @@ wslua_filehandler_read_packet(wtap *wth, FILE_T wth_fh, wtap_rec *rec, Buffer *b
     wtap_block_unref(rec->block);
     rec->block = NULL;
 
+    wtap_setup_packet_rec(rec, wth->file_encap);
+
     fp = push_File(L, wth_fh);
     fc = push_CaptureInfo(L, wth, false);
-    fi = push_FrameInfo(L, rec, buf);
+    fi = push_FrameInfo(L, rec);
 
     switch ( lua_pcall(L,3,1,1) ) {
         case 0:
@@ -270,7 +271,7 @@ wslua_filehandler_read_packet(wtap *wth, FILE_T wth_fh, wtap_rec *rec, Buffer *b
              * succeed without advancing data offset. Should it fail instead?
              */
             if (lua_type(L, -1) == LUA_TNUMBER) {
-                *offset = wslua_togint64(L, -1);
+                *offset = wslua_toint64(L, -1);
                 retval = 1;
                 break;
             }
@@ -296,15 +297,15 @@ wslua_filehandler_read_packet(wtap *wth, FILE_T wth_fh, wtap_rec *rec, Buffer *b
  * This will be the seek_off parameter when this frame is re-read.
  */
 static bool
-wslua_filehandler_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+wslua_filehandler_read(wtap *wth, wtap_rec *rec,
                        int *err, char **err_info, int64_t *offset)
 {
-    return wslua_filehandler_read_packet(wth, wth->fh, rec, buf, err, err_info, offset);
+    return wslua_filehandler_read_packet(wth, wth->fh, rec, err, err_info, offset);
 }
 
 static bool
-wslua_filehandler_seek_read_packet(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf,
-                            int *err, char **err_info)
+wslua_filehandler_seek_read_packet(wtap *wth, int64_t seek_off, wtap_rec *rec,
+                                   int *err, char **err_info)
 {
     FileHandler fh = (FileHandler)(wth->wslua_data);
     int retval = -1;
@@ -323,9 +324,11 @@ wslua_filehandler_seek_read_packet(wtap *wth, int64_t seek_off, wtap_rec *rec, B
     wtap_block_unref(rec->block);
     rec->block = NULL;
 
+    wtap_setup_packet_rec(rec, wth->file_encap);
+
     fp = push_File(L, wth->random_fh);
     fc = push_CaptureInfo(L, wth, false);
-    fi = push_FrameInfo(L, rec, buf);
+    fi = push_FrameInfo(L, rec);
     lua_pushinteger(L, (lua_Integer)seek_off);
 
     switch ( lua_pcall(L,4,1,1) ) {
@@ -357,7 +360,7 @@ wslua_filehandler_seek_read_packet(wtap *wth, int64_t seek_off, wtap_rec *rec, B
  * Do a standard file_seek() and then call FileHandler:read().
  */
 static bool
-wslua_filehandler_seek_read_default(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf,
+wslua_filehandler_seek_read_default(wtap *wth, int64_t seek_off, wtap_rec *rec,
                                     int *err, char **err_info)
 {
     int64_t offset = file_seek(wth->random_fh, seek_off, SEEK_SET, err);
@@ -366,14 +369,14 @@ wslua_filehandler_seek_read_default(wtap *wth, int64_t seek_off, wtap_rec *rec, 
         return false;
     }
 
-    return wslua_filehandler_read_packet(wth, wth->random_fh, rec, buf, err, err_info, &offset);
+    return wslua_filehandler_read_packet(wth, wth->random_fh, rec, err, err_info, &offset);
 }
 
 /* Classic wtap seek_read function, called by wtap core.  This must return true on
  * success, false on error.
  */
 static bool
-wslua_filehandler_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf,
+wslua_filehandler_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
                             int *err, char **err_info)
 {
     FileHandler fh = (FileHandler)(wth->wslua_data);
@@ -384,9 +387,9 @@ wslua_filehandler_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *
     }
 
     if (fh->seek_read_ref != LUA_NOREF) {
-        return wslua_filehandler_seek_read_packet(wth, seek_off, rec, buf, err, err_info);
+        return wslua_filehandler_seek_read_packet(wth, seek_off, rec, err, err_info);
     } else {
-        return wslua_filehandler_seek_read_default(wth, seek_off, rec, buf, err, err_info);
+        return wslua_filehandler_seek_read_default(wth, seek_off, rec, err, err_info);
     }
 }
 
@@ -499,7 +502,7 @@ wslua_filehandler_can_write_encap(int encap, void* data)
 /* some declarations */
 static bool
 wslua_filehandler_dump(wtap_dumper *wdh, const wtap_rec *rec,
-                      const uint8_t *pd, int *err, char **err_info);
+                       int *err, char **err_info);
 static bool
 wslua_filehandler_dump_finish(wtap_dumper *wdh, int *err, char **err_info);
 
@@ -570,7 +573,7 @@ wslua_filehandler_dump_open(wtap_dumper *wdh, int *err, char **err_info)
 */
 static bool
 wslua_filehandler_dump(wtap_dumper *wdh, const wtap_rec *rec,
-                      const uint8_t *pd, int *err, char **err_info)
+                       int *err, char **err_info)
 {
     FileHandler fh = (FileHandler)(wdh->wslua_data);
     int retval = -1;
@@ -588,7 +591,7 @@ wslua_filehandler_dump(wtap_dumper *wdh, const wtap_rec *rec,
 
     fp = push_Wdh(L, wdh);
     fc = push_CaptureInfoConst(L,wdh);
-    fi = push_FrameInfoConst(L, rec, pd);
+    fi = push_FrameInfoConst(L, rec, ws_buffer_start_ptr(&rec->data));
 
     errno = WTAP_ERR_CANT_WRITE;
     switch ( lua_pcall(L,3,1,1) ) {
@@ -671,7 +674,7 @@ static const struct supported_block_type block_type_proto[] = {
 	{ WTAP_BLOCK_FT_SPECIFIC_EVENT, BLOCK_NOT_SUPPORTED, 0, NULL }
 };
 
-#define NUM_LISTED_BLOCK_TYPES (sizeof block_type_proto / sizeof block_type_proto[0])
+#define NUM_LISTED_BLOCK_TYPES array_length(block_type_proto)
 
 WSLUA_CONSTRUCTOR FileHandler_new(lua_State* L) {
     /* Creates a new FileHandler */
@@ -709,7 +712,7 @@ WSLUA_CONSTRUCTOR FileHandler_new(lua_State* L) {
     fh->finfo.writing_must_seek = false;
     supported_blocks = (struct supported_block_type  *)g_memdup2(&block_type_proto, sizeof block_type_proto);
     /*
-     * Add a list of options to the seciton block, interface block, and
+     * Add a list of options to the section block, interface block, and
      * packet block, so the file handler can indicate comment support.
      */
     for (size_t i = 0; i < NUM_LISTED_BLOCK_TYPES; i++) {
@@ -1043,7 +1046,7 @@ WSLUA_ATTRIBUTE_FUNC_SETTER(FileHandler,write_close);
 
 /* WSLUA_ATTRIBUTE FileHandler_type RO The internal file type.  This is automatically set with a new
     number when the FileHandler is registered. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FileHandler,type,file_type);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FileHandler,type,file_type);
 
 /* WSLUA_ATTRIBUTE FileHandler_extensions RW One or more semicolon-separated file extensions that this file type usually uses.
 
@@ -1215,7 +1218,7 @@ WSLUA_ATTRIBUTE_SET(FileHandler,supported_comment_types, { \
     struct supported_option_type *supported_options; \
     if (!lua_isnumber(L,-1) ) \
         return luaL_error(L, "FileHandler's attribute`supported_comment_types' must be a number"); \
-    supported_comment_types = wslua_toguint(L,-1); \
+    supported_comment_types = wslua_touint(L,-1); \
     /* \
      * Update support for comments in the relevant block types; the entries \
      * for comments in those types should be there. \

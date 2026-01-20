@@ -17,12 +17,14 @@
 #ifndef PACKET_ROS_H
 #define PACKET_ROS_H
 
+#include <epan/asn1.h>
+
 extern const value_string ros_ROS_vals[];
 extern const value_string ros_InvokeId_vals[];
 extern const value_string ros_Code_vals[];
-int dissect_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-int dissect_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-int dissect_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+unsigned dissect_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+unsigned dissect_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+unsigned dissect_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 # include "packet-ses.h"
 
@@ -49,28 +51,28 @@ int dissect_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, a
 # define err_ros_bind  (-2) /* pseudo error code for asn2wrs generated binds */
 
 typedef struct _ros_opr_t {
-  gint32 opcode;
+  int32_t opcode;
   dissector_t arg_pdu;
   dissector_t res_pdu;
 } ros_opr_t;
 
 typedef struct _ros_err_t {
-  gint32 errcode;
+  int32_t errcode;
   dissector_t err_pdu;
 } ros_err_t;
 
 typedef struct _ros_info_t {
-  const gchar         *name;
+  const char          *name;
   int                 *proto;
-  gint                *ett_proto;
+  int                 *ett_proto;
   const value_string  *opr_code_strings;
   const ros_opr_t     *opr_code_dissectors;
   const value_string  *err_code_strings;
   const ros_err_t     *err_code_dissectors;
 } ros_info_t;
 
-void register_ros_oid_dissector_handle(const char *oid, dissector_handle_t dissector, int proto _U_, const char *name, gboolean uses_rtse);
-void register_ros_protocol_info(const char *oid, const ros_info_t *rinfo, int proto _U_, const char *name, gboolean uses_rtse);
+void register_ros_oid_dissector_handle(const char *oid, dissector_handle_t dissector, int proto _U_, const char *name, bool uses_rtse);
+void register_ros_protocol_info(const char *oid, const ros_info_t *rinfo, int proto _U_, const char *name, bool uses_rtse);
 int call_ros_oid_callback(const char *oid, tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, struct SESSION_DATA_STRUCTURE* session);
 
 #endif  /* PACKET_ROS_H */

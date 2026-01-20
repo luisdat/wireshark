@@ -66,8 +66,8 @@ static int hf_who_uid;
 static int hf_who_timeon;
 static int hf_who_idle;
 
-static gint ett_who;
-static gint ett_whoent;
+static int ett_who;
+static int ett_whoent;
 
 #define UDP_PORT_WHO    513
 
@@ -79,7 +79,7 @@ dissect_who(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 	int		offset = 0;
 	proto_tree	*who_tree;
 	proto_item	*who_ti;
-	guint8		*server_name;
+	const char	*server_name;
 	double		loadav_5 = 0.0, loadav_10 = 0.0, loadav_15 = 0.0;
 
 	/* Summary information */
@@ -110,7 +110,7 @@ dissect_who(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 	}
 	offset += 4;
 
-	server_name = tvb_get_stringzpad(pinfo->pool, tvb, offset, 32, ENC_ASCII|ENC_NA);
+	server_name = (char*)tvb_get_stringzpad(pinfo->pool, tvb, offset, 32, ENC_ASCII|ENC_NA);
 	proto_tree_add_string(who_tree, hf_who_hostname, tvb, offset, 32, server_name);
 	offset += 32;
 
@@ -155,10 +155,10 @@ dissect_whoent(packet_info *pinfo, tvbuff_t *tvb, int offset, proto_tree *tree)
 	proto_tree	*whoent_tree = NULL;
 	proto_item	*whoent_ti = NULL;
 	int		line_offset = offset;
-	guint8		*out_line;
-	guint8		*out_name;
+	const char	*out_line;
+	const char	*out_name;
 	int		whoent_num = 0;
-	guint32		idle_secs; /* say that out loud... */
+	uint32_t		idle_secs; /* say that out loud... */
 
 	while (tvb_reported_length_remaining(tvb, line_offset) > 0
 	    && whoent_num < MAX_NUM_WHOENTS) {
@@ -166,12 +166,12 @@ dissect_whoent(packet_info *pinfo, tvbuff_t *tvb, int offset, proto_tree *tree)
 		    line_offset, SIZE_OF_WHOENT, ENC_NA);
 		whoent_tree = proto_item_add_subtree(whoent_ti, ett_whoent);
 
-		out_line = tvb_get_stringzpad(pinfo->pool, tvb, line_offset, 8, ENC_ASCII|ENC_NA);
+		out_line = (char*)tvb_get_stringzpad(pinfo->pool, tvb, line_offset, 8, ENC_ASCII|ENC_NA);
 		proto_tree_add_string(whoent_tree, hf_who_tty, tvb, line_offset,
 		    8, out_line);
 		line_offset += 8;
 
-		out_name = tvb_get_stringzpad(pinfo->pool, tvb, line_offset, 8, ENC_ASCII|ENC_NA);
+		out_name = (char*)tvb_get_stringzpad(pinfo->pool, tvb, line_offset, 8, ENC_ASCII|ENC_NA);
 		proto_tree_add_string(whoent_tree, hf_who_uid, tvb, line_offset,
 		    8, out_name);
 		line_offset += 8;
@@ -251,7 +251,7 @@ proto_register_who(void)
 			NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_who,
 		&ett_whoent,
 	};

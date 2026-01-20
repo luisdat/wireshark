@@ -17,6 +17,8 @@
 
 #include <epan/packet.h>
 #include <epan/conversation.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 void proto_register_quake(void);
 
@@ -57,10 +59,10 @@ static int hf_quake_CCREP_RULE_INFO_rule;
 static int hf_quake_CCREP_RULE_INFO_value;
 
 
-static gint ett_quake;
-static gint ett_quake_control;
-static gint ett_quake_control_colors;
-static gint ett_quake_flags;
+static int ett_quake;
+static int ett_quake_control;
+static int ett_quake_control_colors;
+static int ett_quake_flags;
 
 static dissector_handle_t quake_handle;
 
@@ -136,8 +138,8 @@ static void
 dissect_quake_CCREQ_CONNECT
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	gint offset = 0;
-	gint item_len;
+	int offset = 0;
+	int item_len;
 
 	proto_tree_add_item_ret_length(tree, hf_quake_CCREQ_CONNECT_game,
 			tvb, offset, -1, ENC_ASCII|ENC_NA, &item_len);
@@ -152,8 +154,8 @@ static void
 dissect_quake_CCREQ_SERVER_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	gint offset = 0;
-	gint item_len;
+	int offset = 0;
+	int item_len;
 
 	proto_tree_add_item_ret_length(tree, hf_quake_CCREQ_SERVER_INFO_game,
 			tvb, offset, -1, ENC_ASCII|ENC_NA, &item_len);
@@ -185,7 +187,7 @@ static void
 dissect_quake_CCREP_ACCEPT
 (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-	guint32 port;
+	uint32_t port;
 	conversation_t *c;
 
 	port = tvb_get_letohl(tvb, 0);
@@ -210,8 +212,8 @@ static void
 dissect_quake_CCREP_SERVER_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	gint offset = 0;
-	gint item_len;
+	int offset = 0;
+	int item_len;
 
 	proto_tree_add_item_ret_length(tree,
 			hf_quake_CCREP_SERVER_INFO_address, tvb, offset, -1,
@@ -243,13 +245,13 @@ static void
 dissect_quake_CCREP_PLAYER_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	gint offset = 0;
-	guint32 colors;
-	guint32 color_shirt;
-	guint32 color_pants;
+	int offset = 0;
+	uint32_t colors;
+	uint32_t color_shirt;
+	uint32_t color_pants;
 	proto_item *colors_item;
 	proto_tree *colors_tree;
-	gint item_len;
+	int item_len;
 
 	proto_tree_add_item(tree, hf_quake_CCREQ_PLAYER_INFO_player,
 			tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -291,8 +293,8 @@ static void
 dissect_quake_CCREP_RULE_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	gint offset = 0;
-	gint item_len;
+	int offset = 0;
+	int item_len;
 
 	if (tvb_reported_length(tvb) == 0) return;
 
@@ -308,22 +310,22 @@ dissect_quake_CCREP_RULE_INFO
 static void
 dissect_quake_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-	guint8		command;
+	uint8_t		command;
 	int		direction;
 	proto_tree	*control_tree;
 	tvbuff_t	*next_tvb;
 
-	command = tvb_get_guint8(tvb, 0);
+	command = tvb_get_uint8(tvb, 0);
 	direction = (command & 0x80) ? CCREP : CCREQ;
 
 	col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-			val_to_str(command,names_control_command, "%u"),
-			val_to_str(direction,names_control_direction,"%u"));
+			val_to_str(pinfo->pool, command,names_control_command, "%u"),
+			val_to_str(pinfo->pool, direction,names_control_direction,"%u"));
 
 	control_tree = proto_tree_add_subtree_format(tree, tvb,
 			0, -1, ett_quake_control, NULL, "Control %s: %s",
-			val_to_str(direction, names_control_direction, "%u"),
-			val_to_str(command, names_control_command, "%u"));
+			val_to_str(pinfo->pool, direction, names_control_direction, "%u"),
+			val_to_str(pinfo->pool, command, names_control_command, "%u"));
 	proto_tree_add_uint(control_tree, hf_quake_control_command,
 			tvb, 0, 1, command);
 
@@ -377,37 +379,37 @@ dissect_quake(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 {
 	proto_tree	*quake_tree;
 	proto_item	*quake_item;
-	guint16		flags;
+	uint16_t		flags;
 	proto_item	*flags_item;
 	proto_tree	*flags_tree;
-	guint32		sequence = 0;
+	uint32_t		sequence = 0;
 	tvbuff_t	*next_tvb;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "QUAKE");
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	flags = tvb_get_ntohs(tvb, 2);
+	flags = tvb_get_ntohs(tvb, 0);
 
 	quake_item = proto_tree_add_item(tree, proto_quake, tvb, 0, -1, ENC_NA);
 	quake_tree = proto_item_add_subtree(quake_item, ett_quake);
 
 	flags_item = proto_tree_add_item(quake_tree, hf_quake_header_flags,
-			tvb, 2, 2, ENC_BIG_ENDIAN);
+			tvb, 0, 2, ENC_BIG_ENDIAN);
 	flags_tree = proto_item_add_subtree(flags_item, ett_quake_flags);
 	proto_tree_add_item(flags_tree, hf_quake_header_flags_data,
-			tvb, 2, 2, ENC_BIG_ENDIAN);
+			tvb, 0, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(flags_tree, hf_quake_header_flags_ack,
-			tvb, 2, 2, ENC_BIG_ENDIAN);
+			tvb, 0, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(flags_tree, hf_quake_header_flags_no_ack,
-			tvb, 2, 2, ENC_BIG_ENDIAN);
+			tvb, 0, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(flags_tree, hf_quake_header_flags_endmsg,
-			tvb, 2, 2, ENC_BIG_ENDIAN);
+			tvb, 0, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(flags_tree, hf_quake_header_flags_unreliable,
-			tvb, 2, 2, ENC_BIG_ENDIAN);
+			tvb, 0, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(flags_tree, hf_quake_header_flags_control,
-			tvb, 2, 2, ENC_BIG_ENDIAN);
+			tvb, 0, 2, ENC_BIG_ENDIAN);
 
-	proto_tree_add_item(quake_tree, hf_quake_header_length, tvb, 0, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(quake_tree, hf_quake_header_length, tvb, 2, 2, ENC_BIG_ENDIAN);
 
 	if (flags == NETFLAG_CTL) {
 		next_tvb = tvb_new_subset_remaining(tvb, 4);
@@ -561,7 +563,7 @@ proto_register_quake(void)
 		    FT_STRINGZ, BASE_NONE, NULL, 0x0,
 		    "Rule Value", HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_quake,
 		&ett_quake_control,
 		&ett_quake_control_colors,

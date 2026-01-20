@@ -27,15 +27,15 @@
 #include "packet-tcp.h"
 
 struct HpfeedsTap {
-    guint payload_size;
-    guint8* channel;
-    guint8 opcode;
+    unsigned payload_size;
+    uint8_t* channel;
+    uint8_t opcode;
 };
 
 static int hpfeeds_tap;
 
-static const gchar* st_str_channels_payload = "Payload size per channel";
-static const gchar* st_str_opcodes = "Opcodes";
+static const char* st_str_channels_payload = "Payload size per channel";
+static const char* st_str_opcodes = "Opcodes";
 
 static int st_node_channels_payload = -1;
 static int st_node_opcodes = -1;
@@ -43,8 +43,8 @@ static int st_node_opcodes = -1;
 static wmem_list_t* channels_list;
 
 struct channel_node {
-    guint8* channel;
-    guint st_node_channel_payload;
+    uint8_t* channel;
+    unsigned st_node_channel_payload;
 };
 
 void proto_register_hpfeeds(void);
@@ -73,7 +73,7 @@ static int hf_hpfeeds_channel;
 static int hf_hpfeeds_chan_len;
 static int hf_hpfeeds_errmsg;
 
-static gint ett_hpfeeds;
+static int ett_hpfeeds;
 
 static expert_field ei_hpfeeds_opcode_unknown;
 
@@ -97,19 +97,19 @@ static const value_string opcode_vals[] = {
 };
 
 static void
-dissect_hpfeeds_error_pdu(tvbuff_t *tvb, proto_tree *tree, guint offset)
+dissect_hpfeeds_error_pdu(tvbuff_t *tvb, proto_tree *tree, unsigned offset)
 {
     proto_tree_add_item(tree, hf_hpfeeds_errmsg, tvb, offset, -1, ENC_ASCII);
 }
 
 static void
-dissect_hpfeeds_info_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset)
+dissect_hpfeeds_info_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
 {
-    guint8 len = 0;
+    uint8_t len = 0;
     proto_tree *data_subtree;
-    guint8 *strptr = NULL;
+    uint8_t *strptr = NULL;
 
-    len = tvb_get_guint8(tvb, offset);
+    len = tvb_get_uint8(tvb, offset);
     /* don't move the offset yet as we need to get data after this operation */
     strptr = tvb_get_string_enc(pinfo->pool, tvb, offset + 1, len, ENC_ASCII);
     data_subtree = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_hpfeeds, NULL, "Broker: %s", strptr);
@@ -127,13 +127,12 @@ dissect_hpfeeds_info_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 }
 
 static void
-dissect_hpfeeds_auth_pdu(tvbuff_t *tvb, proto_tree *tree, guint offset)
+dissect_hpfeeds_auth_pdu(tvbuff_t *tvb, proto_tree *tree, unsigned offset)
 {
-    guint8 len = 0;
+    uint8_t len = 0;
 
-    len = tvb_get_guint8(tvb, offset);
-    proto_tree_add_item(tree, hf_hpfeeds_ident_len, tvb,
-                    offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_ident_len, tvb,
+                    offset, 1, ENC_BIG_ENDIAN, &len);
     offset += 1;
     proto_tree_add_item(tree, hf_hpfeeds_ident, tvb,
                     offset, len, ENC_ASCII);
@@ -143,42 +142,40 @@ dissect_hpfeeds_auth_pdu(tvbuff_t *tvb, proto_tree *tree, guint offset)
                     offset, -1, ENC_NA);
 }
 
-static guint8*
-hpfeeds_get_channel_name(tvbuff_t* tvb, guint offset)
+static uint8_t*
+hpfeeds_get_channel_name(tvbuff_t* tvb, unsigned offset)
 {
-    guint8 len = tvb_get_guint8(tvb, offset);
+    uint8_t len = tvb_get_uint8(tvb, offset);
     offset += len + 1;
-    len = tvb_get_guint8(tvb, offset);
+    len = tvb_get_uint8(tvb, offset);
     offset += 1;
     return tvb_get_string_enc(wmem_file_scope(), tvb, offset, len, ENC_ASCII);
 }
 
-static guint
-hpfeeds_get_payload_size(tvbuff_t* tvb, guint offset)
+static unsigned
+hpfeeds_get_payload_size(tvbuff_t* tvb, unsigned offset)
 {
-    guint message_len = tvb_get_ntohl(tvb, offset);
-    guint ident_len = tvb_get_guint8(tvb, offset + 5);
-    guint channel_len = tvb_get_guint8(tvb, offset + 6 + ident_len);
+    unsigned message_len = tvb_get_ntohl(tvb, offset);
+    unsigned ident_len = tvb_get_uint8(tvb, offset + 5);
+    unsigned channel_len = tvb_get_uint8(tvb, offset + 6 + ident_len);
     return (message_len - 2 - ident_len - 1 - channel_len);
 }
 
 static void
 dissect_hpfeeds_publish_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-    guint offset)
+    unsigned offset)
 {
-    guint8 len = 0;
+    uint8_t len = 0;
     heur_dtbl_entry_t *hdtbl_entry;
     tvbuff_t *next_tvb;
-    const guint8 *channelname = NULL;
+    const uint8_t *channelname = NULL;
     const char* save_match_string = NULL;
 
-    len = tvb_get_guint8(tvb, offset);
-    proto_tree_add_item(tree, hf_hpfeeds_ident_len, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_ident_len, tvb, offset, 1, ENC_BIG_ENDIAN, &len);
     offset += 1;
     proto_tree_add_item(tree, hf_hpfeeds_ident, tvb, offset, len, ENC_ASCII);
     offset += len;
-    len = tvb_get_guint8(tvb, offset);
-    proto_tree_add_item(tree, hf_hpfeeds_chan_len, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_chan_len, tvb, offset, 1, ENC_BIG_ENDIAN, &len);
     offset += 1;
 
     /* get the channel name as ephemeral string to pass it to the heuristic decoders */
@@ -208,7 +205,7 @@ dissect_hpfeeds_publish_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 static void hpfeeds_stats_tree_init(stats_tree* st)
 {
-    st_node_channels_payload = stats_tree_create_node(st, st_str_channels_payload, 0, STAT_DT_INT, TRUE);
+    st_node_channels_payload = stats_tree_create_node(st, st_str_channels_payload, 0, STAT_DT_INT, true);
     st_node_opcodes = stats_tree_create_pivot(st, st_str_opcodes, 0);
 
     channels_list = wmem_list_new(wmem_epan_scope());
@@ -225,7 +222,7 @@ static tap_packet_status hpfeeds_stats_tree_packet(stats_tree* st _U_, packet_in
         /* search an existing channel node and create it if it does not */
         while(cur != NULL) {
             ch_node = (struct channel_node*)wmem_list_frame_data(cur);
-            if (strncmp((gchar*)ch_node->channel, (gchar*)pi->channel, strlen((gchar*)pi->channel)) == 0) {
+            if (strncmp((char*)ch_node->channel, (char*)pi->channel, strlen((char*)pi->channel)) == 0) {
                 break;
             }
             cur = wmem_list_frame_next(cur);
@@ -233,29 +230,28 @@ static tap_packet_status hpfeeds_stats_tree_packet(stats_tree* st _U_, packet_in
 
         if (cur == NULL) {
             ch_node = wmem_new0(wmem_file_scope(), struct channel_node);
-            ch_node->channel = (guchar*)wmem_strdup(wmem_file_scope(), (gchar*)pi->channel);
-            ch_node->st_node_channel_payload = stats_tree_create_node(st, (gchar*)ch_node->channel,
-                st_node_channels_payload, STAT_DT_INT, FALSE);
+            ch_node->channel = (unsigned char*)wmem_strdup(wmem_file_scope(), (char*)pi->channel);
+            ch_node->st_node_channel_payload = stats_tree_create_node(st, (char*)ch_node->channel,
+                st_node_channels_payload, STAT_DT_INT, false);
             wmem_list_append(channels_list, ch_node);
         }
 
-        avg_stat_node_add_value_int(st, st_str_channels_payload, 0, FALSE, pi->payload_size);
-        avg_stat_node_add_value_int(st, (gchar*)ch_node->channel, 0, FALSE, pi->payload_size);
+        avg_stat_node_add_value_int(st, st_str_channels_payload, 0, false, pi->payload_size);
+        avg_stat_node_add_value_int(st, (char*)ch_node->channel, 0, false, pi->payload_size);
     }
 
     stats_tree_tick_pivot(st, st_node_opcodes,
-            val_to_str(pi->opcode, opcode_vals, "Unknown opcode (%d)"));
+            val_to_str(pinfo->pool, pi->opcode, opcode_vals, "Unknown opcode (%d)"));
     return TAP_PACKET_REDRAW;
 }
 
 static void
-dissect_hpfeeds_subscribe_pdu(tvbuff_t *tvb, proto_tree *tree, guint offset)
+dissect_hpfeeds_subscribe_pdu(tvbuff_t *tvb, proto_tree *tree, unsigned offset)
 {
-    guint8 len = 0;
+    uint8_t len = 0;
     /* get length of ident field */
-    len = tvb_get_guint8(tvb, offset);
-    proto_tree_add_item(tree, hf_hpfeeds_ident_len, tvb, offset, 1,
-        ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_ident_len, tvb, offset, 1,
+        ENC_BIG_ENDIAN, &len);
     offset += 1;
 
     proto_tree_add_item(tree, hf_hpfeeds_ident, tvb, offset, len,
@@ -271,7 +267,7 @@ dissect_hpfeeds_subscribe_pdu(tvbuff_t *tvb, proto_tree *tree, guint offset)
  * This is a trivial function, but it's mandatory as it is used as a callback
  * by the routine to re-assemble the protocol spread on multiple TCP packets
  */
-static guint
+static unsigned
 get_hpfeeds_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
     return tvb_get_ntohl(tvb, offset + 0);
@@ -283,9 +279,9 @@ dissect_hpfeeds_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
     struct HpfeedsTap *hpfeeds_stats;
 
     /* We have already parsed msg length we need to skip to opcode offset */
-    guint offset = 0;
+    unsigned offset = 0;
 
-    guint8 opcode;
+    uint8_t opcode;
     proto_item *ti;
     proto_tree *hpfeeds_tree, *data_subtree;
 
@@ -298,11 +294,11 @@ dissect_hpfeeds_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
     offset += 4;
 
     /* Get opcode and write it */
-    opcode = tvb_get_guint8(tvb, offset);
+    opcode = tvb_get_uint8(tvb, offset);
 
     /* Clear out stuff in the info column */
     col_add_fstr(pinfo->cinfo, COL_INFO, "Type %s",
-        val_to_str(opcode, opcode_vals, "Unknown (0x%02x)"));
+        val_to_str(pinfo->pool, opcode, opcode_vals, "Unknown (0x%02x)"));
 
     ti = proto_tree_add_item(hpfeeds_tree, hf_hpfeeds_opcode, tvb, offset,
             1, ENC_BIG_ENDIAN);
@@ -437,7 +433,7 @@ proto_register_hpfeeds(void)
 
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_hpfeeds
     };
 
@@ -448,11 +444,7 @@ proto_register_hpfeeds(void)
     module_t *hpfeeds_module;
     expert_module_t* expert_hpfeeds;
 
-    proto_hpfeeds = proto_register_protocol (
-        "HPFEEDS HoneyPot Feeds Protocol", /* name */
-        "HPFEEDS",      /* short name */
-        "hpfeeds"       /* abbrev     */
-        );
+    proto_hpfeeds = proto_register_protocol ("HPFEEDS HoneyPot Feeds Protocol", "HPFEEDS", "hpfeeds");
 
     heur_subdissector_list = register_heur_dissector_list_with_description("hpfeeds", "HPFEEDS Publish payload", proto_hpfeeds);
 

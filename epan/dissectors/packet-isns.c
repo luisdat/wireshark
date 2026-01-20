@@ -19,9 +19,9 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/exceptions.h>
 #include <epan/prefs.h>
-
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include "packet-tcp.h"
 
 void proto_register_isns(void);
@@ -41,14 +41,14 @@ void proto_reg_handoff_isns(void);
 static dissector_handle_t isns_tcp_handle;
 static dissector_handle_t isns_udp_handle;
 
-static gint ett_isns_flags;
-static gint ett_isns_payload;
-static gint ett_isns_attribute;
-static gint ett_isns_port;
-static gint ett_isns_isnt;
+static int ett_isns_flags;
+static int ett_isns_payload;
+static int ett_isns_attribute;
+static int ett_isns_port;
+static int ett_isns_isnt;
 
-static guint AddAttribute(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree,
-                          guint offset, guint16 function_id);
+static unsigned AddAttribute(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree,
+                          unsigned offset, uint16_t function_id);
 
 /* Initialize the protocol and registered fields */
 static int proto_isns;
@@ -519,19 +519,19 @@ static const true_false_string tfs_isns_flag_client = {
 
 
 /* Initialize the subtree pointers */
-static gint ett_isns;
+static int ett_isns;
 
 
 /* Code to actually dissect the packets */
 static int
 dissect_isns_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    guint offset = 0;
-    guint16 function_id;
-    guint packet_len;
+    unsigned offset = 0;
+    uint16_t function_id;
+    unsigned packet_len;
     proto_item *ti;
     proto_tree *isns_tree;
-    guint16     flags;
+    uint16_t    flags;
     proto_tree *tt = NULL;
     proto_item *tpayload;
     static int * const isns_flags[] = {
@@ -553,7 +553,7 @@ dissect_isns_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
     /* Add the function name in the info col */
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str_ext(function_id, &isns_function_ids_ext,
+                val_to_str_ext(pinfo->pool, function_id, &isns_function_ids_ext,
                                "Unknown function ID 0x%04x"));
 
     /* create display subtree for the protocol */
@@ -645,7 +645,7 @@ dissect_isns_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     default:
         /* we can only look at the attributes for the first PDU */
         if(!(flags&ISNS_FLAGS_FIRST_PDU)){
-            proto_tree_add_expert(tt, pinfo, &ei_isns_not_first_pdu, tvb, offset, -1);
+            proto_tree_add_expert_remaining(tt, pinfo, &ei_isns_not_first_pdu, tvb, offset);
             return tvb_captured_length(tvb);
         }
 
@@ -659,10 +659,10 @@ dissect_isns_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     return tvb_captured_length(tvb);
 }
 
-static guint
+static unsigned
 get_isns_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
-    guint16 isns_len;
+    uint16_t isns_len;
 
     isns_len = tvb_get_ntohs(tvb, offset+4);
     return (isns_len+ISNS_HEADER_SIZE);
@@ -671,9 +671,9 @@ get_isns_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _
 static int
 dissect_isns_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    gint length = tvb_captured_length(tvb);
-    guint16 isns_protocol_version;
-    guint16 function_id;
+    int length = tvb_captured_length(tvb);
+    uint16_t isns_protocol_version;
+    uint16_t function_id;
 
     if (length < ISNS_HEADER_SIZE) {
         /*
@@ -702,9 +702,9 @@ dissect_isns_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
 static int
 dissect_isns_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    gint length = tvb_captured_length(tvb);
-    guint16 isns_protocol_version;
-    guint16 function_id;
+    int length = tvb_captured_length(tvb);
+    uint16_t isns_protocol_version;
+    uint16_t function_id;
 
     if (length < ISNS_HEADER_SIZE) {
         /*
@@ -731,11 +731,11 @@ dissect_isns_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
 
 
 static void
-dissect_isns_attr_port(tvbuff_t *tvb, guint offset, proto_tree *tree, int hf_index,
-                       guint16 isns_port_type, packet_info *pinfo)
+dissect_isns_attr_port(tvbuff_t *tvb, unsigned offset, proto_tree *tree, int hf_index,
+                       uint16_t isns_port_type, packet_info *pinfo)
 {
-    guint16             port  = tvb_get_ntohs(tvb, offset+2);
-    gboolean            is_udp = ((tvb_get_ntohs(tvb, offset) & 0x01) == 0x01);
+    uint16_t            port  = tvb_get_ntohs(tvb, offset+2);
+    bool                is_udp = ((tvb_get_ntohs(tvb, offset) & 0x01) == 0x01);
     conversation_t     *conversation;
     conversation_type ckt;
     dissector_handle_t  handle;
@@ -765,7 +765,7 @@ dissect_isns_attr_port(tvbuff_t *tvb, guint offset, proto_tree *tree, int hf_ind
 
 
 static void
-dissect_isns_attr_iscsi_node_type(tvbuff_t *tvb, guint offset, proto_tree *tree)
+dissect_isns_attr_iscsi_node_type(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
     static int * const flags[] = {
         &hf_isns_isnt_control,
@@ -781,7 +781,7 @@ dissect_isns_attr_iscsi_node_type(tvbuff_t *tvb, guint offset, proto_tree *tree)
 
 
 static void
-dissect_isns_attr_portal_security_bitmap(tvbuff_t *tvb, guint offset, proto_tree *tree)
+dissect_isns_attr_portal_security_bitmap(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
     static int * const flags[] = {
         &hf_isns_psb_tunnel_mode,
@@ -800,7 +800,7 @@ dissect_isns_attr_portal_security_bitmap(tvbuff_t *tvb, guint offset, proto_tree
 
 
 static void
-dissect_isns_attr_scn_bitmap(tvbuff_t *tvb, guint offset, proto_tree *tree)
+dissect_isns_attr_scn_bitmap(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
     /*
         24              INITIATOR AND SELF INFORMATION ONLY
@@ -828,26 +828,24 @@ dissect_isns_attr_scn_bitmap(tvbuff_t *tvb, guint offset, proto_tree *tree)
 }
 
 
-static guint
-AddAttribute(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, guint offset,
-             guint16 function_id)
+static unsigned
+AddAttribute(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, unsigned offset,
+             uint16_t function_id)
 {
     proto_tree *attr_tree;
     proto_item *attr_item;
-    guint32 tag,len;
+    uint32_t tag,len;
     proto_item *len_item;
 
     attr_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
             ett_isns_attribute, &attr_item, "Attribute");
 
-    tag = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(attr_tree, hf_isns_attr_tag,
-            tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(attr_tree, hf_isns_attr_tag,
+            tvb, offset, 4, ENC_BIG_ENDIAN, &tag);
     offset +=4;
 
-    len = tvb_get_ntohl(tvb, offset);
-    len_item = proto_tree_add_item(attr_tree, hf_isns_attr_len,
-            tvb, offset, 4, ENC_BIG_ENDIAN);
+    len_item = proto_tree_add_item_ret_uint(attr_tree, hf_isns_attr_len,
+            tvb, offset, 4, ENC_BIG_ENDIAN, &len);
     offset +=4;
 
     proto_item_append_text(attr_item, ": %s", val_to_str_ext_const(tag, &isns_attribute_tags_ext, "Unknown"));
@@ -1376,12 +1374,12 @@ void proto_register_isns(void)
 
     { &hf_isns_heartbeat_tcp_port,
       { "Heartbeat TCP Port", "isns.heartbeat.tcpport",
-        FT_UINT16, BASE_DEC, NULL, 0x0,
+        FT_UINT16, BASE_PT_TCP, NULL, 0x0,
         "Server TCP Port", HFILL }},
 
     { &hf_isns_heartbeat_udp_port,
       { "Heartbeat UDP Port", "isns.heartbeat.udpport",
-        FT_UINT16, BASE_DEC, NULL, 0x0,
+        FT_UINT16, BASE_PT_UDP, NULL, 0x0,
         "Server UDP Port", HFILL }},
 
 
@@ -1628,7 +1626,7 @@ void proto_register_isns(void)
     { &hf_isns_entity_next_index,
       { "Entity Next Index", "isns.entity.next_index",
         FT_UINT32, BASE_DEC, NULL, 0x0,
-        "Next Entity Index", HFILL }},
+        NULL, HFILL }},
 
     { &hf_isns_timestamp,
       { "Timestamp", "isns.timestamp",
@@ -1658,7 +1656,7 @@ void proto_register_isns(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
     &ett_isns,
     &ett_isns_flags,
     &ett_isns_payload,

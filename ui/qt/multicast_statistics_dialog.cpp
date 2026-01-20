@@ -60,10 +60,18 @@ public:
         num_buff_alarms_ = 0;
     }
 
+    ~MulticastStatTreeWidgetItem()
+    {
+        // This probably doesn't outlive the stream_info, so perhaps we
+        // could shallow copy the addresses.
+        free_address_wmem(NULL, &src_addr_);
+        free_address_wmem(NULL, &dst_addr_);
+    }
+
     void updateStreamInfo(const mcast_stream_info_t *stream_info) {
-        copy_address(&src_addr_, &stream_info->src_addr);
+        copy_address_wmem(NULL, &src_addr_, &stream_info->src_addr);
         src_port_ = stream_info->src_port;
-        copy_address(&dst_addr_, &stream_info->dest_addr);
+        copy_address_wmem(NULL, &dst_addr_, &stream_info->dest_addr);
         dst_port_ = stream_info->dest_port;
         num_packets_ = stream_info->npackets;
         avg_pps_ = stream_info->apackets;
@@ -86,7 +94,7 @@ public:
         setText(col_packets_s_, QString::number(avg_pps_, 'f', 2));
         setText(col_avg_bw_, bits_s_to_qstring(avg_bw_));
         setText(col_max_bw_, bits_s_to_qstring(max_bw_));
-        setText(col_max_burst_, QString("%1 / %2ms").arg(top_burst_size_).arg(mcast_stream_burstint));
+        setText(col_max_burst_, QStringLiteral("%1 / %2ms").arg(top_burst_size_).arg(mcast_stream_burstint));
         setText(col_burst_alarms_, QString::number(num_bursts_));
         setText(col_max_buffers_, bits_s_to_qstring(top_buff_usage_));
         setText(col_buffer_alarms_, QString::number(num_buff_alarms_));
@@ -142,7 +150,7 @@ public:
 
         if (src_addr_.type == AT_IPv6) ip_version = "v6";
 
-        const QString filter_expr = QString("(ip%1.src==%2 && udp.srcport==%3 && ip%1.dst==%4 && udp.dstport==%5)")
+        const QString filter_expr = QStringLiteral("(ip%1.src==%2 && udp.srcport==%3 && ip%1.dst==%4 && udp.dstport==%5)")
                 .arg(ip_version)
                 .arg(address_to_qstring(&src_addr_))
                 .arg(src_port_)
@@ -153,9 +161,9 @@ public:
 
 private:
     address src_addr_;
-    guint16 src_port_;
+    uint16_t src_port_;
     address dst_addr_;
-    guint16 dst_port_;
+    uint16_t dst_port_;
     unsigned num_packets_;
     double avg_pps_;
     double avg_bw_;
@@ -253,7 +261,6 @@ MulticastStatisticsDialog::MulticastStatisticsDialog(QWidget &parent, CaptureFil
         simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK,
                         "%s", error_string->str);
         g_string_free(error_string, TRUE);
-        exit(1);
     }
 
     updateWidgets();
@@ -414,7 +421,7 @@ void MulticastStatisticsDialog::updateMulticastParameters()
 
     param = burst_measurement_interval_le_->text().toUInt(&ok);
     if (ok && param > 0 && param <= 1000) {
-        mcast_stream_burstint = (guint16) param;
+        mcast_stream_burstint = (uint16_t) param;
     }
 
     param = burst_alarm_threshold_le_->text().toInt(&ok);
@@ -456,7 +463,7 @@ void MulticastStatisticsDialog::fillTree()
 
 void MulticastStatisticsDialog::rescan()
 {
-    gboolean was_registered = tapinfo_->is_registered;
+    bool was_registered = tapinfo_->is_registered;
     if (!tapinfo_->is_registered)
         register_tap_listener_mcast_stream(tapinfo_);
 
@@ -478,7 +485,7 @@ void MulticastStatisticsDialog::captureFileClosing()
 
 // Stat command + args
 
-static void
+static bool
 multicast_statistics_init(const char *args, void*) {
     QStringList args_l = QString(args).split(',');
     QByteArray filter;
@@ -486,6 +493,7 @@ multicast_statistics_init(const char *args, void*) {
         filter = QStringList(args_l.mid(2)).join(",").toUtf8();
     }
     mainApp->emitStatCommandSignal("MulticastStatistics", filter.constData(), NULL);
+    return true;
 }
 
 static stat_tap_ui multicast_statistics_ui = {

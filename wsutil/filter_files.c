@@ -99,7 +99,7 @@ getc_crlf(FILE *ff)
 }
 
 filter_list_t *
-ws_filter_list_read(filter_list_type_t list_type)
+ws_filter_list_read(filter_list_type_t list_type, const char* app_env_var_prefix)
 {
     const char *ff_name, *ff_description;
     char       *ff_path;
@@ -107,8 +107,8 @@ ws_filter_list_read(filter_list_type_t list_type)
     GList      *flp = NULL;
     int         c;
     char       *filt_name, *filt_expr;
-    int         filt_name_len, filt_expr_len;
-    int         filt_name_index, filt_expr_index;
+    size_t      filt_name_len, filt_expr_len;
+    size_t      filt_name_index, filt_expr_index;
     int         line = 1;
 
     filter_list_t *list = g_new(filter_list_t, 1);
@@ -119,12 +119,12 @@ ws_filter_list_read(filter_list_type_t list_type)
 
         case CFILTER_LIST:
             ff_name = CFILTER_FILE_NAME;
-            ff_description = "capture";
+            ff_description = "capture filter";
             break;
 
         case DFILTER_LIST:
             ff_name = DFILTER_FILE_NAME;
-            ff_description = "display";
+            ff_description = "display filter";
             break;
 
         case DMACROS_LIST:
@@ -137,7 +137,7 @@ ws_filter_list_read(filter_list_type_t list_type)
     }
 
     /* try to open personal "cfilters"/"dfilters" file */
-    ff_path = get_persconffile_path(ff_name, true);
+    ff_path = get_persconffile_path(ff_name, true, app_env_var_prefix);
     if ((ff = ws_fopen(ff_path, "r")) == NULL) {
         /*
          * Did that fail because the file didn't exist?
@@ -146,7 +146,7 @@ ws_filter_list_read(filter_list_type_t list_type)
             /*
              * No.  Just give up.
              */
-            report_warning("Could not open your %s filter file\n\"%s\": %s.",
+            report_warning("Could not open your %s file\n\"%s\": %s.",
                     ff_description, ff_path, g_strerror(errno));
             g_free(ff_path);
             return list;
@@ -156,14 +156,14 @@ ws_filter_list_read(filter_list_type_t list_type)
          * Yes. Try to open the global "cfilters/dfilters" file.
          */
         g_free(ff_path);
-        ff_path = get_datafile_path(ff_name);
+        ff_path = get_datafile_path(ff_name, app_env_var_prefix);
         if ((ff = ws_fopen(ff_path, "r")) == NULL) {
             /*
              * Well, that didn't work, either.  Just give up.
              * Report an error if the file existed but we couldn't open it.
              */
             if (errno != ENOENT) {
-                report_warning("Could not open your %s filter file\n\"%s\": %s.",
+                report_warning("Could not open your %s file\n\"%s\": %s.",
                         ff_description, ff_path, g_strerror(errno));
             }
             g_free(ff_path);
@@ -284,7 +284,7 @@ ws_filter_list_read(filter_list_type_t list_type)
         for (;;) {
             /* Add this character to the filter expression string. */
             if (filt_expr_index >= filt_expr_len) {
-                /* Filter expressioin buffer isn't long enough; double its length. */
+                /* Filter expression buffer isn't long enough; double its length. */
                 filt_expr_len *= 2;
                 filt_expr = (char *)g_realloc(filt_expr, filt_expr_len + 1);
             }
@@ -308,7 +308,7 @@ ws_filter_list_read(filter_list_type_t list_type)
 
         /* We saw the ending newline; terminate the filter expression string */
         if (filt_expr_index >= filt_expr_len) {
-            /* Filter expressioin buffer isn't long enough; double its length. */
+            /* Filter expression buffer isn't long enough; double its length. */
             filt_expr_len *= 2;
             filt_expr = (char *)g_realloc(filt_expr, filt_expr_len + 1);
         }
@@ -318,7 +318,7 @@ ws_filter_list_read(filter_list_type_t list_type)
         flp = add_filter_entry(flp, filt_name, filt_expr);
     }
     if (ferror(ff)) {
-        report_warning("Error reading your %s filter file\n\"%s\": %s.",
+        report_warning("Error reading your %s file\n\"%s\": %s.",
                 ff_description, ff_path, g_strerror(errno));
     }
     g_free(ff_path);
@@ -340,7 +340,7 @@ ws_filter_list_add(filter_list_t *fl, const char *name,
 }
 
 static int
-compare_def(gconstpointer def, gconstpointer name)
+compare_def(const void *def, const void *name)
 {
     return g_strcmp0(((filter_def *)def)->name, name);
 }
@@ -371,7 +371,7 @@ ws_filter_list_remove(filter_list_t *list, const char *name)
  * On error, report the error via the UI.
  */
 void
-ws_filter_list_write(filter_list_t *list)
+ws_filter_list_write(filter_list_t *list, const char* app_env_var_prefix)
 {
     char        *pf_dir_path;
     const char *ff_name, *ff_description;
@@ -386,17 +386,17 @@ ws_filter_list_write(filter_list_t *list)
 
         case CFILTER_LIST:
             ff_name = CFILTER_FILE_NAME;
-            ff_description = "capture";
+            ff_description = "capture filter";
             break;
 
         case DFILTER_LIST:
             ff_name = DFILTER_FILE_NAME;
-            ff_description = "display";
+            ff_description = "display filter";
             break;
 
         case DMACROS_LIST:
             ff_name = DMACROS_FILE_NAME;
-            ff_description = "display filter macros";
+            ff_description = "display filter macro";
             break;
 
         default:
@@ -407,14 +407,14 @@ ws_filter_list_write(filter_list_t *list)
 
     /* Create the directory that holds personal configuration files,
        if necessary.  */
-    if (create_persconffile_dir(&pf_dir_path) == -1) {
+    if (create_persconffile_dir(app_env_var_prefix, &pf_dir_path) == -1) {
         report_failure("Can't create directory\n\"%s\"\nfor filter files: %s.",
                 pf_dir_path, g_strerror(errno));
         g_free(pf_dir_path);
         return;
     }
 
-    ff_path = get_persconffile_path(ff_name, true);
+    ff_path = get_persconffile_path(ff_name, true, app_env_var_prefix);
 
     /* Write to "XXX.new", and rename if that succeeds.
        That means we don't trash the file if we fail to write it out
@@ -423,7 +423,7 @@ ws_filter_list_write(filter_list_t *list)
 
     if ((ff = ws_fopen(ff_path_new, "w")) == NULL) {
         /* We had an error saving the filter. */
-        report_failure("Error saving your %s filter file\nCouldn't open \"%s\": %s.",
+        report_failure("Error saving your %s file\nCouldn't open \"%s\": %s.",
                 ff_description, ff_path_new, g_strerror(errno));
         g_free(ff_path_new);
         g_free(ff_path);
@@ -449,7 +449,7 @@ ws_filter_list_write(filter_list_t *list)
         /* Write out the filter expression and a newline. */
         fprintf(ff, "%s\n", filt->strval);
         if (ferror(ff)) {
-            report_failure("Error saving your %s filter file\nWrite to \"%s\" failed: %s.",
+            report_failure("Error saving your %s file\nWrite to \"%s\" failed: %s.",
                     ff_description, ff_path_new, g_strerror(errno));
             fclose(ff);
             ws_unlink(ff_path_new);
@@ -460,7 +460,7 @@ ws_filter_list_write(filter_list_t *list)
         flpp = flpp->next;
     }
     if (fclose(ff) == EOF) {
-        report_failure("Error saving your %s filter file\nWrite to \"%s\" failed: %s.",
+        report_failure("Error saving your %s file\nWrite to \"%s\" failed: %s.",
                 ff_description, ff_path_new, g_strerror(errno));
         ws_unlink(ff_path_new);
         g_free(ff_path_new);
@@ -484,7 +484,7 @@ ws_filter_list_write(filter_list_t *list)
         /* It failed for some reason other than "it's not there"; if
            it's not there, we don't need to remove it, so we just
            drive on. */
-        report_failure("Error saving your %s filter file\nCouldn't remove \"%s\": %s.",
+        report_failure("Error saving your %s file\nCouldn't remove \"%s\": %s.",
                 ff_description, ff_path, g_strerror(errno));
         ws_unlink(ff_path_new);
         g_free(ff_path_new);
@@ -494,7 +494,7 @@ ws_filter_list_write(filter_list_t *list)
 #endif
 
     if (ws_rename(ff_path_new, ff_path) < 0) {
-        report_failure("Error saving your %s filter file\nCouldn't rename \"%s\" to \"%s\": %s.",
+        report_failure("Error saving your %s file\nCouldn't rename \"%s\" to \"%s\": %s.",
                 ff_description, ff_path_new, ff_path, g_strerror(errno));
         ws_unlink(ff_path_new);
         g_free(ff_path_new);

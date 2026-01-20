@@ -11,12 +11,20 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/* AI generated comment:
+ * AIM Instant Messenger was a popular instant messaging service launched by America Online (AOL) in 1997
+ *  that used the proprietary OSCAR protocol to enable real-time communication.
+ * The OSCAR (Open System for CommunicAtion in Realtime) protocol handled user login,
+ * buddy lists, and instant messages, and was also used by ICQ.
+ * The service was discontinued on December 15, 2017.
+ */
 #include "config.h"
 
 
 #include <epan/packet.h>
 #include <epan/strutil.h>
 #include <epan/to_str.h>
+#include <epan/tfs.h>
 
 #include "packet-tcp.h"
 #include "packet-tls.h"
@@ -122,9 +130,9 @@ static const value_string aim_snac_errors[] = {
 	{ 0, NULL }
 };
 
-static int dissect_aim_tlv_value_userstatus(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_);
-static int dissect_aim_tlv_value_dcinfo(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_);
-static int dissect_aim_tlv_value_client_short_capabilities(proto_item *ti, guint16, tvbuff_t *, packet_info *);
+static int dissect_aim_tlv_value_userstatus(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_);
+static int dissect_aim_tlv_value_dcinfo(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_);
+static int dissect_aim_tlv_value_client_short_capabilities(proto_item *ti, uint16_t, tvbuff_t *, packet_info *);
 
 
 #define DC_DISABLED		0x0000
@@ -248,13 +256,13 @@ static const value_string aim_fnac_family_ssi_types[] = {
 };
 
 typedef struct _aim_tlv {
-	guint16 valueid;
+	uint16_t valueid;
 	const char *desc;
-	int (*dissector) (proto_item *ti, guint16 value_id, tvbuff_t *tvb, packet_info *);
+	int (*dissector) (proto_item *ti, uint16_t value_id, tvbuff_t *tvb, packet_info *);
 } aim_tlv;
 
 typedef struct _aim_subtype {
-	guint16 id;
+	uint16_t id;
 	const char *name;
 	int (*dissector) (tvbuff_t *, packet_info *, proto_tree *);
 } aim_subtype;
@@ -263,14 +271,14 @@ typedef struct _aim_family {
 	int ett;
 	int proto_id;
 	protocol_t *proto;
-	guint16 family;
+	uint16_t family;
 	const char *name;
 	const aim_subtype *subtypes;
 } aim_family;
 
 static int dissect_aim_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, int offset, proto_tree *tree, const aim_tlv *);
 
-static int dissect_aim_tlv_value_uint16(proto_item *ti, guint16, tvbuff_t *, packet_info *);
+static int dissect_aim_tlv_value_uint16(proto_item *ti, uint16_t, tvbuff_t *, packet_info *);
 
 
 static int proto_aim;
@@ -486,55 +494,55 @@ static int hf_aim_sst_icon;
 static int hf_aim_userlookup_email;
 
 /* Initialize the subtree pointers */
-static gint ett_aim;
-static gint ett_aim_dcinfo;
-static gint ett_aim_buddyname;
-static gint ett_aim_fnac;
-static gint ett_aim_fnac_flags;
-static gint ett_aim_tlv;
-static gint ett_aim_tlv_value;
-static gint ett_aim_userclass;
-static gint ett_aim_messageblock;
-static gint ett_aim_nickinfo_caps;
-static gint ett_aim_nickinfo_short_caps;
-static gint ett_aim_string08_array;
+static int ett_aim;
+static int ett_aim_dcinfo;
+static int ett_aim_buddyname;
+static int ett_aim_fnac;
+static int ett_aim_fnac_flags;
+static int ett_aim_tlv;
+static int ett_aim_tlv_value;
+static int ett_aim_userclass;
+static int ett_aim_messageblock;
+static int ett_aim_nickinfo_caps;
+static int ett_aim_nickinfo_short_caps;
+static int ett_aim_string08_array;
 
-static gint ett_aim_admin;
-static gint ett_aim_adverts;
-static gint ett_aim_bos;
-static gint ett_aim_buddylist;
-static gint ett_aim_chat;
-static gint ett_aim_chatnav;
-static gint ett_aim_directory;
-static gint ett_aim_email;
+static int ett_aim_admin;
+static int ett_aim_adverts;
+static int ett_aim_bos;
+static int ett_aim_buddylist;
+static int ett_aim_chat;
+static int ett_aim_chatnav;
+static int ett_aim_directory;
+static int ett_aim_email;
 
-static gint ett_generic_clientready;
-static gint ett_generic_migratefamilies;
-static gint ett_generic_clientready_item;
-static gint ett_generic_serverready;
-static gint ett_generic;
-static gint ett_generic_priv_flags;
-static gint ett_generic_rateinfo_class;
-static gint ett_generic_rateinfo_classes;
-static gint ett_generic_rateinfo_groups;
-static gint ett_generic_rateinfo_group;
+static int ett_generic_clientready;
+static int ett_generic_migratefamilies;
+static int ett_generic_clientready_item;
+static int ett_generic_serverready;
+static int ett_generic;
+static int ett_generic_priv_flags;
+static int ett_generic_rateinfo_class;
+static int ett_generic_rateinfo_classes;
+static int ett_generic_rateinfo_groups;
+static int ett_generic_rateinfo_group;
 
-static gint ett_aim_invitation;
-static gint ett_aim_icq;
-static gint ett_aim_icq_tlv;
-static gint ett_aim_location;
-static gint ett_aim_messaging;
-static gint ett_aim_rendezvous_data;
-static gint ett_aim_extended_data;
-static gint ett_aim_extended_data_message_flags;
-static gint ett_aim_popup;
-static gint ett_aim_signon;
-static gint ett_aim_ssi;
-static gint ett_ssi;
-static gint ett_aim_sst;
-static gint ett_aim_stats;
-static gint ett_aim_translate;
-static gint ett_aim_userlookup;
+static int ett_aim_invitation;
+static int ett_aim_icq;
+static int ett_aim_icq_tlv;
+static int ett_aim_location;
+static int ett_aim_messaging;
+static int ett_aim_rendezvous_data;
+static int ett_aim_extended_data;
+static int ett_aim_extended_data_message_flags;
+static int ett_aim_popup;
+static int ett_aim_signon;
+static int ett_aim_ssi;
+static int ett_ssi;
+static int ett_aim_sst;
+static int ett_aim_stats;
+static int ett_aim_translate;
+static int ett_aim_userlookup;
 
 static expert_field ei_aim_messageblock_len;
 
@@ -543,10 +551,10 @@ static bool aim_desegment = true;
 
 static dissector_handle_t aim_handle;
 
-static GList *families = NULL;
+static GList *families;
 
 static const aim_subtype
-*aim_get_subtype( guint16 famnum, guint16 subtype )
+*aim_get_subtype( uint16_t famnum, uint16_t subtype )
 {
 	GList *gl = families;
 	while(gl) {
@@ -565,7 +573,7 @@ static const aim_subtype
 }
 
 static const aim_family
-*aim_get_family( guint16 famnum )
+*aim_get_family( uint16_t famnum )
 {
 	GList *gl = families;
 	while(gl) {
@@ -578,23 +586,23 @@ static const aim_family
 }
 
 static int
-aim_get_buddyname(wmem_allocator_t *pool, guint8 **name, tvbuff_t *tvb, int offset)
+aim_get_buddyname(wmem_allocator_t *pool, char **name, tvbuff_t *tvb, int offset)
 {
-	guint8 buddyname_length;
+	uint8_t buddyname_length;
 
-	buddyname_length = tvb_get_guint8(tvb, offset);
+	buddyname_length = tvb_get_uint8(tvb, offset);
 
-	*name = tvb_get_string_enc(pool, tvb, offset + 1, buddyname_length, ENC_UTF_8|ENC_NA);
+	*name = (char *)tvb_get_string_enc(pool, tvb, offset + 1, buddyname_length, ENC_UTF_8|ENC_NA);
 
 	return buddyname_length;
 }
 
 
 static void
-aim_get_message( guchar *msg, tvbuff_t *tvb, int msg_offset, int msg_length)
+aim_get_message( unsigned char *msg, tvbuff_t *tvb, int msg_offset, int msg_length)
 {
 	int i,j,c;
-	int bracket = FALSE;
+	bool bracket = false;
 	int max, tagchars = 0;
 	int new_offset = msg_offset;
 	int new_length = msg_length;
@@ -611,7 +619,7 @@ aim_get_message( guchar *msg, tvbuff_t *tvb, int msg_offset, int msg_length)
 	 * (it is nearly impossible to find the correct start offset for all client versions) */
 	while( (tagchars < 6) && (new_length > 5) )
 	{
-		j = tvb_get_guint8(tvb, new_offset);
+		j = tvb_get_uint8(tvb, new_offset);
 		if( ( (j == '<') && (tagchars == 0) ) ||
 		    ( (j == 'h') && (tagchars == 1) ) ||
 		    ( (j == 'H') && (tagchars == 1) ) ||
@@ -636,7 +644,7 @@ aim_get_message( guchar *msg, tvbuff_t *tvb, int msg_offset, int msg_length)
 	 * All other HTML tags are stripped to display only the raw message (printable characters) */
 	while( (c < max) && (tagchars < 7) )
 	{
-		j = tvb_get_guint8(tvb, msg_offset+c);
+		j = tvb_get_uint8(tvb, msg_offset+c);
 
 
 		/* make sure this is an HTML tag by checking the order of the chars */
@@ -653,9 +661,9 @@ aim_get_message( guchar *msg, tvbuff_t *tvb, int msg_offset, int msg_length)
 		    ( (j == '>') && (tagchars == 6) ) ) tagchars++;
 
 #ifdef STRIP_TAGS
-		if( j == '<' ) bracket = TRUE;
-		if( j == '>' ) bracket = FALSE;
-		if( (g_ascii_isprint(j) ) && (bracket == FALSE) && (j != '>'))
+		if( j == '<' ) bracket = true;
+		if( j == '>' ) bracket = false;
+		if( (g_ascii_isprint(j) ) && (bracket == false) && (j != '>'))
 #else
 			if( g_ascii_isprint(j) )
 #endif
@@ -668,7 +676,7 @@ aim_get_message( guchar *msg, tvbuff_t *tvb, int msg_offset, int msg_length)
 }
 
 static void
-aim_init_family(int proto, int ett, guint16 family, const aim_subtype *subtypes)
+aim_init_family(int proto, int ett, uint16_t family, const aim_subtype *subtypes)
 {
 	aim_family *fam = g_new(aim_family, 1);
 	fam->proto = find_protocol_by_id(proto);
@@ -684,10 +692,11 @@ aim_init_family(int proto, int ett, guint16 family, const aim_subtype *subtypes)
 static int
 dissect_aim_ssi_result(tvbuff_t *tvb, packet_info *pinfo, proto_tree *aim_tree)
 {
-	col_add_str(pinfo->cinfo, COL_INFO,
-	    val_to_str(tvb_get_ntohs(tvb, 0), aim_ssi_result_codes, "Unknown SSI result code 0x%02x"));
+	uint32_t code;
+	proto_tree_add_item_ret_uint(aim_tree, hf_aim_ssi_result_code, tvb, 0, 2, ENC_BIG_ENDIAN, &code);
 
-	proto_tree_add_item (aim_tree, hf_aim_ssi_result_code, tvb, 0, 2, ENC_BIG_ENDIAN);
+	col_add_str(pinfo->cinfo, COL_INFO,
+		val_to_str(pinfo->pool, code, aim_ssi_result_codes, "Unknown SSI result code 0x%02x"));
 
 	return 2;
 }
@@ -703,10 +712,10 @@ static void
 dissect_aim_snac(tvbuff_t *tvb, packet_info *pinfo, int offset,
 		 proto_tree *aim_tree, proto_tree *root_tree)
 {
-	guint16 family_id;
-	guint16 subtype_id;
-	guint16 flags;
-	guint32 id;
+	uint16_t family_id;
+	uint16_t subtype_id;
+	uint16_t flags;
+	uint32_t id;
 	proto_tree *aim_tree_fnac = NULL;
 	tvbuff_t *subtvb;
 	int orig_offset;
@@ -762,7 +771,7 @@ dissect_aim_snac(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
 	if(flags & FNAC_FLAG_CONTAINS_VERSION)
 	{
-		guint16 len = tvb_get_ntohs(tvb, offset);
+		uint16_t len = tvb_get_ntohs(tvb, offset);
 		int oldoffset;
 		offset+=2;
 		oldoffset = offset;
@@ -843,10 +852,10 @@ static int
 dissect_aim_buddyname(tvbuff_t *tvb, packet_info *pinfo _U_, int offset,
 		      proto_tree *tree)
 {
-	guint8 buddyname_length = 0;
+	uint8_t buddyname_length = 0;
 	proto_tree *buddy_tree;
 
-	buddyname_length = tvb_get_guint8(tvb, offset);
+	buddyname_length = tvb_get_uint8(tvb, offset);
 	offset++;
 
 	if(tree)
@@ -1020,7 +1029,7 @@ aim_find_capability (e_guid_t clsid)
 }
 
 static const aim_client_capability *
-aim_find_short_capability(guint16 shortid)
+aim_find_short_capability(uint16_t shortid)
 {
 	e_guid_t clsid = {0x09460000, 0x4c7f, 0x11d1, {0x82, 0x22, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00}};
 	clsid.data1 |= shortid;
@@ -1053,7 +1062,7 @@ static int
 dissect_aim_short_capability(proto_tree *entry, tvbuff_t *tvb, int offset)
 {
 	const aim_client_capability *caps;
-	guint16 shortid;
+	uint16_t shortid;
 
 	shortid = tvb_get_ntohs(tvb, offset);
 	caps = aim_find_short_capability(shortid);
@@ -1068,7 +1077,7 @@ dissect_aim_short_capability(proto_tree *entry, tvbuff_t *tvb, int offset)
 }
 
 static int
-dissect_aim_tlv_value_client_capabilities(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_client_capabilities(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	int offset = 0;
 	proto_tree *entry;
@@ -1085,7 +1094,7 @@ dissect_aim_tlv_value_client_capabilities(proto_item *ti, guint16 valueid _U_, t
 }
 
 static int
-dissect_aim_tlv_value_client_short_capabilities(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_client_short_capabilities(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	int offset = 0;
 	proto_tree *entry;
@@ -1102,14 +1111,14 @@ dissect_aim_tlv_value_client_short_capabilities(proto_item *ti, guint16 valueid 
 }
 
 static int
-dissect_aim_tlv_value_time(proto_item *ti _U_, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_time(proto_item *ti _U_, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	/* FIXME */
 	return tvb_reported_length(tvb);
 }
 
 static int
-dissect_aim_userclass(tvbuff_t *tvb, int offset, int len, proto_item *ti, guint32 value)
+dissect_aim_userclass(tvbuff_t *tvb, int offset, int len, proto_item *ti, uint32_t value)
 {
 	proto_tree *entry;
 	static int * const flags[] = {
@@ -1143,22 +1152,22 @@ dissect_aim_userclass(tvbuff_t *tvb, int offset, int len, proto_item *ti, guint3
 }
 
 static int
-dissect_aim_tlv_value_userclass(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_userclass(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
-	guint16 value16 = tvb_get_ntohs(tvb, 0);
+	uint16_t value16 = tvb_get_ntohs(tvb, 0);
 	proto_item_set_text(ti, "Value: 0x%04x", value16);
 	return dissect_aim_userclass(tvb, 0, 2, ti, value16);
 }
 
 static int
-dissect_aim_tlv_value_userstatus(proto_item *ti _U_, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_userstatus(proto_item *ti _U_, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	/* FIXME */
 	return tvb_reported_length(tvb);
 }
 
 static int
-dissect_aim_tlv_value_dcinfo(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_dcinfo(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	int offset = 0;
 
@@ -1180,29 +1189,29 @@ dissect_aim_tlv_value_dcinfo(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb,
 }
 
 static int
-dissect_aim_tlv_value_string (proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo)
+dissect_aim_tlv_value_string (proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo)
 {
-	guint8 *buf;
-	gint string_len;
+	const char *buf;
+	int string_len;
 
 	string_len = tvb_reported_length(tvb);
-	buf = tvb_get_string_enc(pinfo->pool, tvb, 0, string_len, ENC_UTF_8|ENC_NA);
+	buf = (char*)tvb_get_string_enc(pinfo->pool, tvb, 0, string_len, ENC_UTF_8|ENC_NA);
 	proto_item_set_text(ti, "Value: %s", format_text(pinfo->pool, buf, string_len));
 
 	return string_len;
 }
 
 static int
-dissect_aim_tlv_value_string08_array (proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_string08_array (proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	proto_tree *entry;
-	gint offset=0;
+	int offset=0;
 
 	entry = proto_item_add_subtree(ti, ett_aim_string08_array);
 
 	while (tvb_reported_length_remaining(tvb, offset) > 1)
 	{
-		guint8 string_len = tvb_get_guint8(tvb, offset);
+		uint8_t string_len = tvb_get_uint8(tvb, offset);
 		proto_tree_add_item(entry, hf_aim_string08, tvb, offset, 1, ENC_UTF_8|ENC_NA);
 		offset += (string_len+1);
 	}
@@ -1211,49 +1220,49 @@ dissect_aim_tlv_value_string08_array (proto_item *ti, guint16 valueid _U_, tvbuf
 }
 
 static int
-dissect_aim_tlv_value_bytes (proto_item *ti _U_, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_bytes (proto_item *ti _U_, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	return tvb_reported_length(tvb);
 }
 
 static int
-dissect_aim_tlv_value_uint8 (proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_uint8 (proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
-	guint8 value8 = tvb_get_guint8(tvb, 0);
+	uint8_t value8 = tvb_get_uint8(tvb, 0);
 	proto_item_set_text(ti, "Value: %d", value8);
 	return 1;
 }
 
 static int
-dissect_aim_tlv_value_uint16 (proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_uint16 (proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
-	guint16 value16 = tvb_get_ntohs(tvb, 0);
+	uint16_t value16 = tvb_get_ntohs(tvb, 0);
 	proto_item_set_text(ti, "Value: %d", value16);
 	return 2;
 }
 
 static int
-dissect_aim_tlv_value_ipv4 (proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_ipv4 (proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	proto_item_set_text(ti, "Value: %s", tvb_ip_to_str(pinfo->pool, tvb, 0));
 	return 4;
 }
 
 static int
-dissect_aim_tlv_value_uint32 (proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_uint32 (proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
-	guint32 value32 = tvb_get_ntohl(tvb, 0);
+	uint32_t value32 = tvb_get_ntohl(tvb, 0);
 	proto_item_set_text(ti, "Value: %d", value32);
 	return 4;
 }
 
 static int
-dissect_aim_tlv_value_messageblock (proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo)
+dissect_aim_tlv_value_messageblock (proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo)
 {
 	proto_tree *entry;
-	guint8 *buf;
-	guint16 featurelen;
-	guint32 blocklen;
+	const char *buf;
+	uint16_t featurelen;
+	uint32_t blocklen;
 	proto_item* len_item;
 	int offset=0;
 
@@ -1304,7 +1313,7 @@ dissect_aim_tlv_value_messageblock (proto_item *ti, guint16 valueid _U_, tvbuff_
 		offset += 2;
 
 		/* The actual message */
-		buf = tvb_get_string_enc(pinfo->pool, tvb, offset, blocklen - 4, ENC_ASCII|ENC_NA);
+		buf = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, blocklen - 4, ENC_ASCII|ENC_NA);
 		proto_item_append_text(ti, "Message: %s ",
 				    format_text(pinfo->pool, buf, blocklen - 4));
 		proto_tree_add_item(entry, hf_aim_messageblock_message, tvb,
@@ -1321,8 +1330,8 @@ static int
 dissect_aim_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset,
 		proto_tree *tree, const aim_tlv *tlv)
 {
-	guint16 valueid;
-	guint16 length;
+	uint16_t valueid;
+	uint16_t length;
 	int i = 0;
 	const aim_tlv *tmp;
 	const char *desc;
@@ -1390,7 +1399,7 @@ static int
 dissect_aim_tlv_list(tvbuff_t *tvb, packet_info *pinfo, int offset,
 		     proto_tree *tree, const aim_tlv *tlv_table)
 {
-	guint16 i, tlv_count = tvb_get_ntohs(tvb, offset);
+	uint16_t i, tlv_count = tvb_get_ntohs(tvb, offset);
 
 	proto_tree_add_item(tree, hf_aim_tlvcount, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset += 2;
@@ -1541,18 +1550,19 @@ dissect_aim_newconn(tvbuff_t *tvb, packet_info *pinfo, int offset,
 static int
 dissect_aim_snac_error(tvbuff_t *tvb, packet_info *pinfo, proto_tree *aim_tree)
 {
-	col_add_str(pinfo->cinfo, COL_INFO,
-	    val_to_str(tvb_get_ntohs(tvb, 0), aim_snac_errors, "Unknown SNAC error 0x%02x"));
+	uint32_t error;
+	proto_tree_add_item_ret_uint(aim_tree, hf_aim_snac_error, tvb, 0, 2, ENC_BIG_ENDIAN, &error);
 
-	proto_tree_add_item (aim_tree, hf_aim_snac_error, tvb, 0, 2, ENC_BIG_ENDIAN);
+	col_add_str(pinfo->cinfo, COL_INFO,
+		val_to_str(pinfo->pool, error, aim_snac_errors, "Unknown SNAC error 0x%02x"));
 
 	return dissect_aim_tlv_sequence(tvb, pinfo, 2, aim_tree, aim_client_tlvs);
 }
 
-static guint
+static unsigned
 get_aim_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
-	guint16 plen;
+	uint16_t plen;
 
 	/*
 	* Get the length of the AIM packet.
@@ -1586,7 +1596,7 @@ dissect_aim_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 
 	/* get relevant header information */
 	offset += 1;          /* XXX - put the identifier into the tree? */
-	hdr_channel           = tvb_get_guint8(tvb, offset);
+	hdr_channel           = tvb_get_uint8(tvb, offset);
 	offset += 1;
 	hdr_sequence_no       = tvb_get_ntohs(tvb, offset);
 	offset += 2;
@@ -1637,7 +1647,7 @@ dissect_aim(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 	/* check, if this is really an AIM packet, they start with 0x2a */
 	/* XXX - I've seen some stuff starting with 0x5a followed by 0x2a */
 
-	if(tvb_reported_length(tvb) >= 1 && tvb_get_guint8(tvb, 0) != 0x2a)
+	if(tvb_reported_length(tvb) >= 1 && tvb_get_uint8(tvb, 0) != 0x2a)
 	{
 		/* Not an instant messenger packet, just happened to use the
 		 * same port
@@ -1653,17 +1663,17 @@ dissect_aim(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 	return tvb_reported_length(tvb);
 }
 
-static int
+static bool
 dissect_aim_ssl_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
 	struct tlsinfo *tlsinfo = (struct tlsinfo *) data;
 	/* XXX improve heuristics */
-	if (tvb_reported_length(tvb) < 1 || tvb_get_guint8(tvb, 0) != 0x2a) {
-		return FALSE;
+	if (tvb_reported_length(tvb) < 1 || tvb_get_uint8(tvb, 0) != 0x2a) {
+		return false;
 	}
 	dissect_aim(tvb, pinfo, tree, NULL);
 	*(tlsinfo->app_handle) = aim_handle;
-	return TRUE;
+	return true;
 }
 
 /***********************************************************************************************************
@@ -1741,7 +1751,7 @@ static const aim_tlv aim_privacy_tlvs[] = {
 static int dissect_aim_bos_set_group_perm(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *bos_tree)
 {
 	int offset = 0;
-	guint32 userclass = tvb_get_ntohl(tvb, offset);
+	uint32_t userclass = tvb_get_ntohl(tvb, offset);
 	proto_item *ti = proto_tree_add_uint(bos_tree, hf_aim_bos_class, tvb, offset, 4, userclass);
 	return dissect_aim_userclass(tvb, offset, 4, ti, userclass);
 }
@@ -1865,7 +1875,7 @@ static int dissect_aim_buddylist_reject(tvbuff_t *tvb, packet_info *pinfo, proto
 
 static int dissect_aim_buddylist_oncoming(tvbuff_t *tvb, packet_info *pinfo, proto_tree *buddy_tree)
 {
-	guint8 *buddyname;
+	char  *buddyname;
 	int    offset           = 0;
 	int    buddyname_length = aim_get_buddyname( pinfo->pool, &buddyname, tvb, offset );
 
@@ -1888,7 +1898,7 @@ static int dissect_aim_buddylist_oncoming(tvbuff_t *tvb, packet_info *pinfo, pro
 static int dissect_aim_buddylist_offgoing(tvbuff_t *tvb, packet_info *pinfo, proto_tree *buddy_tree)
 {
 
-	guint8 *buddyname;
+	char  *buddyname;
 	int    offset           = 0;
 	int    buddyname_length = aim_get_buddyname( pinfo->pool, &buddyname, tvb, offset );
 
@@ -1964,11 +1974,11 @@ static int dissect_aim_chat_userinfo_list(tvbuff_t *tvb, packet_info *pinfo, pro
 
 static int dissect_aim_chat_outgoing_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *chat_tree _U_)
 {
-	guint8 *buddyname;
-	guchar *msg;
+	char *buddyname;
+	unsigned char *msg;
 	int buddyname_length;
 
-	msg=(guchar *)wmem_alloc(pinfo->pool, 1000);
+	msg=(unsigned char *)wmem_alloc(pinfo->pool, 1000);
 	buddyname_length = aim_get_buddyname( pinfo->pool, &buddyname, tvb, 30 );
 
 	/* channel message from client */
@@ -1983,12 +1993,12 @@ static int dissect_aim_chat_outgoing_msg(tvbuff_t *tvb, packet_info *pinfo, prot
 
 static int dissect_aim_chat_incoming_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *chat_tree)
 {
-	guint8 *buddyname;
-	guchar *msg;
+	char *buddyname;
+	unsigned char *msg;
 	/* channel message to client */
 	int buddyname_length;
 
-	msg=(guchar *)wmem_alloc(pinfo->pool, 1000);
+	msg=(unsigned char *)wmem_alloc(pinfo->pool, 1000);
 	buddyname_length = aim_get_buddyname( pinfo->pool, &buddyname, tvb, 30 );
 
 	aim_get_message( msg, tvb, 36 + buddyname_length, tvb_reported_length(tvb)
@@ -2149,8 +2159,8 @@ static int dissect_rate_class(tvbuff_t *tvb, packet_info *pinfo _U_, int offset,
 static int dissect_generic_rateinfo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	int offset = 0;
-	guint16 i;
-	guint16 numclasses = tvb_get_ntohs(tvb, 0);
+	uint16_t i;
+	uint16_t numclasses = tvb_get_ntohs(tvb, 0);
 	proto_tree *classes_tree = NULL, *groups_tree, *group_tree;
 	proto_tree_add_uint(tree, hf_generic_rateinfo_numclasses, tvb, 0, 2, numclasses );
 	offset+=2;
@@ -2162,7 +2172,7 @@ static int dissect_generic_rateinfo(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	}
 
 	for(i = 0; i < numclasses; i++) {
-		guint16 myid = tvb_get_ntohs(tvb, offset);
+		uint16_t myid = tvb_get_ntohs(tvb, offset);
 		proto_tree *class_tree = proto_tree_add_subtree_format(classes_tree, tvb, offset, 35,
 		                ett_generic_rateinfo_class, NULL, "Rate Class 0x%02x", myid);
 		offset = dissect_rate_class(tvb, pinfo, offset, class_tree);
@@ -2171,9 +2181,9 @@ static int dissect_generic_rateinfo(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	groups_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_generic_rateinfo_groups, NULL, "Rate Groups");
 
 	for(i = 0; i < numclasses; i++) {
-		guint16 j;
-		guint16 myid = tvb_get_ntohs(tvb, offset);
-		guint16 numpairs = tvb_get_ntohs(tvb, offset + 2);
+		uint16_t j;
+		uint16_t myid = tvb_get_ntohs(tvb, offset);
+		uint16_t numpairs = tvb_get_ntohs(tvb, offset + 2);
 		/*
 		 * sizeof(rate_group) = sizeof(class_id) + sizeof(numpairs) + numpairs * 2 * sizeof(uint16_t)
 		 *                    = 2 + 2 + numpairs * 4
@@ -2183,8 +2193,8 @@ static int dissect_generic_rateinfo(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 		proto_tree_add_uint(group_tree, hf_generic_rateinfo_classid, tvb, offset, 2, myid);offset+=2;
 		proto_tree_add_uint(group_tree, hf_generic_rateinfo_numpairs, tvb, offset, 2, numpairs); offset+=2;
 		for(j = 0; j < numpairs; j++) {
-			guint16 family_id;
-			guint16 subtype_id;
+			uint16_t family_id;
+			uint16_t subtype_id;
 			const aim_family *family;
 			const aim_subtype *subtype;
 			family_id = tvb_get_ntohs(tvb, offset);
@@ -2330,7 +2340,7 @@ static int dissect_aim_generic_clientpauseack(tvbuff_t *tvb, packet_info *pinfo 
 static int dissect_aim_generic_migration_req(tvbuff_t *tvb, packet_info *pinfo, proto_tree *gen_tree)
 {
 	int offset = 0;
-	guint32 n, i;
+	uint32_t n, i;
 	proto_tree *entry;
 
 	n = tvb_get_ntohs(tvb, offset);offset+=2;
@@ -2403,14 +2413,14 @@ static int dissect_aim_generic_clientver_repl(tvbuff_t *tvb, packet_info *pinfo 
 
 static int dissect_aim_generic_ext_status_repl(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *gen_tree)
 {
-	guint8 length;
+	uint8_t length;
 	int offset = 0;
 	proto_tree_add_item(gen_tree, hf_generic_ext_status_type, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset += 2;
 	proto_tree_add_item(gen_tree, hf_generic_ext_status_flags, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 	proto_tree_add_item(gen_tree, hf_generic_ext_status_length, tvb, offset, 1, ENC_BIG_ENDIAN);
-	length = tvb_get_guint8(tvb, offset);
+	length = tvb_get_uint8(tvb, offset);
 	offset += 1;
 	proto_tree_add_item(gen_tree, hf_generic_ext_status_data, tvb, offset, length, ENC_NA);
 	offset += 1;
@@ -2418,7 +2428,7 @@ static int dissect_aim_generic_ext_status_repl(tvbuff_t *tvb, packet_info *pinfo
 }
 
 static void
-aim_generic_family( gchar *result, guint32 famnum )
+aim_generic_family( char *result, uint32_t famnum )
 {
 	const aim_family *family = aim_get_family(famnum);
 
@@ -2459,7 +2469,7 @@ static const aim_subtype aim_fnac_family_generic[] = {
 /***********************************************************************************************************
  * AIM ICQ
  ***********************************************************************************************************/
-#define ICQ_CLI_OFFLINE_MESSAGE_REQ 	0x003c
+#define ICQ_CLI_OFFLINE_MESSAGE_REQ	0x003c
 #define ICQ_CLI_DELETE_OFFLINE_MSGS	0x003e
 #define ICQ_SRV_OFFLINE_MSGS		0x0041
 #define ICQ_SRV_END_OF_OFFLINE_MSGS	0x0042
@@ -2468,16 +2478,16 @@ static const aim_subtype aim_fnac_family_generic[] = {
 
 static const value_string aim_icq_data_types[] = {
 	{ ICQ_CLI_OFFLINE_MESSAGE_REQ, "Offline Message Request" },
+	{ ICQ_CLI_DELETE_OFFLINE_MSGS, "Delete Offline Messages Request" },
 	{ ICQ_SRV_OFFLINE_MSGS,        "Offline Messages Reply" },
 	{ ICQ_SRV_END_OF_OFFLINE_MSGS, "End Of Offline Messages Reply" },
-	{ ICQ_CLI_DELETE_OFFLINE_MSGS, "Delete Offline Messages Request" },
 	{ ICQ_CLI_META_INFO_REQ,       "Metainfo Request" },
 	{ ICQ_SRV_META_INFO_REPL,      "Metainfo Reply" },
 	{ 0, NULL }
 };
 
 
-static int dissect_aim_tlv_value_icq(proto_item *ti, guint16 subtype, tvbuff_t *tvb, packet_info *pinfo);
+static int dissect_aim_tlv_value_icq(proto_item *ti, uint16_t subtype, tvbuff_t *tvb, packet_info *pinfo);
 
 #define TLV_ICQ_META_DATA 			  0x0001
 
@@ -2487,9 +2497,9 @@ static const aim_tlv icq_tlv[] = {
 };
 
 
-static struct
+static const struct
 {
-	guint16 subtype;
+	uint16_t subtype;
 	const char *name;
 	int (*dissector) (tvbuff_t *, packet_info *, proto_tree *);
 } icq_calls [] = {
@@ -2548,12 +2558,12 @@ static struct
 };
 
 
-static int dissect_aim_tlv_value_icq(proto_item *ti, guint16 subtype _U_, tvbuff_t *tvb, packet_info *pinfo)
+static int dissect_aim_tlv_value_icq(proto_item *ti, uint16_t subtype _U_, tvbuff_t *tvb, packet_info *pinfo)
 {
 	int         offset = 0;
 	int         i;
 	proto_item *subtype_item;
-	guint16     req_type, req_subtype;
+	uint16_t    req_type, req_subtype;
 	proto_tree *t      = proto_item_add_subtree(ti, ett_aim_icq_tlv);
 
 	proto_tree_add_item(t, hf_icq_tlv_data_chunk_size, tvb, offset, 2, ENC_LITTLE_ENDIAN);
@@ -2706,7 +2716,7 @@ static int dissect_aim_location_user_info_query(tvbuff_t *tvb, packet_info *pinf
 static int dissect_aim_snac_location_request_user_information(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
 	int    offset		= 0;
-	guint8 buddyname_length = 0;
+	uint8_t buddyname_length = 0;
 
 	/* Info Type */
 	proto_tree_add_item(tree, hf_aim_snac_location_request_user_info_infotype,
@@ -2714,7 +2724,7 @@ static int dissect_aim_snac_location_request_user_information(tvbuff_t *tvb, pac
 	offset += 2;
 
 	/* Buddy Name length */
-	buddyname_length = tvb_get_guint8(tvb, offset);
+	buddyname_length = tvb_get_uint8(tvb, offset);
 	proto_tree_add_item(tree, hf_aim_location_buddyname_len, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 
@@ -2728,10 +2738,10 @@ static int dissect_aim_snac_location_request_user_information(tvbuff_t *tvb, pac
 static int dissect_aim_snac_location_user_information(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	int    offset		= 0;
-	guint8 buddyname_length = 0;
+	uint8_t buddyname_length = 0;
 
 	/* Buddy Name length */
-	buddyname_length = tvb_get_guint8(tvb, offset);
+	buddyname_length = tvb_get_uint8(tvb, offset);
 	proto_tree_add_item(tree, hf_aim_location_buddyname_len, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 
@@ -2786,7 +2796,7 @@ static const aim_tlv aim_messaging_incoming_ch1_tlvs[] = {
 	{ 0, NULL, NULL },
 };
 
-static int dissect_aim_tlv_value_rendezvous(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo);
+static int dissect_aim_tlv_value_rendezvous(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo);
 
 #define ICBM_CHANNEL_IM		0x0001
 #define ICBM_CHANNEL_RENDEZVOUS	0x0002
@@ -2970,9 +2980,9 @@ static const value_string extended_data_message_types[] = {
 	{ 0, NULL },
 };
 
-#define EXTENDED_DATA_MFLAG_NORMAL 0x01
-#define EXTENDED_DATA_MFLAG_AUTO   0x02
-#define EXTENDED_DATA_MFLAG_MULTI  0x80
+#define EXTENDED_DATA_MFLAG_NORMAL 0x0001
+#define EXTENDED_DATA_MFLAG_AUTO   0x0002
+#define EXTENDED_DATA_MFLAG_MULTI  0x0080
 
 #define EVIL_ORIGIN_ANONYMOUS		1
 #define EVIL_ORIGIN_NONANONYMOUS 	2
@@ -2986,7 +2996,7 @@ static const value_string evil_origins[] = {
 /* Initialize the protocol and registered fields */
 
 static int
-dissect_aim_tlv_value_rendezvous(proto_item *ti, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo)
+dissect_aim_tlv_value_rendezvous(proto_item *ti, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo)
 {
 	int offset = 0;
 	proto_tree *entry = proto_item_add_subtree(ti, ett_aim_rendezvous_data);
@@ -3007,8 +3017,8 @@ dissect_aim_msg_outgoing(tvbuff_t *tvb, packet_info *pinfo, proto_tree *msg_tree
 {
 	int offset = 0;
 	const aim_tlv *aim_ch_tlvs = NULL;
-	guint16 channel_id;
-	guint8 *buddyname;
+	uint16_t channel_id;
+	char *buddyname;
 	int buddyname_length;
 
 	/* ICBM Cookie */
@@ -3043,7 +3053,7 @@ dissect_aim_msg_incoming(tvbuff_t *tvb, packet_info *pinfo, proto_tree *msg_tree
 {
 	int offset = 0;
 	const aim_tlv *aim_ch_tlvs;
-	guint16 channel_id;
+	uint16_t channel_id;
 
 	/* ICBM Cookie */
 	proto_tree_add_item(msg_tree, hf_aim_icbm_cookie, tvb, offset, 8, ENC_NA);
@@ -3158,7 +3168,7 @@ dissect_aim_plugin(proto_tree *entry, tvbuff_t *tvb, int offset, e_guid_t* out_p
 
 	plugin = aim_find_plugin(uuid);
 
-	ti = proto_tree_add_item(entry, hf_aim_messaging_plugin, tvb, offset, 16, ENC_NA);
+	ti = proto_tree_add_item(entry, hf_aim_messaging_plugin, tvb, offset, 16, ENC_BIG_ENDIAN);
 	proto_item_append_text(ti, " (%s)", plugin ? plugin->name:"Unknown");
 
 	return offset+16;
@@ -3168,7 +3178,7 @@ static int
 dissect_aim_rendezvous_extended_message(tvbuff_t *tvb, proto_tree *msg_tree)
 {
 	int offset = 0;
-	guint32 text_length;
+	uint32_t text_length;
 	static int * const flags[] = {
 		&hf_aim_rendezvous_extended_data_message_flags_normal,
 		&hf_aim_rendezvous_extended_data_message_flags_auto,
@@ -3208,10 +3218,10 @@ is_uuid_null(e_guid_t uuid)
 }
 
 static int
-dissect_aim_tlv_value_extended_data(proto_tree *entry, guint16 valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
+dissect_aim_tlv_value_extended_data(proto_tree *entry, uint16_t valueid _U_, tvbuff_t *tvb, packet_info *pinfo _U_)
 {
 	int offset = 0;
-	guint16 length/*, protocol_version*/;
+	uint16_t length/*, protocol_version*/;
 	int start_offset;
 	e_guid_t plugin_uuid;
 
@@ -3271,7 +3281,7 @@ static int
 dissect_aim_msg_client_err(tvbuff_t *tvb, packet_info *pinfo, proto_tree *msg_tree)
 {
 	int offset = 0;
-	guint16 channel, reason;
+	uint16_t channel, reason;
 
 	proto_tree_add_item(msg_tree,hf_aim_icbm_cookie, tvb, offset, 8, ENC_NA); offset+=8;
 	channel = tvb_get_ntohs(tvb, offset);
@@ -3380,9 +3390,9 @@ static int dissect_aim_snac_signon_logon_reply(tvbuff_t *tvb,
 static int dissect_aim_snac_signon_signon(tvbuff_t *tvb, packet_info *pinfo,
 					  proto_tree *tree)
 {
-	guint8 buddyname_length = 0;
+	uint8_t buddyname_length = 0;
 	int offset = 0;
-	guint8 *buddyname;
+	char *buddyname;
 
 	/* Info Type */
 	proto_tree_add_item(tree, hf_aim_infotype, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -3409,7 +3419,7 @@ static int dissect_aim_snac_signon_signon_reply(tvbuff_t *tvb,
 						proto_tree *tree)
 {
 	int offset = 0;
-	guint16 challenge_length = 0;
+	uint16_t challenge_length = 0;
 
 	/* Logon Challenge Length */
 	challenge_length = tvb_get_ntohs(tvb, offset);
@@ -3422,7 +3432,7 @@ static int dissect_aim_snac_signon_signon_reply(tvbuff_t *tvb,
 	return offset;
 }
 
-static int dissect_aim_tlv_value_registration(proto_item *ti _U_, guint16 value_id _U_, tvbuff_t *tvb _U_, packet_info *pinfo _U_)
+static int dissect_aim_tlv_value_registration(proto_item *ti _U_, uint16_t value_id _U_, tvbuff_t *tvb _U_, packet_info *pinfo _U_)
 {
 	/* FIXME */
 	return 0;
@@ -3467,27 +3477,27 @@ static const aim_tlv aim_ssi_rightsinfo_tlvs[] = {
 
 /** Calculate size of SSI entry
  * Size of SSI entry can be calculated as:
- *   sizeof(buddy name length field) = sizeof(guint16) = 2
+ *   sizeof(buddy name length field) = sizeof(uint16_t) = 2
  * + sizeof(buddy name string) = buddy name length field = N
- * + sizeof(group ID) = sizeof(guint16) = 2
- * + sizeof(buddy ID) = sizeof(guint16) = 2
- * + sizeof(buddy type) = sizeof(guint16) = 2
- * + sizeof(TLV length) = sizeof(guint16) = 2
+ * + sizeof(group ID) = sizeof(uint16_t) = 2
+ * + sizeof(buddy ID) = sizeof(uint16_t) = 2
+ * + sizeof(buddy type) = sizeof(uint16_t) = 2
+ * + sizeof(TLV length) = sizeof(uint16_t) = 2
  * + sizeof(TLVs) = TLV length = M
  * = 2 + N + 2 * 4 + M
  */
 static int calc_ssi_entry_size(tvbuff_t *tvb, int offset)
 {
-	gint ssi_entry_size = 2 + tvb_get_ntohs(tvb, offset) + 2 * 3;
+	int ssi_entry_size = 2 + tvb_get_ntohs(tvb, offset) + 2 * 3;
 	ssi_entry_size += tvb_get_ntohs(tvb, offset + ssi_entry_size) + 2;
 	return ssi_entry_size;
 }
 
 static int dissect_ssi_item(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *ssi_entry)
 {
-	guint16 buddyname_length = 0;
+	uint16_t buddyname_length = 0;
 	int endoffset;
-	guint16 tlv_len = 0;
+	uint16_t tlv_len = 0;
 
 	/* Buddy Name Length */
 	buddyname_length = tvb_get_ntohs(tvb, offset);
@@ -3535,7 +3545,7 @@ static int dissect_ssi_ssi_item(tvbuff_t *tvb, packet_info *pinfo, proto_tree *s
 static int dissect_ssi_ssi_items(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	int offset = 0;
-	gint ssi_entry_size;
+	int ssi_entry_size;
 	proto_tree *ssi_entry = NULL;
 	int size = tvb_reported_length(tvb);
 	while (size > offset)
@@ -3576,8 +3586,8 @@ static int dissect_aim_snac_ssi_list(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 {
 	int offset = 0;
 	proto_tree *ssi_entry = NULL;
-	guint16 num_items, i;
-	gint ssi_entry_size;
+	uint16_t num_items, i;
+	int ssi_entry_size;
 
 	/* SSI Version */
 	proto_tree_add_item(tree, hf_aim_fnac_subtype_ssi_version, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -3602,11 +3612,11 @@ static int dissect_aim_snac_ssi_list(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 static int dissect_aim_snac_ssi_auth_request(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
 	int offset = 0;
-	guint16 reason_length;
-	/*guint16 unknown;*/
+	uint16_t reason_length;
+	/*uint16_t unknown;*/
 
 	/* get buddy length (1 byte) */
-	guint8 buddyname_length = tvb_get_guint8(tvb, offset);
+	uint8_t buddyname_length = tvb_get_uint8(tvb, offset);
 	proto_tree_add_item(tree, hf_aim_fnac_subtype_ssi_buddyname_len8, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 
@@ -3637,10 +3647,10 @@ static int dissect_aim_snac_ssi_auth_request(tvbuff_t *tvb, packet_info *pinfo _
 static int dissect_aim_snac_ssi_auth_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
 	int offset = 0;
-	guint16 reason_length;
+	uint16_t reason_length;
 
 	/* get buddy length (1 byte) */
-	guint8 buddyname_length = tvb_get_guint8(tvb, offset);
+	uint8_t buddyname_length = tvb_get_uint8(tvb, offset);
 	proto_tree_add_item(tree, hf_aim_fnac_subtype_ssi_buddyname_len8, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 
@@ -3699,13 +3709,13 @@ static const aim_subtype aim_fnac_family_ssi[] = {
 static int dissect_aim_sst_buddy_down_req (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	int offset = dissect_aim_buddyname(tvb, pinfo, 0, tree);
-	guint8 md5_size;
+	uint8_t md5_size;
 
 	proto_tree_add_item(tree, hf_aim_sst_unknown, tvb, offset, 4, ENC_NA);
 	offset+=4;
 
 	proto_tree_add_item(tree, hf_aim_sst_md5_hash_size, tvb, offset, 1, ENC_BIG_ENDIAN);
-	md5_size = tvb_get_guint8(tvb, offset);
+	md5_size = tvb_get_uint8(tvb, offset);
 	offset++;
 
 	proto_tree_add_item(tree, hf_aim_sst_md5_hash, tvb, offset, md5_size, ENC_NA);
@@ -3717,14 +3727,14 @@ static int dissect_aim_sst_buddy_down_req (tvbuff_t *tvb, packet_info *pinfo, pr
 static int dissect_aim_sst_buddy_down_repl (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	int offset = dissect_aim_buddyname(tvb, pinfo, 0, tree);
-	guint8 md5_size;
-	guint16 icon_size;
+	uint8_t md5_size;
+	uint16_t icon_size;
 
 	proto_tree_add_item(tree, hf_aim_sst_unknown, tvb, offset, 3, ENC_NA);
 	offset+=3;
 
 	proto_tree_add_item(tree, hf_aim_sst_md5_hash_size, tvb, offset, 1, ENC_BIG_ENDIAN);
-	md5_size = tvb_get_guint8(tvb, offset);
+	md5_size = tvb_get_uint8(tvb, offset);
 	offset++;
 
 	proto_tree_add_item(tree, hf_aim_sst_md5_hash, tvb, offset, md5_size, ENC_NA);
@@ -3748,13 +3758,13 @@ static int dissect_aim_sst_buddy_down_repl (tvbuff_t *tvb, packet_info *pinfo, p
 static int dissect_aim_sst_buddy_up_repl (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
 	int offset = 0;
-	guint8 md5_size;
+	uint8_t md5_size;
 
 	proto_tree_add_item(tree, hf_aim_sst_unknown, tvb, offset, 4, ENC_NA);
 	offset+=4;
 
 	proto_tree_add_item(tree, hf_aim_sst_md5_hash_size, tvb, offset, 1, ENC_BIG_ENDIAN);
-	md5_size = tvb_get_guint8(tvb, offset);
+	md5_size = tvb_get_uint8(tvb, offset);
 	offset++;
 
 	proto_tree_add_item(tree, hf_aim_sst_md5_hash, tvb, offset, md5_size, ENC_NA);
@@ -3766,7 +3776,7 @@ static int dissect_aim_sst_buddy_up_repl (tvbuff_t *tvb, packet_info *pinfo _U_,
 static int dissect_aim_sst_buddy_up_req (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
 	int offset = 0;
-	guint16 icon_size;
+	uint16_t icon_size;
 
 	proto_tree_add_item(tree, hf_aim_sst_ref_num, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset+=2;
@@ -3831,7 +3841,7 @@ static const aim_subtype aim_fnac_family_userlookup[] = {
 };
 
 static void
-family_free(gpointer p, gpointer user_data _U_)
+family_free(void *p, void *user_data _U_)
 {
 	g_free(p);
 }
@@ -4425,12 +4435,12 @@ proto_register_aim(void)
 
 	static hf_register_info hf_userlookup[] = {
 		{ &hf_aim_userlookup_email,
-		  { "Email address looked for", "aim_lookup.email", FT_STRING, BASE_NONE, NULL, 0, "Email address", HFILL }
+		  { "Email address looked for", "aim_lookup.email", FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }
 		},
 	};
 
 	/* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_aim,
 		&ett_aim_dcinfo,
 		&ett_aim_fnac,

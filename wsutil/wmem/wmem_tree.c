@@ -192,6 +192,170 @@ rb_insert_case1(wmem_tree_t *tree, wmem_tree_node_t *node)
     }
 }
 
+static void
+rb_remove_doubleblack(wmem_tree_t *tree, wmem_tree_node_t *node)
+{
+    wmem_tree_node_t *parent = node->parent;
+    wmem_tree_node_t *sib, *c_nephew, *d_nephew;
+    bool left;
+
+    ws_assert(parent);
+    if (node == parent->left) {
+        left = true;
+        parent->left = NULL;
+    } else {
+        left = false;
+        parent->right = NULL;
+    }
+
+    for (node = NULL; parent; parent = node->parent) {
+        if (node) {
+            left = (node == parent->left);
+        }
+        if (left) {
+            sib = parent->right;
+            c_nephew = sib->left;
+            d_nephew = sib->right;
+        } else {
+            sib = parent->left;
+            c_nephew = sib->right;
+            d_nephew = sib->left;
+        }
+        if (sib && sib->color == WMEM_NODE_COLOR_RED) {
+            // Sib red
+            goto case_d3;
+        } else if (d_nephew && d_nephew->color == WMEM_NODE_COLOR_RED) {
+            // D red, Sib black
+            goto case_d6;
+        } else if (c_nephew && c_nephew->color == WMEM_NODE_COLOR_RED) {
+            // C red, Sib, D black
+            goto case_d5;
+        } else if (parent->color == WMEM_NODE_COLOR_RED) {
+            // Parent red, Sib, D, C black
+            goto case_d4;
+        } else {
+            // All black
+            sib->color = WMEM_NODE_COLOR_RED;
+            node = parent;
+        }
+    }
+
+    return;
+
+case_d3:
+    if (left) {
+        rotate_left(tree, parent);
+    } else {
+        rotate_right(tree, parent);
+    }
+    parent->color = WMEM_NODE_COLOR_RED;
+    sib->color = WMEM_NODE_COLOR_BLACK;
+    sib = c_nephew;
+    d_nephew = left ? sib->right : sib->left;
+    if (d_nephew && d_nephew->color == WMEM_NODE_COLOR_RED)
+        goto case_d6;
+    c_nephew = left ? sib->left : sib->right;
+    if (c_nephew && c_nephew->color == WMEM_NODE_COLOR_RED)
+        goto case_d5;
+
+case_d4:
+    sib->color = WMEM_NODE_COLOR_RED;
+    parent->color = WMEM_NODE_COLOR_BLACK;
+    return;
+
+case_d5:
+    if (left) {
+        rotate_right(tree, sib);
+    } else {
+        rotate_left(tree, sib);
+    }
+    sib->color = WMEM_NODE_COLOR_RED;
+    c_nephew->color = WMEM_NODE_COLOR_BLACK;
+    d_nephew = sib;
+    sib = c_nephew;
+    // D red and sib black;
+
+case_d6:
+    if (left) {
+        rotate_left(tree, parent);
+    } else {
+        rotate_right(tree, parent);
+    }
+    sib->color = parent->color;
+    parent->color = WMEM_NODE_COLOR_BLACK;
+    d_nephew->color = WMEM_NODE_COLOR_BLACK;
+    return;
+}
+
+static void
+rb_remove_node(wmem_tree_t *tree, wmem_tree_node_t *node, bool free_key)
+{
+    wmem_tree_node_t *temp_node;
+    /* First, if the node has both children, swap the key and data
+     * with the in-order successor and delete that node instead.
+     */
+    if (node->left && node->right) {
+        temp_node = node->right;
+        while (temp_node->left) {
+            temp_node = temp_node->left;
+        }
+        node->key = temp_node->key;
+        node->data = temp_node->data;
+        node = temp_node;
+    }
+
+    wmem_node_color_t child_color = WMEM_NODE_COLOR_BLACK;
+    /* node now has one child at most. */
+    if (node->left) {
+        temp_node = node->left;
+        ws_assert(node->right == NULL);
+    } else {
+        temp_node = node->right;
+    }
+    /* If there is a child, then the child must be red and original
+     * node black, or else the R-B tree assumptions are wrong and
+     * there's a problem elsewhere in the code. */
+    if (temp_node) {
+        child_color = temp_node->color;
+        ws_assert(child_color == WMEM_NODE_COLOR_RED);
+        ws_assert(node->color == WMEM_NODE_COLOR_BLACK);
+        temp_node->parent = node->parent;
+        temp_node->color = WMEM_NODE_COLOR_BLACK;
+    }
+
+    if (temp_node == NULL &&
+        node->color == WMEM_NODE_COLOR_BLACK && node->parent) {
+
+        /* Removing will create a "double black" imbalance in the tree and
+         * we will need to rectify it to keep this a R-B tree.
+         * This function removes and does any necessary rotations.
+         */
+        rb_remove_doubleblack(tree, node);
+    } else {
+        // Now remove the node from the tree.
+        if (node->parent) {
+            if (node == node->parent->left) {
+                node->parent->left = temp_node;
+            } else {
+                node->parent->right = temp_node;
+            }
+        } else {
+            tree->root = temp_node;
+        }
+    }
+
+    /* Freeing memory is only strictly necessary for a NULL allocator.
+     * The key is copied in a string tree, a GUINT_TO_POINTER in a
+     * 32 bit integer tree, and used uncopied in a generic tree, so
+     * it should be freed in the first case but not the others.
+     * The value is returned, so not freed under any circumstance.
+     */
+    if (free_key) {
+        wmem_free(tree->data_allocator, (void *)node->key);
+    }
+    wmem_free(tree->data_allocator, node);
+}
+
 wmem_tree_t *
 wmem_tree_new(wmem_allocator_t *allocator)
 {
@@ -292,7 +456,7 @@ wmem_tree_destroy(wmem_tree_t *tree, bool free_keys, bool free_values)
 }
 
 bool
-wmem_tree_is_empty(wmem_tree_t *tree)
+wmem_tree_is_empty(const wmem_tree_t *tree)
 {
     return tree->root == NULL;
 }
@@ -306,7 +470,7 @@ count_nodes(const void *key _U_, void *value _U_, void *userdata)
 }
 
 unsigned
-wmem_tree_count(wmem_tree_t* tree)
+wmem_tree_count(const wmem_tree_t* tree)
 {
     unsigned count = 0;
 
@@ -414,7 +578,7 @@ lookup_or_insert32(wmem_tree_t *tree, uint32_t key,
 }
 
 static void *
-wmem_tree_lookup(wmem_tree_t *tree, const void *key, compare_func cmp)
+wmem_tree_lookup(const wmem_tree_t *tree, const void *key, compare_func cmp)
 {
     wmem_tree_node_t *node;
 
@@ -441,7 +605,7 @@ wmem_tree_lookup(wmem_tree_t *tree, const void *key, compare_func cmp)
 }
 
 wmem_tree_node_t *
-wmem_tree_insert(wmem_tree_t *tree, const void *key, void *data, compare_func cmp)
+wmem_tree_insert_node(wmem_tree_t *tree, const void *key, void *data, compare_func cmp)
 {
     wmem_tree_node_t *node = tree->root;
     wmem_tree_node_t *new_node = NULL;
@@ -498,7 +662,7 @@ wmem_tree_insert32(wmem_tree_t *tree, uint32_t key, void *data)
     lookup_or_insert32(tree, key, NULL, data, false, true);
 }
 
-bool wmem_tree_contains32(wmem_tree_t *tree, uint32_t key)
+bool wmem_tree_contains32(const wmem_tree_t *tree, uint32_t key)
 {
     if (!tree) {
         return false;
@@ -521,8 +685,8 @@ bool wmem_tree_contains32(wmem_tree_t *tree, uint32_t key)
     return false;
 }
 
-void *
-wmem_tree_lookup32(wmem_tree_t *tree, uint32_t key)
+static wmem_tree_node_t*
+wmem_tree_lookup32_node(const wmem_tree_t *tree, uint32_t key)
 {
     if (!tree) {
         return NULL;
@@ -532,7 +696,7 @@ wmem_tree_lookup32(wmem_tree_t *tree, uint32_t key)
 
     while (node) {
         if (key == GPOINTER_TO_UINT(node->key)) {
-            return node->data;
+            return node;
         }
         else if (key < GPOINTER_TO_UINT(node->key)) {
             node = node->left;
@@ -546,7 +710,17 @@ wmem_tree_lookup32(wmem_tree_t *tree, uint32_t key)
 }
 
 void *
-wmem_tree_lookup32_le(wmem_tree_t *tree, uint32_t key)
+wmem_tree_lookup32(const wmem_tree_t *tree, uint32_t key)
+{
+    wmem_tree_node_t *node = wmem_tree_lookup32_node(tree, key);
+    if (node == NULL) {
+        return NULL;
+    }
+    return node->data;
+}
+
+static wmem_tree_node_t*
+wmem_tree_lookup32_le_node(const wmem_tree_t *tree, uint32_t key)
 {
     if (!tree) {
         return NULL;
@@ -556,7 +730,7 @@ wmem_tree_lookup32_le(wmem_tree_t *tree, uint32_t key)
 
     while (node) {
         if (key == GPOINTER_TO_UINT(node->key)) {
-            return node->data;
+            return node;
         }
         else if (key < GPOINTER_TO_UINT(node->key)) {
             if (node->left == NULL) {
@@ -583,7 +757,7 @@ wmem_tree_lookup32_le(wmem_tree_t *tree, uint32_t key)
      */
     if (node->parent == NULL) {
         if (key > GPOINTER_TO_UINT(node->key)) {
-            return node->data;
+            return node;
         } else {
             return NULL;
         }
@@ -591,14 +765,14 @@ wmem_tree_lookup32_le(wmem_tree_t *tree, uint32_t key)
 
     if (GPOINTER_TO_UINT(node->key) <= key) {
         /* if our key is <= the search key, we have the right node */
-        return node->data;
+        return node;
     }
     else if (node == node->parent->left) {
         /* our key is bigger than the search key and we're a left child,
          * we have to check if any of our ancestors are smaller. */
         while (node) {
             if (key > GPOINTER_TO_UINT(node->key)) {
-                return node->data;
+                return node;
             }
             node=node->parent;
         }
@@ -607,18 +781,137 @@ wmem_tree_lookup32_le(wmem_tree_t *tree, uint32_t key)
     else {
         /* our key is bigger than the search key and we're a right child,
          * our parent is the one we want */
-        return node->parent->data;
+        return node->parent;
     }
+}
+
+void *
+wmem_tree_lookup32_le(const wmem_tree_t *tree, uint32_t key)
+{
+    wmem_tree_node_t *node = wmem_tree_lookup32_le_node(tree, key);
+    if (node == NULL) {
+        return NULL;
+    }
+
+    return node->data;
+}
+
+void *
+wmem_tree_lookup32_le_full(const wmem_tree_t *tree, uint32_t key, uint32_t *orig_key)
+{
+    wmem_tree_node_t *node = wmem_tree_lookup32_le_node(tree, key);
+    if (node == NULL) {
+        return NULL;
+    }
+
+    *orig_key = GPOINTER_TO_UINT(node->key);
+    return node->data;
+}
+
+static wmem_tree_node_t*
+wmem_tree_lookup32_ge_node(const wmem_tree_t *tree, uint32_t key)
+{
+    if (!tree) {
+        return NULL;
+    }
+
+    wmem_tree_node_t *node = tree->root;
+
+    while (node) {
+        if (key == GPOINTER_TO_UINT(node->key)) {
+            return node;
+        }
+        else if (key < GPOINTER_TO_UINT(node->key)) {
+            if (node->left == NULL) {
+                break;
+            }
+            node = node->left;
+        }
+        else if (key > GPOINTER_TO_UINT(node->key)) {
+            if (node->right == NULL) {
+                break;
+            }
+            node = node->right;
+        }
+    }
+
+    if (!node) {
+        return NULL;
+    }
+
+    /* If we are still at the root of the tree this means that this node
+     * is either greater than the search key and then we return this
+     * node or else there is no greater key available and then
+     * we return NULL.
+     */
+    if (node->parent == NULL) {
+        if (key < GPOINTER_TO_UINT(node->key)) {
+            return node;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (GPOINTER_TO_UINT(node->key) >= key) {
+        /* if our key is >= the search key, we have the right node */
+        return node;
+    }
+    else if (node == node->parent->right) {
+        /* our key is smaller than the search key and we're a right child,
+         * we have to check if any of our ancestors are bigger. */
+        while (node) {
+            if (key < GPOINTER_TO_UINT(node->key)) {
+                return node;
+            }
+            node=node->parent;
+        }
+        return NULL;
+    }
+    else {
+        /* our key is smaller than the search key and we're a left child,
+         * our parent is the one we want */
+        return node->parent;
+    }
+}
+
+void *
+wmem_tree_lookup32_ge(const wmem_tree_t *tree, uint32_t key)
+{
+    wmem_tree_node_t *node = wmem_tree_lookup32_ge_node(tree, key);
+    if (node == NULL) {
+        return NULL;
+    }
+
+    return node->data;
+}
+
+void *
+wmem_tree_lookup32_ge_full(const wmem_tree_t *tree, uint32_t key, uint32_t *orig_key)
+{
+    wmem_tree_node_t *node = wmem_tree_lookup32_ge_node(tree, key);
+    if (node == NULL) {
+        return NULL;
+    }
+
+    *orig_key = GPOINTER_TO_UINT(node->key);
+    return node->data;
 }
 
 void *
 wmem_tree_remove32(wmem_tree_t *tree, uint32_t key)
 {
-    void *ret = wmem_tree_lookup32(tree, key);
-    if (ret) {
-        /* Not really a remove, but set data to NULL to mark node with is_removed */
-        wmem_tree_insert32(tree, key, NULL);
+    wmem_tree_node_t *node = wmem_tree_lookup32_node(tree, key);
+    if (node == NULL) {
+        return NULL;
     }
+
+    void *ret = node->data;
+
+    /* Remove the node. Do not free the key, because it is a
+     * GPOINTER_TO_UINT. The value we return.
+     */
+    rb_remove_node(tree, node, false);
+
     return ret;
 }
 
@@ -636,11 +929,11 @@ wmem_tree_insert_string(wmem_tree_t* tree, const char* k, void* v, uint32_t flag
         cmp = (compare_func)strcmp;
     }
 
-    wmem_tree_insert(tree, key, v, cmp);
+    wmem_tree_insert_node(tree, key, v, cmp);
 }
 
 void *
-wmem_tree_lookup_string(wmem_tree_t* tree, const char* k, uint32_t flags)
+wmem_tree_lookup_string(const wmem_tree_t* tree, const char* k, uint32_t flags)
 {
     compare_func cmp;
 
@@ -696,10 +989,10 @@ wmem_tree_insert32_array(wmem_tree_t *tree, wmem_tree_key_t *key, void *data)
 }
 
 static void *
-wmem_tree_lookup32_array_helper(wmem_tree_t *tree, wmem_tree_key_t *key,
-        void*(*helper)(wmem_tree_t*, uint32_t))
+wmem_tree_lookup32_array_helper(const wmem_tree_t *tree, wmem_tree_key_t *key,
+        void*(*helper)(const wmem_tree_t*, uint32_t))
 {
-    wmem_tree_t *lookup_tree = NULL;
+    const wmem_tree_t *lookup_tree = NULL;
     wmem_tree_key_t *cur_key;
     uint32_t i, lookup_key32 = 0;
 
@@ -731,19 +1024,19 @@ wmem_tree_lookup32_array_helper(wmem_tree_t *tree, wmem_tree_key_t *key,
 }
 
 void *
-wmem_tree_lookup32_array(wmem_tree_t *tree, wmem_tree_key_t *key)
+wmem_tree_lookup32_array(const wmem_tree_t *tree, wmem_tree_key_t *key)
 {
     return wmem_tree_lookup32_array_helper(tree, key, wmem_tree_lookup32);
 }
 
 void *
-wmem_tree_lookup32_array_le(wmem_tree_t *tree, wmem_tree_key_t *key)
+wmem_tree_lookup32_array_le(const wmem_tree_t *tree, wmem_tree_key_t *key)
 {
     return wmem_tree_lookup32_array_helper(tree, key, wmem_tree_lookup32_le);
 }
 
 static bool
-wmem_tree_foreach_nodes(wmem_tree_node_t* node, wmem_foreach_func callback,
+wmem_tree_foreach_nodes(const wmem_tree_node_t* node, wmem_foreach_func callback,
         void *user_data)
 {
     bool stop_traverse = false;
@@ -780,7 +1073,7 @@ wmem_tree_foreach_nodes(wmem_tree_node_t* node, wmem_foreach_func callback,
 }
 
 bool
-wmem_tree_foreach(wmem_tree_t* tree, wmem_foreach_func callback,
+wmem_tree_foreach(const wmem_tree_t* tree, wmem_foreach_func callback,
         void *user_data)
 {
     if(!tree->root)
@@ -789,7 +1082,13 @@ wmem_tree_foreach(wmem_tree_t* tree, wmem_foreach_func callback,
     return wmem_tree_foreach_nodes(tree->root, callback, user_data);
 }
 
-static void wmem_print_subtree(wmem_tree_t *tree, uint32_t level, wmem_printer_func key_printer, wmem_printer_func data_printer);
+wmem_allocator_t*
+wmem_tree_get_data_scope(const wmem_tree_t* tree)
+{
+    return tree->data_allocator;
+}
+
+static void wmem_print_subtree(const wmem_tree_t *tree, uint32_t level, wmem_printer_func key_printer, wmem_printer_func data_printer);
 
 static void
 wmem_print_indent(uint32_t level) {
@@ -836,7 +1135,7 @@ wmem_tree_print_nodes(const char *prefix, wmem_tree_node_t *node, uint32_t level
 
 
 static void
-wmem_print_subtree(wmem_tree_t *tree, uint32_t level, wmem_printer_func key_printer, wmem_printer_func data_printer)
+wmem_print_subtree(const wmem_tree_t *tree, uint32_t level, wmem_printer_func key_printer, wmem_printer_func data_printer)
 {
     if (!tree)
         return;
@@ -850,7 +1149,7 @@ wmem_print_subtree(wmem_tree_t *tree, uint32_t level, wmem_printer_func key_prin
 }
 
 void
-wmem_print_tree(wmem_tree_t *tree, wmem_printer_func key_printer, wmem_printer_func data_printer)
+wmem_print_tree(const wmem_tree_t *tree, wmem_printer_func key_printer, wmem_printer_func data_printer)
 {
     wmem_print_subtree(tree, 0, key_printer, data_printer);
 }

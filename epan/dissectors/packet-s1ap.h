@@ -17,28 +17,30 @@
 #define PACKET_S1AP_H
 
 typedef struct _s1ap_ctx_t {
-  guint32 message_type;
-  guint32 ProcedureCode;
-  guint32 ProtocolIE_ID;
-  guint32 ProtocolExtensionID;
+  uint32_t message_type;
+  uint32_t ProcedureCode;
+  uint32_t ProtocolIE_ID;
+  uint32_t ProtocolExtensionID;
 } s1ap_ctx_t;
 
 extern const value_string s1ap_warningType_vals[];
 extern const value_string s1ap_serialNumber_gs_vals[];
 
-void dissect_s1ap_warningMessageContents(tvbuff_t *warning_msg_tvb, proto_tree *tree, packet_info *pinfo, guint8 dcs, int hf_nb_pages, int hf_decoded_page);
+void dissect_s1ap_warningMessageContents(tvbuff_t *warning_msg_tvb, proto_tree *tree, packet_info *pinfo, uint8_t dcs, int hf_nb_pages, int hf_decoded_page);
 
-WS_DLL_PUBLIC const value_string s1ap_Cause_vals[];
-WS_DLL_PUBLIC const value_string s1ap_CauseMisc_vals[];
-WS_DLL_PUBLIC const value_string s1ap_CauseProtocol_vals[];
-WS_DLL_PUBLIC const value_string s1ap_CauseRadioNetwork_vals[];
-WS_DLL_PUBLIC const value_string s1ap_CauseTransport_vals[];
-WS_DLL_PUBLIC const value_string s1ap_CauseNas_vals[];
+#include <epan/asn1.h>
+
+extern const value_string s1ap_Cause_vals[];
+extern const value_string s1ap_CauseMisc_vals[];
+extern const value_string s1ap_CauseProtocol_vals[];
+extern const value_string s1ap_CauseRadioNetwork_vals[];
+extern const value_string s1ap_CauseTransport_vals[];
+extern const value_string s1ap_CauseNas_vals[];
 extern const value_string s1ap_SONtransferRequestContainer_vals[];
 extern const value_string s1ap_SONtransferResponseContainer_vals[];
-int dissect_s1ap_Global_ENB_ID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-int dissect_s1ap_SONtransferRequestContainer(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-int dissect_s1ap_SONtransferResponseContainer(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+unsigned dissect_s1ap_Global_ENB_ID(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+unsigned dissect_s1ap_SONtransferRequestContainer(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+unsigned dissect_s1ap_SONtransferResponseContainer(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 int dissect_s1ap_Global_ENB_ID_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 int dissect_s1ap_ENB_StatusTransfer_TransparentContainer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 int dissect_s1ap_EN_DCSONConfigurationTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);

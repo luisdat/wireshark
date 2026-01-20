@@ -1,4 +1,4 @@
-/* packet-bpv7.h
+/* packet-bpsec.h
  * Definitions for Bundle Protocol Version 7 Security (BPSec) dissection
  * References:
  *     RFC 9172: https://www.rfc-editor.org/rfc/rfc9172.html
@@ -16,15 +16,17 @@
 
 #include <ws_symbol_export.h>
 #include <epan/tvbuff.h>
-#include <epan/proto.h>
-#include <epan/expert.h>
-#include <glib.h>
+#include "packet-bpv7.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
+ * A human-friendly name for a security context ID can be registered with
+ * the dissector table "bpsec.ctx". This dissector is used only for its
+ * description and not to actually dissect anything.
+ *
  * BPSec per-context parameter types and result types are registered with the
  * dissector table "bpsec.param" and "bpsec.result" respectively.
  * Both use bpsec_id_t* table keys, to identify both the context and the type
@@ -42,30 +44,22 @@ typedef enum {
 /// Parameter/Result dissector lookup
 typedef struct {
     /// Security context ID
-    gint64 context_id;
+    int64_t context_id;
     /// Parameter/Result ID
-    gint64 type_id;
+    int64_t type_id;
 } bpsec_id_t;
+
+typedef struct {
+    /// Specific type being dissected
+    bpsec_id_t id;
+    /// Pointer to containing block/bundle context
+    const bp_dissector_data_t *bp;
+} bpsec_dissector_data_t;
 
 /** Construct a new ID.
  */
 WS_DLL_PUBLIC
-bpsec_id_t * bpsec_id_new(wmem_allocator_t *alloc, gint64 context_id, gint64 type_id);
-
-/** Function to match the GDestroyNotify signature.
- */
-WS_DLL_PUBLIC
-void bpsec_id_free(wmem_allocator_t *alloc, gpointer ptr);
-
-/** Function to match the GCompareFunc signature.
- */
-WS_DLL_PUBLIC
-gboolean bpsec_id_equal(gconstpointer a, gconstpointer b);
-
-/** Function to match the GHashFunc signature.
- */
-WS_DLL_PUBLIC
-guint bpsec_id_hash(gconstpointer key);
+bpsec_id_t * bpsec_id_new(wmem_allocator_t *alloc, int64_t context_id, int64_t type_id);
 
 #ifdef __cplusplus
 }

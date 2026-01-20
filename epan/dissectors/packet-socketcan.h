@@ -37,15 +37,16 @@
  * XL and CAN classic/CAN FD frames by testing that bit.
  */
 #define CANXL_XLF 0x80 /* XL flag - if set, this is an XL frame */
-#define CANXL_SEC 0x01 /* Simple Extended Content */
+#define CANXL_SEC 0x01 /* Simple Extended Content (security/segmentation) */
+#define CANXL_RRS 0x02 /* Remote Request Substitution */
 
 /*
  * CAN frame type.
  *
  * CAN_TYPE_CAN_CLASSIC is 0, and CAN_TYPE_CAN_FD is 1, so that the
  * fd field behaves, for CAN classic and CAN FD frames, the same way
- * that it did when it was a gboolean field that was FALSE for CAN classic
- * frames and TRUE for CAN FD frames.
+ * that it did when it was a bool field that was false for CAN classic
+ * frames and true for CAN FD frames.
  */
 #define CAN_TYPE_CAN_CLASSIC 0
 #define CAN_TYPE_CAN_FD      1
@@ -53,10 +54,10 @@
 
 /* Structure that gets passed between dissectors. */
 typedef struct can_info {
-    guint32 id;
-    guint32 len;
-    guint fd;
-    guint16 bus_id;
+    uint32_t id;
+    uint32_t len;
+    unsigned fd;
+    uint16_t bus_id;
 } can_info_t;
 
 /* controller area network (CAN) kernel definitions
@@ -121,8 +122,8 @@ typedef struct can_info {
 #define CAN_ERR_PROT_LOC_EOF     0x1A /* end of frame */
 #define CAN_ERR_PROT_LOC_INTERM  0x12 /* intermission */
 
-gboolean socketcan_call_subdissectors(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct can_info *can_info, const gboolean use_heuristics_first);
-gboolean socketcan_set_source_and_destination_columns(packet_info* pinfo, can_info_t *caninfo);
+bool socketcan_call_subdissectors(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct can_info *can_info, const bool use_heuristics_first);
+bool socketcan_set_source_and_destination_columns(packet_info* pinfo, can_info_t *caninfo);
 
 /*
  * CAN XL SDU types from CAN CiA 611-1
@@ -136,6 +137,22 @@ gboolean socketcan_set_source_and_destination_columns(packet_info* pinfo, can_in
 #define CANXL_SDU_TYPE_CIA_611_2                0x08
 #define CANXL_SDU_TYPE_AUTOSAR_MPDU             0x09
 #define CANXL_SDU_TYPE_CIA_613_2                0x0A
+
+static const value_string canxl_sdu_type_vals[] = {
+    { 0x00, "Reserved" },
+    { CANXL_SDU_TYPE_CONTENT_BASED_ADDRESSING, "Content-based Addressing" },
+    { 0x02, "Reserved for future use" },
+    { CANXL_SDU_TYPE_CAN_CC_CAN_FD, "CAN CC/CAN FD" },
+    { CANXL_SDU_TYPE_IEEE_802_3, "IEEE 802.3 (MAC frame)" },
+    { CANXL_SDU_TYPE_IEEE_802_3_EXTENDED, "IEEE 802.3 (MAC frame) extended" },
+    { CANXL_SDU_TYPE_CAN_CC, "CAN CC" },
+    { CANXL_SDU_TYPE_CAN_FD, "CAN FD" },
+    { CANXL_SDU_TYPE_CIA_611_2, "CiA 611-2 (Multi-PDU)" },
+    { CANXL_SDU_TYPE_AUTOSAR_MPDU, "AUTOSAR Multi-PDU" },
+    { CANXL_SDU_TYPE_CIA_613_2, "CiA 613-2 (CANsec key agreement protocol" },
+    { 0xFF, "Reserved" },
+    { 0, NULL }
+};
 
 #endif /* __PACKET_SOCKETCAN_H__ */
 

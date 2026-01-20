@@ -12,8 +12,6 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include <stdio.h>
 
 #ifdef HAVE_UNISTD_H
@@ -44,12 +42,23 @@ public:
     ~FollowStreamDialog();
 
     void addCodecs(const QMap<QString, QTextCodec *> &codecMap);
-    bool follow(QString previous_filter = QString(), bool use_stream_index = false, guint stream_num = 0, guint sub_stream_num = 0);
+    bool follow(QString previous_filter = QString(), bool use_stream_index = false, unsigned stream_num = 0, unsigned sub_stream_num = 0);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event);
     void keyPressEvent(QKeyEvent *event);
     void captureFileClosed();
+    virtual QString labelHint(int pkt = 0);
+
+    int client_packet_count() const { return client_packet_count_; }
+    int server_packet_count() const { return server_packet_count_; }
+    int turns() const { return turns_; }
+    const follow_info_t& followInfo() const { return follow_info_; }
+
+    virtual QString serverToClientString() const;
+    virtual QString clientToServerString() const;
+    virtual QString bothDirectionsString() const;
+
 
 private slots:
     void cbCharsetCurrentIndexChanged(int idx);
@@ -86,13 +95,13 @@ private:
     void resetStream(void);
     void updateWidgets(bool follow_in_progress);
     void updateWidgets() { updateWidgets(false); } // Needed for WiresharkDialog?
-    void showBuffer(QByteArray &buffer, size_t nchars, gboolean is_from_server,
-                guint32 packet_num, nstime_t abs_ts, guint32 *global_pos);
+    void showBuffer(QByteArray &buffer, size_t nchars, bool is_from_server,
+                uint32_t packet_num, nstime_t abs_ts, uint32_t *global_pos);
     void readStream();
     void readFollowStream();
 
     void followStream();
-    void addText(QString text, gboolean is_from_server, guint32 packet_num, gboolean colorize = true);
+    void addText(QString text, bool is_from_server, uint32_t packet_num, bool colorize = true);
 
     Ui::FollowStreamDialog  *ui;
 
@@ -111,8 +120,8 @@ private:
     int                     server_buffer_count_;
     int                     client_packet_count_;
     int                     server_packet_count_;
-    guint32                 last_packet_;
-    gboolean                last_from_server_;
+    uint32_t                last_packet_;
+    bool                    last_from_server_;
     nstime_t                last_ts_;
     int                     turns_;
 

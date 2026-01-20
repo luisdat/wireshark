@@ -19,16 +19,13 @@
 #include <epan/packet.h>
 #include <epan/asn1.h>
 #include <epan/proto_data.h>
+#include <wsutil/array.h>
 
 #include "packet-isup.h"
 #include "packet-per.h"
 #include "packet-ber.h"
 #include "packet-e212.h"
 
-#ifdef _MSC_VER
-/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
-#pragma warning(disable:4146)
-#endif
 
 #define PNAME  "UTRAN Iur interface Radio Network Subsystem Application Part"
 #define PSNAME "RNSAP"
@@ -42,16 +39,16 @@ void proto_register_rnsap(void);
 void proto_reg_handoff_rnsap(void);
 
 typedef struct {
-    guint32     ProcedureCode;
-    guint32     ProtocolIE_ID;
-    guint32     ddMode;
+    uint32_t    ProcedureCode;
+    uint32_t    ProtocolIE_ID;
+    uint32_t    ddMode;
     const char *ProcedureID;
     const char *obj_id;
 } rnsap_private_data_t;
 
-static dissector_handle_t ranap_handle = NULL;
-static dissector_handle_t rrc_dl_ccch_handle = NULL;
-static dissector_handle_t rrc_ul_ccch_handle = NULL;
+static dissector_handle_t ranap_handle;
+static dissector_handle_t rrc_dl_ccch_handle;
+static dissector_handle_t rrc_ul_ccch_handle;
 
 /* Initialize the protocol and registered fields */
 static int proto_rnsap;
@@ -124,21 +121,21 @@ static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, pro
 {
   rnsap_private_data_t *pdata = rnsap_get_private_data(pinfo);
   if (!pdata->ProcedureID) return 0;
-  return (dissector_try_string(rnsap_proc_imsg_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string_with_data(rnsap_proc_imsg_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   rnsap_private_data_t *pdata = rnsap_get_private_data(pinfo);
   if (!pdata->ProcedureID) return 0;
-  return (dissector_try_string(rnsap_proc_sout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string_with_data(rnsap_proc_sout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   rnsap_private_data_t *pdata = rnsap_get_private_data(pinfo);
   if (!pdata->ProcedureID) return 0;
-  return (dissector_try_string(rnsap_proc_uout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string_with_data(rnsap_proc_uout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
@@ -163,50 +160,50 @@ dissect_rnsap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 /* Highest ProcedureCode value, used in heuristics */
 #define RNSAP_MAX_PC 61 /* id-enhancedRelocationResourceRelease = 61*/
 #define RNSAP_MSG_MIN_LENGTH 7
-static gboolean
+static bool
 dissect_sccp_rnsap_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-  guint8 pdu_type;
-  guint8 procedure_id;
-  guint8 dd_mode;
-  guint8 criticality;
-  guint8 transaction_id_type;
-  guint length;
+  uint8_t pdu_type;
+  uint8_t procedure_id;
+  uint8_t dd_mode;
+  uint8_t criticality;
+  uint8_t transaction_id_type;
+  unsigned length;
   int length_field_offset;
 
   #define PDU_TYPE_OFFSET 0
   #define PROC_CODE_OFFSET 1
   #define DD_CRIT_OFFSET 2
   if (tvb_captured_length(tvb) < RNSAP_MSG_MIN_LENGTH) {
-    return FALSE;
+    return false;
   }
 
-  pdu_type = tvb_get_guint8(tvb, PDU_TYPE_OFFSET);
+  pdu_type = tvb_get_uint8(tvb, PDU_TYPE_OFFSET);
   if (pdu_type & 0x1F) {
-    /* pdu_type is not 0x00 (initiatingMessage), 0x20 (succesfulOutcome),
-       0x40 (unsuccesfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
-    return FALSE;
+    /* pdu_type is not 0x00 (initiatingMessage), 0x20 (successfulOutcome),
+       0x40 (unsuccessfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
+    return false;
   }
 
-  procedure_id = tvb_get_guint8(tvb, PROC_CODE_OFFSET);
+  procedure_id = tvb_get_uint8(tvb, PROC_CODE_OFFSET);
   if (procedure_id > RNSAP_MAX_PC) {
-      return FALSE;
+      return false;
   }
 
-  dd_mode = tvb_get_guint8(tvb, DD_CRIT_OFFSET) >> 5;
+  dd_mode = tvb_get_uint8(tvb, DD_CRIT_OFFSET) >> 5;
   if (dd_mode >= 0x03) {
     /* dd_mode is not 0x00 (tdd), 0x01 (fdd) or 0x02 (common) */
-    return FALSE;
+    return false;
   }
 
-  criticality = (tvb_get_guint8(tvb, DD_CRIT_OFFSET) & 0x18) >> 3;
+  criticality = (tvb_get_uint8(tvb, DD_CRIT_OFFSET) & 0x18) >> 3;
   if (criticality == 0x03) {
     /* criticality is not 0x00 (reject), 0x01 (ignore) or 0x02 (notify) */
-    return FALSE;
+    return false;
   }
 
   /* Finding the offset for the length field - depends on wether the transaction id is long or short */
-  transaction_id_type = (tvb_get_guint8(tvb, DD_CRIT_OFFSET) & 0x04) >> 2;
+  transaction_id_type = (tvb_get_uint8(tvb, DD_CRIT_OFFSET) & 0x04) >> 2;
   if(transaction_id_type == 0x00) { /* Short transaction id - 1 byte*/
     length_field_offset = 4;
   }
@@ -216,25 +213,25 @@ dissect_sccp_rnsap_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
   /* compute aligned PER length determinant without calling dissect_per_length_determinant()
      to avoid exceptions and info added to tree, info column and expert info */
-  length = tvb_get_guint8(tvb, length_field_offset);
+  length = tvb_get_uint8(tvb, length_field_offset);
   length_field_offset += 1;
   if (length & 0x80) {
     if ((length & 0xc0) == 0x80) {
       length &= 0x3f;
       length <<= 8;
-      length += tvb_get_guint8(tvb, length_field_offset);
+      length += tvb_get_uint8(tvb, length_field_offset);
       length_field_offset += 1;
     } else {
       length = 0;
     }
   }
   if (length!= (tvb_reported_length(tvb) - length_field_offset)){
-    return FALSE;
+    return false;
   }
 
   dissect_rnsap(tvb, pinfo, tree, data);
 
-  return TRUE;
+  return true;
 }
 
 
@@ -259,7 +256,7 @@ void proto_register_rnsap(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_rnsap,
     &ett_rnsap_transportLayerAddress,
     &ett_rnsap_transportLayerAddress_nsap,

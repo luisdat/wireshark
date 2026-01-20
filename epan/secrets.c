@@ -37,6 +37,16 @@
 /** Maps uint32_t secrets_type -> secrets_block_callback_t. */
 static GHashTable *secrets_callbacks;
 
+typedef struct _secret_inject_data_t
+{
+    const char* name;
+    secret_inject_count_func count;
+    secret_inject_export_func inject;
+    secret_export_func export;
+} secret_inject_data_t;
+
+static wmem_map_t* secrets_injection;
+
 #ifdef HAVE_LIBGNUTLS
 /** Maps public key IDs (cert_key_id_t) -> gnutls_privkey_t.  */
 static GHashTable *rsa_privkeys;
@@ -70,6 +80,7 @@ void
 secrets_init(void)
 {
     secrets_callbacks = g_hash_table_new(g_direct_hash, g_direct_equal);
+    secrets_injection = wmem_map_new(wmem_epan_scope(), g_str_hash, g_str_equal);
 #ifdef HAVE_LIBGNUTLS
     rsa_privkeys = privkey_hash_table_new();
     register_rsa_uats();
@@ -81,6 +92,8 @@ secrets_cleanup(void)
 {
     g_hash_table_destroy(secrets_callbacks);
     secrets_callbacks = NULL;
+    wmem_map_destroy(secrets_injection, true, true);
+    secrets_injection = NULL;
 #ifdef HAVE_LIBGNUTLS
     g_hash_table_destroy(rsa_privkeys);
     rsa_privkeys = NULL;
@@ -98,6 +111,75 @@ secrets_register_type(uint32_t secrets_type, secrets_block_callback_t cb)
 }
 
 void
+secrets_register_inject_type(const char* name, secret_inject_count_func count_func, secret_inject_export_func inject_func, secret_export_func export_func)
+{
+    secret_inject_data_t* injector = wmem_new(wmem_epan_scope(), secret_inject_data_t);
+    injector->name = name;
+    injector->count = count_func;
+    injector->inject = inject_func;
+    injector->export = export_func;
+
+    wmem_map_insert(secrets_injection, injector->name, injector);
+}
+
+unsigned
+secrets_get_count(const char* name)
+{
+    secret_inject_data_t* injector = wmem_map_lookup(secrets_injection, name);
+    if (injector == NULL)
+        return 0;
+
+    return injector->count();
+}
+
+secrets_export_values
+secrets_export_dsb(const char* name, capture_file* cf)
+{
+    //lookup name
+    secret_inject_data_t* injector = wmem_map_lookup(secrets_injection, name);
+    if (injector == NULL)
+        return SECRETS_UNKNOWN_PROTOCOL;
+
+    //get count
+    unsigned count = injector->count();
+    if (count == 0)
+        return SECRETS_NO_SECRETS;
+
+    if (!injector->inject(cf))
+        return SECRETS_EXPORT_FAILED;
+
+    return SECRETS_EXPORT_SUCCESS;
+}
+
+WS_DLL_PUBLIC secrets_export_values
+secrets_export(const char* name, char** secrets, size_t* secrets_len, unsigned* num_secrets)
+{
+    //lookup name
+    secret_inject_data_t* exporter = wmem_map_lookup(secrets_injection, name);
+    if (exporter == NULL)
+        return SECRETS_UNKNOWN_PROTOCOL;
+
+    //get count
+    *num_secrets = exporter->count();
+    if (*num_secrets == 0)
+        return SECRETS_NO_SECRETS;
+
+    //XXX - Not required to provide ???
+    if (exporter->export == NULL)
+        return SECRETS_EXPORT_FAILED;
+
+    *secrets = exporter->export(secrets_len);
+    return SECRETS_EXPORT_SUCCESS;
+
+}
+
+void
+secrets_inject_foreach(GHFunc func, void* param)
+{
+    wmem_map_foreach(secrets_injection, func, param);
+}
+
+void
 secrets_wtap_callback(uint32_t secrets_type, const void *secrets, unsigned size)
 {
     secrets_block_callback_t cb = (secrets_block_callback_t)g_hash_table_lookup(
@@ -109,7 +191,7 @@ secrets_wtap_callback(uint32_t secrets_type, const void *secrets, unsigned size)
 
 #ifdef HAVE_LIBGNUTLS
 static unsigned
-key_id_hash(gconstpointer key)
+key_id_hash(const void *key)
 {
     const cert_key_id_t *key_id = (const cert_key_id_t *)key;
     const uint32_t *dw = (const uint32_t *)key_id->key_id;
@@ -120,7 +202,7 @@ key_id_hash(gconstpointer key)
 }
 
 static gboolean
-key_id_equal(gconstpointer a, gconstpointer b)
+key_id_equal(const void *a, const void *b)
 {
     const cert_key_id_t *key_id_a = (const cert_key_id_t *)a;
     const cert_key_id_t *key_id_b = (const cert_key_id_t *)b;
@@ -170,7 +252,7 @@ get_pkcs11_token_uris(void)
 
     for (unsigned i = 0; ; i++) {
         char *uri = NULL;
-        int flags;
+        unsigned flags;
         int ret = gnutls_pkcs11_token_get_url(i, GNUTLS_PKCS11_URL_GENERIC, &uri);
         if (ret == GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE) {
             break;
@@ -388,7 +470,7 @@ uat_pkcs11_libs_load_all(void)
     }
     if (err) {
         report_failure("%s", err->str);
-        g_string_free(err, true);
+        g_string_free(err, TRUE);
     }
 }
 
@@ -519,7 +601,7 @@ uat_rsa_privkeys_post_update(void)
     }
     if (errors) {
         report_failure("%s", errors->str);
-        g_string_free(errors, true);
+        g_string_free(errors, TRUE);
     }
 }
 
@@ -628,7 +710,7 @@ register_rsa_uats(void)
 }
 
 int
-secrets_rsa_decrypt(const cert_key_id_t *key_id, const uint8_t *encr, int encr_len, uint8_t **out, int *out_len)
+secrets_rsa_decrypt(const cert_key_id_t *key_id, const uint8_t *encr, unsigned encr_len, uint8_t **out, unsigned *out_len)
 {
     bool ret;
     gnutls_datum_t ciphertext = { (unsigned char *)encr, encr_len };

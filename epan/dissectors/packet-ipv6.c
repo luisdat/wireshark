@@ -28,27 +28,29 @@
 #include <epan/conversation_table.h>
 #include <epan/conversation_filter.h>
 #include <epan/reassemble.h>
-#include <epan/ipproto.h>
 #include <epan/etypes.h>
-#include <epan/ppptypes.h>
 #include <epan/aftypes.h>
-#include <epan/nlpid.h>
-#include <epan/arcnet_pids.h>
 #include <epan/decode_as.h>
 #include <epan/proto_data.h>
 #include <epan/to_str.h>
 #include <epan/exported_pdu.h>
 #include <epan/exceptions.h>
 #include <epan/iana-ip.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #include <wiretap/erf_record.h>
-#include <wsutil/str_util.h>
+#include "packet-iana-data.h"
 #include "packet-ip.h"
 #include "packet-juniper.h"
 #include "packet-sflow.h"
 #include "packet-vxlan.h"
 #include "packet-mpls.h"
 #include "packet-nsh.h"
+#include "packet-osi.h"
+#include "packet-ppp.h"
+#include "packet-arcnet.h"
+
 
 void proto_register_ipv6(void);
 void proto_reg_handoff_ipv6(void);
@@ -70,7 +72,7 @@ void proto_reg_handoff_ipv6(void);
 #define IP6OPT_CALIPSO                  0x07    /* 00 0 00111 =   7 */
 #define IP6OPT_SMF_DPD                  0x08    /* 00 0 01000 =   8 */
 #define IP6OPT_PDM                      0x0F    /* 00 0 01111 =  15 */
-#define IP6OPT_APN6                     0x13    /* 00 0 10003 =  19 */
+#define IP6OPT_APN6                     0x13    /* 00 0 10011 =  19 */
 #define IP6OPT_EXP_1E                   0x1E    /* 00 0 11110 =  30 */
 #define IP6OPT_RPL                      0x23    /* 00 1 00011 =  35 */
 #define IP6OPT_QUICKSTART               0x26    /* 00 1 00110 =  38 */
@@ -108,6 +110,7 @@ void proto_reg_handoff_ipv6(void);
 #define IP6IOAM_INC_TRACE               1       /* Incremental Trace */
 #define IP6IOAM_POT                     2       /* Proof of Transit */
 #define IP6IOAM_E2E                     3       /* Edge to Edge */
+#define IP6IOAM_DEX                     4       /* Direct Export */
 
 /* IOAM Trace Types */
 #define IP6IOAM_TRACE_MASK_BIT0         (1 << 23) /* Hop_lim + Node ID */
@@ -328,6 +331,15 @@ static int hf_ipv6_opt_ioam_trace_node_undefined;
 static int hf_ipv6_opt_ioam_trace_node_oss_len;
 static int hf_ipv6_opt_ioam_trace_node_oss_scid;
 static int hf_ipv6_opt_ioam_trace_node_oss_data;
+static int hf_ipv6_opt_ioam_dex_ns;
+static int hf_ipv6_opt_ioam_dex_flags;
+static int hf_ipv6_opt_ioam_dex_extflags;
+static int hf_ipv6_opt_ioam_dex_extflag_flag_rsv;
+static int hf_ipv6_opt_ioam_dex_extflag_flag_seqnum;
+static int hf_ipv6_opt_ioam_dex_extflag_flag_flowid;
+static int hf_ipv6_opt_ioam_dex_extflag_seqnum;
+static int hf_ipv6_opt_ioam_dex_extflag_flowid;
+static int hf_ipv6_opt_ioam_dex_rsv;
 static int hf_ipv6_opt_tpf_information;
 static int hf_ipv6_opt_mipv6_home_address;
 static int hf_ipv6_opt_rpl_flag;
@@ -495,29 +507,30 @@ static int hf_geoip_dst_as_org;
 static int hf_geoip_dst_latitude;
 static int hf_geoip_dst_longitude;
 
-static gint ett_ipv6_proto;
-static gint ett_ipv6_detail;
-static gint ett_ipv6_detail_special_purpose;
-static gint ett_ipv6_multicast_flags;
-static gint ett_ipv6_traffic_class;
-static gint ett_ipv6_opt;
-static gint ett_ipv6_opt_type;
-static gint ett_ipv6_opt_rpl;
-static gint ett_ipv6_opt_mpl;
-static gint ett_ipv6_opt_dff_flags;
-static gint ett_ipv6_opt_ioam_trace_flags;
-static gint ett_ipv6_opt_ioam_trace_types;
-static gint ett_ipv6_hopopts_proto;
-static gint ett_ipv6_fraghdr_proto;
-static gint ett_ipv6_routing_proto;
-static gint ett_ipv6_routing_srh_vect;
-static gint ett_ipv6_fragments;
-static gint ett_ipv6_fragment;
-static gint ett_ipv6_dstopts_proto;
+static int ett_ipv6_proto;
+static int ett_ipv6_detail;
+static int ett_ipv6_detail_special_purpose;
+static int ett_ipv6_multicast_flags;
+static int ett_ipv6_traffic_class;
+static int ett_ipv6_opt;
+static int ett_ipv6_opt_type;
+static int ett_ipv6_opt_rpl;
+static int ett_ipv6_opt_mpl;
+static int ett_ipv6_opt_dff_flags;
+static int ett_ipv6_opt_ioam_trace_flags;
+static int ett_ipv6_opt_ioam_trace_types;
+static int ett_ipv6_opt_ioam_dex_extflags;
+static int ett_ipv6_hopopts_proto;
+static int ett_ipv6_fraghdr_proto;
+static int ett_ipv6_routing_proto;
+static int ett_ipv6_routing_srh_vect;
+static int ett_ipv6_fragments;
+static int ett_ipv6_fragment;
+static int ett_ipv6_dstopts_proto;
 
-static gint ett_geoip_info;
+static int ett_geoip_info;
 
-static guint32 ipv6_stream_count;
+static uint32_t ipv6_stream_count;
 
 static expert_field ei_ipv6_routing_invalid_length;
 static expert_field ei_ipv6_routing_invalid_segleft;
@@ -554,6 +567,37 @@ static expert_field ei_ipv6_opt_ioam_invalid_trace_type;
 static expert_field ei_ipv6_embed_ipv4_u_value;
 
 static dissector_handle_t ipv6_handle;
+static dissector_handle_t ilnp_handle;
+
+/* Reassemble fragmented datagrams */
+static bool ipv6_reassemble = true;
+
+/* Place IPv6 summary in proto tree */
+static bool ipv6_summary_in_tree = true;
+
+/* Show expanded information about IPv6 address */
+static bool ipv6_address_detail = true;
+
+/* Perform strict RFC adherence checking */
+static bool g_ipv6_rpl_srh_strict_rfc_checking;
+
+/* Use heuristics to determine subdissector */
+static bool try_heuristic_first;
+
+/* Display IPv6 extension headers under the root tree */
+static bool ipv6_exthdr_under_root;
+
+/* Hide extension header generated field for length */
+static bool ipv6_exthdr_hide_len_oct_field;
+
+/* Assume TSO and correct zero-length IP packets */
+static bool ipv6_tso_supported;
+
+/* Assign unique ID numbers to each IPv6 conversation. This increases
+ * resource US because of having to lookup and create conversations
+ * (which aren't otherwise needed.)
+ */
+static bool ipv6_track_conv_id = true;
 
 #define set_address_ipv6(dst, src_ip6) \
     set_address((dst), AT_IPv6, IPv6_ADDR_SIZE, (src_ip6))
@@ -598,34 +642,34 @@ ipv6_pinfo_t *p_ipv6_pinfo_add_len(packet_info *pinfo, int exthdr_len)
     return p;
 }
 
-static void p_add_ipv6_nxt(packet_info *pinfo, guint8 nxt)
+static void p_add_ipv6_nxt(packet_info *pinfo, uint8_t nxt)
 {
-    guint8 *ptr;
+    uint8_t *ptr;
 
-    ptr = (guint8 *)wmem_memdup(pinfo->pool, &nxt, sizeof(guint8));
+    ptr = (uint8_t *)wmem_memdup(pinfo->pool, &nxt, sizeof(uint8_t));
     p_add_proto_data(pinfo->pool, pinfo, proto_ipv6,
                         (pinfo->curr_layer_num<<8) | IPV6_PROTO_VALUE, ptr);
 }
 
-static guint8 *p_get_ipv6_nxt(packet_info *pinfo)
+static uint8_t *p_get_ipv6_nxt(packet_info *pinfo)
 {
-    return (guint8 *)p_get_proto_data(pinfo->pool, pinfo, proto_ipv6,
+    return (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_ipv6,
                         (pinfo->curr_layer_num<<8) | IPV6_PROTO_VALUE);
 }
 
-static gpointer ipv6_value(packet_info *pinfo)
+static void *ipv6_value(packet_info *pinfo)
 {
-    guint8 *nxt = p_get_ipv6_nxt(pinfo);
+    uint8_t *nxt = p_get_ipv6_nxt(pinfo);
 
     if (nxt == NULL) {
         return GUINT_TO_POINTER(255); /* Reserved IP Protocol */
     }
-    return GUINT_TO_POINTER((guint)*nxt);
+    return GUINT_TO_POINTER((unsigned)*nxt);
 }
 
-static void ipv6_prompt(packet_info *pinfo, gchar *result)
+static void ipv6_prompt(packet_info *pinfo, char *result)
 {
-    gpointer value = ipv6_value(pinfo);
+    void *value = ipv6_value(pinfo);
 
     snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "IP protocol %u as", GPOINTER_TO_UINT(value));
 }
@@ -654,9 +698,15 @@ ipv6_conversation_packet(void *pct, packet_info *pinfo, epan_dissect_t *edt _U_,
 
     const ipv6_tap_info_t *ip6 = (const ipv6_tap_info_t *)vip;
 
-    add_conversation_table_data_with_conv_id(hash, &ip6->ip6_src, &ip6->ip6_dst, 0, 0,
-            (conv_id_t)ip6->ip6_stream, 1, pinfo->fd->pkt_len,
-            &pinfo->rel_ts, &pinfo->abs_ts, &ipv6_ct_dissector_info, CONVERSATION_IPV6);
+    if (!ipv6_track_conv_id) {
+        add_conversation_table_data(hash, &ip6->ip6_src, &ip6->ip6_dst, 0, 0,
+                1, pinfo->fd->pkt_len, &pinfo->rel_ts, &pinfo->abs_ts,
+                &ipv6_ct_dissector_info, CONVERSATION_IPV6);
+    } else {
+        add_conversation_table_data_with_conv_id(hash, &ip6->ip6_src, &ip6->ip6_dst, 0, 0,
+                (conv_id_t)ip6->ip6_stream, 1, pinfo->fd->pkt_len,
+                &pinfo->rel_ts, &pinfo->abs_ts, &ipv6_ct_dissector_info, CONVERSATION_IPV6);
+    }
 
     return TAP_PACKET_REDRAW;
 }
@@ -679,21 +729,21 @@ ipv6_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, con
 
     const ipv6_tap_info_t *ip6 = (const ipv6_tap_info_t *)vip;
 
-    add_endpoint_table_data(hash, &ip6->ip6_src, 0, TRUE, 1,
+    add_endpoint_table_data(hash, &ip6->ip6_src, 0, true, 1,
                 pinfo->fd->pkt_len, &ipv6_endpoint_dissector_info, ENDPOINT_NONE);
-    add_endpoint_table_data(hash, &ip6->ip6_dst, 0, FALSE, 1,
+    add_endpoint_table_data(hash, &ip6->ip6_dst, 0, false, 1,
                 pinfo->fd->pkt_len, &ipv6_endpoint_dissector_info, ENDPOINT_NONE);
 
     return TAP_PACKET_REDRAW;
 }
 
-static gboolean
+static bool
 ipv6_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
     return proto_is_frame_protocol(pinfo->layers, "ipv6");
 }
 
-static gchar*
+static char*
 ipv6_build_filter(packet_info *pinfo, void *user_data _U_)
 {
     return ws_strdup_printf("ipv6.addr eq %s and ipv6.addr eq %s",
@@ -701,6 +751,34 @@ ipv6_build_filter(packet_info *pinfo, void *user_data _U_)
                 address_to_str(pinfo->pool, &pinfo->net_dst));
 }
 
+/* https://www.iana.org/assignments/ipv6-parameters/ipv6-parameters.xhtml#extension-header */
+
+static bool ipv6_exthdr_check(int proto)
+{
+    switch (proto) {
+        /* fall through all cases */
+    case IP_PROTO_HOPOPT:          /* IPv6 Hop-by-Hop Option */
+    case IP_PROTO_IPV6_ROUTE:      /* Routing Header for IPv6 */
+    case IP_PROTO_IPV6_FRAG:       /* Fragment Header for IPv6 */
+    case IP_PROTO_ESP:             /* Encapsulating Security Payload */
+    case IP_PROTO_AH:              /* Authentication Header */
+    case IP_PROTO_IPV6_OPTS:       /* Destination Options for IPv6 */
+    case IP_PROTO_MOBILITY_HEADER: /* Mobility Header */
+    case IP_PROTO_HIP:             /* Host Identity Protocol */
+    case IP_PROTO_SHIM6:           /* Shim6 Protocol */
+        return true;
+    default:
+        break;
+    }
+    return false;
+}
+
+const char* ipv6extprotostr(int proto)
+{
+    if (ipv6_exthdr_check(proto))
+        return ipprotostr(proto);
+    return NULL;
+}
 
 /* UAT for providing a list of NAT64 prefixes */
 
@@ -711,26 +789,26 @@ struct nat64_prefix_data {
 };
 
 
-static uat_t *nat64_prefix_uat = NULL;
-static struct nat64_prefix_data *nat64_prefix_uats = NULL;
-static guint number_of_nat64_prefix = 0;
+static uat_t *nat64_prefix_uat;
+static struct nat64_prefix_data *nat64_prefix_uats;
+static unsigned number_of_nat64_prefix;
 
 
 UAT_CSTRING_CB_DEF(nat64_prefix_uats, ipaddr, struct nat64_prefix_data)
 
 static bool
-nat64_prefix_uat_fld_ip_chk_cb(void *r _U_, const char *ipaddr, guint len _U_, const void *u1 _U_, const void *u2 _U_, char **err)
+nat64_prefix_uat_fld_ip_chk_cb(void *r _U_, const char *ipaddr, unsigned len _U_, const void *u1 _U_, const void *u2 _U_, char **err)
 {
     /* Check for a valid IPv6 address */
     ws_in6_addr addr;
 
     if (ws_inet_pton6(ipaddr, &addr)) {
         *err = NULL;
-        return TRUE;
+        return true;
     }
 
     *err = ws_strdup_printf("No valid IPv6 address given.");
-    return FALSE;
+    return false;
 }
 
 static const value_string nat64_prefix_length_vals[] =
@@ -781,7 +859,7 @@ nat64_prefix_copy_cb(void *dst_, const void *src_, size_t len _U_)
 }
 
 
-static gint
+static int
 ipv6_previous_layer_id(packet_info *pinfo)
 {
     wmem_list_frame_t *layer;
@@ -814,30 +892,6 @@ static const fragment_items ipv6_frag_items = {
 
 static dissector_table_t ip_dissector_table;
 static dissector_table_t ipv6_routing_dissector_table;
-
-/* Reassemble fragmented datagrams */
-static bool ipv6_reassemble = true;
-
-/* Place IPv6 summary in proto tree */
-static bool ipv6_summary_in_tree = true;
-
-/* Show expanded information about IPv6 address */
-static bool ipv6_address_detail = true;
-
-/* Perform strict RFC adherence checking */
-static bool g_ipv6_rpl_srh_strict_rfc_checking = false;
-
-/* Use heuristics to determine subdissector */
-static bool try_heuristic_first = false;
-
-/* Display IPv6 extension headers under the root tree */
-static bool ipv6_exthdr_under_root = false;
-
-/* Hide extension header generated field for length */
-static bool ipv6_exthdr_hide_len_oct_field = false;
-
-/* Assume TSO and correct zero-length IP packets */
-static bool ipv6_tso_supported = false;
 
 /*
  * defragmentation of IPv6
@@ -922,7 +976,7 @@ enum {
     IPv6_OPT_HDR_ANY
 };
 
-static const gint _ipv6_opt_type_hdr[][2] = {
+static const int _ipv6_opt_type_hdr[][2] = {
     { IP6OPT_TEL,           IPv6_OPT_HDR_DST },
     { IP6OPT_RTALERT,       IPv6_OPT_HDR_HBH },
     { IP6OPT_PMTU,          IPv6_OPT_HDR_HBH },
@@ -944,10 +998,10 @@ static const gint _ipv6_opt_type_hdr[][2] = {
     { 0, IPv6_OPT_HDR_ANY }
 };
 
-static inline gint
-ipv6_opt_type_hdr(gint type)
+static inline int
+ipv6_opt_type_hdr(int type)
 {
-    const gint (*p)[2] = _ipv6_opt_type_hdr;
+    static const int (*p)[2] = _ipv6_opt_type_hdr;
 
     for (; (*p)[1] != IPv6_OPT_HDR_ANY; p++) {
         if ((*p)[0] == type) {
@@ -1022,13 +1076,13 @@ static const value_string apn_id_type_strs[] = {
         { 0, NULL }
 };
 
-static gboolean
-capture_ipv6(const guchar *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header)
+static bool
+capture_ipv6(const unsigned char *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header)
 {
-    guint8 nxt;
+    uint8_t nxt;
 
     if (!BYTES_ARE_IN_FRAME(offset, len, IPv6_HDR_SIZE))
-        return FALSE;
+        return false;
 
     capture_dissector_increment_count(cpinfo, proto_ipv6);
 
@@ -1038,17 +1092,17 @@ capture_ipv6(const guchar *pd, int offset, int len, capture_packet_info_t *cpinf
     return try_capture_dissector("ip.proto", nxt, pd, offset, len, cpinfo, pseudo_header);
 }
 
-static gboolean
-capture_ipv6_exthdr(const guchar *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header)
+static bool
+capture_ipv6_exthdr(const unsigned char *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header)
 {
-    guint8 nxt;
+    uint8_t nxt;
     int    advance;
 
     if (!BYTES_ARE_IN_FRAME(offset, len, 2))
-        return FALSE;
+        return false;
     nxt = pd[offset];
     switch (nxt) {
-        case IP_PROTO_FRAGMENT:
+        case IP_PROTO_IPV6_FRAG:
             advance = IPv6_FRAGMENT_HDR_SIZE;
             break;
         default:
@@ -1056,14 +1110,14 @@ capture_ipv6_exthdr(const guchar *pd, int offset, int len, capture_packet_info_t
             break;
     }
     if (!BYTES_ARE_IN_FRAME(offset, len, advance))
-        return FALSE;
+        return false;
     offset += advance;
 
     return try_capture_dissector("ip.proto", nxt, pd, offset, len, cpinfo, pseudo_header);
 }
 
 static void
-add_geoip_info_entry(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, gint offset, const ws_in6_addr *ip6, gboolean isdst)
+add_geoip_info_entry(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, int offset, const ws_in6_addr *ip6, bool isdst)
 {
     const mmdb_lookup_t *lookup = maxmind_db_lookup_ipv6(ip6);
     if (!lookup->found) return;
@@ -1154,31 +1208,31 @@ add_geoip_info_entry(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, gint o
 }
 
 static void
-add_geoip_info(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, gint offset, const ws_in6_addr *src, const ws_in6_addr *dst)
+add_geoip_info(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, int offset, const ws_in6_addr *src, const ws_in6_addr *dst)
 {
-    add_geoip_info_entry(tree, pinfo, tvb, offset, src, FALSE);
-    add_geoip_info_entry(tree, pinfo, tvb, offset, dst, TRUE);
+    add_geoip_info_entry(tree, pinfo, tvb, offset, src, false);
+    add_geoip_info_entry(tree, pinfo, tvb, offset, dst, true);
 }
 
-/* Returns TRUE if reassembled */
-static gboolean
-ipv6_reassemble_do(tvbuff_t **tvb_ptr, gint *offset_ptr, packet_info *pinfo, proto_tree *ipv6_tree,
-                    guint32 plen, guint16 frag_off, gboolean frag_flg, guint32 frag_ident,
-                    gboolean *show_data_ptr)
+/* Returns true if reassembled */
+static bool
+ipv6_reassemble_do(tvbuff_t **tvb_ptr, int *offset_ptr, packet_info *pinfo, proto_tree *ipv6_tree,
+                    uint32_t plen, uint16_t frag_off, bool frag_flg, uint32_t frag_ident,
+                    bool *show_data_ptr)
 {
     fragment_head   *ipfd_head;
     tvbuff_t        *next_tvb;
-    gboolean         update_col_info = TRUE;
+    bool             update_col_info = true;
 
-    pinfo->fragmented = TRUE;
-    *show_data_ptr = TRUE;
+    pinfo->fragmented = true;
+    *show_data_ptr = true;
     if (!ipv6_reassemble) {
         /* not reassembling */
         if (frag_off == 0) {
              /* first fragment */
-            *show_data_ptr = FALSE;
+            *show_data_ptr = false;
         }
-        return FALSE;
+        return false;
     }
 
     /* reassembling */
@@ -1192,20 +1246,20 @@ ipv6_reassemble_do(tvbuff_t **tvb_ptr, gint *offset_ptr, packet_info *pinfo, pro
             /* Process post-fragment headers after reassembly */
             *offset_ptr = 0;
             *tvb_ptr = next_tvb;
-            pinfo->fragmented = FALSE;
-            *show_data_ptr = FALSE;
-            return TRUE;
+            pinfo->fragmented = false;
+            *show_data_ptr = false;
+            return true;
         }
     }
-    return FALSE;
+    return false;
 }
 
 static proto_item *
-_proto_tree_add_ipv6_vector_address(proto_tree *tree, packet_info *pinfo, int hfindex, tvbuff_t *tvb, gint start,
-                            gint length, const ws_in6_addr *value_ptr, int idx)
+_proto_tree_add_ipv6_vector_address(proto_tree *tree, packet_info *pinfo, int hfindex, tvbuff_t *tvb, int start,
+                            int length, const ws_in6_addr *value_ptr, int idx)
 {
     address addr;
-    gchar *str;
+    char *str;
 
     set_address_ipv6(&addr, value_ptr);
     str = address_with_resolution_to_str(pinfo->pool, &addr);
@@ -1220,8 +1274,8 @@ dissect_routing6_rt0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     struct ws_rthdr *rt = (struct ws_rthdr *)data;
     proto_item *ti;
     int offset = 0;
-    gint idx;
-    gint rt0_addr_count;
+    int idx;
+    int rt0_addr_count;
     const ws_in6_addr *addr = NULL;
 
     proto_tree_add_item(tree, hf_ipv6_routing_src_reserved, tvb, offset, 4, ENC_NA);
@@ -1297,14 +1351,14 @@ dissect_routing6_rpl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     struct ws_rthdr *rt = (struct ws_rthdr *)data;
     proto_item *ti;
     int offset = 0;
-    guint8 cmprI, cmprE, cmprX, pad;
-    guint32 reserved;
-    gint idx;
-    gint rpl_addr_count;
+    uint8_t cmprI, cmprE, cmprX, pad;
+    uint32_t reserved;
+    int idx;
+    int rpl_addr_count;
     ws_in6_addr rpl_fulladdr;
     const ws_in6_addr *ip6_dst_addr, *ip6_src_addr;
     wmem_array_t *rpl_addr_vector = NULL;
-    guint i;
+    unsigned i;
 
     /* Must be IPv6 addresses */
     if ((pinfo->dst.type != AT_IPv6) || (pinfo->src.type != AT_IPv6))
@@ -1324,9 +1378,9 @@ dissect_routing6_rpl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     proto_tree_add_item(tree, hf_ipv6_routing_rpl_cmprE, tvb, offset, 4, ENC_BIG_ENDIAN);
     ti = proto_tree_add_item(tree, hf_ipv6_routing_rpl_pad, tvb, offset, 4, ENC_BIG_ENDIAN);
 
-    cmprI = tvb_get_guint8(tvb, offset) & 0xF0;
-    cmprE = tvb_get_guint8(tvb, offset) & 0x0F;
-    pad   = tvb_get_guint8(tvb, offset + 1) & 0xF0;
+    cmprI = tvb_get_uint8(tvb, offset) & 0xF0;
+    cmprE = tvb_get_uint8(tvb, offset) & 0x0F;
+    pad   = tvb_get_uint8(tvb, offset + 1) & 0xF0;
 
     /* Shift bytes over */
     cmprI >>= 4;
@@ -1357,7 +1411,7 @@ dissect_routing6_rpl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
         /* This error should always be reported */
         expert_add_info_format(pinfo, ti, &ei_ipv6_routing_rpl_addr_count_ge0, "Calculated total address count must be greater than or equal to 0, instead was %d", rpl_addr_count);
     }
-    else if (rt->hdr.ip6r_segleft > (guint)rpl_addr_count) {
+    else if (rt->hdr.ip6r_segleft > (unsigned)rpl_addr_count) {
         expert_add_info_format(pinfo, rt->ti_segleft, &ei_ipv6_routing_invalid_segleft,
             "IPv6 RPL Routing Header segments left field must not exceed address count (%d)", rpl_addr_count);
     }
@@ -1426,8 +1480,8 @@ dissect_routing6_srh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 {
     struct ws_rthdr *rt = (struct ws_rthdr *)data;
     int offset = 0;
-    gint addr_offset;
-    guint32 last_entry, addr_count;
+    int addr_offset;
+    uint32_t last_entry, addr_count;
 
     proto_tree_add_item_ret_uint(tree, hf_ipv6_routing_srh_last_entry,
                                     tvb, offset, 1, ENC_BIG_ENDIAN,
@@ -1466,15 +1520,15 @@ dissect_routing6_srh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 static int dissect_routing6_crh(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data)
 {
     int offset, minimum_crh_length;
-    gint sid;
+    int sid;
 
     unsigned sid_count;
     unsigned octets_per_sid;
     unsigned sids_beyond_first_word;
     unsigned sids_per_word;
     struct ws_rthdr* rt = (struct ws_rthdr*)data;
-    gboolean is_crh16 = rt->hdr.ip6r_type == IPv6_RT_HEADER_COMPACT_16;
-    guint8 segments_left = rt->hdr.ip6r_segleft;
+    bool is_crh16 = rt->hdr.ip6r_type == IPv6_RT_HEADER_COMPACT_16;
+    uint8_t segments_left = rt->hdr.ip6r_segleft;
 
     /* Compute the minimum CRH length measured in 8-octet units, not including
     the first 8 octets */
@@ -1520,8 +1574,8 @@ static int dissect_routing6_crh(tvbuff_t* tvb, packet_info* pinfo, proto_tree* t
             tvb, offset + (octets_per_sid * segments_left), octets_per_sid, ENC_BIG_ENDIAN);
         proto_item_set_generated(current_sid_item);
     }
-    sid = is_crh16 ? tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN)
-                   : tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+    sid = is_crh16 ? tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN)
+                   : tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
     proto_tree* segment_ids
         = proto_tree_add_subtree(tree, tvb, 0, -1, 0, NULL, "Segment Identifiers");
     for (unsigned i = 0; i < sid_count && sid; i++) {
@@ -1533,8 +1587,8 @@ static int dissect_routing6_crh(tvbuff_t* tvb, packet_info* pinfo, proto_tree* t
                 octets_per_sid, sid, "SID[%d] = %d", i, sid);
         }
         offset += octets_per_sid;
-        sid = is_crh16 ? tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN)
-                       : tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+        sid = is_crh16 ? tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN)
+                       : tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
     }
 
     return tvb_captured_length(tvb);
@@ -1554,7 +1608,7 @@ static int dissect_routing6_crh(tvbuff_t* tvb, packet_info* pinfo, proto_tree* t
 static int
 dissect_routing6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) {
     struct ws_rthdr    rt;
-    guint              nxt, hdr_len, total_len;
+    unsigned           nxt, hdr_len, total_len;
     proto_tree        *rt_tree, *root_tree;
     proto_item        *pi, *ti, *ti_hdr_len, *ti_type, *ti_segs;
     int                offset = 0;
@@ -1570,11 +1624,11 @@ dissect_routing6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
     rt_tree = proto_item_add_subtree(pi, ett_ipv6_routing_proto);
 
     proto_tree_add_item(rt_tree, hf_ipv6_routing_nxt, tvb, offset, 1, ENC_BIG_ENDIAN);
-    nxt = tvb_get_guint8(tvb, offset);
+    nxt = tvb_get_uint8(tvb, offset);
     offset += 1;
 
     ti_hdr_len = proto_tree_add_item(rt_tree, hf_ipv6_routing_len, tvb, offset, 1, ENC_BIG_ENDIAN);
-    hdr_len = tvb_get_guint8(tvb, offset);
+    hdr_len = tvb_get_uint8(tvb, offset);
     /*
           Hdr Ext Len         8-bit unsigned integer.  Length of the Routing
                               header in 8-octet units, not including the
@@ -1594,8 +1648,8 @@ dissect_routing6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
     offset += 1;
 
     ti_type = proto_tree_add_item(rt_tree, hf_ipv6_routing_type, tvb, offset, 1, ENC_BIG_ENDIAN);
-    type = tvb_get_guint8(tvb, offset);
-    proto_item_append_text(pi, " (%s)", val_to_str(type, routing_header_type, "Unknown type %u"));
+    type = tvb_get_uint8(tvb, offset);
+    proto_item_append_text(pi, " (%s)", val_to_str(pinfo->pool, type, routing_header_type, "Unknown type %u"));
     offset += 1;
 
     ti_segs = proto_tree_add_item(rt_tree, hf_ipv6_routing_segleft, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1626,18 +1680,18 @@ static int
 dissect_fraghdr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) {
     proto_item      *pi, *ti;
     proto_tree      *frag_tree, *root_tree;
-    guint8           nxt;
-    guint16          offlg;
-    guint16          frag_off;
-    gboolean         frag_flg;
-    guint32          frag_ident;
-    gint             offset = 0;
+    uint8_t          nxt;
+    uint16_t         offlg;
+    uint16_t         frag_off;
+    bool             frag_flg;
+    uint32_t         frag_ident;
+    int              offset = 0;
     ipv6_pinfo_t    *ipv6_pinfo;
-    gboolean         show_data = FALSE;
-    gboolean         reassembled;
+    bool             show_data = false;
+    bool             reassembled;
     tvbuff_t        *next_tvb;
 
-    nxt = tvb_get_guint8(tvb, offset);
+    nxt = tvb_get_uint8(tvb, offset);
     offlg = tvb_get_ntohs(tvb, offset + 2);
     frag_off = offlg & IP6F_OFF_MASK; /* offset in bytes */
     frag_flg = offlg & IP6F_MORE_FRAG;
@@ -1700,6 +1754,7 @@ dissect_fraghdr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
 struct opt_proto_item {
     proto_item *type, *len;
+    proto_tree *root_tree;
 };
 
 /*
@@ -1711,13 +1766,13 @@ struct opt_proto_item {
    |                     Jumbo Payload Length                      |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_jumbo(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                    struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_jumbo(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                    struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     proto_item *pi = proto_tree_get_parent(opt_tree);
     proto_item *ti;
-    guint32 jumbo_plen = 0;
+    uint32_t jumbo_plen = 0;
     ipv6_pinfo_t *ipv6_pinfo = p_get_ipv6_pinfo(pinfo);
 
     if (opt_len != 4) {
@@ -1750,9 +1805,9 @@ dissect_opt_jumbo(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *op
      |                         (sub-TLVs)                            |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_rpl(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                    struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_rpl(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                    struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     static int * const rpl_flags[] = {
         &hf_ipv6_opt_rpl_flag_o,
@@ -1787,9 +1842,9 @@ dissect_opt_rpl(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_
    |0 0 0 0 0 1 0 0|       1       | Tun Encap Lim |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_tel(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                    struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_tel(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                    struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     if (opt_len != 1) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -1843,11 +1898,11 @@ dissect_opt_tel(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_
               <https://www.iana.org/assignments/ipv6-parameters/
               ipv6-parameters.xhtml#ipv6-parameters-2>
 */
-static gint
-dissect_opt_pmtu(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                        struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_pmtu(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                        struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
-    guint16 val;
+    uint16_t val;
 
     if (opt_len != 4) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -1883,19 +1938,19 @@ dissect_opt_pmtu(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt
    |                    (32-bit/64-bit/128-bit)                    |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  * */
-static gint
-dissect_opt_apn6(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                 struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_apn6(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                 struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     if (opt_len < 8) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
               "APN6 Option: Invalid Length (%u bytes) for basic APN header and shortest APN ID(32-bit)", opt_len);
     }
 
-    guint32 parsed_offset = 0; // offset is for DOH header; parsed_offset is for APN option.
+    uint32_t parsed_offset = 0; // offset is for DOH header; parsed_offset is for APN option.
     proto_tree *sub_tree = proto_tree_add_subtree(opt_tree, tvb, offset, opt_len, 0, NULL, "APN Header");
 
-    guint8 apn_id_type = tvb_get_guint8(tvb, offset);
+    uint8_t apn_id_type = tvb_get_uint8(tvb, offset);
     proto_item *apn_id_type_i = proto_tree_add_item(sub_tree, hf_ipv6_opt_apn_id_type, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
@@ -1957,9 +2012,9 @@ dissect_opt_apn6(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
                       length = 2
 */
-static gint
-dissect_opt_rtalert(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                        struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_rtalert(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                        struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     if (opt_len != 2) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -1983,21 +2038,21 @@ dissect_opt_rtalert(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *
    |                        QS Nonce                           | R |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_quickstart(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                        struct opt_proto_item *opt_ti, guint8 opt_len, ws_ip6 *iph)
+static int
+dissect_opt_quickstart(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                        struct opt_proto_item *opt_ti, uint8_t opt_len, ws_ip6 *iph)
 {
     proto_item *pi = proto_tree_get_parent(opt_tree);
     proto_item *ti;
-    guint8 command, function, rate;
-    guint32 qs_ttl = 0;
+    uint8_t command, function, rate;
+    uint32_t qs_ttl = 0;
 
     if (opt_len != 6) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
                 "Quick-Start: Invalid Length (%u bytes)", opt_len);
     }
 
-    command = tvb_get_guint8(tvb, offset);
+    command = tvb_get_uint8(tvb, offset);
     function = command >> 4;
     rate = command & QS_RATE_MASK;
 
@@ -2009,10 +2064,10 @@ dissect_opt_quickstart(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tre
         offset += 1;
         proto_tree_add_item_ret_uint(opt_tree, hf_ipv6_opt_qs_ttl, tvb, offset, 1, ENC_BIG_ENDIAN, &qs_ttl);
         proto_item_append_text(pi, ", %s, QS TTL %u",
-                               val_to_str_ext(rate, &qs_rate_vals_ext, "Unknown (%u)"),
+                               val_to_str_ext(pinfo->pool, rate, &qs_rate_vals_ext, "Unknown (%u)"),
                                qs_ttl);
         if (iph != NULL) {
-            guint8 ttl_diff;
+            uint8_t ttl_diff;
 
             ttl_diff = (iph->ip6_hop - qs_ttl) % 256;
             ti = proto_tree_add_uint(opt_tree, hf_ipv6_opt_qs_ttl_diff, tvb, offset, 1, ttl_diff);
@@ -2026,7 +2081,7 @@ dissect_opt_quickstart(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tre
         break;
     case QS_RATE_REPORT:
         proto_tree_add_item(opt_tree, hf_ipv6_opt_qs_rate, tvb, offset, 1, ENC_BIG_ENDIAN);
-        proto_item_append_text(pi, ", %s", val_to_str_ext(rate, &qs_rate_vals_ext, "Unknown (%u)"));
+        proto_item_append_text(pi, ", %s", val_to_str_ext(pinfo->pool, rate, &qs_rate_vals_ext, "Unknown (%u)"));
         offset += 1;
         proto_tree_add_item(opt_tree, hf_ipv6_opt_qs_unused, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
@@ -2046,12 +2101,13 @@ static const value_string ipv6_ioam_opt_types[] = {
     { IP6IOAM_INC_TRACE,  "Incremental Trace"   },
     { IP6IOAM_POT,        "Proof of Transit"    },
     { IP6IOAM_E2E,        "Edge to Edge"        },
+    { IP6IOAM_DEX,        "Direct Export"       },
     { 0, NULL}
 };
 
-static gint
-dissect_opt_ioam_trace_node(tvbuff_t *tvb, gint offset,
-                            proto_tree *opt_tree, guint32 trace_type)
+static int
+dissect_opt_ioam_trace_node(tvbuff_t *tvb, int offset,
+                            proto_tree *opt_tree, uint32_t trace_type)
 {
     proto_tree* sub_tree;
 
@@ -2235,15 +2291,15 @@ dissect_opt_ioam_trace_node(tvbuff_t *tvb, gint offset,
      |                                                               |  |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+<-+
 */
-static gint
-dissect_opt_ioam_trace(tvbuff_t *tvb, gint offset, packet_info *pinfo,
-                       proto_tree *opt_tree, struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_ioam_trace(tvbuff_t *tvb, int offset, packet_info *pinfo,
+                       proto_tree *opt_tree, struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     proto_item *ti;
-    guint32 trace_type, oss_scid;
-    guint16 len;
-    guint8 remlen, nodelen, oss_len, i = 0;
-    gint new_offset;
+    uint32_t trace_type, oss_scid;
+    uint16_t len;
+    uint8_t remlen, nodelen, oss_len, i = 0;
+    int new_offset;
 
     static int * const ioam_trace_flags[] = {
         &hf_ipv6_opt_ioam_trace_flag_o,
@@ -2285,7 +2341,7 @@ dissect_opt_ioam_trace(tvbuff_t *tvb, gint offset, packet_info *pinfo,
                              offset * 8, 5, ENC_BIG_ENDIAN);
 
     proto_tree_add_bitmask(opt_tree, tvb, offset, hf_ipv6_opt_ioam_trace_flags,
-                           ett_ipv6_opt_ioam_trace_flags, ioam_trace_flags, ENC_NA);
+                           ett_ipv6_opt_ioam_trace_flags, ioam_trace_flags, ENC_BIG_ENDIAN);
 
     remlen = tvb_get_bits8(tvb, offset * 8 + 9, 7);
     ti = proto_tree_add_bits_item(opt_tree, hf_ipv6_opt_ioam_trace_remlen, tvb,
@@ -2343,7 +2399,7 @@ dissect_opt_ioam_trace(tvbuff_t *tvb, gint offset, packet_info *pinfo,
                 return offset;
             }
 
-            oss_len = tvb_get_guint8(tvb, offset);
+            oss_len = tvb_get_uint8(tvb, offset);
 
             proto_tree* oss_tree
                 = proto_tree_add_subtree(node_tree, tvb, offset, (oss_len + 1) * 4,
@@ -2380,6 +2436,87 @@ dissect_opt_ioam_trace(tvbuff_t *tvb, gint offset, packet_info *pinfo,
 }
 
 /*
+ * IOAM Direct Export Option Header
+ *
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |        Namespace-ID           |     Flags     |Extension-Flags|
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |               IOAM-Trace-Type                 |   Reserved    |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                         Flow ID (Optional)                    |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                     Sequence Number  (Optional)               |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+static int
+dissect_opt_ioam_dex(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+    struct opt_proto_item *opt_ti, uint8_t opt_len)
+{
+    uint8_t extflags;
+
+    static int * const ioam_dex_extflags[] = {
+        &hf_ipv6_opt_ioam_dex_extflag_flag_rsv,
+        &hf_ipv6_opt_ioam_dex_extflag_flag_seqnum,
+        &hf_ipv6_opt_ioam_dex_extflag_flag_flowid,
+        NULL
+    };
+
+    static int * const ioam_dex_trace_types[] = {
+        &hf_ipv6_opt_ioam_trace_type_bit0,
+        &hf_ipv6_opt_ioam_trace_type_bit1,
+        &hf_ipv6_opt_ioam_trace_type_bit2,
+        &hf_ipv6_opt_ioam_trace_type_bit3,
+        &hf_ipv6_opt_ioam_trace_type_bit4,
+        &hf_ipv6_opt_ioam_trace_type_bit5,
+        &hf_ipv6_opt_ioam_trace_type_bit6,
+        &hf_ipv6_opt_ioam_trace_type_bit7,
+        &hf_ipv6_opt_ioam_trace_type_bit8,
+        &hf_ipv6_opt_ioam_trace_type_bit9,
+        &hf_ipv6_opt_ioam_trace_type_bit10,
+        &hf_ipv6_opt_ioam_trace_type_bit11,
+        &hf_ipv6_opt_ioam_trace_type_undef,
+        &hf_ipv6_opt_ioam_trace_type_bit22,
+        &hf_ipv6_opt_ioam_trace_type_rsv,
+        NULL
+    };
+
+    if (opt_len < 10) {
+        expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
+                               "IOAM Option: Invalid length (%u bytes)", opt_len);
+    }
+
+    proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_dex_ns, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+
+    proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_dex_flags, tvb, offset, 1, ENC_NA);
+    offset++;
+
+    extflags = tvb_get_bits8(tvb, offset*8, 8);
+    proto_tree_add_bitmask(opt_tree, tvb, offset, hf_ipv6_opt_ioam_dex_extflags,
+                           ett_ipv6_opt_ioam_dex_extflags, ioam_dex_extflags, ENC_BIG_ENDIAN);
+    offset++;
+
+    proto_tree_add_bitmask(opt_tree, tvb, offset, hf_ipv6_opt_ioam_trace_type,
+                                ett_ipv6_opt_ioam_trace_types, ioam_dex_trace_types, ENC_BIG_ENDIAN);
+    proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_trace_rsv, tvb, offset + 3, 1, ENC_NA);
+    offset += 4;
+
+    if (extflags & 0x80) {
+        proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_dex_extflag_flowid, tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset+=4;
+    }
+
+    if (extflags & 0x40) {
+        proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_dex_extflag_seqnum, tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset+=4;
+    }
+
+    return offset;
+}
+
+/*
  * IOAM Option Header
  *
       0                   1                   2                   3
@@ -2388,11 +2525,11 @@ dissect_opt_ioam_trace(tvbuff_t *tvb, gint offset, packet_info *pinfo,
      |  Option Type  |  Opt Data Len |   Reserved    |   IOAM Type   |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_ioam(tvbuff_t *tvb, gint offset, packet_info *pinfo,
-                 proto_tree *opt_tree, struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_ioam(tvbuff_t *tvb, int offset, packet_info *pinfo,
+                 proto_tree *opt_tree, struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
-    guint32 opt_type;
+    uint32_t opt_type;
 
     if (opt_len < 2) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -2418,6 +2555,8 @@ dissect_opt_ioam(tvbuff_t *tvb, gint offset, packet_info *pinfo,
         break;
     case IP6IOAM_E2E:
         break;
+    case IP6IOAM_DEX:
+        offset = dissect_opt_ioam_dex(tvb, offset, pinfo, opt_type_tree, opt_ti, opt_len);
     }
 
     return offset;
@@ -2434,9 +2573,9 @@ dissect_opt_ioam(tvbuff_t *tvb, gint offset, packet_info *pinfo,
      |                        TPF Information                        |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_tpf(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                        struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_tpf(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                        struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     if (opt_len != 4) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -2459,11 +2598,11 @@ dissect_opt_tpf(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_
    |      Compartment Bitmap (Optional; variable length)      |
    +-------------+---------------+-------------+--------------+
 */
-static gint
-dissect_opt_calipso(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                    struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_calipso(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                    struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
-    guint32 cmpt_length = 0;
+    uint32_t cmpt_length = 0;
 
     if (opt_len < 8) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -2518,16 +2657,16 @@ dissect_opt_calipso(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *
 
            Figure 4: IPv6 SMF_DPD Option Header in H-DPD Mode
 */
-static gint
-dissect_opt_smf_dpd(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *opt_tree,
-                    struct opt_proto_item *opt_ti _U_, guint8 opt_len)
+static int
+dissect_opt_smf_dpd(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *opt_tree,
+                    struct opt_proto_item *opt_ti _U_, uint8_t opt_len)
 {
-    guint8 hash_tid;
-    guint8 tid_len;
-    gint ident_len;
+    uint8_t hash_tid;
+    uint8_t tid_len;
+    int ident_len;
 
     proto_tree_add_item(opt_tree, hf_ipv6_opt_smf_dpd_hash_bit, tvb, offset, 1, ENC_BIG_ENDIAN);
-    hash_tid = tvb_get_guint8(tvb, offset);
+    hash_tid = tvb_get_uint8(tvb, offset);
 
     if (hash_tid & 0x80) {
         /* H-DPD Mode */
@@ -2567,9 +2706,9 @@ dissect_opt_smf_dpd(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tr
       |   Delta Time Last Received    |  Delta Time Last Sent         |
       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_pdm(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *opt_tree,
-                    struct opt_proto_item *opt_ti _U_, guint8 opt_len)
+static int
+dissect_opt_pdm(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *opt_tree,
+                    struct opt_proto_item *opt_ti _U_, uint8_t opt_len)
 {
     if (opt_len != 10) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -2608,9 +2747,9 @@ dissect_opt_pdm(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *
       |                                                               |
       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_home_address(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                            struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_home_address(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                            struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     if (opt_len != 16) {
         expert_add_info_format(pinfo, opt_ti->len, &ei_ipv6_opt_invalid_len,
@@ -2635,13 +2774,17 @@ dissect_opt_home_address(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_t
     /                         Nonce Value                           /
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_ilnp_nonce(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *opt_tree,
-                            struct opt_proto_item *opt_ti _U_, guint8 opt_len)
+static int
+dissect_opt_ilnp_nonce(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *opt_tree,
+                            struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     proto_tree_add_item(opt_tree, hf_ipv6_opt_ilnp_nonce, tvb, offset, opt_len, ENC_NA);
-    offset += opt_len;
 
+    // Make a new tvb for the ILNP protocol
+    tvbuff_t* tvb_ilnp = tvb_new_subset_length(tvb, offset, opt_len);
+    call_dissector_with_data(ilnp_handle, tvb_ilnp, pinfo, proto_tree_get_parent(opt_ti->root_tree), NULL);
+
+    offset += opt_len;
     return offset;
 }
 
@@ -2656,11 +2799,11 @@ dissect_opt_ilnp_nonce(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto
    | LineIDLen     |     Line ID...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_lio(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *opt_tree,
-                            struct opt_proto_item *opt_ti _U_, guint8 opt_len)
+static int
+dissect_opt_lio(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *opt_tree,
+                            struct opt_proto_item *opt_ti _U_, uint8_t opt_len)
 {
-    guint32 lid_len = 0;
+    uint32_t lid_len = 0;
 
     proto_tree_add_item_ret_uint(opt_tree, hf_ipv6_opt_lio_len, tvb, offset, 1, ENC_BIG_ENDIAN, &lid_len);
     offset += 1;
@@ -2686,9 +2829,9 @@ dissect_opt_lio(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *
      | S |M|V|  rsv  |   sequence    |      seed-id (optional)       |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_mpl(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *opt_tree,
-                    struct opt_proto_item *opt_ti _U_, guint8 opt_len _U_)
+static int
+dissect_opt_mpl(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *opt_tree,
+                    struct opt_proto_item *opt_ti _U_, uint8_t opt_len _U_)
 {
     static int * const mpl_flags[] = {
         &hf_ipv6_opt_mpl_flag_s,
@@ -2697,11 +2840,11 @@ dissect_opt_mpl(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *
         &hf_ipv6_opt_mpl_flag_rsv,
         NULL
     };
-    static const guint8 seed_id_len_arr[4] = {0, 2, 8, 16};
-    guint8 seed_id_len;
+    static const uint8_t seed_id_len_arr[4] = {0, 2, 8, 16};
+    uint8_t seed_id_len;
 
     proto_tree_add_bitmask(opt_tree, tvb, offset, hf_ipv6_opt_mpl_flag, ett_ipv6_opt_mpl, mpl_flags, ENC_NA);
-    seed_id_len = seed_id_len_arr[tvb_get_guint8(tvb, offset) >> 6];
+    seed_id_len = seed_id_len_arr[tvb_get_uint8(tvb, offset) >> 6];
     offset +=1;
 
     proto_tree_add_item(opt_tree, hf_ipv6_opt_mpl_sequence, tvb, offset, 1, ENC_NA);
@@ -2728,9 +2871,9 @@ dissect_opt_mpl(tvbuff_t *tvb, gint offset, packet_info *pinfo _U_, proto_tree *
      |VER|D|R|0|0|0|0|        Sequence Number        |      Pad1     |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-static gint
-dissect_opt_dff(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                            struct opt_proto_item *opt_ti, guint8 opt_len)
+static int
+dissect_opt_dff(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                            struct opt_proto_item *opt_ti, uint8_t opt_len)
 {
     static int * const dff_flags[] = {
         &hf_ipv6_opt_dff_flag_ver,
@@ -2755,9 +2898,9 @@ dissect_opt_dff(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_
     return offset;
 }
 
-static gint
-dissect_opt_unknown(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *opt_tree,
-                            struct opt_proto_item *opt_ti _U_, guint8 opt_len)
+static int
+dissect_opt_unknown(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *opt_tree,
+                            struct opt_proto_item *opt_ti _U_, uint8_t opt_len)
 {
     proto_item *ti;
 
@@ -2771,23 +2914,23 @@ dissect_opt_unknown(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *
 static int
 dissect_opts(tvbuff_t *tvb, int offset, proto_tree *tree, packet_info *pinfo, ws_ip6 *iph, const int exthdr_proto)
 {
-    gint            len, offset_end;
-    guint8          nxt;
+    int             len, offset_end;
+    uint8_t         nxt;
     proto_tree     *exthdr_tree, *opt_tree, *opt_type_tree, *root_tree;
     proto_item     *pi, *ti, *ti_len;
     int             hf_exthdr_item_nxt, hf_exthdr_item_len, hf_exthdr_item_len_oct;
     int             ett_exthdr_proto;
-    guint8          opt_type, opt_len, opt_start;
-    gint            opt_hdr_type;
-    const gchar    *opt_name;
-    gboolean        hopopts;
+    uint8_t         opt_type, opt_len, opt_start;
+    int             opt_hdr_type;
+    const char     *opt_name;
+    bool            hopopts;
     struct opt_proto_item opt_ti;
     tvbuff_t       *next_tvb;
 
     hopopts = (exthdr_proto == proto_ipv6_hopopts);
 
-    nxt = tvb_get_guint8(tvb, offset);
-    len = (tvb_get_guint8(tvb, offset + 1) + 1) << 3;
+    nxt = tvb_get_uint8(tvb, offset);
+    len = (tvb_get_uint8(tvb, offset + 1) + 1) << 3;
     offset_end = offset + len;
 
     root_tree = p_ipv6_pinfo_select_root(pinfo, tree);
@@ -2832,15 +2975,17 @@ dissect_opts(tvbuff_t *tvb, int offset, proto_tree *tree, packet_info *pinfo, ws
     while (offset < offset_end) {
         /* there are more options */
 
-        opt_type = tvb_get_guint8(tvb, offset);
-        opt_len = tvb_get_guint8(tvb, offset + 1);
-        opt_name = val_to_str_ext(opt_type, &ipv6_opt_type_vals_ext, "Unknown IPv6 Option (%u)");
+        opt_type = tvb_get_uint8(tvb, offset);
+        opt_len = tvb_get_uint8(tvb, offset + 1);
+        opt_name = val_to_str_ext(pinfo->pool, opt_type, &ipv6_opt_type_vals_ext, "Unknown IPv6 Option (%u)");
 
         pi = proto_tree_add_none_format(exthdr_tree, hf_ipv6_opt, tvb, offset, 2 + opt_len,
                     "%s", opt_name);
         opt_tree = proto_item_add_subtree(pi, ett_ipv6_opt);
 
         opt_ti.type = proto_tree_add_item(opt_tree, hf_ipv6_opt_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+        //Allow options to have access to the IP tree
+        opt_ti.root_tree = tree;
 
         if (opt_type == IP6OPT_PAD1) {
             /* The Pad1 option is a special case, and contains no data. */
@@ -2986,33 +3131,33 @@ dissect_dstopts(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     return dissect_opts(tvb, 0, tree, pinfo, (ws_ip6 *)data, proto_ipv6_dstopts);
 }
 
-/* return value is > G_MAXUINT16, else zero */
+/* return value is > UINT16_MAX, else zero */
 /* tvb + offset contains the Hbh header */
-static guint32
-ipv6_get_jumbo_plen(tvbuff_t *tvb, gint offset)
+static uint32_t
+ipv6_get_jumbo_plen(tvbuff_t *tvb, int offset)
 {
-    gint         offset_end, hdr_len;
-    gint         opt_type, opt_len;
-    guint32      jumbo_plen;
+    int          offset_end, hdr_len;
+    int          opt_type, opt_len;
+    uint32_t     jumbo_plen;
 
     if (!tvb_bytes_exist(tvb, offset, 2)) {
         return 0;
     }
-    hdr_len = (tvb_get_guint8(tvb, offset + 1) + 1) * 8;
+    hdr_len = (tvb_get_uint8(tvb, offset + 1) + 1) * 8;
     offset_end = offset + hdr_len;
     offset +=2;
 
     while (offset < offset_end && tvb_bytes_exist(tvb, offset, 6)) {
-        opt_type = tvb_get_guint8(tvb, offset);
+        opt_type = tvb_get_uint8(tvb, offset);
         offset += 1;
         if (opt_type == IP6OPT_PAD1) {
             continue;
         }
-        opt_len = tvb_get_guint8(tvb, offset);
+        opt_len = tvb_get_uint8(tvb, offset);
         offset += 1;
         if (opt_type == IP6OPT_JUMBO && opt_len == 4) {
-            jumbo_plen = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
-            if (jumbo_plen > G_MAXUINT16) {
+            jumbo_plen = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+            if (jumbo_plen > UINT16_MAX) {
                 return jumbo_plen;
             }
             return 0;
@@ -3037,7 +3182,7 @@ add_ipv6_address_detail(packet_info *pinfo, proto_item *vis, proto_item *invis,
      * Internet Protocol Version 6 Address Space
      * https://www.iana.org/assignments/ipv6-address-space/ipv6-address-space.xhtml
      */
-    if (tvb_get_guint8(tvb, offset) == 0xFF) {
+    if (tvb_get_uint8(tvb, offset) == 0xFF) {
         /* RFC 4291 section 2.4: multicast prefix */
         ti = proto_tree_add_string(vtree, *addr_info->hf_addr_space, tvb, offset, 1, "Multicast");
         proto_item_set_generated(ti);
@@ -3090,13 +3235,13 @@ add_ipv6_address_detail(packet_info *pinfo, proto_item *vis, proto_item *invis,
         ti = proto_tree_add_string(itree, hf_ipv6_addr_space, tvb, offset, 2, "Link-Local Unicast");
         proto_item_set_generated(ti);
     }
-    else if ((tvb_get_guint8(tvb, offset) & 0x30) == 0x20) {
+    else if ((tvb_get_uint8(tvb, offset) & 0x30) == 0x20) {
         ti = proto_tree_add_string(vtree, *addr_info->hf_addr_space, tvb, offset, 2, "Global Unicast");
         proto_item_set_generated(ti);
         ti = proto_tree_add_string(itree, hf_ipv6_addr_space, tvb, offset, 2, "Global Unicast");
         proto_item_set_generated(ti);
     }
-    else if ((tvb_get_guint8(tvb, offset) & 0xFE) == 0xFC) {
+    else if ((tvb_get_uint8(tvb, offset) & 0xFE) == 0xFC) {
         ti = proto_tree_add_string(vtree, *addr_info->hf_addr_space, tvb, offset, 2, "Unique Local Unicast");
         proto_item_set_generated(ti);
         ti = proto_tree_add_string(itree, hf_ipv6_addr_space, tvb, offset, 2, "Unique Local Unicast");
@@ -3161,7 +3306,7 @@ static void
 add_ipv6_address(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset,
                         struct ipv6_addr_info_s *addr_info)
 {
-    address addr;
+    ws_in6_addr addr;
     const char *name;
     proto_item *ti, *vis, *invis;
 
@@ -3169,13 +3314,18 @@ add_ipv6_address(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset
     invis = proto_tree_add_item(tree, hf_ipv6_addr, tvb, offset, IPv6_ADDR_SIZE, ENC_NA);
     proto_item_set_hidden(invis);
 
-    set_address_ipv6_tvb(&addr, tvb, offset);
-    name = address_to_display(pinfo->pool, &addr);
-
     if (ipv6_address_detail) {
         add_ipv6_address_detail(pinfo, vis, invis, tvb, offset, addr_info);
     }
 
+    if (!proto_field_is_referenced(tree, *addr_info->hf_host) &&
+        !proto_field_is_referenced(tree, hf_ipv6_host)) {
+
+        return;
+    }
+
+    tvb_get_ipv6(tvb, offset, &addr);
+    name = get_hostname6_wmem(pinfo->pool, &addr);
     ti = proto_tree_add_string(tree, *addr_info->hf_host, tvb, offset, IPv6_ADDR_SIZE, name);
     proto_item_set_generated(ti);
     proto_item_set_hidden(ti);
@@ -3193,12 +3343,12 @@ add_ipv6_address(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset
 /* RFC 3056 section 2 */
 static void
 add_ipv6_address_6to4(proto_tree *tree, tvbuff_t *tvb, int offset,
-                        gint hf_gateway, gint hf_sla_id)
+                        int hf_gateway, int hf_sla_id)
 {
     if (tvb_get_ntohs(tvb, offset) != 0x2002)
         return;
 
-    struct { gint gateway, sla_id; } hf[2] = {
+    struct { int gateway, sla_id; } hf[2] = {
         { hf_gateway, hf_sla_id},
         { hf_ipv6_6to4_gateway_ipv4, hf_ipv6_6to4_sla_id}
     };
@@ -3214,15 +3364,15 @@ add_ipv6_address_6to4(proto_tree *tree, tvbuff_t *tvb, int offset,
 /* RFC 4380 section 4 */
 static void
 add_ipv6_address_teredo(proto_tree *tree, tvbuff_t *tvb, int offset,
-                        gint hf_server, gint hf_port, gint hf_client)
+                        int hf_server, int hf_port, int hf_client)
 {
     if (tvb_get_ntohl(tvb, offset) != 0x20010000)
         return;
 
-    guint16 mapped_port = tvb_get_ntohs(tvb, offset + 10) ^ 0xffff;
-    guint32 client_v4 = tvb_get_ipv4(tvb, offset + 12) ^ 0xffffffff;
+    uint16_t mapped_port = tvb_get_ntohs(tvb, offset + 10) ^ 0xffff;
+    uint32_t client_v4 = tvb_get_ipv4(tvb, offset + 12) ^ 0xffffffff;
 
-    struct { gint server, port, client; } hf[2] = {
+    struct { int server, port, client; } hf[2] = {
         { hf_server, hf_port, hf_client },
         { hf_ipv6_teredo_server_ipv4, hf_ipv6_teredo_port, hf_ipv6_teredo_client_ipv4 }
     };
@@ -3239,19 +3389,19 @@ add_ipv6_address_teredo(proto_tree *tree, tvbuff_t *tvb, int offset,
 
 /* RFC 4291 appendix A */
 static void
-add_ipv6_address_slaac(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_slaac)
+add_ipv6_address_slaac(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, int hf_slaac)
 {
-    if (!(tvb_get_guint8(tvb, offset + 8) & 0x02) ||
+    if (!(tvb_get_uint8(tvb, offset + 8) & 0x02) ||
                             !(tvb_get_ntohs(tvb, offset + 11) == 0xfffe)) {
         return;
     }
 
-    guint8 *mac_addr = (guint8 *)wmem_alloc(pinfo->pool, 6);
+    uint8_t *mac_addr = (uint8_t *)wmem_alloc(pinfo->pool, 6);
     tvb_memcpy(tvb, mac_addr, offset + 8, 3);
     tvb_memcpy(tvb, mac_addr+3, offset + 13, 3);
     mac_addr[0] &= ~0x02;
 
-    struct { gint mac; } hf[2] = {
+    struct { int mac; } hf[2] = {
         { hf_slaac },
         { hf_ipv6_slaac_mac }
     };
@@ -3264,12 +3414,12 @@ add_ipv6_address_slaac(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int 
 
 /* RFC 5214 section 6.1 */
 static void
-add_ipv6_address_isatap(proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_isatap)
+add_ipv6_address_isatap(proto_tree *tree, tvbuff_t *tvb, int offset, int hf_isatap)
 {
     if ((tvb_get_ntohl(tvb, offset + 8) & 0xfcffffff) != 0x00005efe)
         return;
 
-    struct { gint ipv4; } hf[2] = {
+    struct { int ipv4; } hf[2] = {
         { hf_isatap },
         { hf_ipv6_isatap_ipv4 }
     };
@@ -3282,10 +3432,10 @@ add_ipv6_address_isatap(proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_isa
 
 /* RFC 6052 */
 static void
-add_ipv6_address_embed_ipv4(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, gint hf_embed)
+add_ipv6_address_embed_ipv4(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, int hf_embed)
 {
     /* Section 2.1: Well-Known Prefix for IPv4-Embedded IPv6 Address: 64:FF9B::/96 */
-    static const guint8 well_known_prefix[] = {
+    static const uint8_t well_known_prefix[] = {
         0x00, 0x64, 0xFF, 0x9B,
         0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00
@@ -3293,9 +3443,9 @@ add_ipv6_address_embed_ipv4(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb,
 
     ws_in6_addr ipv6_addr;
     ws_in4_addr ipv4_addr;
-    gint ipv4_prefix;
-    gint ipv4_offset;
-    gboolean ipv6_embed_ipv4 = false;
+    int ipv4_prefix;
+    int ipv4_offset;
+    bool ipv6_embed_ipv4 = false;
 
     if (tvb_memeql(tvb, offset, well_known_prefix, sizeof well_known_prefix) == 0) {
         ipv4_addr = tvb_get_bits32(tvb, (offset * 8) + 96, 32, ENC_BIG_ENDIAN);
@@ -3309,7 +3459,7 @@ add_ipv6_address_embed_ipv4(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb,
             }
 
             if (ws_inet_pton6(nat64_prefix_uats[j].ipaddr, &ipv6_addr)) {
-                if (tvb_memeql(tvb, offset, (const guint8 *)&ipv6_addr,
+                if (tvb_memeql(tvb, offset, (const uint8_t *)&ipv6_addr,
                     (nat64_prefix_uats[j].prefix_len - nat64_prefix_uats[j].prefix_wildcard_len) / 8) == 0) {
                     switch (nat64_prefix_uats[j].prefix_len)
                     {
@@ -3364,7 +3514,7 @@ add_ipv6_address_embed_ipv4(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb,
                 ti = proto_tree_add_item(tree, hf_ipv6_embed_ipv4_u, tvb, offset + 8, 1, ENC_NA);
                 proto_item_set_generated(ti);
             }
-            if (tvb_get_guint8(tvb, offset + 8)) {
+            if (tvb_get_uint8(tvb, offset + 8)) {
                 expert_add_info(pinfo, ti, &ei_ipv6_embed_ipv4_u_value);
             }
         }
@@ -3385,7 +3535,7 @@ add_ipv6_address_embed_ipv4(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb,
         if (ipv4_prefix < 56) {
             ti = proto_tree_add_item(tree, hf_ipv6_embed_ipv4_u, tvb, offset + 8, 1, ENC_NA);
             proto_item_set_generated(ti);
-            if (tvb_get_guint8(tvb, offset + 8)) {
+            if (tvb_get_uint8(tvb, offset + 8)) {
                 expert_add_info(pinfo, ti, &ei_ipv6_embed_ipv4_u_value);
             }
         }
@@ -3460,15 +3610,15 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     proto_tree    *ipv6_tree, *pt;
     proto_item    *ipv6_item, *ti, *pi;
     proto_item    *ti_ipv6_plen = NULL, *ti_ipv6_version;
-    guint8         ip6_tcls, ip6_nxt, ip6_hlim;
-    guint32        ip6_flow;
+    uint8_t        ip6_tcls, ip6_nxt, ip6_hlim;
+    uint32_t       ip6_flow;
     const ws_in6_addr *ip6_src, *ip6_dst;
-    guint32        ip6_plen = 0, jumbo_plen = 0;
-    guint32        plen;
+    uint32_t       ip6_plen = 0, jumbo_plen = 0;
+    uint32_t       plen;
     int            offset;
-    guint          reported_plen;
+    unsigned       reported_plen;
     tvbuff_t      *next_tvb;
-    gboolean       save_fragmented;
+    bool           save_fragmented;
     int            version;
     ws_ip6        *iph;
     struct         ipv6_analysis *ipv6d=NULL;
@@ -3524,17 +3674,17 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
     /* Set DSCP column */
     col_add_str(pinfo->cinfo, COL_DSCP_VALUE,
-                val_to_str_ext(IPDSFIELD_DSCP(ip6_tcls), &dscp_short_vals_ext, "%u"));
+                val_to_str_ext(pinfo->pool, IPDSFIELD_DSCP(ip6_tcls), &dscp_short_vals_ext, "%u"));
 
     proto_tree_add_item_ret_uint(ipv6_tree, hf_ipv6_flow, tvb,
                         offset + IP6H_CTL_FLOW + 1, 3, ENC_BIG_ENDIAN, &ip6_flow);
 
-    ip6_plen = tvb_get_guint16(tvb, offset + IP6H_CTL_PLEN, ENC_BIG_ENDIAN);
+    ip6_plen = tvb_get_uint16(tvb, offset + IP6H_CTL_PLEN, ENC_BIG_ENDIAN);
 
-    ip6_nxt = tvb_get_guint8(tvb, offset + IP6H_CTL_NXT);
+    ip6_nxt = tvb_get_uint8(tvb, offset + IP6H_CTL_NXT);
 
     if (ipv6_tso_supported && ip6_plen == 0 &&
-                    ip6_nxt != IP_PROTO_HOPOPTS && ip6_nxt != IP_PROTO_NONE) {
+                    ip6_nxt != IP_PROTO_HOPOPT && ip6_nxt != IP_PROTO_IPV6_NONXT) {
         ip6_plen = tvb_reported_length(tvb) - IPv6_HDR_SIZE;
         pi = proto_tree_add_uint_format_value(ipv6_tree, hf_ipv6_plen, tvb,
                                 offset + IP6H_CTL_PLEN, 2, ip6_plen,
@@ -3545,7 +3695,7 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     } else {
         ti_ipv6_plen = proto_tree_add_item(ipv6_tree, hf_ipv6_plen, tvb,
                                 offset + IP6H_CTL_PLEN, 2, ENC_BIG_ENDIAN);
-        if (ip6_plen == 0 && ip6_nxt != IP_PROTO_HOPOPTS && ip6_nxt != IP_PROTO_NONE) {
+        if (ip6_plen == 0 && ip6_nxt != IP_PROTO_HOPOPT && ip6_nxt != IP_PROTO_IPV6_NONXT) {
             expert_add_info(pinfo, ti_ipv6_plen, &ei_ipv6_plen_zero);
         }
     }
@@ -3554,7 +3704,7 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
     proto_tree_add_item(ipv6_tree, hf_ipv6_hlim, tvb,
                         offset + IP6H_CTL_HLIM, 1, ENC_BIG_ENDIAN);
-    ip6_hlim = tvb_get_guint8(tvb, offset + IP6H_CTL_HLIM);
+    ip6_hlim = tvb_get_uint8(tvb, offset + IP6H_CTL_HLIM);
 
     /* Source address */
     add_ipv6_address(pinfo, ipv6_tree, tvb, offset + IP6H_SRC, &ipv6_src_info);
@@ -3605,14 +3755,14 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
     /* Check for Jumbo option */
     plen = ip6_plen;
-    if (plen == 0 && ip6_nxt == IP_PROTO_HOPOPTS) {
+    if (plen == 0 && ip6_nxt == IP_PROTO_HOPOPT) {
         jumbo_plen = ipv6_get_jumbo_plen(tvb, offset);
         if (jumbo_plen != 0) {
             proto_item_append_text(ti_ipv6_plen, " (Jumbogram)");
             plen = jumbo_plen;
         } else {
             /* IPv6 length zero is invalid if there is a hop-by-hop header without jumbo option */
-            col_add_fstr(pinfo->cinfo, COL_INFO, "Invalid IPv6 payload length");
+            col_set_str(pinfo->cinfo, COL_INFO, "Invalid IPv6 payload length");
             expert_add_info(pinfo, ti_ipv6_plen, &ei_ipv6_opt_jumbo_missing);
         }
     }
@@ -3623,30 +3773,36 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
                     "IPv6 payload length exceeds framing length (%d bytes)", reported_plen);
     }
 
-    /* conversation management */
-    conversation_t *conv = find_conversation(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_IPV6, 0, 0, NO_PORT_X);
-    if(!conv) {
-      conv = conversation_new(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_IPV6, 0, 0, NO_PORTS);
-    }
-    else {
-      /*
-       * while not strictly necessary because there is only 1
-       * conversation between 2 IPs, we still move the last frame
-       * indicator as being a usual practice.
-       */
-      if (!(pinfo->fd->visited)) {
-        if (pinfo->num > conv->last_frame) {
-          conv->last_frame = pinfo->num;
+
+    if (ipv6_track_conv_id) {
+        /* conversation management */
+        conversation_t *conv;
+
+        /* find (and extend) an existing conversation, or create a new one */
+        conv = find_conversation_strat(pinfo, CONVERSATION_IPV6, NO_PORT_X, false);
+        if(!conv) {
+            conv=conversation_new_strat(pinfo, CONVERSATION_IPV6, NO_PORTS);
         }
-      }
-    }
+        else {
+            /*
+             * while not strictly necessary because there is only 1
+             * conversation between 2 IPs, we still move the last frame
+             * indicator as being a usual practice.
+             */
+            if (!(pinfo->fd->visited)) {
+                if (pinfo->num > conv->last_frame) {
+                    conv->last_frame = pinfo->num;
+                }
+            }
+        }
 
-    ipv6d = get_ipv6_conversation_data(conv, pinfo);
-    if(ipv6d) {
-      iph->ip6_stream = ipv6d->stream;
+        ipv6d = get_ipv6_conversation_data(conv, pinfo);
+        if(ipv6d) {
+          iph->ip6_stream = ipv6d->stream;
 
-      ipv6_item = proto_tree_add_uint(ipv6_tree, hf_ipv6_stream, tvb, 0, 0, ipv6d->stream);
-      proto_item_set_generated(ipv6_item);
+          ipv6_item = proto_tree_add_uint(ipv6_tree, hf_ipv6_stream, tvb, 0, 0, ipv6d->stream);
+          proto_item_set_generated(ipv6_item);
+        }
     }
 
     /* Fill in IP header fields for subdissectors */
@@ -3702,8 +3858,48 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     return tvb_captured_length(tvb);
 }
 
+bool
+dissect_ipv6_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+{
+    int length, tot_length;
+    uint8_t version;
+
+   /*
+    * IPv6 Header Format
+    *
+    *  0                   1                   2                   3
+    *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |Version| Traffic Class |           Flow Label                  |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    * |         Payload Length        |  Next Header  |   Hop Limit   |
+    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    */
+
+    length = tvb_captured_length(tvb);
+    if (length < 8) {
+        /* Need at least 8 bytes to make a decision */
+        return false;
+    }
+
+    /* Check IPv6 version */
+    version = tvb_get_uint8(tvb, 0) >> 4;
+    if (version != 6) {
+        return false;
+    }
+
+    /* Payload Length is the length of the payload without the IPv6 header. */
+    tot_length = tvb_get_ntohs(tvb, 4);
+    if ((tot_length + 40) != (int)tvb_reported_length(tvb)) {
+        return false;
+    }
+
+    dissect_ipv6(tvb, pinfo, tree, data);
+    return true;
+}
+
 void
-ipv6_dissect_next(guint nxt, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, ws_ip6 *iph)
+ipv6_dissect_next(unsigned nxt, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, ws_ip6 *iph)
 {
     dissector_handle_t nxt_handle;
     ipv6_pinfo_t *ipv6_pinfo = p_get_ipv6_pinfo(pinfo);
@@ -3711,14 +3907,14 @@ ipv6_dissect_next(guint nxt, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     /* https://www.iana.org/assignments/ipv6-parameters/ipv6-parameters.xhtml#extension-header */
 
     switch (nxt) {
-        case IP_PROTO_HOPOPTS:
-        case IP_PROTO_ROUTING:
-        case IP_PROTO_FRAGMENT:
+        case IP_PROTO_HOPOPT:
+        case IP_PROTO_IPV6_ROUTE:
+        case IP_PROTO_IPV6_FRAG:
         //case IP_PROTO_ESP:    Even though ESP is technically an extension header,
         //                      we treat it as a payload container.
         case IP_PROTO_AH:
-        case IP_PROTO_DSTOPTS:
-        case IP_PROTO_MIPV6:
+        case IP_PROTO_IPV6_OPTS:
+        case IP_PROTO_MOBILITY_HEADER:
         //case IP_PROTO_HIP:    Even though HIP is technically an extension header, the only defined
         //                      next header is IP_NONE. Also the HIP dissector is not ready for this.
         case IP_PROTO_SHIM6:
@@ -3748,7 +3944,7 @@ ipv6_dissect_next(guint nxt, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
         tap_queue_packet(ipv6_tap, pinfo, iph);
     }
 
-    if (nxt == IP_PROTO_NONE) {
+    if (nxt == IP_PROTO_IPV6_NONXT) {
         col_set_str(pinfo->cinfo, COL_INFO, "IPv6 no next header");
         call_data_dissector(tvb, pinfo, tree);
         return;
@@ -4319,7 +4515,7 @@ proto_register_ipv6(void)
         { &hf_ipv6_opt,
             { "IPv6 Option", "ipv6.opt",
                 FT_NONE, BASE_NONE, NULL, 0x0,
-                "Option", HFILL }
+                NULL, HFILL }
         },
         { &hf_ipv6_opt_type,
             { "Type", "ipv6.opt.type",
@@ -4776,6 +4972,51 @@ proto_register_ipv6(void)
                 FT_BYTES, BASE_NONE, NULL, 0x0,
                 NULL, HFILL }
         },
+        { &hf_ipv6_opt_ioam_dex_ns,
+            { "Namespace ID", "ipv6.opt.ioam.dex.ns",
+                FT_UINT16, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_flags,
+            { "Flags", "ipv6.opt.ioam.dex.flags",
+                FT_UINT8, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_extflags,
+            { "Extension Flags", "ipv6.opt.ioam.dex.extflags",
+                FT_UINT8, BASE_HEX, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_extflag_flag_seqnum,
+            { "Sequence Number", "ipv6.opt.ioam.dex.extflag.flag.seqnum",
+                FT_BOOLEAN, 8, NULL, 0x40,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_extflag_flag_flowid,
+            { "Flow ID", "ipv6.opt.ioam.dex.extflag.flag.flowid",
+                FT_BOOLEAN, 8, NULL, 0x80,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_extflag_flag_rsv,
+            { "Reserved", "ipv6.opt.ioam.trace.type.rsv",
+                FT_BOOLEAN, 8, NULL, 0x3F,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_extflag_flowid,
+            { "Flow ID", "ipv6.opt.ioam.dex.extflag.flowid",
+                FT_UINT32, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_extflag_seqnum,
+            { "Sequence Number", "ipv6.opt.ioam.dex.extflag.seqnum",
+                FT_UINT32, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_ipv6_opt_ioam_dex_rsv,
+            { "Reserved", "ipv6.opt.ioam.dex.rsv",
+                FT_UINT8, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
         { &hf_ipv6_opt_tpf_information,
             { "TPF Information", "ipv6.opt.tpf_information",
                 FT_UINT32, BASE_HEX, NULL, 0x0,
@@ -4986,7 +5227,7 @@ proto_register_ipv6(void)
         },
         { &hf_ipv6_hopopts_len_oct,
             { "Length", "ipv6.hopopts.len_oct",
-                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
                 "Extension header length in octets", HFILL }
         }
     };
@@ -5004,7 +5245,7 @@ proto_register_ipv6(void)
         },
         { &hf_ipv6_dstopts_len_oct,
             { "Length", "ipv6.dstopts.len_oct",
-                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
                 "Extension header length in octets", HFILL }
         }
     };
@@ -5024,7 +5265,7 @@ proto_register_ipv6(void)
         },
         { &hf_ipv6_routing_len_oct,
             { "Length", "ipv6.routing.len_oct",
-                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
                 "Extension header length in octets", HFILL }
         },
         { &hf_ipv6_routing_type,
@@ -5181,7 +5422,7 @@ proto_register_ipv6(void)
         }
     };
 
-    static gint *ett_ipv6[] = {
+    static int *ett_ipv6[] = {
         &ett_ipv6_proto,
         &ett_ipv6_detail,
         &ett_ipv6_detail_special_purpose,
@@ -5195,24 +5436,25 @@ proto_register_ipv6(void)
         &ett_ipv6_opt_dff_flags,
         &ett_ipv6_opt_ioam_trace_flags,
         &ett_ipv6_opt_ioam_trace_types,
+        &ett_ipv6_opt_ioam_dex_extflags,
         &ett_ipv6_fragment,
         &ett_ipv6_fragments
     };
 
-    static gint *ett_ipv6_hopopts[] = {
+    static int *ett_ipv6_hopopts[] = {
         &ett_ipv6_hopopts_proto
     };
 
-    static gint *ett_ipv6_routing[] = {
+    static int *ett_ipv6_routing[] = {
         &ett_ipv6_routing_proto,
         &ett_ipv6_routing_srh_vect
     };
 
-    static gint *ett_ipv6_fraghdr[] = {
+    static int *ett_ipv6_fraghdr[] = {
         &ett_ipv6_fraghdr_proto
     };
 
-    static gint *ett_ipv6_dstopts[] = {
+    static int *ett_ipv6_dstopts[] = {
         &ett_ipv6_dstopts_proto
     };
 
@@ -5362,19 +5604,19 @@ proto_register_ipv6(void)
     static decode_as_value_t ipv6_da_values = {ipv6_prompt, 1, ipv6_da_build_value};
 
     static decode_as_t ipv6_da = {"ipv6", "ip.proto", 1, 0, &ipv6_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
     static decode_as_t ipv6_hopopts_da = {"ipv6.hopopts", "ip.proto", 1, 0, &ipv6_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
     static decode_as_t ipv6_routing_da = {"ipv6.routing", "ip.proto", 1, 0, &ipv6_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
     static decode_as_t ipv6_fraghdr_da = {"ipv6.fraghdr", "ip.proto", 1, 0, &ipv6_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
     static decode_as_t ipv6_dstopts_da = {"ipv6.dstopts", "ip.proto", 1, 0, &ipv6_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
     module_t *ipv6_module;
     expert_module_t* expert_ipv6;
@@ -5463,6 +5705,11 @@ proto_register_ipv6(void)
                                    "IP geolocation settings can be changed in the Name Resolution preferences",
                                    "IP geolocation settings can be changed in the Name Resolution preferences");
 
+    prefs_register_bool_preference(ipv6_module, "conv_id",
+                                   "Assign IPv6 conversation IDs",
+                                   "Whether to assign unique numbers to each IPv6 conversation (increases resource consumption)",
+                                   &ipv6_track_conv_id);
+
     static uat_field_t nat64_uats_flds[] = {
         UAT_FLD_CSTRING_OTHER(nat64_prefix_uats, ipaddr, "NAT64 Prefix", nat64_prefix_uat_fld_ip_chk_cb, "IPv6 prefix address"),
         UAT_FLD_VS(nat64_prefix_uats, prefix_len, "Prefix length", nat64_prefix_length_vals, "IPv6 prefix address length"),
@@ -5473,7 +5720,7 @@ proto_register_ipv6(void)
     nat64_prefix_uat = uat_new("NAT64 Network-Specific Prefixes",
         sizeof(struct nat64_prefix_data),
         "NAT64_NSP_list",               /* filename */
-        TRUE,                           /* from_profile */
+        true,                           /* from_profile */
         &nat64_prefix_uats,             /* data_ptr */
         &number_of_nat64_prefix,        /* numitems_ptr */
         UAT_AFFECTS_DISSECTION,
@@ -5503,7 +5750,7 @@ proto_register_ipv6(void)
     register_decode_as(&ipv6_fraghdr_da);
     register_decode_as(&ipv6_dstopts_da);
 
-    register_conversation_table(proto_ipv6, TRUE, ipv6_conversation_packet, ipv6_endpoint_packet);
+    register_conversation_table(proto_ipv6, true, ipv6_conversation_packet, ipv6_endpoint_packet);
     register_conversation_filter("ipv6", "IPv6", ipv6_filter_valid, ipv6_build_filter, NULL);
 
     register_capture_dissector("ipv6", capture_ipv6, proto_ipv6);
@@ -5539,7 +5786,6 @@ proto_reg_handoff_ipv6(void)
     dissector_add_uint("pwach.channel_type", PW_ACH_TYPE_IPV6, ipv6_handle);
     dissector_add_uint("mcc.proto", PW_ACH_TYPE_IPV6, ipv6_handle);
     dissector_add_uint("sflow_245.header_protocol", SFLOW_245_HEADER_IPv6, ipv6_handle);
-    dissector_add_uint("wtap_encap", WTAP_ENCAP_RAW_IP6, ipv6_handle);
     dissector_add_uint("enc", BSD_AF_INET6_BSD, ipv6_handle);
     dissector_add_uint("vxlan.next_proto", VXLAN_IPV6, ipv6_handle);
     dissector_add_uint("nsh.next_proto", NSH_IPV6, ipv6_handle);
@@ -5547,16 +5793,16 @@ proto_reg_handoff_ipv6(void)
     dissector_add_for_decode_as_with_preference("udp.port", ipv6_handle);
 
     ipv6_hopopts_handle = create_dissector_handle(dissect_hopopts, proto_ipv6_hopopts);
-    dissector_add_uint("ip.proto", IP_PROTO_HOPOPTS, ipv6_hopopts_handle);
+    dissector_add_uint("ip.proto", IP_PROTO_HOPOPT, ipv6_hopopts_handle);
 
     ipv6_routing_handle = create_dissector_handle(dissect_routing6, proto_ipv6_routing);
-    dissector_add_uint("ip.proto", IP_PROTO_ROUTING, ipv6_routing_handle);
+    dissector_add_uint("ip.proto", IP_PROTO_IPV6_ROUTE, ipv6_routing_handle);
 
     ipv6_fraghdr_handle = create_dissector_handle(dissect_fraghdr, proto_ipv6_fraghdr);
-    dissector_add_uint("ip.proto", IP_PROTO_FRAGMENT, ipv6_fraghdr_handle);
+    dissector_add_uint("ip.proto", IP_PROTO_IPV6_FRAG, ipv6_fraghdr_handle);
 
     ipv6_dstopts_handle = create_dissector_handle(dissect_dstopts, proto_ipv6_dstopts);
-    dissector_add_uint("ip.proto", IP_PROTO_DSTOPTS, ipv6_dstopts_handle);
+    dissector_add_uint("ip.proto", IP_PROTO_IPV6_OPTS, ipv6_dstopts_handle);
 
     ip_dissector_table = find_dissector_table("ip.proto");
 
@@ -5569,13 +5815,13 @@ proto_reg_handoff_ipv6(void)
     capture_dissector_add_uint("fr.nlpid", NLPID_IP6, ipv6_cap_handle);
 
     ipv6_ext_cap_handle = create_capture_dissector_handle(capture_ipv6_exthdr, proto_ipv6_hopopts);
-    capture_dissector_add_uint("ip.proto", IP_PROTO_HOPOPTS, ipv6_ext_cap_handle);
+    capture_dissector_add_uint("ip.proto", IP_PROTO_HOPOPT, ipv6_ext_cap_handle);
     ipv6_ext_cap_handle = create_capture_dissector_handle(capture_ipv6_exthdr, proto_ipv6_routing);
-    capture_dissector_add_uint("ip.proto", IP_PROTO_ROUTING, ipv6_ext_cap_handle);
+    capture_dissector_add_uint("ip.proto", IP_PROTO_IPV6_ROUTE, ipv6_ext_cap_handle);
     ipv6_ext_cap_handle = create_capture_dissector_handle(capture_ipv6_exthdr, proto_ipv6_fraghdr);
-    capture_dissector_add_uint("ip.proto", IP_PROTO_FRAGMENT, ipv6_ext_cap_handle);
+    capture_dissector_add_uint("ip.proto", IP_PROTO_IPV6_FRAG, ipv6_ext_cap_handle);
     ipv6_ext_cap_handle = create_capture_dissector_handle(capture_ipv6_exthdr, proto_ipv6_dstopts);
-    capture_dissector_add_uint("ip.proto", IP_PROTO_DSTOPTS, ipv6_ext_cap_handle);
+    capture_dissector_add_uint("ip.proto", IP_PROTO_IPV6_OPTS, ipv6_ext_cap_handle);
 
     h = create_dissector_handle(dissect_routing6_rt0, proto_ipv6_routing_rt0);
     dissector_add_uint("ipv6.routing.type", IPv6_RT_HEADER_SOURCE_ROUTING, h);
@@ -5588,6 +5834,10 @@ proto_reg_handoff_ipv6(void)
     h = create_dissector_handle(dissect_routing6_crh, proto_ipv6_routing_crh);
     dissector_add_uint("ipv6.routing.type", IPv6_RT_HEADER_COMPACT_16, h);
     dissector_add_uint("ipv6.routing.type", IPv6_RT_HEADER_COMPACT_32, h);
+
+    heur_dissector_add("dect_nr.dlc", dissect_ipv6_heur, "IPv6 over DECT NR+", "ipv6_dect_nr", proto_ipv6, HEURISTIC_ENABLE);
+
+    ilnp_handle = find_dissector_add_dependency("ilnp", proto_ipv6_dstopts);
 
     exported_pdu_tap = find_tap_id("IP");
 }

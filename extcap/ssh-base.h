@@ -33,13 +33,16 @@
 	{ "remote-port", ws_required_argument, NULL, OPT_REMOTE_PORT}, \
 	{ "remote-username", ws_required_argument, NULL, OPT_REMOTE_USERNAME}, \
 	{ "remote-password", ws_required_argument, NULL, OPT_REMOTE_PASSWORD}, \
-	{ "remote-interface", ws_required_argument, NULL, OPT_REMOTE_INTERFACE}, \
-	{ "remote-filter", ws_required_argument, NULL, OPT_REMOTE_FILTER}, \
 	{ "remote-count", ws_required_argument, NULL, OPT_REMOTE_COUNT}, \
 	{ "sshkey", ws_required_argument, NULL, OPT_SSHKEY}, \
 	{ "sshkey-passphrase", ws_required_argument, NULL, OPT_SSHKEY_PASSPHRASE}, \
 	{ "proxycommand", ws_required_argument, NULL, OPT_PROXYCOMMAND}, \
 	{ "ssh-sha1", ws_no_argument, NULL, OPT_SSH_SHA1}
+
+#define SSH_BASE_PACKET_OPTIONS \
+	SSH_BASE_OPTIONS, \
+	{ "remote-interface", ws_required_argument, NULL, OPT_REMOTE_INTERFACE}, \
+	{ "remote-filter", ws_required_argument, NULL, OPT_REMOTE_FILTER}
 
 typedef struct _ssh_params {
 	char* host;
@@ -56,7 +59,7 @@ typedef struct _ssh_params {
 /* Add libssh version information to an extcap_parameters structure */
 void add_libssh_info(extcap_parameters * extcap_conf);
 
-/* Create a ssh connection using all the possible authentication menthods */
+/* Create a ssh connection using all the possible authentication methods */
 ssh_session create_ssh_connection(const ssh_params_t* ssh_params, char** err_info);
 
 /* Write a formatted message in the channel */

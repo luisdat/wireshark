@@ -11,14 +11,27 @@
  */
 
 #include "uat_model.h"
+#include "ui/qt/io_graph_dialog.h"
 #include <epan/to_str.h>
+#include <epan/uat-int.h>
 #include <ui/qt/utils/qt_ui_utils.h>
+#include <app/application_flavor.h>
+#include <QFont>
 #include <QBrush>
 #include <QDebug>
 
+// XXX - The model accesses the uat_t raw data, but if the raw data
+// is changed outside the model, e.g. by another model on the same UAT
+// or by changing configuration profiles, record_errors and dirty_records
+// don't have the proper length, which leads to accessing an illegal list
+// index. The preference dialog and configuration profile dialogs are modal,
+// which reduces the chance of this, but the I/O Graphs using a UAT invites
+// issues.
+
 UatModel::UatModel(QObject *parent, epan_uat *uat) :
     QAbstractTableModel(parent),
-    uat_(0)
+    uat_(0),
+    applying_(false)
 {
     loadUat(uat);
 }
@@ -47,7 +60,14 @@ void UatModel::loadUat(epan_uat * uat)
 
 void UatModel::reloadUat()
 {
+    // Avoid unnecessarily resetting the model if we're just making
+    // what's on disk match what we have.
+    if (applying_)
+        return;
+
     beginResetModel();
+    record_errors.clear();
+    dirty_records.clear();
     loadUat(uat_);
     endResetModel();
 }
@@ -57,14 +77,20 @@ bool UatModel::applyChanges(QString &error)
     if (uat_->changed) {
         char *err = NULL;
 
-        if (!uat_save(uat_, &err)) {
-            error = QString("Error while saving %1: %2").arg(uat_->name).arg(err);
+        if (!uat_save(uat_, application_configuration_environment_prefix(), &err)) {
+            error = QStringLiteral("Error while saving %1: %2").arg(uat_->name).arg(err);
             g_free(err);
         }
 
+        applying_ = true;
+        // XXX - Why does this need to call post_update_cb? post_update_cb
+        // is for when the uat_t is updated, e.g. after loading a file.
+        // Saving makes the information on disk match the table records in
+        // memory, but it shouldn't change the uat_t.
         if (uat_->post_update_cb) {
             uat_->post_update_cb();
         }
+        applying_ = false;
         return true;
     }
 
@@ -79,8 +105,8 @@ bool UatModel::revertChanges(QString &error)
     if (uat_->changed) {
         char *err = NULL;
         uat_clear(uat_);
-        if (!uat_load(uat_, NULL, &err)) {
-            error = QString("Error while loading %1: %2").arg(uat_->name).arg(err);
+        if (!uat_load(uat_, NULL, application_configuration_environment_prefix(), &err)) {
+            error = QStringLiteral("Error while loading %1: %2").arg(uat_->name).arg(err);
             g_free(err);
         }
         return true;
@@ -91,17 +117,55 @@ bool UatModel::revertChanges(QString &error)
 
 Qt::ItemFlags UatModel::flags(const QModelIndex &index) const
 {
+    Qt::ItemFlags flags = QAbstractTableModel::flags(index);
+    flags |= Qt::ItemIsDropEnabled;
+
     if (!index.isValid())
-        return Qt::ItemFlags();
+        return flags;
 
     uat_field_t *field = &uat_->fields[index.column()];
 
-    Qt::ItemFlags flags = QAbstractTableModel::flags(index);
-    if (field->mode == PT_TXTMOD_BOOL)
-    {
-        flags |= Qt::ItemIsUserCheckable;
+    /* UAT being multipurpose, we want to handle this specific
+     * case for I/O Graphs here.
+     * Column indexes are defined there (io_graph_dialog precisely).
+     */
+    bool isIOGraph = g_strcmp0(uat_->name, "I/O Graphs") == 0;
+    if(isIOGraph) {
+        UatColumnsIOG ucol = colAOT;
+        if(index.column()==colAOT) {
+            ucol = colYAxis;
+            uat_field_t *field2 = &uat_->fields[ucol];
+            void *rec = UAT_INDEX_PTR(uat_, index.row());
+            char *str = NULL;
+            unsigned length;
+            field2->cb.tostr(rec, &str, &length, field2->cbdata.tostr, field2->fld_data);
+            bool allowsAOT = (str &&
+                         ( (g_strcmp0(str, "Packets") == 0) ||
+                         (g_strcmp0(str, "Bytes") == 0) ||
+                         (g_strcmp0(str, "Bits") == 0) ));
+            g_free(str);
+
+            if ((field->mode == PT_TXTMOD_BOOL) && allowsAOT ) {
+                flags |= Qt::ItemIsUserCheckable;
+            }
+        }
+        else {
+            if (field->mode == PT_TXTMOD_BOOL) {
+                flags |= Qt::ItemIsUserCheckable;
+            }
+        }
+
+        flags |= Qt::ItemIsEditable | Qt::ItemIsDragEnabled;
     }
-    flags |= Qt::ItemIsEditable;
+    else {
+        // default case (non-I/O Graph)
+        if (field->mode == PT_TXTMOD_BOOL)
+        {
+            flags |= Qt::ItemIsUserCheckable;
+        }
+        flags |= Qt::ItemIsEditable | Qt::ItemIsDragEnabled;
+    }
+
     return flags;
 }
 
@@ -163,6 +227,15 @@ QVariant UatModel::data(const QModelIndex &index, int role) const
         if (errors.contains(index.column())) {
             // TODO is it OK to color cells like this? Maybe some other marker is better?
             return QBrush("pink");
+        }
+        return QVariant();
+    }
+
+    if (role == Qt::FontRole) {
+        if (!g_array_index(uat_->valid_data, bool, index.row())) {
+            QFont font;
+            font.setItalic(!font.italic());
+            return font;
         }
         return QVariant();
     }
@@ -260,9 +333,9 @@ QModelIndex UatModel::appendEntry(QVariantList rowData)
                 data = rowData[col].toString();
             } else {
                 if (rowData[col].toInt() == Qt::Checked) {
-                    data = QString("true");
+                    data = QStringLiteral("true");
                 } else {
-                    data = QString("false");
+                    data = QStringLiteral("false");
                 }
             }
         }
@@ -314,6 +387,11 @@ bool UatModel::setData(const QModelIndex &index, const QVariant &value, int role
     if (field->mode != PT_TXTMOD_BOOL) {
         const QByteArray &str = value.toString().toUtf8();
         const QByteArray &bytes = field->mode == PT_TXTMOD_HEXBYTES ? QByteArray::fromHex(str) : str;
+        // XXX - This converts from string to value before checkRow converts
+        // back to a string to check the value. For, e.g., the numeric types,
+        // that means that they aren't really checked, just converted to a
+        // number if possible. The chk function for those needs to be called
+        // earlier (possibly in UatDelegate.)
         field->cb.set(rec, bytes.constData(), (unsigned) bytes.size(), field->cbdata.set, field->fld_data);
     } else {
         if (value.toInt() == Qt::Checked) {
@@ -396,13 +474,16 @@ bool UatModel::insertRows(int row, int count, const QModelIndex &/*parent*/)
 
 bool UatModel::removeRows(int row, int count, const QModelIndex &/*parent*/)
 {
-    if (count != 1 || row < 0 || row >= rowCount())
+    if (row < 0 || count < 0 || row + count > rowCount())
         return false;
 
-    beginRemoveRows(QModelIndex(), row, row);
-    uat_remove_record_idx(uat_, row);
-    record_errors.removeAt(row);
-    dirty_records.removeAt(row);
+    if (count == 0)
+        return true;
+
+    beginRemoveRows(QModelIndex(), row, row + count - 1);
+    uat_remove_record_range(uat_, row, count);
+    record_errors.remove(row, count);
+    dirty_records.remove(row, count);
     uat_->changed = true;
     endRemoveRows();
     return true;
@@ -449,7 +530,7 @@ QModelIndex UatModel::copyRow(QModelIndex original)
     checkRow(newRow);
     dirty_records.insert(newRow, true);
 
-    // the UAT record has been created, now it is filled with the infromation
+    // the UAT record has been created, now it is filled with the information
     const void *src_record = UAT_INDEX_PTR(uat_, original.row());
     void *dst_record = UAT_INDEX_PTR(uat_, newRow);
     // insertRows always initializes the record with empty value. Before copying
@@ -470,25 +551,57 @@ QModelIndex UatModel::copyRow(QModelIndex original)
 
     uat_->changed = true;
 
-    endInsertRows();    
+    endInsertRows();
 
     return index(newRow, 0, QModelIndex());
 }
 
-bool UatModel::moveRow(int src_row, int dst_row)
+bool UatModel::moveRowPrivate(int src_row, int dst_row)
 {
-    if (src_row < 0 || src_row >= rowCount() || dst_row < 0 || dst_row >= rowCount())
-        return false;
+    if (src_row == dst_row)
+        return true;
 
-    int dst = src_row < dst_row ? dst_row + 1 : dst_row;
-
-    beginMoveRows(QModelIndex(), src_row, src_row, QModelIndex(), dst);
     uat_move_index(uat_, src_row, dst_row);
     record_errors.move(src_row, dst_row);
     dirty_records.move(src_row, dst_row);
     uat_->changed = true;
-    endMoveRows();
 
+    return true;
+}
+
+bool UatModel::moveRow(int src_row, int dst_row)
+{
+    return moveRows(QModelIndex(), src_row, 1, QModelIndex(), dst_row);
+}
+
+bool UatModel::moveRows(const QModelIndex &, int sourceRow, int count, const QModelIndex &, int destinationChild)
+{
+    if (sourceRow < 0 || sourceRow >= rowCount() || destinationChild < 0 || destinationChild >= rowCount() || count < 0)
+        return false;
+
+    if (count == 0)
+        return true;
+
+    // beginMoveRows checks this
+    if (sourceRow <= destinationChild && destinationChild <= sourceRow + count - 1)
+        return false;
+
+    if (destinationChild < sourceRow) {
+        if (!beginMoveRows(QModelIndex(), sourceRow, sourceRow + count - 1, QModelIndex(), destinationChild)) {
+            return false;
+        }
+        for (int i = 0; i < count; i++) {
+            moveRowPrivate(sourceRow + i, destinationChild + i);
+        }
+    } else {
+        if (!beginMoveRows(QModelIndex(), sourceRow, sourceRow + count - 1, QModelIndex(), destinationChild + 1)) {
+            return false;
+        }
+        for (int i = 0; i < count; i++) {
+            moveRowPrivate(sourceRow, destinationChild);
+        }
+    }
+    endMoveRows();
     return true;
 }
 
@@ -543,4 +656,21 @@ QList<int> UatModel::checkRow(int row)
         }
     }
     return changed;
+}
+
+Qt::DropActions UatModel::supportedDropActions() const
+{
+    return Qt::MoveAction;
+}
+
+bool UatModel::dropMimeData(const QMimeData *, Qt::DropAction, int, int, const QModelIndex &)
+{
+    // We could implement MimeData using uat_fld_tostr (or a new function
+    // that just gives the entire string) although it would be nice for
+    // uat_load_str to be able to load at a specified index, or else have
+    // a function to produce a UAT record from a string. Or we could use
+    // something else. However, for now we really just want internal moves.
+    // Supporting drop actions and rejecting drops still allows our row
+    // moving view's InternalMove to work.
+    return false;
 }

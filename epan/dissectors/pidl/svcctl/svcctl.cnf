@@ -13,21 +13,40 @@ NOEMIT svcctl_dissect_element_EnumServicesStatusW_services
 NOEMIT svcctl_dissect_element_EnumServicesStatusW_bytes_needed
 NOEMIT svcctl_dissect_element_EnumServicesStatusW_services_returned
 
+# policyhandle tracking
+# This block is to specify where a policyhandle is opened and where it is
+# closed so that policyhandles when dissected contain nice info such as
+# [opened in xxx]  [closed in yyy]
+#
+# Policyhandles are opened in these functions
+PARAM_VALUE svcctl_dissect_element_OpenSCManagerW_scm_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_OpenSCManagerA_scm_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_OpenServiceW_service_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_OpenServiceA_service_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_CreateServiceW_service_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_CreateServiceA_service_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_CreateServiceWOW64W_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_CreateServiceWOW64A_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_CreateWowService_handle_ PIDL_POLHND_OPEN
+PARAM_VALUE svcctl_dissect_element_OpenSCManager2_handle_ PIDL_POLHND_OPEN
+# Policyhandles are closed in these functions
+PARAM_VALUE svcctl_dissect_element_CloseServiceHandle_object_handle_ PIDL_POLHND_CLOSE
+
 CODE START
 
 /*  ENUM_SERVICE_STATUSW Caveats
 	https://github.com/fortra/impacket/blob/4888172ce638910104da4bda2c3301c24e17564c/impacket/dcerpc/v5/scmr.py#L1274
 */
-static int
-svcctl_dissect_struct_ENUM_SERVICE_STATUSW_ptr(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, dcerpc_info* di, guint8 *drep, int hf_index, gint starting_offset);
-static int
-svcctl_dissect_struct_ENUM_SERVICE_STATUSW_ptr(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, dcerpc_info* di, guint8 *drep, int hf_index, gint starting_offset)
+static unsigned
+svcctl_dissect_struct_ENUM_SERVICE_STATUSW_ptr(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree, dcerpc_info* di, uint8_t *drep, int hf_index, int starting_offset);
+static unsigned
+svcctl_dissect_struct_ENUM_SERVICE_STATUSW_ptr(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree, dcerpc_info* di, uint8_t *drep, int hf_index, int starting_offset)
 {
 	proto_item *item = NULL;
 	proto_tree *tree = NULL;
 	proto_tree *tr = NULL;
 	int old_offset;
-	guint32 _referent_id = 0;
+	uint32_t _referent_id = 0;
 
 	ALIGN_TO_5_BYTES;
 
@@ -63,16 +82,16 @@ svcctl_dissect_struct_ENUM_SERVICE_STATUSW_ptr(tvbuff_t *tvb, int offset, packet
 /*  REnumServicesStatusW
 	https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-scmr/22b4ff3d-29c6-481f-b598-8ce66a46944a
 */
-static int
-svcctl_dissect_EnumServicesStatusW_response(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep)
+static unsigned
+svcctl_dissect_EnumServicesStatusW_response(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep)
 {
-	guint32 status;
-	guint32 services_returned= 0;
+	uint32_t status;
+	uint32_t services_returned= 0;
 	proto_item *item;
 	proto_tree  *tr           = NULL;
-	gint        services_buffer_offset;
-	gint        payload_starting_offset = offset;
-	guint64 buffer_size = 0;
+	int         services_buffer_offset;
+	int         payload_starting_offset = offset;
+	uint64_t buffer_size = 0;
 
 	ALIGN_TO_5_BYTES
 
@@ -119,7 +138,7 @@ svcctl_dissect_EnumServicesStatusW_response(tvbuff_t *tvb, int offset, packet_in
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_svcctl_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }

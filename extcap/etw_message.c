@@ -13,7 +13,7 @@
 
 #include "etw_message.h"
 #include <wsutil/wslog.h>
-ULONGLONG g_num_events = 0;
+ULONGLONG g_num_events;
 
 VOID format_message(WCHAR* lpszMessage, PROPERTY_KEY_VALUE* propArray, DWORD dwPropertyCount, WCHAR* lpszOutBuffer, DWORD dwOutBufferCount)
 {
@@ -81,12 +81,12 @@ VOID format_message(WCHAR* lpszMessage, PROPERTY_KEY_VALUE* propArray, DWORD dwP
 /*
 * Get the length of the property data. For MOF-based events, the size is inferred from the data type
 * of the property. For manifest-based events, the property can specify the size of the property value
-* using the length attribute. The length attribue can specify the size directly or specify the name
+* using the length attribute. The length attribute can specify the size directly or specify the name
 * of another property in the event data that contains the size. If the property does not include the
 * length attribute, the size is inferred from the data type. The length will be zero for variable
 * length, null-terminated strings and structures.
 */
-DWORD GetPropertyLength(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT PropertyLength)
+static DWORD GetPropertyLength(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT PropertyLength)
 {
     DWORD status = ERROR_SUCCESS;
     PROPERTY_DATA_DESCRIPTOR DataDescriptor = { 0 };
@@ -147,7 +147,7 @@ cleanup:
     return status;
 }
 
-DWORD GetArraySize(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT ArraySize)
+static DWORD GetArraySize(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT ArraySize)
 {
     DWORD status = ERROR_SUCCESS;
     PROPERTY_DATA_DESCRIPTOR DataDescriptor = { 0 };
@@ -171,7 +171,7 @@ DWORD GetArraySize(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSH
     return status;
 }
 
-DWORD GetMapInfo(PEVENT_RECORD pEvent, LPWSTR pMapName, PEVENT_MAP_INFO* pMapInfo)
+static DWORD GetMapInfo(PEVENT_RECORD pEvent, LPWSTR pMapName, PEVENT_MAP_INFO* pMapInfo)
 {
     DWORD status = ERROR_SUCCESS;
     DWORD MapSize = 0;

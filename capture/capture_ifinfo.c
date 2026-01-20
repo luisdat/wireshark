@@ -18,10 +18,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 
 #include "capture/capture_session.h"
 #include "capture/capture_sync.h"
+#include "capture/iface_monitor.h"
 #include "extcap.h"
 
 #include <capture/capture-pcap-util.h>
@@ -31,7 +32,7 @@
 #include <wsutil/wsjson.h>
 
 #ifdef HAVE_PCAP_REMOTE
-static GList *remote_interface_list = NULL;
+static GList *remote_interface_list;
 
 GList * append_remote_list(GList *iflist)
 {
@@ -326,7 +327,7 @@ deserialize_interface_list(char *data, int *err, char **err_str)
  *
  */
 GList *
-capture_interface_list(int *err, char **err_str, void (*update_cb)(void))
+capture_interface_list(const char* app_name, int *err, char **err_str, void (*update_cb)(void))
 {
     int        ret;
     GList     *if_list = NULL;
@@ -338,7 +339,7 @@ capture_interface_list(int *err, char **err_str, void (*update_cb)(void))
     }
 
     /* Try to get the local interface list */
-    ret = sync_interface_list_open(&data, &primary_msg, &secondary_msg, update_cb);
+    ret = sync_interface_list_open(app_name, &data, &primary_msg, &secondary_msg, update_cb);
     if (ret != 0) {
         ws_info("sync_interface_list_open() failed. %s (%s)",
                   primary_msg ? primary_msg : "no message",
@@ -377,7 +378,7 @@ capture_interface_list(int *err, char **err_str, void (*update_cb)(void))
 }
 
 if_capabilities_t *
-capture_get_if_capabilities(const char *ifname, bool monitor_mode,
+capture_get_if_capabilities(const char* app_name, const char *ifname, bool monitor_mode,
                             const char *auth_string,
                             char **err_primary_msg, char **err_secondary_msg,
                             void (*update_cb)(void))
@@ -399,8 +400,10 @@ capture_get_if_capabilities(const char *ifname, bool monitor_mode,
     }
 
     /* Try to get our interface list */
-    err = sync_if_capabilities_open(ifname, monitor_mode, auth_string, &data,
+    iface_mon_enable(false);
+    err = sync_if_capabilities_open(app_name, ifname, monitor_mode, auth_string, &data,
                                     &primary_msg, &secondary_msg, update_cb);
+    iface_mon_enable(true);
     if (err != 0) {
         ws_info("Capture Interface Capabilities failed. Error %d, %s",
               err, primary_msg ? primary_msg : "no message");
@@ -477,7 +480,7 @@ free_if_capabilities_cb(void *data)
 }
 
 GHashTable*
-capture_get_if_list_capabilities(GList *if_cap_queries,
+capture_get_if_list_capabilities(const char* app_name, GList *if_cap_queries,
                             char **err_primary_msg, char **err_secondary_msg,
                             void (*update_cb)(void))
 {
@@ -509,8 +512,10 @@ capture_get_if_list_capabilities(GList *if_cap_queries,
     local_queries = g_list_reverse(local_queries);
 
     /* Try to get our interface list */
-    err = sync_if_list_capabilities_open(local_queries, &data,
+    iface_mon_enable(false);
+    err = sync_if_list_capabilities_open(app_name, local_queries, &data,
                                     &primary_msg, &secondary_msg, update_cb);
+    iface_mon_enable(true);
     g_list_free(local_queries);
     if (err != 0) {
         ws_info("Capture Interface Capabilities failed. Error %d, %s",

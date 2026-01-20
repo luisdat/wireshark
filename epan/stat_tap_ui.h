@@ -40,13 +40,13 @@ typedef struct _tap_param {
     const char       *name;      /* name to use in error messages */
     const char       *title;     /* title to use in GUI widgets */
     const enum_val_t *enum_vals; /* values for PARAM_ENUM */
-    gboolean          optional;  /* TRUE if the parameter is optional */
+    bool              optional;  /* true if the parameter is optional */
 } tap_param;
 
 /*
  * UI information for a tap.
  */
-typedef void (* stat_tap_init_cb)(const char *, void*);
+typedef bool (* stat_tap_init_cb)(const char *, void*);
 typedef struct _stat_tap_ui {
     register_stat_group_t  group;      /* group to which statistic belongs */
     const char            *title;      /* title of statistic */
@@ -65,27 +65,43 @@ typedef enum {
     TABLE_ITEM_ENUM
 } stat_tap_table_item_enum;
 
+/**
+ * @brief Represents a single item in a statistics tap table.
+ *
+ * This structure holds a typed value used in statistical reporting, such as counters,
+ * labels, or computed metrics. It also includes a scratchpad area (`user_data`) for
+ * dissector-specific temporary storage or extended metadata.
+ */
 typedef struct _stat_tap_table_item_type
 {
-    stat_tap_table_item_enum type;
-    union
-    {
-        guint uint_value;
-        gint  int_value;
-        const char* string_value;
-        double float_value;
-        gint enum_value;
+    stat_tap_table_item_enum type; /**< Type of the item (e.g., integer, float, string). */
+
+    /**
+     * @brief The primary value of the item.
+     *
+     * The actual field used depends on the `type` member.
+     */
+    union {
+        unsigned uint_value;     /**< Unsigned integer value. */
+        int int_value;           /**< Signed integer value. */
+        const char* string_value;/**< String value. */
+        double float_value;      /**< Floating-point value. */
+        int enum_value;          /**< Enumerated value. */
     } value;
-    /* Scratch space for the dissector. Alternatively we could also add support
-     * for hidden columns. */
-    union
-    {
-        guint uint_value;
-        gint  int_value;
-        const char* string_value;
-        double float_value;
-        gint enum_value;
-        void* ptr_value;
+
+    /**
+     * @brief Scratch space for dissector use.
+     *
+     * This union provides temporary storage for dissectors to associate
+     * auxiliary data with the item. It can also be used to support hidden columns.
+     */
+    union {
+        unsigned uint_value;     /**< Unsigned integer scratch value. */
+        int int_value;           /**< Signed integer scratch value. */
+        const char* string_value;/**< String scratch value. */
+        double float_value;      /**< Floating-point scratch value. */
+        int enum_value;          /**< Enumerated scratch value. */
+        void* ptr_value;         /**< Generic pointer for custom data. */
     } user_data;
 } stat_tap_table_item_type;
 
@@ -100,7 +116,7 @@ typedef struct _stat_tap_table_item
     stat_tap_table_item_enum type;
     tap_alignment_type align;
     const char* column_name;
-    const char* field_format; /* printf style formating of field. Currently unused? */
+    const char* field_format; /* printf style formatting of field. */
 
 } stat_tap_table_item;
 
@@ -110,8 +126,8 @@ typedef struct _stat_tap_table
 {
     const char* title;
     const char *filter_string;        /**< append procedure number (%d) to this string to create a display filter */
-    guint num_fields;
-    guint num_elements;
+    unsigned num_fields;
+    unsigned num_elements;
     stat_tap_table_item_type **elements;
 
 } stat_tap_table;
@@ -127,14 +143,14 @@ typedef struct _stat_tap_table_ui {
     void (* stat_tap_init_cb)(struct _stat_tap_table_ui* new_stat);
     tap_packet_cb packet_func;
     void (* stat_tap_reset_table_cb)(stat_tap_table* table);
-    void (* stat_tap_free_table_item_cb)(stat_tap_table* table, guint row, guint column, stat_tap_table_item_type* field_data);
+    void (* stat_tap_free_table_item_cb)(stat_tap_table* table, unsigned row, unsigned column, stat_tap_table_item_type* field_data);
     void (* stat_filter_check_cb)(const char *opt_arg, const char **filter, char** err); /* Dissector chance to reject filter */
     size_t                 nfields;    /* number of fields */
     stat_tap_table_item*   fields;
     size_t                 nparams;    /* number of parameters */
     tap_param             *params;     /* pointer to table of parameter info */
     GArray                *tables;     /* An array of stat_tap_table* */
-    guint                  refcount;   /* a reference count for deallocation */
+    unsigned               refcount;   /* a reference count for deallocation */
 } stat_tap_table_ui;
 
 
@@ -145,6 +161,7 @@ typedef struct _stat_data_t {
     void        *user_data;       /**< "GUI" specifics (if necessary) */
 } stat_data_t;
 
+extern void stat_tap_init(void);
 
 /** Register UI information for a tap.
  *
@@ -154,15 +171,15 @@ typedef struct _stat_data_t {
 WS_DLL_PUBLIC void register_stat_tap_ui(stat_tap_ui *ui, void *userdata);
 
 WS_DLL_PUBLIC void register_stat_tap_table_ui(stat_tap_table_ui *ui);
-WS_DLL_PUBLIC void stat_tap_iterate_tables(wmem_foreach_func func, gpointer user_data);
+WS_DLL_PUBLIC void stat_tap_iterate_tables(wmem_foreach_func func, void *user_data);
 WS_DLL_PUBLIC void stat_tap_get_filter(stat_tap_table_ui* new_stat, const char *opt_arg, const char **filter, char** err);
 WS_DLL_PUBLIC stat_tap_table* stat_tap_init_table(const char *name, int num_fields, int num_elements,
                 const char *filter_string);
 WS_DLL_PUBLIC void stat_tap_add_table(stat_tap_table_ui* new_stat, stat_tap_table* table);
 WS_DLL_PUBLIC stat_tap_table *stat_tap_find_table(stat_tap_table_ui *ui, const char *name);
-WS_DLL_PUBLIC void stat_tap_init_table_row(stat_tap_table *stat_table, guint table_index, guint num_fields, const stat_tap_table_item_type* fields);
-WS_DLL_PUBLIC stat_tap_table_item_type* stat_tap_get_field_data(const stat_tap_table *stat_table, guint table_index, guint field_index);
-WS_DLL_PUBLIC void stat_tap_set_field_data(stat_tap_table *stat_table, guint table_index, guint field_index, stat_tap_table_item_type* field_data);
+WS_DLL_PUBLIC void stat_tap_init_table_row(stat_tap_table *stat_table, unsigned table_index, unsigned num_fields, const stat_tap_table_item_type* fields);
+WS_DLL_PUBLIC stat_tap_table_item_type* stat_tap_get_field_data(const stat_tap_table *stat_table, unsigned table_index, unsigned field_index);
+WS_DLL_PUBLIC void stat_tap_set_field_data(stat_tap_table *stat_table, unsigned table_index, unsigned field_index, stat_tap_table_item_type* field_data);
 WS_DLL_PUBLIC void reset_stat_table(stat_tap_table_ui* new_stat);
 
 WS_DLL_PUBLIC stat_tap_table_ui *stat_tap_by_name(const char *name);
@@ -178,11 +195,11 @@ WS_DLL_PUBLIC stat_tap_table_ui *stat_tap_by_name(const char *name);
 WS_DLL_PUBLIC void free_stat_tables(stat_tap_table_ui* new_stat);
 
 
-WS_DLL_PUBLIC gboolean process_stat_cmd_arg(const char *optstr);
+WS_DLL_PUBLIC bool process_stat_cmd_arg(const char *optstr);
 
 WS_DLL_PUBLIC void list_stat_cmd_args(void);
 
-WS_DLL_PUBLIC void start_requested_stats(void);
+WS_DLL_PUBLIC bool start_requested_stats(void);
 
 #ifdef __cplusplus
 }

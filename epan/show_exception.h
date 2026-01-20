@@ -9,6 +9,11 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#ifndef __SHOW_EXCEPTION_H__
+#define __SHOW_EXCEPTION_H__
+
+#include <epan/proto.h>
+
 /*
  * Called to register the pseudo-protocols used for exceptions.
  */
@@ -25,5 +30,7 @@ void show_exception(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
  * Routine used to add an indication of a ReportedBoundsError exception
  * to the tree.
  */
-void
+WS_DLL_PUBLIC void
 show_reported_bounds_error(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+
+#endif /* __SHOW_EXCEPTION_H__ */

@@ -6,6 +6,7 @@
  * (c) 2006, Luis E. Garcia Ontanon <luis@ontanon.org>
  * (c) 2007, Tamas Regos <tamas.regos@ericsson.com>
  * (c) 2008, Balint Reczey <balint.reczey@ericsson.com>
+ * (c) 2025, Bartis Csaba <bracsek@bracsek.eu>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -37,16 +38,23 @@
 #include <epan/packet.h>
 #include <epan/strutil.h>
 #include <epan/to_str.h>
+#include <epan/uat-int.h>
+#include <epan/uat.h>
 #include <epan/prefs.h>
+#include <epan/prefs-int.h>
 #include <epan/proto.h>
 #include <epan/epan_dissect.h>
 #include <epan/tap.h>
 #include <epan/column-utils.h>
 #include <wsutil/filesystem.h>
+#include <wsutil/wsgcrypt.h>
 #include <epan/funnel.h>
 #include <epan/tvbparse.h>
 #include <epan/epan.h>
 #include <epan/expert.h>
+#include <epan/exceptions.h>
+#include <epan/show_exception.h>
+#include <epan/conversation.h>
 
 #include <epan/wslua/declare_wslua.h>
 
@@ -58,29 +66,64 @@
 #define WSLUA_PREFS_CHANGED "prefs_changed"
 
 /* type conversion macros - lua_Number is a double, so casting isn't kosher; and
-   using Lua's already-available lua_tointeger() and luaL_checkinteger() might be different
-   on different machines; so use these instead please! */
-#define wslua_togint(L,i)       (int)            ( lua_tointeger(L,i) )
-#define wslua_togint32(L,i)     (int32_t)          ( lua_tonumber(L,i) )
-#define wslua_togint64(L,i)     (int64_t)          ( lua_tonumber(L,i) )
-#define wslua_toguint(L,i)      (unsigned)           ( lua_tointeger(L,i) )
-#define wslua_toguint32(L,i)    (uint32_t)         ( lua_tonumber(L,i) )
-#define wslua_toguint64(L,i)    (uint64_t)         ( lua_tonumber(L,i) )
+   using Lua's already-available lua_tointeger() and luaL_checkinteger() might be
+   different on different machines; so use these instead please!
 
-#define wslua_checkgint(L,i)    (int)            ( luaL_checkinteger(L,i) )
-#define wslua_checkgint32(L,i)  (int32_t)          ( luaL_checknumber(L,i) )
-#define wslua_checkgint64(L,i)  (int64_t)          ( luaL_checknumber(L,i) )
-#define wslua_checkguint(L,i)   (unsigned)           ( luaL_checkinteger(L,i) )
-#define wslua_checkguint32(L,i) (uint32_t)         ( luaL_checknumber(L,i) )
-#define wslua_checkguint64(L,i) (uint64_t)         ( luaL_checknumber(L,i) )
+   It can be important to choose the correct version of signed or unsigned
+   conversion macros; don't assume that you can freely convert to the signed
+   or unsigned integer of the same size later:
 
-#define wslua_optgint(L,i,d)    (int)            ( luaL_optinteger(L,i,d) )
-#define wslua_optgint32(L,i,d)  (int32_t)          ( luaL_optnumber(L,i,d) )
-#define wslua_optgint64(L,i,d)  (int64_t)          ( luaL_optnumber(L,i,d) )
-#define wslua_optguint(L,i,d)   (unsigned)           ( luaL_optinteger(L,i,d) )
-#define wslua_optguint32(L,i,d) (uint32_t)         ( luaL_optnumber(L,i,d) )
-#define wslua_optguint64(L,i,d) (uint64_t)         ( luaL_optnumber(L,i,d) )
+   On 32-bit Windows x86, Lua 5.2 and earlier must use lua_tounsigned() and
+   luaL_checkunsigned() due to the use of float to integer inlined assembly.
+   (#18367)
+   On ARM, casting from a negative floating point number to an unsigned integer
+   type doesn't perform wraparound conversion in the same way as casting from
+   float to the same size signed integer then to unsigned does, unlike x86[-64].
+   (Commit 15392c324d5eaefcaa298cdee09cd5b40b12e09c)
 
+   On Lua 5.3 and later, numbers are stored as a kind of union between
+   Lua_Number and Lua_Integer. On 5.2 and earlier. all numbers are stored
+   as Lua_Number internally.
+
+   Be careful about using the 64-bit functions, as they convert from double
+   and lose precision at high values. See wslua_int64.c and the types there.
+   TODO: Check if Lua_Integer is 64 bit on Lua 5.3 and later.
+*/
+#define wslua_toint(L,i)       (int)             ( lua_tointeger(L,i) )
+#define wslua_toint32(L,i)     (int32_t)         ( lua_tointeger(L,i) )
+#define wslua_toint64(L,i)     (int64_t)         ( lua_tonumber(L,i) )
+#define wslua_touint64(L,i)    (uint64_t)        ( lua_tonumber(L,i) )
+
+#define wslua_checkint(L,i)    (int)             ( luaL_checkinteger(L,i) )
+#define wslua_checkint32(L,i)  (int32_t)         ( luaL_checkinteger(L,i) )
+#define wslua_checkint64(L,i)  (int64_t)         ( luaL_checknumber(L,i) )
+#define wslua_checkuint64(L,i) (uint64_t)        ( luaL_checknumber(L,i) )
+
+#define wslua_optint(L,i,d)    (int)             ( luaL_optinteger(L,i,d) )
+#define wslua_optint32(L,i,d)  (int32_t)         ( luaL_optinteger(L,i,d) )
+#define wslua_optint64(L,i,d)  (int64_t)         ( luaL_optnumber(L,i,d) )
+#define wslua_optuint64(L,i,d) (uint64_t)        ( luaL_optnumber(L,i,d) )
+
+/**
+ * On Lua 5.3 and later, the unsigned conversions may not be defined
+ * (depending on a compatibility define), and they're just casts if they
+ * are.
+ */
+#if LUA_VERSION_NUM < 503
+#define wslua_touint(L,i)      (unsigned)        ( lua_tounsigned(L,i) )
+#define wslua_touint32(L,i)    (uint32_t)        ( lua_tounsigned(L,i) )
+#define wslua_checkuint(L,i)   (unsigned)        ( luaL_checkunsigned(L,i) )
+#define wslua_checkuint32(L,i) (uint32_t)        ( luaL_checkunsigned(L,i) )
+#define wslua_optuint(L,i,d)   (unsigned)        ( luaL_optunsigned(L,i,d) )
+#define wslua_optuint32(L,i,d) (uint32_t)        ( luaL_optunsigned(L,i,d) )
+#else
+#define wslua_touint(L,i)      (unsigned)        ( lua_tointeger(L,i) )
+#define wslua_touint32(L,i)    (uint32_t)        ( lua_tointeger(L,i) )
+#define wslua_checkuint(L,i)   (unsigned)        ( luaL_checkinteger(L,i) )
+#define wslua_checkuint32(L,i) (uint32_t)        ( luaL_checkinteger(L,i) )
+#define wslua_optuint(L,i,d)   (unsigned)        ( luaL_optinteger(L,i,d) )
+#define wslua_optuint32(L,i,d) (uint32_t)        ( luaL_optinteger(L,i,d) )
+#endif
 
 struct _wslua_tvb {
     tvbuff_t* ws_tvb;
@@ -95,8 +138,8 @@ struct _wslua_pinfo {
 
 struct _wslua_tvbrange {
     struct _wslua_tvb* tvb;
-    int offset;
-    int len;
+    unsigned offset;
+    unsigned len;
 };
 
 struct _wslua_tw {
@@ -114,6 +157,7 @@ typedef struct _wslua_field_t {
     enum ftenum type;
     unsigned base;
     const void* vs;
+    int valuestring_ref;
     uint64_t mask;
 } wslua_field_t;
 
@@ -125,25 +169,11 @@ typedef struct _wslua_expert_field_t {
     int severity;
 } wslua_expert_field_t;
 
-/**
- * PREF_OBSOLETE is used for preferences that a module used to support
- * but no longer supports; we give different error messages for them.
- */
-typedef enum {
-    PREF_UINT,
-    PREF_BOOL,
-    PREF_ENUM,
-    PREF_STRING,
-    PREF_RANGE,
-    PREF_STATIC_TEXT,
-    PREF_OBSOLETE
-} pref_type_t;
-
 typedef struct _wslua_pref_t {
     char* name;
     char* label;
     char* desc;
-    pref_type_t type;
+    pref_type_e type;
     union {
         bool b;
         unsigned u;
@@ -161,6 +191,9 @@ typedef struct _wslua_pref_t {
                          option menu or combo box in
                          the preferences tab */
       } enum_info;            /**< for PREF_ENUM */
+      struct {
+          uat_field_t *uat_field_list; /**< list of field configurations */
+      } uat_field_list_info; /**< for PREF_UAT */
       char* default_s;       /**< default value for value.s */
     } info;                    /**< display/text file information */
 
@@ -188,8 +221,17 @@ typedef struct _wslua_proto_t {
     bool expired;
 } wslua_proto_t;
 
+typedef struct _wslua_conv_data_t {
+    conversation_t* conv;
+    int data_ref;
+} wslua_conv_data_t;
+
+/* a "DissectorTable" object can be different things under the hood,
+ * since its heuristic_new() can create a heur_dissector_list_t that
+ * needs to be deregistered. */
 struct _wslua_distbl_t {
     dissector_table_t table;
+    heur_dissector_list_t heur_list;
     const char* name;
     const char* ui_name;
     bool created;
@@ -230,6 +272,16 @@ struct _wslua_field_info {
     bool expired;
 };
 
+/*
+ * _func_saver stores function refs so that Lua won't garbage collect them prematurely.
+ * It is only used by tcp_dissect_pdus right now.
+ */
+struct _wslua_func_saver {
+    lua_State* state;
+    int get_len_ref;
+    int dissect_ref;
+};
+
 typedef void (*tap_extractor_t)(lua_State*,const void*);
 
 struct _wslua_tap {
@@ -261,13 +313,12 @@ struct _wslua_captureinfo {
     bool expired;
 };
 
-struct _wslua_phdr {
-    wtap_rec *rec;      /* this also exists in wtap struct, but is different for seek_read ops */
-    Buffer *buf;        /* can't use the one in wtap because it's different for seek_read ops */
+struct _wslua_rec {
+    wtap_rec *rec;
     bool expired;
 };
 
-struct _wslua_const_phdr {
+struct _wslua_const_rec {
     const wtap_rec *rec;
     const uint8_t *pd;
     bool expired;
@@ -310,6 +361,7 @@ struct _wslua_progdlg {
 typedef struct { const char* name; tap_extractor_t extractor; } tappable_t;
 
 typedef struct {const char* str; enum ftenum id; } wslua_ft_types_t;
+typedef struct {const char* str; conversation_type id; } wslua_conv_types_t;
 
 typedef wslua_pref_t* Pref;
 typedef wslua_pref_t* Prefs;
@@ -319,6 +371,7 @@ typedef struct _wslua_proto_t* Proto;
 typedef struct _wslua_distbl_t* DissectorTable;
 typedef dissector_handle_t Dissector;
 typedef GByteArray* ByteArray;
+typedef gcry_cipher_hd_t* GcryptCipher;
 typedef struct _wslua_tvb* Tvb;
 typedef struct _wslua_tvbrange* TvbRange;
 typedef struct _wslua_col_info* Column;
@@ -337,8 +390,8 @@ typedef struct _wslua_progdlg* ProgDlg;
 typedef struct _wslua_file* File;
 typedef struct _wslua_captureinfo* CaptureInfo;
 typedef struct _wslua_captureinfo* CaptureInfoConst;
-typedef struct _wslua_phdr* FrameInfo;
-typedef struct _wslua_const_phdr* FrameInfoConst;
+typedef struct _wslua_rec* FrameInfo;
+typedef struct _wslua_const_rec* FrameInfoConst;
 typedef struct _wslua_filehandler* FileHandler;
 typedef wtap_dumper* Dumper;
 typedef struct lua_pseudo_header* PseudoHeader;
@@ -348,6 +401,7 @@ typedef tvbparse_elem_t* Node;
 typedef tvbparse_action_t* Shortcut;
 typedef struct _wslua_dir* Dir;
 typedef struct _wslua_private_table* PrivateTable;
+typedef conversation_t* Conversation;
 typedef char* Struct;
 
 /*
@@ -514,11 +568,11 @@ extern int wslua_reg_attributes(lua_State *L, const wslua_attribute_table *t, bo
 #define WSLUA_ATTRIBUTE_NAMED_BOOLEAN_GETTER(C,name,member) \
     WSLUA_ATTRIBUTE_GET(C,name,{lua_pushboolean(L, obj->member );})
 
-#define WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(C,name,member) \
-    WSLUA_ATTRIBUTE_GET(C,name,{lua_pushnumber(L,(lua_Number)(obj->member));})
+#define WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(C,name,member) \
+    WSLUA_ATTRIBUTE_GET(C,name,{lua_pushinteger(L,(lua_Integer)(obj->member));})
 
-#define WSLUA_ATTRIBUTE_NUMBER_GETTER(C,member) \
-    WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(C,member,member)
+#define WSLUA_ATTRIBUTE_INTEGER_GETTER(C,member) \
+    WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(C,member,member)
 
 #define WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(C,name,block) \
     WSLUA_ATTRIBUTE_GET(C,name,{lua_pushnumber(L,(lua_Number)(block));})
@@ -573,15 +627,15 @@ extern int wslua_reg_attributes(lua_State *L, const wslua_attribute_table *t, bo
 
 /* to make this integral-safe, we treat it as int32 and then cast
    Note: This will truncate 64-bit integers (but then Lua itself only has doubles */
-#define WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(C,name,member,cast) \
+#define WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(C,name,member,cast) \
     WSLUA_ATTRIBUTE_SET(C,name, { \
-        if (! lua_isnumber(L,-1) ) \
-            return luaL_error(L, "%s's attribute `%s' must be a number", #C , #name ); \
-        obj->member = (cast) wslua_togint32(L,-1); \
+        if (! lua_isinteger(L,-1) ) \
+            return luaL_error(L, "%s's attribute `%s' must be an integer", #C , #name ); \
+        obj->member = (cast) wslua_toint32(L,-1); \
     })
 
-#define WSLUA_ATTRIBUTE_NUMBER_SETTER(C,member,cast) \
-    WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(C,member,member,cast)
+#define WSLUA_ATTRIBUTE_INTEGER_SETTER(C,member,cast) \
+    WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(C,member,member,cast)
 
 #define WSLUA_ATTRIBUTE_NAMED_STRING_SETTER(C,field,member,need_free) \
     static int C##_set_##field (lua_State* L) { \
@@ -639,13 +693,13 @@ extern int wslua_reg_attributes(lua_State *L, const wslua_attribute_table *t, bo
     /* silly little trick so we can add a semicolon after this macro */ \
     typedef void __dummy##C##_set_##field
 
-#define WSLUA_ERROR(name,error) { luaL_error(L, "%s%s", #name ": " ,error); }
+#define WSLUA_ERROR(name,error) { luaL_error(L, "%s%s", #name ": ", error); }
 #define WSLUA_ARG_ERROR(name,attr,error) { luaL_argerror(L,WSLUA_ARG_ ## name ## _ ## attr, #name  ": " error); }
 #define WSLUA_OPTARG_ERROR(name,attr,error) { luaL_argerror(L,WSLUA_OPTARG_##name##_ ##attr, #name  ": " error); }
 
 #define WSLUA_REG_GLOBAL_BOOL(L,n,v) { lua_pushboolean(L,v); lua_setglobal(L,n); }
 #define WSLUA_REG_GLOBAL_STRING(L,n,v) { lua_pushstring(L,v); lua_setglobal(L,n); }
-#define WSLUA_REG_GLOBAL_NUMBER(L,n,v) { lua_pushnumber(L,v); lua_setglobal(L,n); }
+#define WSLUA_REG_GLOBAL_INTEGER(L,n,v) { lua_pushinteger(L,v); lua_setglobal(L,n); }
 
 #define WSLUA_RETURN(i) return (i)
 
@@ -689,14 +743,34 @@ extern C shift##C(lua_State* L,int i)
     THROW_FORMATTED(DissectorError, __VA_ARGS__)
 
 /* Catches any Wireshark exceptions in code and convert it into a Lua error.
- * Normal restrictions for TRY/CATCH apply, in particular, do not return! */
+ * Normal restrictions for TRY/CATCH apply, in particular, do not return!
+ *
+ * This means do not call lua[L]_error() inside code, as that longjmps out
+ * of the TRY block to the Lua pcall! Use THROW_LUA_ERROR, which is caught
+ * and then converted into a Lua error.
+ *
+ * XXX: We CATCH_ALL here, although there's little point in catching
+ * OutOfMemoryError here. (Is CATCH_BOUNDS_AND_DISSECTOR_ERRORS sufficient?)
+ * There are some Exceptions that we catch and show but don't want to add
+ * the Lua error malformed expert info to the tree: BoundsError,
+ * FragmentBoundsError, and ScsiBoundsError (show_exception doesn't consider
+ * those malformed). The traceback might (or might not) be useful for those.
+ * Putting an extra malformed expert info in the tree in the cases that are
+ * malformed seems not so bad, but we might want to reduce that. Perhaps
+ * at least we could have a separate LuaError type and not call show_exception
+ * for that (we still need to handle some Lua errors that don't use this in
+ * dissector_error_handler.)
+ */
 #define WRAP_NON_LUA_EXCEPTIONS(code) \
 { \
     volatile bool has_error = false; \
     TRY { \
         code \
+    } CATCH3(BoundsError, FragmentBoundsError, ScsiBoundsError) { \
+        show_exception(lua_tvb, lua_pinfo, lua_tree->tree, EXCEPT_CODE, GET_MESSAGE); \
     } CATCH_ALL { \
-        lua_pushstring(L, GET_MESSAGE);  \
+        show_exception(lua_tvb, lua_pinfo, lua_tree->tree, EXCEPT_CODE, GET_MESSAGE); \
+        lua_pushfstring(L, "%s: %s", __func__, GET_MESSAGE ? GET_MESSAGE : "Malformed packet"); \
         has_error = true; \
     } ENDTRY; \
     if (has_error) { lua_error(L); } \
@@ -709,6 +783,8 @@ extern tvbuff_t* lua_tvb;
 extern bool lua_initialized;
 extern int lua_dissectors_table_ref;
 extern int lua_heur_dissectors_table_ref;
+extern const char* lua_app_env_var_prefix;
+extern GPtrArray* lua_outstanding_FuncSavers;
 
 WSLUA_DECLARE_CLASSES()
 WSLUA_DECLARE_FUNCTIONS()
@@ -748,7 +824,7 @@ extern const char* wslua_typeof(lua_State *L, int idx);
 extern bool wslua_get_table(lua_State *L, int idx, const char *name);
 extern bool wslua_get_field(lua_State *L, int idx, const char *name);
 extern int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
-extern int heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
+extern bool heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
 extern expert_field* wslua_get_expert_field(const int group, const int severity);
 extern void wslua_prefs_changed(void);
 extern void proto_register_lua(void);
@@ -761,7 +837,7 @@ extern int Proto_commit(lua_State* L);
 
 extern TreeItem create_TreeItem(proto_tree* tree, proto_item* item);
 
-extern void clear_outstanding_FuncSavers(void);
+extern void clear_outstanding_FuncSavers(lua_State* L);
 
 extern void Int64_pack(lua_State* L, luaL_Buffer *b, int idx, bool asLittleEndian);
 extern int Int64_unpack(lua_State* L, const char *buff, bool asLittleEndian);
@@ -790,7 +866,7 @@ extern void clear_outstanding_FieldInfo(void);
 
 extern void wslua_print_stack(char* s, lua_State* L);
 
-extern void wslua_init(register_cb cb, void *client_data);
+extern void wslua_init(register_cb cb, void *client_data, const char* app_env_var_prefix);
 extern void wslua_early_cleanup(void);
 extern void wslua_cleanup(void);
 
@@ -806,10 +882,7 @@ extern int wslua_hex2bin(lua_State* L, const char* data, const unsigned len, con
 extern int luaopen_rex_pcre2(lua_State *L);
 
 extern const char* get_current_plugin_version(void);
-extern const char* get_current_plugin_description(void);
-extern const char* get_current_plugin_repository(void);
-extern const char* get_current_plugin_spdx_id(void);
-extern void clear_current_plugin_info(void);
+extern void clear_current_plugin_version(void);
 
 extern int wslua_deregister_heur_dissectors(lua_State* L);
 extern int wslua_deregister_protocols(lua_State* L);
@@ -820,6 +893,8 @@ extern int wslua_deregister_filehandlers(lua_State* L);
 extern void wslua_deregister_menus(void);
 
 extern void wslua_init_wtap_filetypes(lua_State* L);
+
+extern const wslua_conv_types_t* wslua_inspect_convtype_enum(void);
 
 #endif
 

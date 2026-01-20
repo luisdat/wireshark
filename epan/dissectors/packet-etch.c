@@ -35,7 +35,7 @@ void proto_reg_handoff_etch(void);
 /*
  * Magic Number for Etch
  */
-static const guint8 etch_magic[] = { 0xde, 0xad, 0xbe, 0xef };
+static const uint8_t etch_magic[] = { 0xde, 0xad, 0xbe, 0xef };
 
 /*
  * Typecodes in the Etch protocol, representing the field types
@@ -91,11 +91,11 @@ static const value_string tc_lookup_table[] = {
  * Wireshark internal fields
  */
 static int proto_etch;
-static gint ett_etch;
-static gint ett_etch_struct;
-static gint ett_etch_keyvalue;
-static gint ett_etch_key;
-static gint ett_etch_value;
+static int ett_etch;
+static int ett_etch_struct;
+static int ett_etch_keyvalue;
+static int ett_etch_key;
+static int ett_etch_value;
 static int hf_etch_sig;
 static int hf_etch_length;
 static int hf_etch_version;
@@ -124,13 +124,13 @@ static dissector_handle_t etch_handle;
  */
 
 static const char       *gbl_keytab_folder = "";
-static char             *gbl_current_keytab_folder = NULL;
+static char             *gbl_current_keytab_folder;
 
 static int               gbl_pdu_counter;
-static guint32           gbl_old_frame_num;
+static uint32_t          gbl_old_frame_num;
 
-static wmem_strbuf_t    *gbl_symbol_buffer = NULL;
-static gboolean          gbl_have_symbol   = FALSE;
+static wmem_strbuf_t    *gbl_symbol_buffer;
+static bool              gbl_have_symbol;
 
 /***************************************************************************/
 /* Methods */
@@ -154,44 +154,46 @@ static int read_value(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree
  *     value_string_ext from the array for use by try_val_to_str_ext & friends.
  *  (Code based upon code in packet-diameter.c)
  */
-static GArray                 *gbl_symbols_array  = NULL;
-static value_string_ext *gbl_symbols_vs_ext = NULL;
+static GArray                 *gbl_symbols_array;
+static value_string_ext *gbl_symbols_vs_ext;
 
 static void
 gbl_symbols_new(void)
 {
   DISSECTOR_ASSERT(gbl_symbols_array == NULL);
-  gbl_symbols_array = g_array_new(TRUE, TRUE, sizeof(value_string));
+  gbl_symbols_array = g_array_new(true, true, sizeof(value_string));
 }
 
 static void
 gbl_symbols_free(void)
 {
-  value_string_ext_free(gbl_symbols_vs_ext);
-  gbl_symbols_vs_ext = NULL;
+  if (gbl_symbols_vs_ext != NULL) {
+    value_string_ext_free(gbl_symbols_vs_ext);
+    gbl_symbols_vs_ext = NULL;
+  }
 
   if (gbl_symbols_array != NULL) {
     value_string *vs_p;
-    guint i;
+    unsigned i;
     vs_p = (value_string *)(void *)gbl_symbols_array->data;
     for (i=0; i<gbl_symbols_array->len; i++) {
-      g_free((gchar *)vs_p[i].strptr);
+      g_free((char *)vs_p[i].strptr);
     }
-    g_array_free(gbl_symbols_array, TRUE);
+    g_array_free(gbl_symbols_array, true);
     gbl_symbols_array = NULL;
   }
 }
 
 static void
-gbl_symbols_array_append(guint32 hash, gchar *symbol)
+gbl_symbols_array_append(uint32_t hash, char *symbol)
 {
   value_string vs = {hash, symbol};
   DISSECTOR_ASSERT(gbl_symbols_array != NULL);
   g_array_append_val(gbl_symbols_array, vs);
 }
 
-static gint
-gbl_symbols_compare_vs(gconstpointer  a, gconstpointer  b)
+static int
+gbl_symbols_compare_vs(const void *   a, const void *   b)
 {
   const value_string *vsa = (const value_string *)a;
   const value_string *vsb = (const value_string *)b;
@@ -210,7 +212,7 @@ gbl_symbols_vs_ext_new(void)
   DISSECTOR_ASSERT(gbl_symbols_vs_ext == NULL);
   DISSECTOR_ASSERT(gbl_symbols_array != NULL);
   g_array_sort(gbl_symbols_array, gbl_symbols_compare_vs);
-  gbl_symbols_vs_ext = value_string_ext_new((value_string *)(void *)gbl_symbols_array->data,
+  gbl_symbols_vs_ext = value_string_ext_new(wmem_epan_scope(), (value_string *)(void *)gbl_symbols_array->data,
                                             gbl_symbols_array->len+1,
                                             "etch-global-symbols" );
 }
@@ -221,8 +223,8 @@ gbl_symbols_vs_ext_new(void)
 /*
  * get the length of a given typecode in bytes, -1 if to be derived from message
  */
-static gint32
-get_byte_length(guint8 typecode)
+static int32_t
+get_byte_length(uint8_t typecode)
 {
   switch (typecode) {
   case ETCH_TC_NULL:
@@ -233,21 +235,16 @@ get_byte_length(guint8 typecode)
   case ETCH_TC_MIN_TINY_INT:
   case ETCH_TC_MAX_TINY_INT:
     return  0;
-    break;
   case ETCH_TC_BYTE:
     return  1;
-    break;
   case ETCH_TC_SHORT:
     return  2;
-    break;
   case ETCH_TC_INT:
   case ETCH_TC_FLOAT:
     return  4;
-    break;
   case ETCH_TC_LONG:
   case ETCH_TC_DOUBLE:
     return  8;
-    break;
   case ETCH_TC_BYTES:
   case ETCH_TC_ARRAY:
   case ETCH_TC_STRING:
@@ -255,10 +252,8 @@ get_byte_length(guint8 typecode)
   case ETCH_TC_CUSTOM:
   case ETCH_TC_ANY:
     return  -1;
-    break;
   default:
     return 0;
-    break;
   }
 }
 
@@ -355,13 +350,13 @@ read_hashed_symbols_from_dir(const char *dirname)
 /*
  * read a type flag from tvb and add it to tree
  */
-static guint8
+static uint8_t
 read_type(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree)
 {
 
-  guint32      type_code;
+  uint32_t     type_code;
 
-  type_code = tvb_get_guint8(tvb, *offset);
+  type_code = tvb_get_uint8(tvb, *offset);
   proto_tree_add_item(etch_tree, hf_etch_typecode, tvb, *offset, 1, ENC_BIG_ENDIAN);
   (*offset)++;
   return type_code;
@@ -373,9 +368,9 @@ read_type(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree)
 static void
 read_array_type(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree)
 {
-  guint32 type_code;
+  uint32_t type_code;
 
-  type_code = tvb_get_guint8(tvb, *offset);
+  type_code = tvb_get_uint8(tvb, *offset);
 
   read_type(offset, tvb, etch_tree);
   if (type_code == ETCH_TC_CUSTOM) {
@@ -390,14 +385,14 @@ read_array_type(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree)
 /*
  * read the length of an array and add it to tree
  */
-static guint32
+static uint32_t
 read_length(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree)
 {
-  guint32 length;
+  uint32_t length;
   int     length_of_array_length_type;
-  guint8  tiny;
+  uint8_t tiny;
 
-  tiny = tvb_get_guint8(tvb, *offset);
+  tiny = tvb_get_uint8(tvb, *offset);
 
   /*  Is this the value already? */
   if (  tiny <= ETCH_TC_MAX_TINY_INT
@@ -405,13 +400,13 @@ read_length(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree)
     length = tiny;
     length_of_array_length_type = 1;
   } else {
-    guint8 type_code;
+    uint8_t type_code;
     type_code = read_type(offset, tvb, etch_tree);
     length_of_array_length_type = get_byte_length(type_code);
 
     switch (length_of_array_length_type) {
     case 1:
-      length = tvb_get_guint8(tvb, *offset);
+      length = tvb_get_uint8(tvb, *offset);
       break;
     case 2:
       length = tvb_get_ntohs(tvb, *offset);
@@ -502,8 +497,8 @@ read_string(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree)
  * read a number and add it to tree
  */
 static void
-read_number(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree,
-            int asWhat, guint8 type_code)
+read_number(unsigned int *offset, tvbuff_t *tvb, wmem_allocator_t* allocator, proto_tree *etch_tree,
+            int asWhat, uint8_t type_code)
 {
   int byteLength;
 
@@ -511,16 +506,16 @@ read_number(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree,
   byteLength = get_byte_length(type_code);
   if (byteLength > 0) {
     proto_item  *ti;
-    const gchar *symbol = NULL;
-    guint32      hash   = 0;
+    const char *symbol = NULL;
+    uint32_t     hash   = 0;
 
-    gbl_symbol_buffer = wmem_strbuf_create(wmem_packet_scope());  /* no symbol found yet */
+    gbl_symbol_buffer = wmem_strbuf_create(allocator);  /* no symbol found yet */
     if (byteLength == 4) {
       hash = tvb_get_ntohl(tvb, *offset);
       symbol = try_val_to_str_ext(hash, gbl_symbols_vs_ext);
       if(symbol != NULL) {
         asWhat = hf_etch_symbol;
-        gbl_have_symbol = TRUE;
+        gbl_have_symbol = true;
         wmem_strbuf_append_printf(gbl_symbol_buffer,"%s",symbol);
       }
     }
@@ -541,9 +536,9 @@ static int
 read_value(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree,
            packet_info *pinfo, int asWhat)
 {
-  guint8 type_code;
+  uint8_t type_code;
 
-  type_code = tvb_get_guint8(tvb, *offset);
+  type_code = tvb_get_uint8(tvb, *offset);
   if (type_code <= ETCH_TC_MAX_TINY_INT ||
       type_code >= ETCH_TC_MIN_TINY_INT) {
     /* this is the value already */
@@ -564,28 +559,28 @@ read_value(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree,
     read_string(offset, tvb, etch_tree);
     break;
   case ETCH_TC_FLOAT:
-    read_number(offset, tvb, etch_tree, hf_etch_float, type_code);
+    read_number(offset, tvb, pinfo->pool, etch_tree, hf_etch_float, type_code);
     break;
   case ETCH_TC_DOUBLE:
-    read_number(offset, tvb, etch_tree, hf_etch_double, type_code);
+    read_number(offset, tvb, pinfo->pool, etch_tree, hf_etch_double, type_code);
     break;
   case ETCH_TC_SHORT:
-    read_number(offset, tvb, etch_tree, hf_etch_short, type_code);
+    read_number(offset, tvb, pinfo->pool, etch_tree, hf_etch_short, type_code);
     break;
   case ETCH_TC_INT:
-    read_number(offset, tvb, etch_tree, hf_etch_int, type_code);
+    read_number(offset, tvb, pinfo->pool, etch_tree, hf_etch_int, type_code);
     break;
   case ETCH_TC_LONG:
-    read_number(offset, tvb, etch_tree, hf_etch_long, type_code);
+    read_number(offset, tvb, pinfo->pool, etch_tree, hf_etch_long, type_code);
     break;
   case ETCH_TC_BYTE:
-    read_number(offset, tvb, etch_tree, hf_etch_byte, type_code);
+    read_number(offset, tvb, pinfo->pool, etch_tree, hf_etch_byte, type_code);
     break;
   case ETCH_TC_BYTES:
     read_bytes(offset, tvb, etch_tree);
     break;
   default:
-    read_number(offset, tvb, etch_tree, asWhat, type_code);
+    read_number(offset, tvb, pinfo->pool, etch_tree, asWhat, type_code);
   }
   decrement_dissection_depth(pinfo);
   return 0;
@@ -636,7 +631,7 @@ read_key_value(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree, packe
   proto_tree *new_tree_bck;
   proto_item *ti, *parent_ti;
 
-  gbl_have_symbol = FALSE;
+  gbl_have_symbol = false;
 
   parent_ti =
     proto_tree_add_item(etch_tree, hf_etch_keyvalue, tvb, *offset, 1,
@@ -650,7 +645,7 @@ read_key_value(unsigned int *offset, tvbuff_t *tvb, proto_tree *etch_tree, packe
   read_value(offset, tvb, new_tree, pinfo, hf_etch_value);
 
   /* append the symbol of the key */
-  if(gbl_have_symbol == TRUE){
+  if(gbl_have_symbol == true){
     proto_item_append_text(parent_ti, " (%s)", wmem_strbuf_get_str(gbl_symbol_buffer));
   }
 
@@ -668,7 +663,7 @@ static wmem_strbuf_t*
 get_column_info(wmem_allocator_t *scope, tvbuff_t *tvb)
 {
   int            byte_length;
-  guint8         type_code;
+  uint8_t        type_code;
   wmem_strbuf_t *result_buf;
   int            my_offset = 0;
 
@@ -677,13 +672,13 @@ get_column_info(wmem_allocator_t *scope, tvbuff_t *tvb)
 
   my_offset += (4 + 4 + 1); /* skip Magic, Length, Version */
 
-  type_code = tvb_get_guint8(tvb, my_offset);
+  type_code = tvb_get_uint8(tvb, my_offset);
   byte_length = get_byte_length(type_code);
   my_offset++;
 
   if (byte_length == 4) {
-    const gchar *symbol;
-    guint32      hash;
+    const char *symbol;
+    uint32_t     hash;
     hash   = tvb_get_ntohl(tvb, my_offset);
     symbol = try_val_to_str_ext(hash, gbl_symbols_vs_ext);
     if (symbol != NULL) {
@@ -746,7 +741,7 @@ dissect_etch_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 /*
  * determine PDU length of protocol etch
  */
-static guint
+static unsigned
 get_etch_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
                      int offset, void *data _U_)
 {
@@ -771,7 +766,7 @@ dissect_etch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     return 0;
   }
 
-  tcp_dissect_pdus(tvb, pinfo, tree, TRUE, 8, get_etch_message_len,
+  tcp_dissect_pdus(tvb, pinfo, tree, true, 8, get_etch_message_len,
                    dissect_etch_message, data);
 
   if (gbl_pdu_counter > 0) {
@@ -779,6 +774,12 @@ dissect_etch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
   }
 
   return 1;
+}
+
+static bool
+dissect_etch_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+{
+    return dissect_etch(tvb, pinfo, tree, data) > 0;
 }
 
 static void
@@ -918,7 +919,7 @@ void proto_register_etch(void)
   };
 
   /* Setup protocol subtree array */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_etch,
     &ett_etch_struct,
     &ett_etch_keyvalue,
@@ -946,14 +947,14 @@ void proto_register_etch(void)
 
 void proto_reg_handoff_etch(void)
 {
-  static gboolean etch_prefs_initialized = FALSE;
+  static bool etch_prefs_initialized = false;
 
   /* create dissector handle only once */
   if(!etch_prefs_initialized) {
     /* add heuristic dissector for tcp */
-    heur_dissector_add("tcp", dissect_etch, "Etch over TCP", "etch_tcp", proto_etch, HEURISTIC_ENABLE);
+    heur_dissector_add("tcp", dissect_etch_heur, "Etch over TCP", "etch_tcp", proto_etch, HEURISTIC_ENABLE);
     dissector_add_for_decode_as_with_preference("tcp.port", etch_handle);
-    etch_prefs_initialized = TRUE;
+    etch_prefs_initialized = true;
   }
 
 

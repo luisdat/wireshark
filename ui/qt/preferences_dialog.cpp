@@ -25,25 +25,36 @@
 #include <extcap.h>
 
 #include <ui/qt/utils/qt_ui_utils.h>
+#include <ui/qt/utils/color_utils.h>
+#include <ui/capture_globals.h>
+#include <app/application_flavor.h>
+
 
 #include "main_application.h"
+
+#include <QClipboard>
+#include <QDesktopServices>
+#include <QKeyEvent>
+#include <QMenu>
+#include <QScrollBar>
+#include <QUrl>
 
 extern "C" {
 // Callbacks prefs routines
 
-static guint
-module_prefs_unstash(module_t *module, gpointer data)
+static unsigned
+module_prefs_unstash(module_t *module, void *data)
 {
-    gboolean *must_redissect_p = static_cast<gboolean *>(data);
+    unsigned int *must_redissect_p = static_cast<unsigned int *>(data);
     pref_unstash_data_t unstashed_data;
 
-    unstashed_data.handle_decode_as = TRUE;
+    unstashed_data.handle_decode_as = true;
 
     module->prefs_changed_flags = 0;        /* assume none of them changed */
     for (GList *pref_l = module->prefs; pref_l && pref_l->data; pref_l = gxx_list_next(pref_l)) {
         pref_t *pref = gxx_list_data(pref_t *, pref_l);
 
-        if (prefs_get_type(pref) == PREF_OBSOLETE || prefs_get_type(pref) == PREF_STATIC_TEXT) continue;
+        if (prefs_is_preference_obsolete(pref) || prefs_get_type(pref) == PREF_STATIC_TEXT) continue;
 
         unstashed_data.module = module;
         pref_unstash(pref, &unstashed_data);
@@ -56,24 +67,24 @@ module_prefs_unstash(module_t *module, gpointer data)
     *must_redissect_p |= module->prefs_changed_flags;
 
     if (prefs_module_has_submodules(module))
-        return prefs_modules_foreach_submodules(module, module_prefs_unstash, data);
+        return prefs_modules_foreach_submodules(module->submodules, module_prefs_unstash, data);
 
     return 0;     /* Keep unstashing. */
 }
 
-static guint
-module_prefs_clean_stash(module_t *module, gpointer)
+static unsigned
+module_prefs_clean_stash(module_t *module, void *)
 {
     for (GList *pref_l = module->prefs; pref_l && pref_l->data; pref_l = gxx_list_next(pref_l)) {
         pref_t *pref = gxx_list_data(pref_t *, pref_l);
 
-        if (prefs_get_type(pref) == PREF_OBSOLETE || prefs_get_type(pref) == PREF_STATIC_TEXT) continue;
+        if (prefs_is_preference_obsolete(pref) || prefs_get_type(pref) == PREF_STATIC_TEXT) continue;
 
         pref_clean_stash(pref, Q_NULLPTR);
     }
 
     if (prefs_module_has_submodules(module))
-        return prefs_modules_foreach_submodules(module, module_prefs_clean_stash, Q_NULLPTR);
+        return prefs_modules_foreach_submodules(module->submodules, module_prefs_clean_stash, Q_NULLPTR);
 
     return 0;     /* Keep cleaning modules */
 }
@@ -142,19 +153,24 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     pd_ui_->expertFrame->setUat(uat_get_table_by_name("Expert Info Severity Level Configuration"));
 
     connect(pd_ui_->prefsView, &PrefModuleTreeView::goToPane, this, &PreferencesDialog::selectPane);
+    connect(pd_ui_->prefsView, &PrefModuleTreeView::expanded, this, &PreferencesDialog::resizeSplitter);
+    connect(pd_ui_->prefsView, &PrefModuleTreeView::collapsed, this, &PreferencesDialog::resizeSplitter);
 
     /* Create a single-shot timer for debouncing calls to
      * updateSearchLineEdit() */
     searchLineEditTimer = new QTimer(this);
     searchLineEditTimer->setSingleShot(true);
     connect(searchLineEditTimer, &QTimer::timeout, this, &PreferencesDialog::updateSearchLineEdit);
+
+    pd_ui_->advancedView->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(pd_ui_->advancedView, &QTreeView::customContextMenuRequested, this, &PreferencesDialog::handleCopyMenu);
 }
 
 PreferencesDialog::~PreferencesDialog()
 {
     delete pd_ui_;
     delete searchLineEditTimer;
-    prefs_modules_foreach_submodules(NULL, module_prefs_clean_stash, NULL);
+    prefs_modules_for_all_modules(module_prefs_clean_stash, NULL);
 }
 
 void PreferencesDialog::setPane(const QString module_name)
@@ -162,33 +178,53 @@ void PreferencesDialog::setPane(const QString module_name)
     pd_ui_->prefsView->setPane(module_name);
 }
 
-void PreferencesDialog::showEvent(QShowEvent *)
+void PreferencesDialog::enableAggregationOptions(bool enable)
 {
-    QStyleOption style_opt;
-    int new_prefs_tree_width =  pd_ui_->prefsView->style()->subElementRect(QStyle::SE_TreeViewDisclosureItem, &style_opt).left();
+    pd_ui_->captureFrame->enableAggregationOptions(enable);
+}
+
+void PreferencesDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (pd_ui_->advancedSearchLineEdit->hasFocus() && (event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return)) {
+        return; // Don't close window on enter/return.
+    }
+
+    GeometryStateDialog::keyPressEvent(event);
+}
+
+void PreferencesDialog::resizeSplitter()
+{
     QList<int> sizes = pd_ui_->splitter->sizes();
 
-#ifdef Q_OS_WIN
-    new_prefs_tree_width *= 2;
-#endif
+    pd_ui_->prefsView->header()->setStretchLastSection(false);
     pd_ui_->prefsView->resizeColumnToContents(ModulePrefsModel::colName);
-    new_prefs_tree_width += pd_ui_->prefsView->columnWidth(ModulePrefsModel::colName);
-    pd_ui_->prefsView->setMinimumWidth(new_prefs_tree_width);
 
-    sizes[1] += sizes[0] - new_prefs_tree_width;
+    int new_prefs_tree_width = pd_ui_->prefsView->columnWidth(ModulePrefsModel::colName);
+    int scrollBarWidth = pd_ui_->prefsView->verticalScrollBar()->sizeHint().width();
+    new_prefs_tree_width += scrollBarWidth;
+    int border_width = pd_ui_->prefsView->style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
+    new_prefs_tree_width += 2 * border_width;
+
+    sizes[1] = (sizes[0] + sizes[1]) - new_prefs_tree_width;
     sizes[0] = new_prefs_tree_width;
+
     pd_ui_->splitter->setSizes(sizes);
     pd_ui_->splitter->setStretchFactor(0, 1);
+}
+
+void PreferencesDialog::showEvent(QShowEvent *)
+{
+    resizeSplitter();
 
     pd_ui_->advancedView->expandAll();
     pd_ui_->advancedView->setSortingEnabled(true);
     pd_ui_->advancedView->sortByColumn(AdvancedPrefsModel::colName, Qt::AscendingOrder);
 
-    int one_em = fontMetrics().height();
-    pd_ui_->advancedView->setColumnWidth(AdvancedPrefsModel::colName, one_em * 12); // Don't let long items widen things too much
+    int one_acw = fontMetrics().averageCharWidth();
+    pd_ui_->advancedView->setColumnWidth(AdvancedPrefsModel::colName, one_acw * 35); // Don't let long items widen things too much
     pd_ui_->advancedView->resizeColumnToContents(AdvancedPrefsModel::colStatus);
-    pd_ui_->advancedView->resizeColumnToContents(AdvancedPrefsModel::colType);
-    pd_ui_->advancedView->setColumnWidth(AdvancedPrefsModel::colValue, one_em * 30);
+    pd_ui_->advancedView->setColumnWidth(AdvancedPrefsModel::colType, one_acw * 22);
+    pd_ui_->advancedView->setColumnWidth(AdvancedPrefsModel::colValue, one_acw * 30);
 }
 
 void PreferencesDialog::selectPane(QString pane)
@@ -213,6 +249,100 @@ void PreferencesDialog::selectPane(QString pane)
     }
 }
 
+void PreferencesDialog::handleCopyMenu(QPoint pos)
+{
+    QTreeView * tree = qobject_cast<QTreeView *>(sender());
+    if (! tree)
+        return;
+
+    QModelIndex index = tree->indexAt(pos);
+    if (! index.isValid())
+        return;
+
+    QMenu * menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+
+    QAction * copyColumnAction = menu->addAction(tr("Copy"));
+    copyColumnAction->setData(VariantPointer<QTreeView>::asQVariant(tree));
+    connect(copyColumnAction, &QAction::triggered, this, &PreferencesDialog::copyActionTriggered);
+
+    QModelIndexList selectedRows = tree->selectionModel()->selectedRows();
+    QAction * copyRowAction = menu->addAction(tr("Copy Row(s)", "", static_cast<int>(selectedRows.count())));
+    copyRowAction->setData(VariantPointer<QTreeView>::asQVariant(tree));
+    connect(copyRowAction, &QAction::triggered, this, &PreferencesDialog::copyRowActionTriggered);
+
+    menu->popup(tree->viewport()->mapToGlobal(pos));
+}
+
+void PreferencesDialog::copyActionTriggered()
+{
+    QAction * sendingAction = qobject_cast<QAction *>(sender());
+    if (! sendingAction)
+        return;
+
+    QTreeView * tree = VariantPointer<QTreeView>::asPtr(sendingAction->data());
+
+    QModelIndexList selIndeces = tree->selectionModel()->selectedIndexes();
+
+    int copyColumn = -1;
+    QMenu * menu = qobject_cast<QMenu *>(sendingAction->parent());
+    if (menu)
+    {
+        QPoint menuPosOnTable = tree->mapFromGlobal(QCursor::pos());
+        QModelIndex clickedIndex = tree->indexAt(menuPosOnTable);
+        if (clickedIndex.isValid())
+            copyColumn = clickedIndex.column();
+        if (copyColumn < 0)
+            copyColumn = 0;
+    }
+
+    QString clipdata;
+    if (selIndeces.count() > 0)
+    {
+        foreach(QModelIndex index, selIndeces)
+        {
+            if (index.column() == copyColumn)
+            {
+                QString data = tree->model()->data(index, Qt::DisplayRole).toString();
+                clipdata.append(data.append("\n"));
+            }
+        }
+    }
+
+    QClipboard * clipBoard = QApplication::clipboard();
+    clipBoard->setText(clipdata);
+}
+
+void PreferencesDialog::copyRowActionTriggered()
+{
+    QAction * sendingAction = qobject_cast<QAction *>(sender());
+    if (! sendingAction)
+        return;
+
+    QTreeView * tree = VariantPointer<QTreeView>::asPtr(sendingAction->data());
+
+    QModelIndexList selIndeces = tree->selectionModel()->selectedIndexes();
+
+    QString clipdata;
+    if (selIndeces.count() > 0)
+    {
+        int lastCol = tree->model()->columnCount() - 1;
+
+        QStringList row;
+        foreach(QModelIndex index, selIndeces)
+        {
+            row << tree->model()->data(index, Qt::DisplayRole).toString();
+            if (index.column() < lastCol)
+                continue;
+            clipdata.append(row.join("\t\t").append("\n"));
+            row.clear();
+        }
+    }
+
+    QClipboard * clipBoard = QApplication::clipboard();
+    clipBoard->setText(clipdata);
+}
+
 void PreferencesDialog::updateSearchLineEdit()
 {
     advancedPrefsModel_.setFilter(searchLineEditText);
@@ -233,8 +363,7 @@ void PreferencesDialog::on_advancedSearchLineEdit_textEdited(const QString &text
      * the countdown.
      */
     searchLineEditText = text;
-    guint gui_debounce_timer = prefs_get_uint_value("gui", "debounce.timer");
-    searchLineEditTimer->start(gui_debounce_timer);
+    searchLineEditTimer->start(prefs.gui_debounce_timer);
 }
 
 void PreferencesDialog::on_showChangedValuesCheckBox_toggled(bool checked)
@@ -245,14 +374,18 @@ void PreferencesDialog::on_showChangedValuesCheckBox_toggled(bool checked)
     pd_ui_->advancedView->expandAll();
 }
 
-void PreferencesDialog::on_buttonBox_accepted()
+void PreferencesDialog::apply()
 {
-    gchar* err = NULL;
+    char* err = NULL;
     unsigned int redissect_flags = 0;
 
     // XXX - We should validate preferences as the user changes them, not here.
+    //       Some, but not all, of the preference controls validate the input,
+    //       but they don't disable the OK/Apply button, and, what's worse, the
+    //       "stashed" value is sometimes the last valid input, not, e.g., the
+    //       input when the dialog was opened.
     // XXX - We're also too enthusiastic about setting must_redissect.
-    prefs_modules_foreach_submodules(NULL, module_prefs_unstash, (gpointer)&redissect_flags);
+    prefs_modules_for_all_modules(module_prefs_unstash, (void *)&redissect_flags);
 
     extcap_register_preferences();
 
@@ -279,24 +412,18 @@ void PreferencesDialog::on_buttonBox_accepted()
     mainApp->emitAppSignal(MainApplication::FilterExpressionsChanged);
 
     prefs_main_write();
-    if (save_decode_as_entries(&err) < 0)
+    if (save_decode_as_entries(application_flavor_name_proper(), application_configuration_environment_prefix(), &err) < 0)
     {
         simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err);
         g_free(err);
     }
 
-    write_language_prefs();
-    mainApp->loadLanguage(QString(language));
-
-#ifdef HAVE_AIRPCAP
-  /*
-   * Load the Wireshark decryption keys (just set) and save
-   * the changes to the adapters' registry
-   */
-  //airpcap_load_decryption_keys(airpcap_if_list);
-#endif
-
-    // gtk/prefs_dlg.c:prefs_main_apply_all
+    if (!write_language_prefs(application_configuration_environment_prefix(), &err))
+    {
+        simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err);
+        g_free(err);
+    }
+    mainApp->loadLanguage(QString(get_language_used()));
     /*
      * Apply the protocol preferences first - "gui_prefs_apply()" could
      * cause redissection, and we have to make sure the protocol
@@ -305,41 +432,48 @@ void PreferencesDialog::on_buttonBox_accepted()
     prefs_apply_all();
 
     /* Fill in capture options with values from the preferences */
-    prefs_to_capture_opts();
-
-#ifdef HAVE_AIRPCAP
-//    prefs_airpcap_update();
-#endif
+    prefs_to_capture_opts(&global_capture_opts);
+    mainApp->emitAppSignal(MainApplication::AggregationVisiblity);
+    if (redissect_flags & PREF_EFFECT_AGGREGATION) {
+        mainApp->emitAppSignal(MainApplication::AggregationChanged);
+    }
 
     mainApp->setMonospaceFont(prefs.gui_font_name);
 
     if (redissect_flags & (PREF_EFFECT_GUI_COLOR)) {
-        mainApp->queueAppSignal(MainApplication::ColorsChanged);
+        ColorUtils::setScheme(prefs.gui_color_scheme);
+        mainApp->emitAppSignal(MainApplication::ColorsChanged);
     }
 
     if (redissect_flags & PREF_EFFECT_FIELDS) {
-        mainApp->queueAppSignal(MainApplication::FieldsChanged);
+        mainApp->emitAppSignal(MainApplication::FieldsChanged);
     }
 
     if (redissect_flags & PREF_EFFECT_DISSECTION) {
         // Freeze the packet list early to avoid updating column data before doing a
         // full redissection. The packet list will be thawed when redissection is done.
-        mainApp->queueAppSignal(MainApplication::FreezePacketList);
+        mainApp->emitAppSignal(MainApplication::FreezePacketList);
 
         /* Redissect all the packets, and re-evaluate the display filter. */
-        mainApp->queueAppSignal(MainApplication::PacketDissectionChanged);
+        mainApp->emitAppSignal(MainApplication::PacketDissectionChanged);
     }
 
     if (redissect_flags) {
-        mainApp->queueAppSignal(MainApplication::PreferencesChanged);
+        mainApp->emitAppSignal(MainApplication::PreferencesChanged);
     }
 
     if (redissect_flags & PREF_EFFECT_GUI_LAYOUT) {
-        mainApp->queueAppSignal(MainApplication::RecentPreferencesRead);
+        mainApp->emitAppSignal(MainApplication::RecentPreferencesRead);
     }
 
     if (prefs.capture_no_extcap != saved_capture_no_extcap_)
         mainApp->refreshLocalInterfaces();
+}
+
+void PreferencesDialog::on_buttonBox_accepted()
+{
+    apply();
+    accept();
 }
 
 void PreferencesDialog::on_buttonBox_rejected()
@@ -350,9 +484,24 @@ void PreferencesDialog::on_buttonBox_rejected()
 #ifdef HAVE_LIBGNUTLS
     pd_ui_->rsaKeysFrame->rejectChanges();
 #endif
+    reject();
+}
+
+void PreferencesDialog::on_buttonBox_clicked(QAbstractButton *button)
+{
+    if (pd_ui_->buttonBox->buttonRole(button) == QDialogButtonBox::ApplyRole) {
+        apply();
+    }
 }
 
 void PreferencesDialog::on_buttonBox_helpRequested()
 {
-    mainApp->helpTopicAction(HELP_PREFERENCES_DIALOG);
+    QString help_page = modulePrefsModel_.data(pd_ui_->prefsView->currentIndex(), ModulePrefsModel::ModuleHelp).toString();
+    if (!help_page.isEmpty()) {
+        QString url = gchar_free_to_qstring(user_guide_url(help_page.toUtf8().constData()));
+        QDesktopServices::openUrl(QUrl(QDir::fromNativeSeparators(url)));
+    } else {
+        // Generic help
+        mainApp->helpTopicAction(HELP_PREFERENCES_DIALOG);
+    }
 }

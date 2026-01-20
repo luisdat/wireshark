@@ -24,9 +24,9 @@ static dissector_handle_t gdsdb_handle;
 #define TCP_PORT	3050
 
 static int proto_gdsdb;
-static gint ett_gdsdb;
+static int ett_gdsdb;
 static int hf_gdsdb_opcode;
-/* static gint ett_gdsdb_opcode; */
+/* static int ett_gdsdb_opcode; */
 
 /* gdsdb_dummy */
 /* gdsdb_connect */
@@ -37,7 +37,7 @@ static int hf_gdsdb_connect_filename;
 static int hf_gdsdb_connect_count;
 static int hf_gdsdb_connect_userid;
 static int hf_gdsdb_connect_pref;
-static gint ett_gdsdb_connect_pref;
+static int ett_gdsdb_connect_pref;
 static int hf_gdsdb_connect_pref_version;
 static int hf_gdsdb_connect_pref_architecture;
 static int hf_gdsdb_connect_pref_mintype;
@@ -378,6 +378,8 @@ static const value_string gdsdb_opcode[] = {
 	{ op_cancel,                 "cancel" },
 	{ 0, NULL }
 };
+static value_string_ext gdsdb_opcode_ext = VALUE_STRING_EXT_INIT(gdsdb_opcode);
+
 
 static const value_string gdsdb_architectures[] = {
 	{  1, "Generic" },
@@ -489,7 +491,7 @@ static int add_uint_string(proto_tree *tree, int hf_string, tvbuff_t *tvb, int o
 static int add_byte_array(proto_tree *tree, int hf_len, int hf_byte, tvbuff_t *tvb, int offset)
 {
 	proto_item* ti;
-	guint32 length;
+	uint32_t length;
 
 	proto_tree_add_item_ret_uint(tree, hf_len, tvb,
 						offset, 4, ENC_BIG_ENDIAN, &length);
@@ -735,7 +737,7 @@ gdsdb_send(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset)
 static int
 gdsdb_status_vector(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
-	guint32 arg;
+	uint32_t arg;
 	while (tvb_reported_length_remaining(tvb, offset) >= 4)
 	{
 		proto_tree_add_item_ret_uint(tree, hf_gdsdb_status_vector_arg, tvb,
@@ -775,7 +777,7 @@ gdsdb_response(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offs
 {
 	int total_length = 16;
 	int length = tvb_reported_length_remaining(tvb, offset);
-	guint32 size_length;
+	uint32_t size_length;
 
 	/* Calculate if we need more data */
 	if (length < total_length) {
@@ -940,7 +942,7 @@ gdsdb_reconnect(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int off
 static int
 gdsdb_info(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset)
 {
-	guint opcode;
+	unsigned opcode;
 	int total_length = 16;
 	int length = tvb_reported_length_remaining(tvb, offset);
 
@@ -1287,7 +1289,7 @@ gdsdb_sql_response(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int 
 	return tvb_reported_length(tvb);
 }
 
-static int (*gdsdb_handle_opcode[])(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset) = {
+static int (* const gdsdb_handle_opcode[])(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset) = {
 	gdsdb_dummy,             /* op_void */
 	gdsdb_connect,           /* op_connect */
 	gdsdb_dummy,             /* op_exit */
@@ -1387,7 +1389,7 @@ dissect_gdsdb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 {
 	proto_item  *ti;
 	proto_tree  *gdsdb_tree;
-	guint        opcode;
+	unsigned     opcode;
 	int          offset = 0;
 
 	if (tvb_reported_length(tvb) < 4)
@@ -1408,7 +1410,7 @@ dissect_gdsdb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 			return 0;
 
 		col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-				val_to_str(opcode, gdsdb_opcode, "Unknown opcode %u"));
+				val_to_str_ext(pinfo->pool, opcode, &gdsdb_opcode_ext, "Unknown opcode %u"));
 
 		ti = proto_tree_add_item(tree, proto_gdsdb, tvb, offset, -1, ENC_NA);
 		gdsdb_tree = proto_item_add_subtree(ti, ett_gdsdb);
@@ -1439,14 +1441,14 @@ proto_register_gdsdb(void)
 	static hf_register_info hf[] = {
 		{ &hf_gdsdb_opcode,
 			{ "Opcode", "gdsdb.opcode",
-			FT_UINT32, BASE_DEC, VALS(gdsdb_opcode), 0x0,
+			FT_UINT32, BASE_DEC|BASE_EXT_STRING, &gdsdb_opcode_ext, 0x0,
 			NULL, HFILL }
 		},
 		/* gdsdb_dummy */
 		/* gdsdb_connect */
 		{ &hf_gdsdb_connect_operation,
 			{ "Operation", "gdsdb.connect.operation",
-			FT_UINT32, BASE_DEC, VALS(gdsdb_opcode), 0x0,
+			FT_UINT32, BASE_DEC|BASE_EXT_STRING, &gdsdb_opcode_ext, 0x0,
 			NULL, HFILL }
 		},
 		{ &hf_gdsdb_connect_version,
@@ -2030,7 +2032,7 @@ proto_register_gdsdb(void)
 #endif
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_gdsdb,
 		/* &ett_gdsdb_opcode, */
 		&ett_gdsdb_connect_pref

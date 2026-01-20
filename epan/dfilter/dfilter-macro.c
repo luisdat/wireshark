@@ -24,7 +24,7 @@
 #include <wsutil/glib-compat.h>
 #include <wsutil/filter_files.h>
 
-static GHashTable *macros_table = NULL;
+static GHashTable *macros_table;
 
 /* #define DUMP_DFILTER_MACRO */
 #ifdef DUMP_DFILTER_MACRO
@@ -79,7 +79,7 @@ static char* dfilter_macro_resolve(char* name, char** args, df_error_t** error) 
 
 	ret = wmem_strdup(NULL, text->str);
 
-	g_string_free(text,true);
+	g_string_free(text,TRUE);
 
 	return ret;
 }
@@ -154,7 +154,7 @@ static char* dfilter_macro_apply_recurse(const char* text, unsigned depth, df_er
 		return NULL;
 	}
 
-#define FGS(n) if (n) g_string_free(n,true); n = NULL
+#define FGS(n) if (n) g_string_free(n,TRUE); n = NULL
 
 #define FREE_ALL() \
 	do { \
@@ -263,7 +263,12 @@ static char* dfilter_macro_apply_recurse(const char* text, unsigned depth, df_er
 					state = OUTSIDE;
 				} else if ( c == '\0') {
 					if (error != NULL)
-						*error = df_error_new_msg("end of filter in the middle of a macro expression");
+						/* A generic error, because DF_ERROR_UNEXPECTED_END
+						 * is used to indicate that a field is grammatically
+						 * possible. (XXX - Have an error that indicates a
+						 * macro name token is expected?)
+						 */
+						*error = df_error_new_msg("end of filter in the middle of a macro expression name");
 					goto on_error;
 				} else {
 					/* XXX - Spaces or other whitespace after the macro name but
@@ -299,7 +304,8 @@ static char* dfilter_macro_apply_recurse(const char* text, unsigned depth, df_er
 				switch(c) {
 					case '\0':
 						if (error != NULL)
-							*error = df_error_new_msg("end of filter in the middle of a macro expression");
+							/* A macro argument can be a field. */
+							*error = df_error_new_printf(DF_ERROR_UNEXPECTED_END, NULL, "%s", "end of filter in the middle of a macro expression");
 						goto on_error;
 					case ';':
 					case ',':
@@ -309,7 +315,7 @@ static char* dfilter_macro_apply_recurse(const char* text, unsigned depth, df_er
 								*error = df_error_new_msg("null argument in macro expression");
 							goto on_error;
 						}
-						g_ptr_array_add(args,g_string_free(arg,false));
+						g_ptr_array_add(args,g_string_free(arg,FALSE));
 
 						arg = g_string_sized_new(32);
 						break;
@@ -320,7 +326,7 @@ static char* dfilter_macro_apply_recurse(const char* text, unsigned depth, df_er
 							break;
 						} else {
 							if (error != NULL)
-								*error = df_error_new_msg("end of filter in the middle of a macro expression");
+								*error = df_error_new_printf(DF_ERROR_UNEXPECTED_END, NULL, "%s", "end of filter in the middle of a macro expression");
 							goto on_error;
 						}
 					case '}':
@@ -340,7 +346,7 @@ static char* dfilter_macro_apply_recurse(const char* text, unsigned depth, df_er
 								goto on_error;
 							}
 						} else {
-							g_ptr_array_add(args,g_string_free(arg,false));
+							g_ptr_array_add(args,g_string_free(arg,FALSE));
 							g_ptr_array_add(args,NULL);
 							arg = NULL;
 						}
@@ -377,11 +383,11 @@ finish:
 
 		if (changed) {
 			resolved = dfilter_macro_apply_recurse(out->str, depth + 1, error);
-			g_string_free(out,true);
+			g_string_free(out,TRUE);
 			return resolved;
 		} else {
 			char* out_str = wmem_strdup(NULL, out->str);
-			g_string_free(out,true);
+			g_string_free(out,TRUE);
 			return out_str;
 		}
 	}
@@ -392,7 +398,7 @@ on_error:
 			if (*error == NULL)
 				*error = df_error_new_msg("unknown error in macro expression");
 		}
-		g_string_free(out,true);
+		g_string_free(out,TRUE);
 		return NULL;
 	}
 }
@@ -502,9 +508,9 @@ dfilter_macro_t *macro_new(const char *name, const char *text) {
 	return m;
 }
 
-void dfilter_macro_init(void) {
+void dfilter_macro_init(const char* app_env_var_prefix) {
 	macros_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)macro_free);
-	dfilter_macro_reload();
+	dfilter_macro_reload(app_env_var_prefix);
 }
 
 static bool check_macro(const char *name, const char *text, const char **errp)
@@ -530,16 +536,16 @@ static bool check_macro(const char *name, const char *text, const char **errp)
 	return true;
 }
 
-void dfilter_macro_reload(void) {
+void dfilter_macro_reload(const char* app_env_var_prefix) {
 
 	/* Check if we need to convert an old dfilter_macro configuration file.
 	 * We do so only if a new one doesn't exist. We need to do this check
 	 * for every reload because the configuration profile might have changed. */
-	convert_old_uat_file();
+	convert_old_uat_file(app_env_var_prefix);
 
 	g_hash_table_remove_all(macros_table);
 
-	filter_list_t *list = ws_filter_list_read(DMACROS_LIST);
+	filter_list_t *list = ws_filter_list_read(DMACROS_LIST, app_env_var_prefix);
 	const char *err;
 
 	for (GList *l = list->list; l != NULL; l = l->next) {
@@ -677,7 +683,7 @@ dfilter_macro_table_iter_next(struct dfilter_macro_table_iter *iter,
 	const char *key;
 	dfilter_macro_t *m;
 
-	if (!g_hash_table_iter_next(&iter->iter, (gpointer *)&key, (gpointer *)&m))
+	if (!g_hash_table_iter_next(&iter->iter, (void **)&key, (void **)&m))
 		return false;
 	if (name_ptr)
 		*name_ptr = key;

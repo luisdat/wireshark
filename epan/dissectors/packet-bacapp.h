@@ -19,10 +19,10 @@
 
 /* Used for BACnet statistics */
 typedef struct _bacapp_info_value_t {
-    const gchar     *service_type;
-    const gchar     *invoke_id;
-    const gchar     *instance_ident;
-    const gchar     *object_ident;
+    const char      *service_type;
+    const char      *invoke_id;
+    const char      *instance_ident;
+    const char      *object_ident;
 } bacapp_info_value_t;
 
 /* Possible datatypes of the present_value property.
@@ -42,6 +42,16 @@ typedef enum BacappPresentValueType {
     BACAPP_PRESENT_VALUE_TIME,
     BACAPP_PRESENT_VALUE_OBJECT_IDENTIFIER
 } BacappPresentValueType;
+
+/* used to dissect the BSCVLC data / destination option token data */
+extern unsigned
+bacnet_dissect_token(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+    unsigned offset, const char *lable);
+
+/* used to dissect the BSCVLC data / destination option hint data */
+extern unsigned
+bacnet_dissect_scope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+    unsigned offset, const char *lable);
 
 #endif /* __PACKET_BACNET_H__ */
 

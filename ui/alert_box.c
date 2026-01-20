@@ -12,34 +12,31 @@
 #include "config.h"
 
 #include <string.h>
+#include <errno.h>
 
 #include <wiretap/wtap.h>
 #include <wsutil/filesystem.h>
+#include <wsutil/report_message.h>
 
 #include "ui/alert_box.h"
 
 #include "ui/simple_dialog.h"
 
+static void
+open_failure_alert_box(const char *filename, int err, bool for_writing);
+static void
+write_failure_alert_box(const char *filename, int err);
+
 /*
- * Alert box for general errors.
+ * Alert boxes for general errors and warnings.
  */
-void
-failure_alert_box(const char *msg_format, ...)
-{
-    va_list ap;
-
-    va_start(ap, msg_format);
-    vsimple_error_message_box(msg_format, ap);
-    va_end(ap);
-}
-
-void
+static void
 vfailure_alert_box(const char *msg_format, va_list ap)
 {
     vsimple_error_message_box(msg_format, ap);
 }
 
-void
+static void
 vwarning_alert_box(const char *msg_format, va_list ap)
 {
     vsimple_warning_message_box(msg_format, ap);
@@ -57,7 +54,7 @@ vwarning_alert_box(const char *msg_format, va_list ap)
  * they're providing guidelines for people less sophisticated than the
  * typical Wireshark user is, but....
  */
-void
+static void
 cfile_open_failure_alert_box(const char *filename, int err, char *err_info)
 {
     char *display_basename;
@@ -147,6 +144,14 @@ cfile_open_failure_alert_box(const char *filename, int err, char *err_info)
             g_free(err_info);
             break;
 
+        case WTAP_ERR_REC_MALFORMED:
+            simple_error_message_box("%s contains a malformed record.\n"
+                "(%s)",
+                display_basename,
+                err_info != NULL ? err_info : "no information supplied");
+            g_free(err_info);
+            break;
+
         default:
             simple_error_message_box(
                         "The file \"%s\" could not be opened: %s.",
@@ -175,7 +180,7 @@ cfile_open_failure_alert_box(const char *filename, int err, char *err_info)
  * they're providing guidelines for people less sophisticated than the
  * typical Wireshark user is, but....
  */
-void
+static void
 cfile_dump_open_failure_alert_box(const char *filename, int err,
                                   char *err_info, int file_type_subtype)
 {
@@ -259,7 +264,7 @@ cfile_dump_open_failure_alert_box(const char *filename, int err,
  * "err_info" is assumed to be a string giving further information for
  * some WTAP_ERR_ values.
  */
-void
+static void
 cfile_read_failure_alert_box(const char *filename, int err, char *err_info)
 {
     char *display_name;
@@ -326,6 +331,14 @@ cfile_read_failure_alert_box(const char *filename, int err, char *err_info)
         g_free(err_info);
         break;
 
+    case WTAP_ERR_REC_MALFORMED:
+        simple_error_message_box("%s contains a malformed record.\n"
+            "(%s)",
+            display_name,
+            err_info != NULL ? err_info : "no information supplied");
+        g_free(err_info);
+        break;
+
     default:
         simple_error_message_box(
                     "An error occurred while reading the %s: %s.",
@@ -347,9 +360,9 @@ cfile_read_failure_alert_box(const char *filename, int err, char *err_info)
  * is a WTAP_FILE_TYPE_SUBTYPE_ value for the type and subtype of file
  * being written.
  */
-void
+static void
 cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
-                              int err, char *err_info, uint32_t framenum,
+                              int err, char *err_info, uint64_t framenum,
                               int file_type_subtype)
 {
     char *in_file_string;
@@ -371,7 +384,7 @@ cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
              * the frame number and file type/subtype.
              */
             simple_error_message_box(
-                        "Frame %u%s has a network type that can't be saved in a \"%s\" file.",
+                        "Frame %" PRIu64 "%s has a network type that can't be saved in a \"%s\" file.",
                         framenum, in_file_string,
                         wtap_file_type_subtype_description(file_type_subtype));
             break;
@@ -383,19 +396,9 @@ cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
              * the frame number and file type/subtype.
              */
             simple_error_message_box(
-                        "Frame %u%s has a network type that differs from the network type of earlier packets, which isn't supported in a \"%s\" file.",
+                        "Frame %" PRIu64 "%s has a network type that differs from the network type of earlier packets, which isn't supported in a \"%s\" file.",
                         framenum, in_file_string,
                         wtap_file_type_subtype_description(file_type_subtype));
-            break;
-
-        case WTAP_ERR_INTERNAL:
-            out_display_basename = g_filename_display_basename(out_filename);
-            simple_error_message_box(
-                        "An internal error occurred while writing to the file \"%s\".\n(%s)",
-                        out_display_basename,
-                        err_info != NULL ? err_info : "no information supplied");
-            g_free(out_display_basename);
-            g_free(err_info);
             break;
 
         case WTAP_ERR_PACKET_TOO_LARGE:
@@ -405,7 +408,7 @@ cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
              * the frame number and file type/subtype.
              */
             simple_error_message_box(
-                        "Frame %u%s is larger than Wireshark supports in a \"%s\" file.",
+                        "Frame %" PRIu64 "%s is larger than Wireshark supports in a \"%s\" file.",
                         framenum, in_file_string,
                         wtap_file_type_subtype_description(file_type_subtype));
             break;
@@ -417,9 +420,12 @@ cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
              * the record number and file type/subtype.
              */
             simple_error_message_box(
-                        "Record %u%s has a record type that can't be saved in a \"%s\" file.",
+                        "Record %" PRIu64 "%s has a record type that can't be saved in a \"%s\" file.\n"
+                        "(%s)",
                         framenum, in_file_string,
-                        wtap_file_type_subtype_description(file_type_subtype));
+                        wtap_file_type_subtype_description(file_type_subtype),
+                        err_info != NULL ? err_info : "no information supplied");
+            g_free(err_info);
             break;
 
         case WTAP_ERR_UNWRITABLE_REC_DATA:
@@ -429,7 +435,7 @@ cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
              * the record number and file type/subtype.
              */
             simple_error_message_box(
-                        "Record %u%s has data that can't be saved in a \"%s\" file.\n"
+                        "Record %" PRIu64 "%s has data that can't be saved in a \"%s\" file.\n"
                         "(%s)",
                         framenum, in_file_string,
                         wtap_file_type_subtype_description(file_type_subtype),
@@ -443,6 +449,16 @@ cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
                         "A full write couldn't be done to the file \"%s\".",
                         out_display_basename);
             g_free(out_display_basename);
+            break;
+
+        case WTAP_ERR_INTERNAL:
+            out_display_basename = g_filename_display_basename(out_filename);
+            simple_error_message_box(
+                        "An internal error occurred while writing to the file \"%s\".\n(%s)",
+                        out_display_basename,
+                        err_info != NULL ? err_info : "no information supplied");
+            g_free(out_display_basename);
+            g_free(err_info);
             break;
 
         default:
@@ -490,7 +506,7 @@ cfile_write_failure_alert_box(const char *in_filename, const char *out_filename,
  * they're providing guidelines for people less sophisticated than the
  * typical Wireshark user is, but....
  */
-void
+static void
 cfile_close_failure_alert_box(const char *filename, int err, char *err_info)
 {
     char *display_basename;
@@ -547,7 +563,7 @@ cfile_close_failure_alert_box(const char *filename, int err, char *err_info)
  * they're providing guidelines for people less sophisticated than the
  * typical Wireshark user is, but....
  */
-void
+static void
 open_failure_alert_box(const char *filename, int err, bool for_writing)
 {
     char *display_basename;
@@ -563,7 +579,7 @@ open_failure_alert_box(const char *filename, int err, bool for_writing)
  * Alert box for a failed attempt to read a file.
  * "err" is assumed to be a UNIX-style errno.
  */
-void
+static void
 read_failure_alert_box(const char *filename, int err)
 {
     char *display_basename;
@@ -585,7 +601,7 @@ read_failure_alert_box(const char *filename, int err)
  * they're providing guidelines for people less sophisticated than the
  * typical Wireshark user is, but....
  */
-void
+static void
 write_failure_alert_box(const char *filename, int err)
 {
     char *display_basename;
@@ -594,4 +610,72 @@ write_failure_alert_box(const char *filename, int err)
     simple_message_box(ESD_TYPE_ERROR, NULL, NULL,
                        file_write_error_message(err), display_basename);
     g_free(display_basename);
+}
+
+/*
+ * Alert box for a failed attempt to rename a file.
+ * "err" is assumed to be a UNIX-style errno.
+ *
+ * XXX - whether we mention the source pathname, the target pathname,
+ * or both depends on the error and on what we find if we look for
+ * one or both of them.
+ */
+static void
+rename_failure_alert_box(const char *old_filename, const char *new_filename,
+                         int err)
+{
+    char *old_display_basename, *new_display_basename;
+
+    old_display_basename = g_filename_display_basename(old_filename);
+    new_display_basename = g_filename_display_basename(new_filename);
+    switch (err) {
+
+    case ENOENT:
+        /* XXX - should check whether the source exists and, if not,
+           report it as the problem and, if so, report the destination
+           as the problem. */
+        simple_error_message_box("The path to the file \"%s\" doesn't exist.",
+                                 old_display_basename);
+        break;
+
+    case EACCES:
+        /* XXX - if we're doing a rename after a safe save, we should
+           probably say something else. */
+        simple_error_message_box("You don't have permission to move the capture file from \"%s\" to \"%s\".",
+                                 old_display_basename, new_display_basename);
+        break;
+
+    default:
+        /* XXX - this should probably mention both the source and destination
+           pathnames. */
+        simple_error_message_box("The file \"%s\" could not be moved to \"%s\": %s.",
+                                 old_display_basename, new_display_basename,
+                                 wtap_strerror(err));
+        break;
+    }
+    g_free(old_display_basename);
+    g_free(new_display_basename);
+}
+
+/*
+ * Register these routines with the report_message mechanism.
+ */
+void
+init_report_alert_box(const char *friendly_program_name)
+{
+    static const struct report_message_routines report_alert_box_routines = {
+        vfailure_alert_box,
+        vwarning_alert_box,
+        open_failure_alert_box,
+        read_failure_alert_box,
+        write_failure_alert_box,
+        rename_failure_alert_box,
+        cfile_open_failure_alert_box,
+        cfile_dump_open_failure_alert_box,
+        cfile_read_failure_alert_box,
+        cfile_write_failure_alert_box,
+        cfile_close_failure_alert_box
+    };
+
+    init_report_message(friendly_program_name, &report_alert_box_routines);
 }

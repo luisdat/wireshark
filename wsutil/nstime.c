@@ -14,10 +14,13 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+
 #include "epochs.h"
 #include "time_util.h"
 #include "to_str.h"
 #include "strtoi.h"
+#include "ws_assert.h"
 
 /* this is #defined so that we can clearly see that we have the right number of
    zeros, rather than as a guard against the number of nanoseconds in a second
@@ -35,6 +38,12 @@ void nstime_set_zero(nstime_t *nstime)
 bool nstime_is_zero(const nstime_t *nstime)
 {
     return nstime->secs == 0 && nstime->nsecs == 0;
+}
+
+/* is the given nstime_t currently negative? */
+bool nstime_is_negative(const nstime_t *nstime)
+{
+    return nstime->secs < 0 || nstime->nsecs < 0;
 }
 
 /* set the given nstime_t to (0,maxint) to mark it as "unset"
@@ -75,6 +84,18 @@ void nstime_copy(nstime_t *a, const nstime_t *b)
 
 void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
 {
+    if (G_UNLIKELY(nstime_is_unset(a) || nstime_is_unset(b))) {
+        nstime_set_unset(delta);
+        return;
+    }
+    /* If calculations with the nanoseconds overflow, the nanoseconds are
+     * outside the valid range, probably because the struct member was set
+     * directly from packet data without checking the value. */
+    if (ckd_sub(&delta->nsecs, b->nsecs, a->nsecs)) {
+        ws_warn_badarg("Nanoseconds outside valid range.");
+        delta->nsecs = 0;
+        errno = EINVAL;
+    }
     if (b->secs == a->secs) {
         /* The seconds part of b is the same as the seconds part of a, so if
            the nanoseconds part of the first time is less than the nanoseconds
@@ -82,9 +103,8 @@ void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
            just be the difference between the nanoseconds part of b and the
            nanoseconds part of a; don't adjust the seconds part of the delta,
            as it's OK if the nanoseconds part is negative, and an overflow
-           can never result. */
+           should never result. */
         delta->secs = 0;
-        delta->nsecs = b->nsecs - a->nsecs;
     } else if (b->secs < a->secs) {
         /* The seconds part of b is less than the seconds part of a, so b is
            before a.
@@ -93,18 +113,32 @@ void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
            should have the same sign, so if the difference between the
            nanoseconds values would be *positive*, subtract 1,000,000,000
            from it, and add one to the seconds value. */
-        delta->secs = b->secs - a->secs;
-        delta->nsecs = b->nsecs - a->nsecs;
+        delta->secs = b->secs;
         if(delta->nsecs > 0) {
             delta->nsecs -= NS_PER_S;
-            delta->secs ++;
+            /* This can never overflow, because b is less than a. */
+            delta->secs++;
+        }
+        if (ckd_sub(&delta->secs, delta->secs, a->secs)) {
+            /* Because b is less than a, the correct answer is smaller than
+             * representable. Clamp to the minimum valid value. */
+            delta->secs = TIME_T_MIN;
+            delta->nsecs = 1 - NS_PER_S;
+            errno = ERANGE;
         }
     } else {
-        delta->secs = b->secs - a->secs;
-        delta->nsecs = b->nsecs - a->nsecs;
+        delta->secs = b->secs;
         if(delta->nsecs < 0) {
             delta->nsecs += NS_PER_S;
-            delta->secs --;
+            /* This can never overflow, because b is greater than a. */
+            delta->secs--;
+        }
+        if (ckd_sub(&delta->secs, delta->secs, a->secs)) {
+            /* Because b is greater than a, the correct answer is greater
+             * than representable. Clamp to the maximum valid value. */
+            delta->secs = TIME_T_MAX;
+            delta->nsecs = NS_PER_S - 1;
+            errno = ERANGE;
         }
     }
 }
@@ -116,14 +150,42 @@ void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
 
 void nstime_sum(nstime_t *sum, const nstime_t *a, const nstime_t *b)
 {
-    sum->secs = a->secs + b->secs;
-    sum->nsecs = a->nsecs + b->nsecs;
+    if (G_UNLIKELY(nstime_is_unset(a) || nstime_is_unset(b))) {
+        nstime_set_unset(sum);
+        return;
+    }
+    if (ckd_add(&sum->nsecs, a->nsecs, b->nsecs)) {
+        ws_warn_badarg("Nanoseconds outside valid range.");
+        sum->nsecs = 0;
+        errno = EINVAL;
+    }
+    if (ckd_add(&sum->secs, a->secs, b->secs)) {
+        if (a->secs > 0) {
+            sum->secs = TIME_T_MAX;
+            sum->nsecs = NS_PER_S - 1;
+        } else {
+            sum->secs = TIME_T_MIN;
+            sum->nsecs = 1 - NS_PER_S;
+        }
+        errno = ERANGE;
+        return;
+    }
     if(sum->nsecs>=NS_PER_S || (sum->nsecs>0 && sum->secs<0)){
         sum->nsecs-=NS_PER_S;
-        sum->secs++;
+        if (ckd_add(&sum->secs, sum->secs, 1)) {
+            sum->secs = TIME_T_MAX;
+            sum->nsecs = NS_PER_S - 1;
+            errno = ERANGE;
+            return;
+        }
     } else if(sum->nsecs<=-NS_PER_S || (sum->nsecs<0 && sum->secs>0)) {
         sum->nsecs+=NS_PER_S;
-        sum->secs--;
+        if (ckd_sub(&sum->secs, sum->secs, 1)) {
+            sum->secs = TIME_T_MIN;
+            sum->nsecs = 1 - NS_PER_S;
+            errno = ERANGE;
+            return;
+        }
     }
 }
 
@@ -149,9 +211,26 @@ int nstime_cmp (const nstime_t *a, const nstime_t *b )
         }
     }
     if (a->secs == b->secs) {
-        return a->nsecs - b->nsecs;
+        if (a->nsecs == b->nsecs) {
+            return 0;
+        } else {
+            return a->nsecs > b->nsecs ? 1 : -1;
+        }
     } else {
-        return (int) (a->secs - b->secs);
+        return a->secs > b->secs ? 1 : -1;
+#if 0
+        /* The old behavior, in the common case, returned the difference in
+         * seconds, which could overflow. That was never promised, but if it
+         * is desired, a way to handle it with C23 checked arithmetic could be
+         * (ignoring hypothetical platforms with floating-point time_t): */
+        int ret;
+        if (ckd_sub(&ret, a->secs, b->secs)) {
+            /* We subtract b->secs, so if it's positive, there was underflow,
+             * and vice versa. */
+            ret = b->secs > 0 ? INT_MIN : INT_MAX;
+        }
+        return ret;
+#endif
     }
 }
 
@@ -182,22 +261,17 @@ double nstime_to_sec(const nstime_t *nstime)
     return ((double)nstime->secs + (double)nstime->nsecs/NS_PER_S);
 }
 
-/*
- * This code is based on the Samba code:
- *
- *  Unix SMB/Netbios implementation.
- *  Version 1.9.
- *  time handling functions
- *  Copyright (C) Andrew Tridgell 1992-1998
- */
-
-#ifndef TIME_T_MIN
-#define TIME_T_MIN ((time_t) ((time_t)0 < (time_t) -1 ? (time_t) 0 \
-                    : (time_t) (~0ULL << (sizeof (time_t) * CHAR_BIT - 1))))
-#endif
-#ifndef TIME_T_MAX
-#define TIME_T_MAX ((time_t) (~ (time_t) 0 - TIME_T_MIN))
-#endif
+void nstime_rounded(nstime_t *a, const nstime_t *b, ws_tsprec_e prec)
+{
+    nstime_t round = NSTIME_INIT_ZERO;
+    unsigned dv = NS_PER_S;
+    for (ws_tsprec_e i = WS_TSPREC_SEC; i < prec; i++) {
+        dv /= 10;
+    }
+    round.nsecs = 5 * (dv / 10);
+    nstime_sum(a, b, &round);
+    a->nsecs = (a->nsecs / dv) * dv;
+}
 
 static bool
 common_filetime_to_nstime(nstime_t *nstime, uint64_t ftsecs, int nsecs)
@@ -252,7 +326,7 @@ filetime_to_nstime(nstime_t *nstime, uint64_t filetime)
 }
 
 /*
- * function: nsfiletime_to_nstime
+ * function: filetime_ns_to_nstime
  * converts a Windows FILETIME-like value, but given in nanoseconds
  * rather than 10ths of microseconds, to an nstime_t
  * returns true if the conversion succeeds, false if it doesn't
@@ -260,7 +334,7 @@ filetime_to_nstime(nstime_t *nstime, uint64_t filetime)
  * underflows time_t)
  */
 bool
-nsfiletime_to_nstime(nstime_t *nstime, uint64_t nsfiletime)
+filetime_ns_to_nstime(nstime_t *nstime, uint64_t nsfiletime)
 {
     uint64_t ftsecs;
     int nsecs;
@@ -270,6 +344,25 @@ nsfiletime_to_nstime(nstime_t *nstime, uint64_t nsfiletime)
     nsecs = (int)(nsfiletime % NS_PER_S);
 
     return common_filetime_to_nstime(nstime, ftsecs, nsecs);
+}
+
+/*
+ * function: filetime_1sec_to_nstime
+ * converts a Windows FILETIME-like value, but given in seconds
+ * rather than 10ths of microseconds, to an nstime_t
+ * returns true if the conversion succeeds, false if it doesn't
+ * (for example, with a 32-bit time_t, the time overflows or
+ * underflows time_t)
+ */
+bool
+filetime_1sec_to_nstime(nstime_t *nstime, uint64_t filetime_1sec)
+{
+    /*
+     * Make sure filetime_1sec fits in a 64-bit signed integer.
+     */
+    if (filetime_1sec > INT64_MAX)
+        return false; /* No, it doesn't */
+    return common_filetime_to_nstime(nstime, filetime_1sec, 0);
 }
 
 /*
@@ -621,7 +714,7 @@ size_t nstime_to_iso8601(char *buf, size_t buf_size, const nstime_t *nstime)
     }
 
     /* Some platforms (MinGW-w64) do not support %F or %T. */
-    /* Returns number of bytes, excluding terminaning null, placed in
+    /* Returns number of bytes, excluding terminating null, placed in
      * buf, or zero if there is not enough space for the whole string. */
     len = strftime(buf, buf_size, "%Y-%m-%dT%H:%M:%S", tm);
     if (len == 0) {

@@ -12,19 +12,23 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#pragma once
+
+#include <wsutil/file_compressed.h>
+
 /* Writing pcap files */
 
 /** Write the file header to a dump file.
    Returns true on success, false on failure.
    Sets "*err" to an error code, or 0 for a short write, on failure*/
 extern bool
-libpcap_write_file_header(FILE* pfile, int linktype, int snaplen,
+libpcap_write_file_header(ws_cwstream* pfile, int linktype, int snaplen,
                           bool ts_nsecs, uint64_t *bytes_written, int *err);
 
 /** Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 extern bool
-libpcap_write_packet(FILE* pfile,
+libpcap_write_packet(ws_cwstream* pfile,
                      time_t sec, uint32_t usec,
                      uint32_t caplen, uint32_t len,
                      const uint8_t *pd,
@@ -34,27 +38,27 @@ libpcap_write_packet(FILE* pfile,
 
 /* Write a pre-formatted pcapng block */
 extern bool
-pcapng_write_block(FILE* pfile,
-                  const uint8_t *data,
-                  uint32_t block_total_length,
-                  uint64_t *bytes_written,
-                  int *err);
+pcapng_write_block(ws_cwstream* pfile,
+                   const uint8_t *data,
+                   uint32_t block_total_length,
+                   uint64_t *bytes_written,
+                   int *err);
 
 /** Write a section header block (SHB)
  *
  */
 extern bool
-pcapng_write_section_header_block(FILE* pfile,  /**< Write information */
-                                  GPtrArray *comments,  /**< Comments on the section, Optinon 1 opt_comment
+pcapng_write_section_header_block(ws_cwstream* pfile,  /**< Write information */
+                                  GPtrArray *comments,  /**< Comments on the section, Option 1 opt_comment
                                                          * UTF-8 strings containing comments that areassociated to the current block.
                                                          */
-                                  const char *hw,       /**< HW, Optinon 2 shb_hardware
+                                  const char *hw,       /**< HW, Option 2 shb_hardware
                                                          * An UTF-8 string containing the description of the hardware  used to create this section.
                                                          */
-                                  const char *os,       /**< Operating system name, Optinon 3 shb_os
+                                  const char *os,       /**< Operating system name, Option 3 shb_os
                                                          * An UTF-8 string containing the name of the operating system used to create this section.
                                                          */
-                                  const char *appname,  /**< Application name, Optinon 4 shb_userappl
+                                  const char *appname,  /**< Application name, Option 4 shb_userappl
                                                          * An UTF-8 string containing the name of the application  used to create this section.
                                                          */
                                   uint64_t section_length, /**< Length of section */
@@ -63,7 +67,7 @@ pcapng_write_section_header_block(FILE* pfile,  /**< Write information */
                                   );
 
 extern bool
-pcapng_write_interface_description_block(FILE* pfile,
+pcapng_write_interface_description_block(ws_cwstream* pfile,
                                          const char *comment,  /* OPT_COMMENT           1 */
                                          const char *name,     /* IDB_NAME              2 */
                                          const char *descr,    /* IDB_DESCRIPTION       3 */
@@ -78,7 +82,7 @@ pcapng_write_interface_description_block(FILE* pfile,
                                          int *err);
 
 extern bool
-pcapng_write_interface_statistics_block(FILE* pfile,
+pcapng_write_interface_statistics_block(ws_cwstream* pfile,
                                         uint32_t interface_id,
                                         uint64_t *bytes_written,
                                         const char *comment,   /* OPT_COMMENT           1 */
@@ -89,7 +93,7 @@ pcapng_write_interface_statistics_block(FILE* pfile,
                                         int *err);
 
 extern bool
-pcapng_write_enhanced_packet_block(FILE* pfile,
+pcapng_write_enhanced_packet_block(ws_cwstream* pfile,
                                    const char *comment,
                                    time_t sec, uint32_t usec,
                                    uint32_t caplen, uint32_t len,
@@ -99,16 +103,3 @@ pcapng_write_enhanced_packet_block(FILE* pfile,
                                    uint32_t flags,
                                    uint64_t *bytes_written,
                                    int *err);
-
-/*
- * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
- *
- * Local variables:
- * c-basic-offset: 4
- * tab-width: 8
- * indent-tabs-mode: nil
- * End:
- *
- * vi: set shiftwidth=4 tabstop=8 expandtab:
- * :indentSize=4:tabSize=8:noTabs=true:
- */

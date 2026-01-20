@@ -34,11 +34,15 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <wsutil/array.h>
 #include <wsutil/str_util.h>
 #include <wsutil/strtoi.h>
 
-#include "wtap-int.h"
+#include "socketcan.h"
 #include "file_wrappers.h"
+#include "cllog.h"
+
+static int cllog_file_type_subtype = -1;
 
 /***********************************************************************************************************************
  * Public definitions
@@ -47,10 +51,8 @@
 /***********************************************************************************************************************
  * Public type declarations
  **********************************************************************************************************************/
-/* Time stamp structure type (sec since start + ms resolution) */
-typedef struct { time_t epoch; uint16_t ms; } cCLLog_timeStamp_t;
 
- /* Messasge type */
+ /* Message type */
 typedef enum
 {
     msg_rx_standard_e = 0,
@@ -62,12 +64,9 @@ typedef enum
 /* Typedef CAN-bus message type */
 typedef struct
 {
-    cCLLog_timeStamp_t timestamp;
     uint32_t lost;
     cCLLog_messageType_t msgType;
-    uint32_t id;
-    uint8_t length;
-    uint8_t data[ 8 ];
+    wtap_can_msg_t msg;
 } cCLLog_message_t;
 
 /* Silent-mode*/
@@ -97,7 +96,7 @@ struct cLLog_private
     char id[20];
     uint32_t sessionNo;
     uint32_t splitNo;
-    cCLLog_timeStamp_t logStartTime;
+    nstime_t logStartTime;
     char logStartTimeString[ 20 ];
     char separator;
     uint8_t timeFormat;
@@ -112,13 +111,13 @@ struct cLLog_private
     parseFieldFunc_t parseFieldFunc[ MAX_LOG_LINE_FIELDS ];
 
     /* First log time stamp as relative offset */
-    cCLLog_timeStamp_t firstTimeStampAbs;
+    nstime_t firstTimeStampAbs;
 };
 
 /***********************************************************************************************************************
  * Private definitions
  **********************************************************************************************************************/
-#define HEADER_LINE_PARSE_MAPPING_LENGTH ( sizeof( headerLineParseMapping ) / sizeof( headerLineParseMapping[ 0 ] ) )
+#define HEADER_LINE_PARSE_MAPPING_LENGTH array_length(headerLineParseMapping)
 #define MAX_LOG_LINE_LENGTH 200
 #define TIME_STAMP_STRING_MAX_LENGTH ( sizeof( "YYYY/MM/DDThh:mm:ss.kkk" ) )
 #define TIME_STAMP_STRING_STRIPPED_MAX_LENGTH ( sizeof( "YYYYMMDDhhmmsskkk" ) )
@@ -229,7 +228,18 @@ static bool parseFieldTS(cCLLog_logFileInfo_t *pInfo, char *pField, cCLLog_messa
 
     /* Strip the delimiters from the time strings */
     uint8_t msgTimeStrippedLen = stripTimeStamp(pInfo, timeStampCopy);
+    if (msgTimeStrippedLen > TIME_STAMP_STRING_STRIPPED_MAX_LENGTH - 1) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = g_strdup("cllog: time stamp incorrectly formatted");
+        return false;
+    }
+
     uint8_t headerTimeStrippedLen = stripTimeStamp(pInfo, timeStampHeaderCopy);
+    if (headerTimeStrippedLen > TIME_STAMP_STRING_STRIPPED_MAX_LENGTH - 1) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = g_strdup("cllog: header time stamp incorrectly formatted");
+        return false;
+    }
 
     /* Set time string (YYYYMMDDhhmmsskkk) to the epoch */
     char timeStampStringFull[TIME_STAMP_STRING_STRIPPED_MAX_LENGTH] = "19700101000000000";
@@ -257,15 +267,12 @@ static bool parseFieldTS(cCLLog_logFileInfo_t *pInfo, char *pField, cCLLog_messa
     tm.tm_year -= 1900;
 
     /* To Epoch (mktime converts to epoch from local (!!!) timezone) */
-    pLogEntry->timestamp.epoch = mktime(&tm);
-    pLogEntry->timestamp.ms = ms;
+    pLogEntry->msg.ts.secs = mktime(&tm);
+    pLogEntry->msg.ts.nsecs = ms*1000 * 1000;
 
     /* Is first time stamp ? */
-    if (pInfo->firstTimeStampAbs.epoch == 0 && pInfo->firstTimeStampAbs.ms == 0)
-    {
-        pInfo->firstTimeStampAbs.epoch = pLogEntry->timestamp.epoch;
-        pInfo->firstTimeStampAbs.ms = pLogEntry->timestamp.ms;
-    }
+    if (pInfo->firstTimeStampAbs.secs == 0 && pInfo->firstTimeStampAbs.nsecs == 0)
+        pInfo->firstTimeStampAbs = pLogEntry->msg.ts;
 
     return true;
 }
@@ -285,19 +292,23 @@ static bool parseFieldLost(cCLLog_logFileInfo_t *pInfo _U_, char *pField, cCLLog
 
 static bool parseFieldMsgType(cCLLog_logFileInfo_t *pInfo _U_, char *pField, cCLLog_message_t *pLogEntry, int *err, char **err_info)
 {
-     switch (pField[0])
+    switch (pField[0])
     {
         case '0':
             pLogEntry->msgType = msg_rx_standard_e;
+            pLogEntry->msg.type = MSG_TYPE_STD;
             return true;
         case '1':
             pLogEntry->msgType = msg_rx_extended_e;
+            pLogEntry->msg.type = MSG_TYPE_EXT;
             return true;
         case '8':
             pLogEntry->msgType = msg_tx_standard_e;
+            pLogEntry->msg.type = MSG_TYPE_STD;
             return true;
         case '9':
             pLogEntry->msgType = msg_tx_extended_e;
+            pLogEntry->msg.type = MSG_TYPE_EXT;
             return true;
         default:
             *err = WTAP_ERR_BAD_FILE;
@@ -315,7 +326,7 @@ static bool parseFieldID(cCLLog_logFileInfo_t *pInfo _U_, char *pField, cCLLog_m
         *err_info = g_strdup_printf("cllog: ID value is not valid");
         return false;
     }
-    pLogEntry->id = id;
+    pLogEntry->msg.id = id;
     return true;
 }
 
@@ -328,7 +339,13 @@ static bool parseFieldLength(cCLLog_logFileInfo_t *pInfo _U_, char *pField, cCLL
         *err_info = g_strdup_printf("cllog: length value is not valid");
         return false;
     }
-    pLogEntry->length = length;
+    if (length > array_length(pLogEntry->msg.data.data)) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = g_strdup_printf("cllog: length value %u > maximum length %zu",
+            length, array_length(pLogEntry->msg.data.data));
+        return false;
+    }
+    pLogEntry->msg.data.length = length;
     return true;
 }
 
@@ -337,15 +354,15 @@ static bool parseFieldData(cCLLog_logFileInfo_t *pInfo _U_, char *pField, cCLLog
     char *pFieldStart = pField;
 
     /* Set data length in case length field is not set explicitly in the log file */
-    pLogEntry->length = 0;
+    pLogEntry->msg.data.length = 0;
 
     /* Loop all data bytes */
-    for (unsigned int dataByte = 0; dataByte < 8; dataByte++)
+    while (pLogEntry->msg.data.length < array_length(pLogEntry->msg.data.data))
     {
         int hexdigit;
         uint8_t data;
 
-        if (*pFieldStart == '\n' || *pFieldStart == '\r')
+        if (*pFieldStart == '\n' || *pFieldStart == '\r' || *pFieldStart == '\0')
         {
             break;
         }
@@ -353,7 +370,7 @@ static bool parseFieldData(cCLLog_logFileInfo_t *pInfo _U_, char *pField, cCLLog
         hexdigit = ws_xton(*pFieldStart);
         if (hexdigit < 0) {
             *err = WTAP_ERR_BAD_FILE;
-            *err_info = g_strdup_printf("cllog: packet byte value is not valid");
+            *err_info = g_strdup_printf("cllog: packet byte value 0x%02x is not valid", *pFieldStart);
             return false;
         }
         data = (uint8_t)hexdigit << 4U;
@@ -361,14 +378,12 @@ static bool parseFieldData(cCLLog_logFileInfo_t *pInfo _U_, char *pField, cCLLog
         hexdigit = ws_xton(*pFieldStart);
         if (hexdigit < 0) {
             *err = WTAP_ERR_BAD_FILE;
-            *err_info = g_strdup("cllog: packet byte value is not valid");
+            *err_info = g_strdup_printf("cllog: packet byte value 0x%02x is not valid", *pFieldStart);
             return false;
         }
         data = data | (uint8_t)hexdigit;
         pFieldStart++;
-        pLogEntry->data[dataByte] = data;
-
-        pLogEntry->length++;
+        pLogEntry->msg.data.data[pLogEntry->msg.data.length++] = data;
     }
     return true;
 }
@@ -390,8 +405,11 @@ static bool parseLogLine(cCLLog_logFileInfo_t *pInfo, char *pLine, cCLLog_messag
             finalField = 1;
         }
 
-        /* Replace separator with string termination */
-        *pFieldEnd = '\0';
+        /* Replace separator or terminator with string termination */
+        if (pFieldEnd != NULL)
+        {
+            *pFieldEnd = '\0';
+        }
 
         /* Is parse function assigned to field? */
         if (pInfo->parseFieldFunc[fieldNo] != NULL)
@@ -437,8 +455,11 @@ static bool parseColumnHeaderFields( cCLLog_logFileInfo_t *pInfo, char *pColLine
             finalField = 1;
         }
 
-        /* Replace separator with string termination */
-        *pFieldEnd = '\0';
+        /* Replace separator or terminator with string termination */
+        if (pFieldEnd != NULL)
+        {
+            *pFieldEnd = '\0';
+        }
 
         /* Set field number */
         if( strcmp( pFieldStart, "Timestamp" ) == 0 )  { pInfo->parseFieldFunc[ fieldNo ] = parseFieldTS; resultFlag = true; }
@@ -448,7 +469,7 @@ static bool parseColumnHeaderFields( cCLLog_logFileInfo_t *pInfo, char *pColLine
         if( strcmp( pFieldStart, "Length" ) == 0 )     { pInfo->parseFieldFunc[ fieldNo ] = parseFieldLength; resultFlag = true; }
         if( strcmp( pFieldStart, "Data" ) == 0 )       { pInfo->parseFieldFunc[ fieldNo ] = parseFieldData; resultFlag = true; }
 
-        /* Set start of next field to end of privious + 1 */
+        /* Set start of next field to end of previous + 1 */
         pFieldStart = pFieldEnd + 1;
     }
 
@@ -555,15 +576,15 @@ static bool parseBoolean(const char *pFieldValue, bool *value, char *fieldName, 
 
 static bool parseLogFileHeaderLine_type(cCLLog_logFileInfo_t *pInfo, char *pFieldValue, int *err, char **err_info)
 {
-    if (strcmp(pFieldValue, "CANLogger1000") == 0 )
+    if (strcmp(pFieldValue, "CANLogger1000") == 0 || strcmp(pFieldValue, "CL1000") == 0)
     {
         pInfo->loggerType = type_CL1000_e;
     }
-    else if (strcmp(pFieldValue, "CANLogger2000") == 0)
+    else if (strcmp(pFieldValue, "CANLogger2000") == 0 || strcmp(pFieldValue, "CL2000") == 0)
     {
         pInfo->loggerType = type_CL2000_e;
     }
-    else if (strcmp(pFieldValue, "CANLogger3000") == 0 )
+    else if (strcmp(pFieldValue, "CANLogger3000") == 0 || strcmp(pFieldValue, "CL3000") == 0)
     {
         pInfo->loggerType = type_CL3000_e;
     }
@@ -619,8 +640,8 @@ static bool parseLogFileHeaderLine_time(cCLLog_logFileInfo_t *pInfo, char *pFiel
     tm.tm_year -= 1900;
 
     /* To Epoch ( mktime converts to epoch from local (!!!) timezone )*/
-    pInfo->logStartTime.epoch = mktime(&tm);
-    pInfo->logStartTime.ms = 0;
+    pInfo->logStartTime.secs = mktime(&tm);
+    pInfo->logStartTime.nsecs = 0;
 
     if (!checked_strcpy(pInfo->logStartTimeString, sizeof pInfo->logStartTimeString, pFieldValue))
     {
@@ -721,41 +742,18 @@ static bool parseLogFileHeaderLine_cyclicMode(cCLLog_logFileInfo_t *pInfo, char 
     return true;
 }
 
-/*
-
-         c:\development\wireshark\plugins\wimaxmacphy\cCLLog.c(248): warning C4
-       477: 'sscanf' : format string '%i' requires an argument of type 'int *',
-        but variadic argument 1 has type 'uint8_t *'
-         c:\development\wireshark\plugins\wimaxmacphy\cCLLog.c(274): warning C4
-       477: 'sscanf' : format string '%i' requires an argument of type 'int *',
-        but variadic argument 1 has type 'uint8_t *'
-         c:\development\wireshark\plugins\wimaxmacphy\cCLLog.c(288): warning C4
-       477: 'sscanf' : format string '%2x' requires an argument of type 'unsign
-       ed int *', but variadic argument 1 has type 'uint8_t *
-
-
-*/
-
-#include "cllog.h"
-
-static int cllog_file_type_subtype = -1;
-
-#define CAN_EFF_MASK 0x1FFFFFFF /* extended frame format (EFF) */
-#define CAN_SFF_MASK 0x000007FF /* standard frame format (SFF) */
-
 static bool
-cllog_read_common(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf, int *err, char **err_info _U_)
+cllog_read_common(wtap *wth, FILE_T fh, wtap_rec *rec, int *err, char **err_info)
 {
-    cCLLog_logFileInfo_t *clLog = (cCLLog_logFileInfo_t *) wth->priv;
+    cCLLog_logFileInfo_t* clLog = (cCLLog_logFileInfo_t*)wtap_socketcan_get_private_data(wth);
     char line[MAX_LOG_LINE_LENGTH];
     cCLLog_message_t logEntry;
-    uint8_t *can_data;
 
     /* Read a line */
     if (file_gets(line, sizeof(line), fh) == NULL)
     {
         /* EOF or error. */
-        *err = file_error(wth->fh, err_info);
+        *err = file_error(fh, err_info);
         return false;
     }
 
@@ -768,15 +766,10 @@ cllog_read_common(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf, int *err, ch
         return false;
     }
 
-    rec->rec_type = REC_TYPE_PACKET;
-    rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
-    rec->presence_flags = WTAP_HAS_TS;
+    logEntry.msg.interface_id = wtap_socketcan_find_or_create_new_interface(wth, clLog->id);
+    if (!wtap_socketcan_gen_packet(wth, rec, &logEntry.msg, "cllog", err, err_info))
+        return false;
 
-    rec->ts.secs = logEntry.timestamp.epoch;
-    rec->ts.nsecs = logEntry.timestamp.ms * 1000U * 1000U;
-
-    rec->rec_header.packet_header.caplen = 8 + logEntry.length;
-    rec->rec_header.packet_header.len = 8 + logEntry.length;
 
     if (logEntry.msgType == msg_tx_standard_e || logEntry.msgType == msg_tx_extended_e)
     {
@@ -787,105 +780,52 @@ cllog_read_common(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf, int *err, ch
         wtap_block_add_uint32_option(rec->block, OPT_PKT_FLAGS, PACK_FLAGS_DIRECTION_INBOUND);
     }
 
-    ws_buffer_assure_space(buf, rec->rec_header.packet_header.caplen);
-    can_data = ws_buffer_start_ptr(buf);
-
-    can_data[0] = (logEntry.id >> 24);
-    can_data[1] = (logEntry.id >> 16);
-    can_data[2] = (logEntry.id >>  8);
-    can_data[3] = (logEntry.id >>  0);
-    can_data[4] = logEntry.length;
-    can_data[5] = 0;
-    can_data[6] = 0;
-    can_data[7] = 0;
-
-    if (logEntry.msgType == msg_tx_extended_e || logEntry.msgType == msg_rx_extended_e || (logEntry.id & CAN_EFF_MASK) > CAN_SFF_MASK)
-        can_data[0] |= 0x80;
-
-    memcpy(&can_data[8], logEntry.data, logEntry.length);
     return true;
 }
 
 static bool
-cllog_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err, char **err_info, int64_t *data_offset)
+cllog_read(wtap *wth, wtap_rec *rec, int *err, char **err_info, int64_t *data_offset)
 {
     *data_offset = file_tell(wth->fh);
 
-    return cllog_read_common(wth, wth->fh, rec, buf, err, err_info);
+    return cllog_read_common(wth, wth->fh, rec, err, err_info);
 }
 
 static bool
-cllog_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf, int *err, char **err_info)
+cllog_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, int *err, char **err_info)
 {
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
 
-    return cllog_read_common(wth, wth->random_fh, rec, buf, err, err_info);
+    return cllog_read_common(wth, wth->random_fh, rec, err, err_info);
+}
+
+static void
+cllog_close(void* tap_data)
+{
+    /* Clean up the file information */
+    g_free((cCLLog_logFileInfo_t*)tap_data);
 }
 
 wtap_open_return_val
-cllog_open(wtap *wth, int *err, char **err_info _U_)
+cllog_open(wtap *wth, int *err, char **err_info)
 {
     cCLLog_logFileInfo_t *clLog;
     char line[ MAX_LOG_LINE_LENGTH ];
+    char *linep;
 
     clLog = g_new0(cCLLog_logFileInfo_t, 1);
 
-    /* Initialize the header information */
-    clLog->loggerType = 0;
-    clLog->hwrev[0] = '\0';
-    clLog->fwrev[0] = '\0';
-    clLog->id[0] = '\0';
-    clLog->sessionNo = 0;
-    clLog->splitNo = 0;
-    clLog->logStartTime.epoch = 0;
-    clLog->logStartTime.ms = 0;
-    clLog->logStartTimeString[0] = '\0';
-    clLog->separator = '\0';
-    clLog->timeFormat = 0;
-    clLog->timeSeparator = '\0';
-    clLog->timeSeparatorMs = '\0';
-    clLog->dateSeparator = '\0';
-    clLog->dateAndTimeSeparator = '\0';
-    clLog->bitRate = 0;
-    clLog->silentMode = 0;
-    clLog->cyclicMode = 0;
-
-    /* Set parse function pointers */
-    memset(clLog->parseFieldFunc, 0, sizeof( clLog->parseFieldFunc));
-
     /*
-     * We're at the beginning of the file; read each line and
-     * parse it.
+     * We're at the beginning of the file.  The header is a set
+     * of comment lines, each beginning with a '#'. Read each line,
+     * stopping if we see a non-comment line, and parse each
+     * comment line; if any aren't valid, quit and indicate that
+     * this isn't a CLX log file.
      */
-    while (file_gets(line, sizeof(line), wth->fh) != NULL)
+    while ((linep = file_gets(line, sizeof(line), wth->fh)) != NULL &&
+           linep[0] == '#')
     {
-        char *linep;
-
-        if (*err != 0)
-        {
-            if (*err != WTAP_ERR_SHORT_READ)
-            {
-                /* Incomplete header, so not ours. */
-                g_free(clLog);
-                return WTAP_OPEN_NOT_MINE;
-            }
-            else
-            {
-                /* I/O error. */
-                g_free(clLog);
-                return WTAP_OPEN_ERROR;
-            }
-        }
-
-        linep = line;
-
-        /* Break on end of header */
-        if (linep[0] != '#')
-        {
-            break;
-        }
-
         /*
          * Skip the comment character and white space following it.
          */
@@ -943,31 +883,71 @@ cllog_open(wtap *wth, int *err, char **err_info _U_)
                      * ours.
                      */
                     g_free(clLog);
-                    return WTAP_OPEN_ERROR;
+                    if (*err == WTAP_ERR_BAD_FILE)
+                    {
+                        wmem_free(NULL, *err_info);
+                        *err_info = NULL;
+                    }
+                    return WTAP_OPEN_NOT_MINE;
                 }
             }
         }
     }
 
     /*
-     * We've read the first line after the header, so it's the column
-     * header line. Parse it.
+     * Did file_gets() fail?
      */
-    if (!parseColumnHeaderFields(clLog, line))
+    if (linep == NULL)
     {
-        g_free(clLog);
-        return WTAP_OPEN_NOT_MINE;
+        /*
+         * Yes - file_gets() didn't return a line.
+         * Did it get an error?
+         */
+        *err = file_error(wth->fh, err_info);
+        if (*err != 0)
+        {
+            /* Yes.  What was it? */
+            if (*err == WTAP_ERR_SHORT_READ)
+            {
+                /* Incomplete header, so not ours. */
+                g_free(clLog);
+                return WTAP_OPEN_NOT_MINE;
+            }
+            else
+            {
+                /* I/O error. */
+                g_free(clLog);
+                return WTAP_OPEN_ERROR;
+            }
+        }
+
+        /*
+         * No, it just got an EOF; treat it as our file, as
+         * older versions did so.
+         *
+         * XXX - should we treat it as not our file, as it lacks
+         * the column header line?
+         */
+    }
+    else
+    {
+        /*
+         * We've read the first line after the header, so it's the column
+         * header line. Parse it. This requires that we have been provided with a
+         * valid separator.
+         */
+        if (clLog->separator == '\0' || !parseColumnHeaderFields(clLog, linep))
+        {
+            g_free(clLog);
+            return WTAP_OPEN_NOT_MINE;
+        }
     }
 
-    wth->priv = clLog;
-
-    wth->file_type_subtype = cllog_file_type_subtype;
-    wth->file_encap = WTAP_ENCAP_SOCKETCAN;
+    wtap_set_as_socketcan(wth, cllog_file_type_subtype, WTAP_TSPREC_MSEC, clLog, cllog_close);
     wth->snapshot_length = 0;
 
     wth->subtype_read = cllog_read;
     wth->subtype_seek_read = cllog_seek_read;
-    wth->file_tsprec = WTAP_TSPREC_MSEC;
 
     return WTAP_OPEN_MINE;
 }

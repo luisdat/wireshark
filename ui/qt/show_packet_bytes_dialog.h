@@ -11,14 +11,13 @@
 #define SHOW_PACKET_BYTES_DIALOG_H
 
 #include <config.h>
-#include <glib.h>
 #include <stdio.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
-#include "file.h"
+#include <epan/tvbuff.h>
 #include "wireshark_dialog.h"
 
 #include <QLineEdit>
@@ -30,6 +29,11 @@ namespace Ui {
 class ShowPacketBytesDialog;
 class ShowPacketBytesTextEdit;
 }
+
+struct uncompress_list_t {
+    QString name;
+    tvbuff_t *(*function)(tvbuff_t *, unsigned, unsigned);
+};
 
 class ShowPacketBytesDialog : public WiresharkDialog
 {
@@ -44,8 +48,6 @@ public:
 protected:
     bool eventFilter(QObject *obj, QEvent *event);
     void keyPressEvent(QKeyEvent *event);
-    void captureFileClosing();
-    void captureFileClosed();
 
 private slots:
     void on_sbStart_valueChanged(int value);
@@ -71,16 +73,17 @@ private:
     void updateHintLabel();
     void sanitizeBuffer(QByteArray &ba, bool handle_CR);
     void symbolizeBuffer(QByteArray &ba);
-    QByteArray decodeQuotedPrintable(const guint8 *bytes, int length);
+    QByteArray decodeQuotedPrintable(const uint8_t *bytes, int length);
     void rot13(QByteArray &ba);
     void updateFieldBytes(bool initialization = false);
     void updatePacketBytes();
 
     Ui::ShowPacketBytesDialog  *ui;
 
-    const field_info  *finfo_;
+    tvbuff_t   *tvb_;
     QByteArray  field_bytes_;
     QString     hint_label_;
+    QString     decode_as_name_;
     QPushButton *print_button_;
     QPushButton *copy_button_;
     QPushButton *save_as_button_;

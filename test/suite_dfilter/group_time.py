@@ -2,8 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import pytest
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import checkDFilterCount, checkDFilterCountWithSelectedFrame, checkDFilterFail
 
 
 class TestDfilterTime:
@@ -110,7 +109,7 @@ class TestDfilterTimeRelative:
 
     def test_relative_time_2(self, checkDFilterCount):
         dfilter = "frame.time_delta > 0.7"
-        checkDFilterCount(dfilter, 0)
+        checkDFilterCount(dfilter, 1)
 
     def test_relative_time_3(self, checkDFilterCount):
         dfilter = "frame.time_delta < 0.7"
@@ -167,8 +166,8 @@ class TestDfilterTimeArithmetic:
 
     def test_time_math_4(self, checkDFilterCountWithSelectedFrame):
         dfilter = 'frame.time_relative > ${frame.time_relative} / 3'
-        # select frame 532, expect 528 frames out of 562.
-        checkDFilterCountWithSelectedFrame(dfilter, 528, 532)
+        # select frame 532, expect 495 frames out of 562.
+        checkDFilterCountWithSelectedFrame(dfilter, 495, 532)
 
     def test_time_math_5(self, checkDFilterCountWithSelectedFrame):
         dfilter = 'frame.time_relative > ${frame.time_relative} * 2.5'

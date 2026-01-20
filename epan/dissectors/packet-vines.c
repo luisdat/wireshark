@@ -73,13 +73,14 @@
 #include <epan/packet.h>
 #include <epan/capture_dissectors.h>
 #include <epan/etypes.h>
-#include <epan/ppptypes.h>
-#include <epan/ipproto.h>
-#include <epan/arcnet_pids.h>
-#include <epan/llcsaps.h>
 #include <epan/to_str.h>
-#include <epan/address_types.h>
-#include <wsutil/pint.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
+#include "packet-ppp.h"
+#include "packet-llc.h"
+#include "packet-arcnet.h"
+#include "packet-iana-data.h"
+
 
 void proto_register_vines_frp(void);
 void proto_reg_handoff_vines_frp(void);
@@ -109,15 +110,15 @@ static int hf_vines_frp_flags_first_fragment;
 static int hf_vines_frp_flags_last_fragment;
 static int hf_vines_frp_sequence_number;
 
-static gint ett_vines_frp;
-static gint ett_vines_frp_flags;
+static int ett_vines_frp;
+static int ett_vines_frp_flags;
 
 static dissector_handle_t vines_frp_handle, vines_frp_new_handle;
 
 static int proto_vines_llc;
 static int hf_vines_llc_packet_type;
 
-static gint ett_vines_llc;
+static int ett_vines_llc;
 
 static dissector_handle_t vines_llc_handle;
 
@@ -135,16 +136,16 @@ static int hf_vines_tctl_metric;
 static int hf_vines_tctl_notif_packet;
 static int hf_vines_tctl_hop_count;
 
-static gint ett_vines_ip;
-static gint ett_vines_ip_tctl;
+static int ett_vines_ip;
+static int ett_vines_ip_tctl;
 
 static dissector_handle_t vines_ip_handle;
 
 static int proto_vines_echo;
 
-static gint hf_vines_echo_data;
+static int hf_vines_echo_data;
 
-static gint ett_vines_echo;
+static int ett_vines_echo;
 
 static dissector_handle_t vines_echo_handle;
 
@@ -164,8 +165,8 @@ static int hf_vines_ipc_remote_connection_id;
 static int hf_vines_ipc_ack_number;
 static int hf_vines_ipc_error;
 
-static gint ett_vines_ipc;
-static gint ett_vines_ipc_control;
+static int ett_vines_ipc;
+static int ett_vines_ipc_control;
 
 static dissector_handle_t vines_ipc_handle;
 
@@ -184,8 +185,8 @@ static int hf_vines_spp_seq_num;
 static int hf_vines_spp_ack_num;
 static int hf_vines_spp_window;
 
-static gint ett_vines_spp;
-static gint ett_vines_spp_control;
+static int ett_vines_spp;
+static int ett_vines_spp_control;
 
 static dissector_handle_t vines_spp_handle;
 
@@ -196,7 +197,7 @@ static int hf_vines_arp_packet_type;
 static int hf_vines_arp_interface_metric;
 static int hf_vines_arp_sequence_number;
 
-static gint ett_vines_arp;
+static int ett_vines_arp;
 
 static dissector_handle_t vines_arp_handle;
 
@@ -253,12 +254,12 @@ static int hf_vines_rtp_preferred_gateway_data_link_address_ether;
 static int hf_vines_rtp_preferred_gateway_data_link_address_bytes;
 static int hf_vines_rtp_preferred_gateway_source_route;
 
-static gint ett_vines_rtp;
-static gint ett_vines_rtp_compatibility_flags;
-static gint ett_vines_rtp_req_info;
-static gint ett_vines_rtp_control_flags;
-static gint ett_vines_rtp_mtype;
-static gint ett_vines_rtp_flags;
+static int ett_vines_rtp;
+static int ett_vines_rtp_compatibility_flags;
+static int ett_vines_rtp_req_info;
+static int ett_vines_rtp_control_flags;
+static int ett_vines_rtp_mtype;
+static int ett_vines_rtp_flags;
 
 static dissector_handle_t vines_rtp_handle;
 
@@ -268,7 +269,7 @@ static int hf_vines_icp_exception_code;
 static int hf_vines_icp_metric;
 static int hf_vines_icp_packet_type;
 
-static gint ett_vines_icp;
+static int ett_vines_icp;
 
 static dissector_handle_t vines_icp_handle;
 static capture_dissector_handle_t vines_echo_cap_handle;
@@ -290,40 +291,40 @@ enum {
 	PKTTYPE_DGRAM = 0,	/* Unreliable datagram */
 	PKTTYPE_DATA = 1,	/* User Data */
 	PKTTYPE_ERR = 2,	/* Error */
-	PKTTYPE_DISC = 3,	/* Diconnect Request */
+	PKTTYPE_DISC = 3,	/* Disconnect Request */
 	PKTTYPE_PROBE = 4,	/* Probe (retransmit) */
 	PKTTYPE_ACK = 5	/* Acknowledgement */
 };
 
 typedef struct _e_vspp {
-	guint16 vspp_sport;
-	guint16 vspp_dport;
-	guint8  vspp_pkttype;
-	guint8  vspp_control;
-	guint16 vspp_lclid;	/* Local Connection ID */
-	guint16 vspp_rmtid;	/* Remote Connection ID */
-	guint16 vspp_seqno;	/* Sequence Number */
-	guint16 vspp_ack;	/* Acknowledgement Number */
-	guint16 vspp_win;
+	uint16_t vspp_sport;
+	uint16_t vspp_dport;
+	uint8_t vspp_pkttype;
+	uint8_t vspp_control;
+	uint16_t vspp_lclid;	/* Local Connection ID */
+	uint16_t vspp_rmtid;	/* Remote Connection ID */
+	uint16_t vspp_seqno;	/* Sequence Number */
+	uint16_t vspp_ack;	/* Acknowledgement Number */
+	uint16_t vspp_win;
 } e_vspp;
 
 typedef struct _e_vipc {
-	guint16 vipc_sport;
-	guint16 vipc_dport;
-	guint8  vipc_pkttype;
-	guint8  vipc_control;
-	guint16 vipc_lclid;	/* Local Connection ID */
-	guint16 vipc_rmtid;	/* Remote Connection ID */
-	guint16 vipc_seqno;	/* Sequence Number */
-	guint16 vipc_ack;	/* Acknowledgement Number */
-	guint16 vipc_err_len;
+	uint16_t vipc_sport;
+	uint16_t vipc_dport;
+	uint8_t vipc_pkttype;
+	uint8_t vipc_control;
+	uint16_t vipc_lclid;	/* Local Connection ID */
+	uint16_t vipc_rmtid;	/* Remote Connection ID */
+	uint16_t vipc_seqno;	/* Sequence Number */
+	uint16_t vipc_ack;	/* Acknowledgement Number */
+	uint16_t vipc_err_len;
 } e_vipc;
 
-static gboolean
-capture_vines(const guchar *pd _U_, int offset _U_, int len _U_, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_)
+static bool
+capture_vines(const unsigned char *pd _U_, int offset _U_, int len _U_, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_)
 {
 	capture_dissector_increment_count(cpinfo, proto_vines);
-	return TRUE;
+	return true;
 }
 
 /* Control flags */
@@ -378,7 +379,7 @@ dissect_vines_frp_new(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		return 0;
 	}
 
-	if ((tvb_get_guint8(tvb, 0) & ~(VINES_FRP_FIRST_FRAGMENT|VINES_FRP_LAST_FRAGMENT)) != 0) {
+	if ((tvb_get_uint8(tvb, 0) & ~(VINES_FRP_FIRST_FRAGMENT|VINES_FRP_LAST_FRAGMENT)) != 0) {
 		/* Those are the only flags; if anything else is set, this
 		 * is presumably not Vines FRP. */
 		return 0;
@@ -411,7 +412,7 @@ proto_register_vines_frp(void)
 	      FT_UINT8, BASE_HEX, NULL, 0x0,
 	      NULL, HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_frp,
 		&ett_vines_frp_flags
 	};
@@ -444,7 +445,7 @@ static const value_string vines_llc_ptype_vals[] = {
 static int
 dissect_vines_llc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint8   ptype;
+	uint32_t  ptype;
 	proto_tree *vines_llc_tree;
 	proto_item *ti;
 	tvbuff_t *next_tvb;
@@ -452,16 +453,13 @@ dissect_vines_llc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines LLC");
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	ptype = tvb_get_guint8(tvb, 0);
-	col_add_str(pinfo->cinfo, COL_INFO,
-		    val_to_str(ptype, vines_llc_ptype_vals,
-		      "Unknown protocol 0x%02x"));
-	if (tree) {
-		ti = proto_tree_add_item(tree, proto_vines_llc, tvb, 0, 1, ENC_NA);
-		vines_llc_tree = proto_item_add_subtree(ti, ett_vines_llc);
+	ti = proto_tree_add_item(tree, proto_vines_llc, tvb, 0, 1, ENC_NA);
+	vines_llc_tree = proto_item_add_subtree(ti, ett_vines_llc);
 
-		proto_tree_add_item(vines_llc_tree, hf_vines_llc_packet_type, tvb, 0, 1, ENC_NA);
-	}
+	proto_tree_add_item_ret_uint(vines_llc_tree, hf_vines_llc_packet_type, tvb, 0, 1, ENC_NA, &ptype);
+	col_add_str(pinfo->cinfo, COL_INFO,
+		val_to_str(pinfo->pool, ptype, vines_llc_ptype_vals,
+			"Unknown protocol 0x%02x"));
 
 	next_tvb = tvb_new_subset_remaining(tvb, 1);
 	if (!dissector_try_uint(vines_llc_dissector_table, ptype,
@@ -481,7 +479,7 @@ proto_register_vines_llc(void)
 	      NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_llc,
 	};
 
@@ -520,7 +518,7 @@ static const value_string proto_vals[] = {
 	{ 0,             NULL }
 };
 
-static const guint8 bcast_addr[VINES_ADDR_LEN] = {
+static const uint8_t bcast_addr[VINES_ADDR_LEN] = {
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 
@@ -532,12 +530,12 @@ static int
 dissect_vines_ip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int         offset = 0;
-	guint16 vip_pktlen;
-	guint8  vip_tctl;	/* Transport Control */
-	guint8  vip_proto;
+	uint16_t vip_pktlen;
+	uint8_t vip_tctl;	/* Transport Control */
+	uint8_t vip_proto;
 	proto_tree *vip_tree, *tctl_tree;
 	proto_item *ti;
-	gboolean is_broadcast = FALSE;
+	bool is_broadcast = false;
 	tvbuff_t *next_tvb;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines IP");
@@ -547,8 +545,8 @@ dissect_vines_ip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
 	/* capture the necessary parts of the header */
 	vip_pktlen = tvb_get_ntohs(tvb, offset+2);
-	vip_tctl = tvb_get_guint8(tvb, offset+3);
-	vip_proto = tvb_get_guint8(tvb, offset+4);
+	vip_tctl = tvb_get_uint8(tvb, offset+3);
+	vip_proto = tvb_get_uint8(tvb, offset+4);
 
 	col_add_fstr(pinfo->cinfo, COL_INFO, "%s (0x%02x)",
 			val_to_str_const(vip_tctl, proto_vals, "Unknown VIP protocol"),
@@ -561,7 +559,7 @@ dissect_vines_ip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
 	/* helpers to transport control */
 	if (tvb_memeql(tvb, offset+6, bcast_addr, VINES_ADDR_LEN) == 0)
-		is_broadcast = TRUE;
+		is_broadcast = true;
 
 	/*
 	 * Adjust the length of this tvbuff to include only the Vines IP
@@ -618,7 +616,7 @@ dissect_vines_ip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 void
 proto_register_vines_ip(void)
 {
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_ip,
 		&ett_vines_ip_tctl,
 	};
@@ -735,7 +733,7 @@ proto_register_vines_echo(void)
 	      NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_echo,
 	};
 
@@ -805,7 +803,7 @@ dissect_vines_ipc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	/* To do: check for runts, errs, etc. */
 
 	/* Avoids alignment problems on many architectures. */
-	tvb_memcpy(tvb, (guint8 *)&viph, offset, sizeof(e_vipc));
+	tvb_memcpy(tvb, (uint8_t *)&viph, offset, sizeof(e_vipc));
 
 	viph.vipc_sport = g_ntohs(viph.vipc_sport);
 	viph.vipc_dport = g_ntohs(viph.vipc_dport);
@@ -821,7 +819,7 @@ dissect_vines_ipc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	case PKTTYPE_DGRAM:
 		col_add_fstr(pinfo->cinfo, COL_INFO,
 				     "%s D=%04x S=%04x",
-				     val_to_str(viph.vipc_pkttype, pkttype_vals,
+				     val_to_str(pinfo->pool, viph.vipc_pkttype, pkttype_vals,
 				         "Unknown packet type (0x%02x)"),
 				     viph.vipc_dport, viph.vipc_sport);
 		break;
@@ -829,10 +827,10 @@ dissect_vines_ipc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	case PKTTYPE_ERR:
 		col_add_fstr(pinfo->cinfo, COL_INFO,
 				     "%s NS=%u NR=%u Err=%s RID=%04x LID=%04x D=%04x S=%04x",
-				     val_to_str(viph.vipc_pkttype, pkttype_vals,
+				     val_to_str(pinfo->pool, viph.vipc_pkttype, pkttype_vals,
 				         "Unknown packet type (0x%02x)"),
 				     viph.vipc_seqno, viph.vipc_ack,
-				     val_to_str(viph.vipc_err_len,
+				     val_to_str(pinfo->pool, viph.vipc_err_len,
 				         vipc_err_vals, "Unknown (%u)"),
 				     viph.vipc_rmtid, viph.vipc_lclid,
 				     viph.vipc_dport, viph.vipc_sport);
@@ -841,7 +839,7 @@ dissect_vines_ipc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	default:
 		col_add_fstr(pinfo->cinfo, COL_INFO,
 				     "%s NS=%u NR=%u Len=%u RID=%04x LID=%04x D=%04x S=%04x",
-				     val_to_str(viph.vipc_pkttype, pkttype_vals,
+				     val_to_str(pinfo->pool, viph.vipc_pkttype, pkttype_vals,
 				         "Unknown packet type (0x%02x)"),
 				     viph.vipc_seqno, viph.vipc_ack,
 				     viph.vipc_err_len, viph.vipc_rmtid,
@@ -978,7 +976,7 @@ proto_register_vines_ipc(void)
 	      NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_ipc,
 		&ett_vines_ipc_control,
 	};
@@ -1017,7 +1015,7 @@ dissect_vines_spp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	/* To do: check for runts, errs, etc. */
 
 	/* Avoids alignment problems on many architectures. */
-	tvb_memcpy(tvb, (guint8 *)&viph, offset, sizeof(e_vspp));
+	tvb_memcpy(tvb, (uint8_t *)&viph, offset, sizeof(e_vspp));
 
 	viph.vspp_sport = g_ntohs(viph.vspp_sport);
 	viph.vspp_dport = g_ntohs(viph.vspp_dport);
@@ -1030,7 +1028,7 @@ dissect_vines_spp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines SPP");
 	col_add_fstr(pinfo->cinfo, COL_INFO,
 			     "%s NS=%u NR=%u Window=%u RID=%04x LID=%04x D=%04x S=%04x",
-			     val_to_str(viph.vspp_pkttype, pkttype_vals,
+			     val_to_str(pinfo->pool, viph.vspp_pkttype, pkttype_vals,
 			         "Unknown packet type (0x%02x)"),
 			     viph.vspp_seqno, viph.vspp_ack, viph.vspp_win,
 			     viph.vspp_rmtid, viph.vspp_lclid, viph.vspp_dport,
@@ -1144,7 +1142,7 @@ proto_register_vines_spp(void)
 	      NULL, HFILL }}
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_spp,
 		&ett_vines_spp_control,
 	};
@@ -1192,9 +1190,9 @@ dissect_vines_arp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 {
 	proto_tree *vines_arp_tree;
 	proto_item *ti;
-	guint8   version;
-	guint16  packet_type;
-	guint16  metric;
+	uint8_t  version;
+	uint16_t packet_type;
+	uint16_t metric;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines ARP");
 	col_clear(pinfo->cinfo, COL_INFO);
@@ -1202,7 +1200,7 @@ dissect_vines_arp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	ti = proto_tree_add_item(tree, proto_vines_arp, tvb, 0, -1, ENC_NA);
 	vines_arp_tree = proto_item_add_subtree(ti, ett_vines_arp);
 
-	version = tvb_get_guint8(tvb, 0);
+	version = tvb_get_uint8(tvb, 0);
 	proto_tree_add_item(vines_arp_tree, hf_vines_arp_version, tvb, 0, 1, ENC_NA);
 
 	if (version == VINES_VERS_5_5) {
@@ -1210,12 +1208,12 @@ dissect_vines_arp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 		 * Sequenced ARP.
 		 */
 		col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines SARP");
-		packet_type = tvb_get_guint8(tvb, 1);
+		packet_type = tvb_get_uint8(tvb, 1);
 		col_add_str(pinfo->cinfo, COL_INFO,
-			    val_to_str(packet_type, vines_arp_packet_type_vals,
+			    val_to_str(pinfo->pool, packet_type, vines_arp_packet_type_vals,
 			      "Unknown (0x%02x)"));
 
-		proto_tree_add_item(vines_arp_tree, hf_vines_arp_packet_type, tvb, 1, 1, ENC_NA);
+		proto_tree_add_item(vines_arp_tree, hf_vines_arp_packet_type, tvb, 1, 1, ENC_BIG_ENDIAN);
 
 		if (packet_type == VARP_ASSIGNMENT_RESP) {
 			col_append_fstr(pinfo->cinfo, COL_INFO,
@@ -1233,9 +1231,9 @@ dissect_vines_arp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 		/*
 		 * Non-sequenced ARP.
 		 */
-		packet_type = (guint8) tvb_get_ntohs(tvb, 0);
+		packet_type = (uint8_t) tvb_get_ntohs(tvb, 0);
 		col_add_str(pinfo->cinfo, COL_INFO,
-			    val_to_str(packet_type, vines_arp_packet_type_vals,
+			    val_to_str(pinfo->pool, packet_type, vines_arp_packet_type_vals,
 			      "Unknown (0x%02x)"));
 		proto_tree_add_item(vines_arp_tree, hf_vines_arp_packet_type, tvb, 0, 2, ENC_BIG_ENDIAN);
 
@@ -1280,7 +1278,7 @@ proto_register_vines_arp(void)
 	      NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_arp,
 	};
 
@@ -1375,7 +1373,7 @@ static int
 srtp_show_machine_info(proto_tree *tree, tvbuff_t *tvb, int offset, int hf_vines,
 						int hf_metric, int hf_nodetype, int hf_controller_type, int hf_machine)
 {
-	guint16 metric;
+	uint16_t metric;
 
 	proto_tree_add_item(tree, hf_vines, tvb, offset, VINES_ADDR_LEN, ENC_NA);
 	offset += VINES_ADDR_LEN;
@@ -1396,7 +1394,7 @@ srtp_show_machine_info(proto_tree *tree, tvbuff_t *tvb, int offset, int hf_vines
 
 static int
 rtp_show_gateway_info(proto_tree *tree, tvbuff_t *tvb, int offset,
-		      guint8 link_addr_length, guint8 source_route_length)
+		      uint8_t link_addr_length, uint8_t source_route_length)
 {
 	if (link_addr_length != 0) {
 		proto_tree_add_item(
@@ -1419,10 +1417,10 @@ dissect_vines_rtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	proto_tree *vines_rtp_tree = NULL;
 	proto_item *ti;
 	proto_tree *subtree;
-	guint8   operation_type;
-	guint8   link_addr_length;
-	guint8   source_route_length;
-	guint16  metric;
+	uint8_t  operation_type;
+	uint8_t  link_addr_length;
+	uint8_t  source_route_length;
+	uint16_t metric;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines RTP");
 	col_clear(pinfo->cinfo, COL_INFO);
@@ -1430,13 +1428,13 @@ dissect_vines_rtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	ti = proto_tree_add_item(tree, proto_vines_rtp, tvb, 0, -1, ENC_NA);
 	vines_rtp_tree = proto_item_add_subtree(ti, ett_vines_rtp);
 
-	if (tvb_get_guint8(tvb, 0) != 0) {
+	if (tvb_get_uint8(tvb, 0) != 0) {
 		/*
 		 * Non-sequenced RTP.
 		 */
-		operation_type = tvb_get_guint8(tvb, offset);
+		operation_type = tvb_get_uint8(tvb, offset);
 		col_add_str(pinfo->cinfo, COL_INFO,
-			    val_to_str(operation_type, vines_rtp_operation_type_vals,
+			    val_to_str(pinfo->pool, operation_type, vines_rtp_operation_type_vals,
 			      "Unknown (0x%02x)"));
 
 		if (tree) {
@@ -1454,10 +1452,10 @@ dissect_vines_rtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 			case VRTP_OP_REDIRECT2:
 				proto_tree_add_item(vines_rtp_tree, hf_vines_rtp_version, tvb, offset, 2, ENC_BIG_ENDIAN);
 				offset += 2;
-				link_addr_length = tvb_get_guint8(tvb, offset);
+				link_addr_length = tvb_get_uint8(tvb, offset);
 				proto_tree_add_item(vines_rtp_tree, hf_vines_rtp_link_address_length, tvb, offset, 1, ENC_NA);
 				offset += 1;
-				source_route_length = tvb_get_guint8(tvb, offset);
+				source_route_length = tvb_get_uint8(tvb, offset);
 				proto_tree_add_item(vines_rtp_tree, hf_vines_rtp_source_route_length, tvb, offset, 1, ENC_NA);
 				offset += 1;
 				offset = srtp_show_machine_info(vines_rtp_tree, tvb, offset, hf_vines_rtp_destination,
@@ -1490,9 +1488,9 @@ dissect_vines_rtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 		col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines SRTP");
 		proto_tree_add_item(vines_rtp_tree, hf_vines_rtp_version, tvb, offset, 2, ENC_BIG_ENDIAN);
 		offset += 2;
-		operation_type = tvb_get_guint8(tvb, offset);
+		operation_type = tvb_get_uint8(tvb, offset);
 		col_add_str(pinfo->cinfo, COL_INFO,
-			    val_to_str(operation_type, vines_rtp_operation_type_vals,
+			    val_to_str(pinfo->pool, operation_type, vines_rtp_operation_type_vals,
 			      "Unknown (0x%02x)"));
 
 		if (tree) {
@@ -1562,10 +1560,10 @@ dissect_vines_rtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 				break;
 
 			case VRTP_OP_REDIRECT:
-				link_addr_length = tvb_get_guint8(tvb, offset);
+				link_addr_length = tvb_get_uint8(tvb, offset);
 				proto_tree_add_item(vines_rtp_tree, hf_vines_rtp_link_address_length, tvb, offset, 1, ENC_NA);
 				offset += 1;
-				source_route_length = tvb_get_guint8(tvb, offset);
+				source_route_length = tvb_get_uint8(tvb, offset);
 				proto_tree_add_item(vines_rtp_tree, hf_vines_rtp_source_route_length, tvb, offset, 1, ENC_NA);
 				offset += 1;
 				proto_tree_add_item(vines_rtp_tree, hf_vines_rtp_destination, tvb, offset, VINES_ADDR_LEN, ENC_NA);
@@ -1868,7 +1866,7 @@ proto_register_vines_rtp(void)
 	      NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_rtp,
 		&ett_vines_rtp_compatibility_flags,
 		&ett_vines_rtp_req_info,
@@ -1905,10 +1903,10 @@ dissect_vines_icp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	int offset = 0;
 	proto_tree *vines_icp_tree;
 	proto_item *ti;
-	guint16  packet_type;
-	guint16  exception_code;
-	guint16  metric;
-	gboolean save_in_error_pkt;
+	uint16_t packet_type;
+	uint16_t exception_code;
+	uint16_t metric;
+	bool save_in_error_pkt;
 	tvbuff_t *next_tvb;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Vines ICP");
@@ -1919,7 +1917,7 @@ dissect_vines_icp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
 	packet_type = tvb_get_ntohs(tvb, offset);
 	col_add_str(pinfo->cinfo, COL_INFO,
-		    val_to_str(packet_type, vines_icp_packet_type_vals,
+		    val_to_str(pinfo->pool, packet_type, vines_icp_packet_type_vals,
 		      "Unknown (0x%02x)"));
 
 	proto_tree_add_item(vines_icp_tree, hf_vines_icp_packet_type, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -1930,7 +1928,7 @@ dissect_vines_icp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	case VICP_EXCEPTION_NOTIFICATION:
 		exception_code = tvb_get_ntohs(tvb, offset);
 		col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-			    val_to_str(exception_code, vipc_err_vals,
+			    val_to_str(pinfo->pool, exception_code, vipc_err_vals,
 			        "Unknown exception code (%u)"));
 		proto_tree_add_item(vines_icp_tree, hf_vines_icp_exception_code, tvb, offset, 2, ENC_BIG_ENDIAN);
 		break;
@@ -1950,7 +1948,7 @@ dissect_vines_icp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	 * "real" packets.
 	 */
 	save_in_error_pkt = pinfo->flags.in_error_pkt;
-	pinfo->flags.in_error_pkt = TRUE;
+	pinfo->flags.in_error_pkt = true;
 
 	/* Decode the first 40 bytes of the original VIP datagram. */
 	next_tvb = tvb_new_subset_remaining(tvb, offset);
@@ -1981,7 +1979,7 @@ proto_register_vines_icp(void)
 	      NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_vines_icp,
 	};
 

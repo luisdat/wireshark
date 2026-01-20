@@ -24,6 +24,7 @@
 #include <wsutil/privileges.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
+#include <app/application_flavor.h>
 
 #include <errno.h>
 #include <string.h>
@@ -32,11 +33,7 @@
 #include <cli_main.h>
 
 static char* wifidump_extcap_interface;
-#ifdef _WIN32
-#define DEFAULT_WIFIDUMP_EXTCAP_INTERFACE "wifidump.exe"
-#else
 #define DEFAULT_WIFIDUMP_EXTCAP_INTERFACE "wifidump"
-#endif
 
 #define WIFIDUMP_VERSION_MAJOR "1"
 #define WIFIDUMP_VERSION_MINOR "0"
@@ -63,11 +60,11 @@ enum {
 	OPT_REMOTE_COUNT
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
 	EXTCAP_BASE_OPTIONS,
 	{ "help", ws_no_argument, NULL, OPT_HELP},
 	{ "version", ws_no_argument, NULL, OPT_VERSION},
-	SSH_BASE_OPTIONS,
+	SSH_BASE_PACKET_OPTIONS,
 	{ "remote-channel-frequency", ws_required_argument, NULL, OPT_REMOTE_CHANNEL_FREQUENCY},
 	{ "remote-channel-width", ws_required_argument, NULL, OPT_REMOTE_CHANNEL_WIDTH},
 	{ 0, 0, 0, 0}
@@ -532,10 +529,16 @@ int main(int argc, char *argv[])
 	char* help_header = NULL;
 	char* interface_description = g_strdup("Wi-Fi remote capture");
 
+	/* Set the program name. */
+	g_set_prgname("wifidump");
+
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init("wifidump");
+	extcap_log_init();
 
 	wifidump_extcap_interface = g_path_get_basename(argv[0]);
+	if (g_str_has_suffix(wifidump_extcap_interface, ".exe")) {
+		wifidump_extcap_interface[strlen(wifidump_extcap_interface) - 4] = '\0';
+	}
 
 	/*
 	 * Get credential information for later use.
@@ -546,14 +549,14 @@ int main(int argc, char *argv[])
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	err_msg = configuration_init(argv[0], NULL);
+	err_msg = configuration_init(argv[0], "wireshark");
 	if (err_msg != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			err_msg);
 		g_free(err_msg);
 	}
 
-	help_url = data_file_url("wifidump.html");
+	help_url = data_file_url("wifidump.html", application_configuration_environment_prefix());
 	extcap_base_set_util_info(extcap_conf, argv[0], WIFIDUMP_VERSION_MAJOR, WIFIDUMP_VERSION_MINOR,
 		WIFIDUMP_VERSION_RELEASE, help_url);
 	g_free(help_url);

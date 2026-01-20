@@ -110,36 +110,44 @@ WS_DLL_PUBLIC value_string_ext nt_cmd_vals_ext;
 
 /* used for SMB export object functionality */
 typedef struct _smb_eo_t {
-	guint	      smbversion;
-	guint16	      cmd;
+	unsigned	      smbversion;
+	uint16_t	      cmd;
 	int	      tid,uid;
-	guint	      fid;
-	guint32	      pkt_num;
-	gchar	     *hostname;
-	gchar	     *filename;
+	unsigned	      fid;
+	uint32_t	      pkt_num;
+	char	     *hostname;
+	char	     *filename;
 	int	      fid_type;
-	gint64	      end_of_file;
-	gchar	     *content_type;
-	guint32	      payload_len;
-	const guint8 *payload_data;
-	guint64	      smb_file_offset;
-	guint32	      smb_chunk_len;
+	int64_t	      end_of_file;
+	char	     *content_type;
+	uint32_t	      payload_len;
+	const uint8_t *payload_data;
+	uint64_t	      smb_file_offset;
+	uint32_t	      smb_chunk_len;
 } smb_eo_t;
 
 /* the information we need to keep around for NT transaction commands */
 typedef struct {
 	int	subcmd;
 	int	fid_type;
-	guint32 ioctl_function;
+	uint32_t ioctl_function;
 } smb_nt_transact_info_t;
 
-/* the information we need to keep around for transaction2 commands */
+/* the information we need to keep around for transaction2 commands
+* t2i and st2i */
 typedef struct {
 	int	    subcmd;
 	int	    info_level;
-	gboolean    resume_keys; /* if "return resume" keys set in T2 FIND_FIRST request */
+	bool        resume_keys; /* if "return resume" keys set in T2 FIND_FIRST request */
 	const char *name;
 } smb_transact2_info_t;
+
+typedef struct {
+    uint32_t        frame_num;
+    unsigned        command_count;
+    bool            multi_cmds;
+    unsigned        cmd_index;
+} multi_cmds_t;
 
 /*
  * The information we need to save about a request in order to show the
@@ -165,17 +173,19 @@ typedef enum {
 
 typedef struct _smb_fid_into_t smb_fid_info_t;
 
+/* sip */
 typedef struct {
-	guint32		  frame_req, frame_res;
+	uint32_t	  frame_req, frame_res;
 	nstime_t	  req_time;
-	guint16		  flags;
-	guint8		  cmd;
+	uint16_t	  flags;
+	uint8_t		  cmd;
 	void		 *extra_info;
 	smb_extra_info_t  extra_info_type;
+	bool		  is_create_req;
 	/* we save the fid in each transaction so that we can get fid filters
 	   to match both request and response */
-	gboolean	  fid_seen_in_request;
-	guint16		  fid;
+	bool		  fid_seen_in_request;
+	uint16_t	  fid;
 } smb_saved_info_t;
 
 /*
@@ -184,17 +194,17 @@ typedef struct {
  * Remote API and Mailslot dissectors.
  * XXX - have an additional data structure hung off of this by the
  * subdissectors?
- */
+ * tri */
 typedef struct {
 	int	 subcmd;
 	int	 trans_subcmd;
 	int	 function;
 	/* Unification of fid variable type (was int) */
-	guint16	 fid;
-	guint16	 lanman_cmd;
-	guchar	*param_descrip; /* Keep these descriptors around */
-	guchar	*data_descrip;
-	guchar	*aux_data_descrip;
+	uint16_t	 fid;
+	uint16_t	 lanman_cmd;
+	const char	*param_descrip; /* Keep these descriptors around */
+	const char	*data_descrip;
+	const char	*aux_data_descrip;
 	int	 info_level;
 } smb_transact_info_t;
 
@@ -220,7 +230,7 @@ typedef struct conv_tables {
 
 	/* This table is used to track TID->services for a conversation */
 	GHashTable  *tid_service;
-	gboolean     raw_ntlmssp; /* Do extended security exc use raw ntlmssp */
+	bool         raw_ntlmssp; /* Do extended security exc use raw ntlmssp */
 
 	/* track fid to fidstruct (filename/openframe/closeframe */
 	wmem_tree_t *fid_tree;
@@ -232,26 +242,31 @@ typedef struct conv_tables {
 
 	/* track uid to username mappings */
 	wmem_tree_t *uid_tree;
+
+	/* This table is used to track which request frame a [NT]Trans[2] response fragment maps to */
+	GHashTable  *trans_frag_resp;
 } conv_tables_t;
 
+/* si */
 typedef struct smb_info {
-  guint8   cmd;
+  uint8_t  cmd;
   int	   tid, pid, uid, mid;
-  guint32  nt_status;
-  gboolean unicode;		/* Are strings in this SMB Unicode? */
-  gboolean request;		/* Is this a request? */
-  gboolean unidir;
+  uint32_t nt_status;
+  bool unicode;		/* Are strings in this SMB Unicode? */
+  bool request;		/* Is this a request? */
+  bool unidir;
   int	   info_level;
   int	   info_count;
   smb_saved_info_t *sip;	/* smb_saved_info_t, if any, for this */
   conv_tables_t	   *ct;
+  proto_tree *smbtree;
 } smb_info_t;
 
 /*
  * Show file data for a read or write.
  */
 extern int dissect_file_data(tvbuff_t *tvb, proto_tree *tree, int offset,
-    guint16 bc, int dataoffset, guint16 datalen);
+    uint16_t bc, int dataoffset, uint16_t datalen);
 
 
 #define SMB_FID_TYPE_UNKNOWN	0
@@ -268,40 +283,42 @@ typedef struct _smb_rename_saved_info_t {
 /* used for tracking lock data between lock request/response */
 typedef struct _smb_lock_info_t {
 	struct _smb_lock_info_t *next;
-	guint16	pid;
-	guint64	offset;
-	guint64	length;
+	uint16_t	pid;
+	uint64_t	offset;
+	uint64_t	length;
 } smb_lock_info_t;
 
 typedef struct _smb_locking_saved_info_t {
-	guint8	type;
-	guint8	oplock_level;
-	guint16	num_lock;
-	guint16	num_unlock;
+	uint8_t	type;
+	uint8_t	oplock_level;
+	uint16_t	num_lock;
+	uint16_t	num_unlock;
 	smb_lock_info_t *locks;
 	smb_lock_info_t *unlocks;
 } smb_locking_saved_info_t;
 
-/* used for tracking fid/tid to filename/sharename openedframe closedframe */
+/* fsi used for tracking fid/tid to filename/sharename openedframe closedframe */
 typedef struct _smb_fid_saved_info_t {
-	char	*filename;
-	guint32	 create_flags;
-	guint32	 access_mask;
-	guint32	 file_attributes;
-	guint32	 share_access;
-	guint32	 create_options;
-	guint32	 create_disposition;
+	char		*filename;
+	uint32_t	 create_flags;
+	uint32_t	 desired_access;
+	uint32_t	 maximal_access;
+	uint32_t	 granted_access;
+	uint32_t	 file_attributes;
+	uint32_t	 share_access;
+	uint32_t	 create_options;
+	uint32_t	 create_disposition;
 } smb_fid_saved_info_t;
 
 struct _smb_fid_into_t {
-        guint16	tid,fid;
+        uint16_t	tid,fid;
         /* The end_of_file will store the last registered offset or
            the reported end_of_file from the SMB protocol */
-        gint64	end_of_file;
+        int64_t		end_of_file;
         /* These two were int */
-	guint	opened_in;
-	guint	closed_in;
-	int	type;
+	unsigned	opened_in;
+	unsigned	closed_in;
+	int		type;
 	smb_fid_saved_info_t *fsi;
 };
 
@@ -318,13 +335,13 @@ typedef struct _smb_tid_into_t {
  * Dissect an smb FID
  */
 extern smb_fid_info_t *dissect_smb_fid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-    int offset, int len, guint16 fid, gboolean is_created, gboolean is_closed, gboolean is_generated, smb_info_t* si);
-
+	int offset, int len, uint16_t fid, bool is_created, bool is_closed, bool is_generated,
+	bool is_displayed, smb_info_t* si);
 /*
  * Dissect named pipe state information.
  */
 extern int dissect_ipc_state(tvbuff_t *tvb, proto_tree *parent_tree,
-    int offset, gboolean setstate);
+    int offset, bool setstate);
 
 extern bool smb_dcerpc_reassembly;
 
@@ -334,7 +351,9 @@ extern int dissect_nt_create_options(tvbuff_t *tvb, proto_tree *parent_tree, int
 
 extern int dissect_nt_share_access(tvbuff_t *tvb, proto_tree *parent_tree, int offset);
 
-extern int dissect_smb_access_mask(tvbuff_t *tvb, proto_tree *parent_tree, int offset);
+extern int dissect_smb_access_mask(tvbuff_t *tvb, proto_tree *parent_tree, int offset, bool is_dir, int mask_type);
+extern int dissect_smb_access_mask_bits(tvbuff_t *tvb, proto_tree *parent_tree, int offset, int len,
+	uint32_t mask, bool is_dir, int mask_type);
 
 extern const value_string oa_open_vals[];
 extern const value_string impersonation_level_vals[];
@@ -343,35 +362,39 @@ extern bool sid_display_hex;
 
 extern int dissect_security_information_mask(tvbuff_t *tvb, proto_tree *parent_tree, int offset);
 
-extern int dissect_qfsi_FS_VOLUME_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, guint16 *bcp, int unicode);
-extern int dissect_qfsi_FS_SIZE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, guint16 *bcp);
-extern int dissect_qfsi_FS_DEVICE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, guint16 *bcp);
-extern int dissect_qfsi_FS_ATTRIBUTE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, guint16 *bcp);
-extern int dissect_nt_quota(tvbuff_t *tvb, proto_tree *tree, int offset, guint16 *bcp);
-extern int dissect_nt_user_quota(tvbuff_t *tvb, proto_tree *tree, int offset, guint16 *bcp);
-extern int dissect_nt_get_user_quota(tvbuff_t *tvb, proto_tree *tree, int offset, guint32 *bcp);
-extern int dissect_qfsi_FS_OBJECTID_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, guint16 *bcp);
-extern int dissect_qfsi_FS_FULL_SIZE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, guint16 *bcp);
-extern int dissect_qfi_SMB_FILE_EA_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qfi_SMB_FILE_STREAM_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, int offset, guint16 *bcp, gboolean *trunc, int unicode);
-extern int dissect_qfi_SMB_FILE_NAME_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc, gboolean unicode);
-extern int dissect_qfi_SMB_FILE_STANDARD_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qfi_SMB_FILE_INTERNAL_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qsfi_SMB_FILE_POSITION_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qsfi_SMB_FILE_MODE_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qfi_SMB_FILE_ALIGNMENT_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qfi_SMB_FILE_COMPRESSION_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qfi_SMB_FILE_NETWORK_OPEN_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qfi_SMB_FILE_ATTRIBUTE_TAG_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qsfi_SMB_FILE_ALLOCATION_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_qsfi_SMB_FILE_ENDOFFILE_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
+extern int dissect_qfsi_FS_VOLUME_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, uint16_t *bcp, int unicode);
+extern int dissect_qfsi_FS_SIZE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, uint16_t *bcp);
+extern int dissect_qfsi_FS_DEVICE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, uint16_t *bcp);
+extern int dissect_qfsi_FS_ATTRIBUTE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, uint16_t *bcp);
+extern int dissect_nt_quota(tvbuff_t *tvb, proto_tree *tree, int offset, uint16_t *bcp);
+extern int dissect_nt_user_quota(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int offset, uint16_t *bcp);
+extern int dissect_nt_get_user_quota(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int offset, uint32_t *bcp);
+extern int dissect_qfsi_FS_OBJECTID_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, uint16_t *bcp);
+extern int dissect_qfsi_FS_FULL_SIZE_INFO(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int offset, uint16_t *bcp);
+extern int dissect_qfi_SMB_FILE_EA_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_STREAM_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, int offset, uint16_t *bcp, bool *trunc, int unicode);
+extern int dissect_qfi_SMB_FILE_NAME_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_STANDARD_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_INTERNAL_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qsfi_SMB_FILE_POSITION_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qsfi_SMB_FILE_MODE_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_ALIGNMENT_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_COMPRESSION_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_NETWORK_OPEN_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_ATTRIBUTE_TAG_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qsfi_SMB_FILE_ALLOCATION_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qsfi_SMB_FILE_ENDOFFILE_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
 extern int dissect_nt_notify_completion_filter(tvbuff_t *tvb, proto_tree *parent_tree, int offset);
-extern int dissect_sfi_SMB_FILE_PIPE_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, guint16 *bcp, gboolean *trunc);
-extern int dissect_get_dfs_request_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean unicode);
-extern int dissect_get_dfs_referral_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, guint16 *bcp, gboolean unicode);
+extern int dissect_sfi_SMB_FILE_PIPE_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_PIPE_LOCAL_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_qfi_SMB_FILE_PIPE_REMOTE_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint16_t *bcp, bool *trunc);
+extern int dissect_smb_get_dfs_request_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool unicode);
+extern int dissect_smb_get_dfs_referral_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t *bcp, bool unicode);
+extern const char *smb_get_unicode_or_ascii_string(wmem_allocator_t *scope, tvbuff_t *tvb, int *offsetp, bool useunicode,
+				int *len, bool nopad, bool exactlen, uint16_t *bcp);
 
 /* Returns an IP (v4 or v6) of the server in a SMB/SMB2 conversation */
-extern const gchar *tree_ip_str(packet_info *pinfo, guint16 cmd);
+extern const char *tree_ip_str(packet_info *pinfo, uint16_t cmd);
 
 #endif
 

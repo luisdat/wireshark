@@ -12,11 +12,15 @@ set(WIRETAP_PUBLIC_HEADERS
 	introspection.h
 	merge.h
 	pcap-encap.h
-	pcapng_module.h
 	secrets-types.h
 	wtap.h
+	wtap_module.h
 	wtap_modules.h
 	wtap_opttypes.h
+)
+
+add_definitions(
+	${LIBXML2_DEFINITIONS}
 )
 
 #
@@ -61,16 +65,19 @@ set(WIRETAP_C_MODULE_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/iptrace.c
 	${CMAKE_CURRENT_SOURCE_DIR}/iseries.c
 	${CMAKE_CURRENT_SOURCE_DIR}/json.c
+	${CMAKE_CURRENT_SOURCE_DIR}/json_log.c
 	${CMAKE_CURRENT_SOURCE_DIR}/k12.c
 	${CMAKE_CURRENT_SOURCE_DIR}/lanalyzer.c
 	${CMAKE_CURRENT_SOURCE_DIR}/log3gpp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/logcat.c
 	${CMAKE_CURRENT_SOURCE_DIR}/logcat_text.c
+	${CMAKE_CURRENT_SOURCE_DIR}/mmodule.c
 	${CMAKE_CURRENT_SOURCE_DIR}/mp4.c
 	${CMAKE_CURRENT_SOURCE_DIR}/mpeg.c
 	${CMAKE_CURRENT_SOURCE_DIR}/mplog.c
 	${CMAKE_CURRENT_SOURCE_DIR}/mime_file.c
 	${CMAKE_CURRENT_SOURCE_DIR}/mp2t.c
+	${CMAKE_CURRENT_SOURCE_DIR}/netlog.c
 	${CMAKE_CURRENT_SOURCE_DIR}/netmon.c
 	${CMAKE_CURRENT_SOURCE_DIR}/netscaler.c
 	${CMAKE_CURRENT_SOURCE_DIR}/netscreen.c
@@ -81,9 +88,14 @@ set(WIRETAP_C_MODULE_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/observer.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packetlogger.c
 	${CMAKE_CURRENT_SOURCE_DIR}/pcap-common.c
+	${CMAKE_CURRENT_SOURCE_DIR}/pcapng-darwin-custom.c
+	${CMAKE_CURRENT_SOURCE_DIR}/pcapng-netflix-custom.c
+	${CMAKE_CURRENT_SOURCE_DIR}/pcapng-sysdig.c
+	${CMAKE_CURRENT_SOURCE_DIR}/peak-trc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/peekclassic.c
 	${CMAKE_CURRENT_SOURCE_DIR}/peektagged.c
 	${CMAKE_CURRENT_SOURCE_DIR}/pppdump.c
+	${CMAKE_CURRENT_SOURCE_DIR}/procmon.c
 	${CMAKE_CURRENT_SOURCE_DIR}/radcom.c
 	${CMAKE_CURRENT_SOURCE_DIR}/rfc7468.c
 	${CMAKE_CURRENT_SOURCE_DIR}/rtpdump.c
@@ -93,6 +105,7 @@ set(WIRETAP_C_MODULE_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/systemd_journal.c
 	${CMAKE_CURRENT_SOURCE_DIR}/tnef.c
 	${CMAKE_CURRENT_SOURCE_DIR}/toshiba.c
+	${CMAKE_CURRENT_SOURCE_DIR}/ttl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/visual.c
 	${CMAKE_CURRENT_SOURCE_DIR}/vms.c
 	${CMAKE_CURRENT_SOURCE_DIR}/vwr.c
@@ -122,6 +135,7 @@ set(WIRETAP_NONGENERATED_C_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/file_wrappers.c
 	${CMAKE_CURRENT_SOURCE_DIR}/merge.c
 	${CMAKE_CURRENT_SOURCE_DIR}/secrets-types.c
+	${CMAKE_CURRENT_SOURCE_DIR}/socketcan.c
 	${CMAKE_CURRENT_SOURCE_DIR}/wtap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/wtap_opttypes.c
 )
@@ -135,13 +149,11 @@ add_lex_files(LEX_FILES WIRETAP_FILES
 	${WIRETAP_LEX_MODULE_FILES}
 	${CMAKE_CURRENT_SOURCE_DIR}/ascend_scanner.l
 	${CMAKE_CURRENT_SOURCE_DIR}/busmaster_scanner.l
-	${CMAKE_CURRENT_SOURCE_DIR}/candump_scanner.l
 )
 
 add_lemon_files(LEMON_FILES WIRETAP_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/ascend_parser.lemon
 	${CMAKE_CURRENT_SOURCE_DIR}/busmaster_parser.lemon
-	${CMAKE_CURRENT_SOURCE_DIR}/candump_parser.lemon
 )
 
 #
@@ -191,14 +203,18 @@ target_link_libraries(wiretap
 		wsutil
 		${GLIB2_LIBRARIES}
 	PRIVATE
+		${LIBXML2_LIBRARIES}
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${ZSTD_LIBRARIES}
 		${LZ4_LIBRARIES}
 )
 
 target_include_directories(wiretap SYSTEM
 	PRIVATE
+		${LIBXML2_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
+		${ZLIBNG_INCLUDE_DIRS}
 		${ZSTD_INCLUDE_DIRS}
 		${LZ4_INCLUDE_DIRS}
 )

@@ -48,10 +48,12 @@ gcry_error_t ws_cmac_buffer(int algo, void *digest, const void *buffer, size_t l
 	return result;
 }
 
-void crypt_des_ecb(uint8_t *output, const uint8_t *buffer, const uint8_t *key56)
+gcry_error_t
+crypt_des_ecb(uint8_t *output, const uint8_t *buffer, const uint8_t *key56)
 {
 	uint8_t key64[8];
 	gcry_cipher_hd_t handle;
+	gcry_error_t err;
 
 	memset(output, 0x00, 8);
 
@@ -65,23 +67,24 @@ void crypt_des_ecb(uint8_t *output, const uint8_t *buffer, const uint8_t *key56)
 	key64[6] = (key56[5] << 2) | (key56[6] >> 6);
 	key64[7] = (key56[6] << 1);
 
-	if (gcry_cipher_open(&handle, GCRY_CIPHER_DES, GCRY_CIPHER_MODE_ECB, 0)) {
-		return;
+	if ((err = gcry_cipher_open(&handle, GCRY_CIPHER_DES, GCRY_CIPHER_MODE_ECB, 0))) {
+		return err;
 	}
-	if (gcry_cipher_setkey(handle, key64, 8)) {
+	if ((err = gcry_cipher_setkey(handle, key64, 8))) {
 		gcry_cipher_close(handle);
-		return;
+		return err;
 	}
-	gcry_cipher_encrypt(handle, output, 8, buffer, 8);
+	err = gcry_cipher_encrypt(handle, output, 8, buffer, 8);
 	gcry_cipher_close(handle);
+	return err;
 }
 
 size_t rsa_decrypt_inplace(const unsigned len, unsigned char* data, gcry_sexp_t pk, bool pkcs1_padding, char **err)
 {
-	int         rc = 0;
-	size_t      decr_len = 0, i = 0;
-	gcry_sexp_t s_data = NULL, s_plain = NULL;
-	gcry_mpi_t  encr_mpi = NULL, text = NULL;
+	gcry_error_t rc = 0;
+	size_t       decr_len = 0, i = 0, pad_len;
+	gcry_sexp_t  s_data = NULL, s_plain = NULL;
+	gcry_mpi_t   encr_mpi = NULL, text = NULL;
 
 	*err = NULL;
 
@@ -142,16 +145,16 @@ size_t rsa_decrypt_inplace(const unsigned len, unsigned char* data, gcry_sexp_t 
 
 	if (pkcs1_padding) {
 		/* strip the padding*/
-		rc = 0;
+		pad_len = 0;
 		for (i = 1; i < decr_len; i++) {
 			if (data[i] == 0) {
-				rc = (int) i+1;
+				pad_len = i+1;
 				break;
 			}
 		}
 
-		decr_len -= rc;
-		memmove(data, data+rc, decr_len);
+		decr_len -= pad_len;
+		memmove(data, data+pad_len, decr_len);
 	}
 
 out:
@@ -185,7 +188,11 @@ hkdf_expand(int hashalgo, const uint8_t *prk, unsigned prk_len, const uint8_t *i
 
 	for (unsigned offset = 0; offset < out_len; offset += hash_len) {
 		gcry_md_reset(h);
-		gcry_md_setkey(h, prk, prk_len);                    /* Set PRK */
+		err = gcry_md_setkey(h, prk, prk_len);              /* Set PRK */
+		if (err) {
+		    gcry_md_close(h);
+		    return err;
+		}
 		if (offset > 0) {
 			gcry_md_write(h, lastoutput, hash_len);     /* T(1..N) */
 		}
@@ -198,6 +205,200 @@ hkdf_expand(int hashalgo, const uint8_t *prk, unsigned prk_len, const uint8_t *i
 
 	gcry_md_close(h);
 	return 0;
+}
+
+gcry_error_t
+hpke_extract(uint16_t kdf_id, const uint8_t *salt, unsigned salt_len, const uint8_t *suite_id, const char *label,
+             const uint8_t *ikm, unsigned ikm_len, uint8_t *out)
+{
+    int hashalgo;
+    gcry_md_hd_t hmac_handle;
+    switch (kdf_id) {
+        case HPKE_HKDF_SHA256:
+            hashalgo = GCRY_MD_SHA256;
+            break;
+        case HPKE_HKDF_SHA384:
+            hashalgo = GCRY_MD_SHA384;
+            break;
+        case HPKE_HKDF_SHA512:
+            hashalgo = GCRY_MD_SHA512;
+            break;
+        default:
+            return GPG_ERR_DIGEST_ALGO;
+    }
+    gcry_error_t result = gcry_md_open(&hmac_handle, hashalgo, GCRY_MD_FLAG_HMAC);
+    if (result) {
+		return result;
+    }
+    result = gcry_md_setkey(hmac_handle, salt, salt_len);
+    if (result) {
+		gcry_md_close(hmac_handle);
+        return result;
+    }
+    gcry_md_write(hmac_handle, HPKE_VERSION_ID, sizeof(HPKE_VERSION_ID) - 1);
+    gcry_md_write(hmac_handle, suite_id, HPKE_SUIT_ID_LEN);
+    gcry_md_write(hmac_handle, label, strlen(label));
+    gcry_md_write(hmac_handle, ikm, ikm_len);
+    memcpy(out, gcry_md_read(hmac_handle, 0), hpke_hkdf_len(kdf_id));
+    gcry_md_close(hmac_handle);
+    return GPG_ERR_NO_ERROR;
+}
+
+uint16_t
+hpke_hkdf_len(uint16_t kdf_id)
+{
+    switch (kdf_id) {
+        case HPKE_HKDF_SHA256:
+            return HASH_SHA2_256_LENGTH;
+        case HPKE_HKDF_SHA384:
+            return HASH_SHA2_384_LENGTH;
+        case HPKE_HKDF_SHA512:
+            return HASH_SHA2_512_LENGTH;
+        default:
+            return 0;
+    }
+}
+
+uint16_t
+hpke_aead_key_len(uint16_t aead_id)
+{
+    switch (aead_id) {
+	case HPKE_AEAD_AES_128_GCM:
+            return AEAD_AES_128_GCM_KEY_LENGTH;
+        case HPKE_AEAD_AES_256_GCM:
+            return AEAD_AES_256_GCM_KEY_LENGTH;
+        case HPKE_AEAD_CHACHA20POLY1305:
+            return AEAD_CHACHA20POLY1305_KEY_LENGTH;
+        default:
+            return 0;
+    }
+}
+
+uint16_t
+hpke_aead_nonce_len(uint16_t aead_id)
+{
+    switch (aead_id) {
+	case HPKE_AEAD_AES_128_GCM:
+        case HPKE_AEAD_AES_256_GCM:
+        case HPKE_AEAD_CHACHA20POLY1305:
+            return HPKE_AEAD_NONCE_LENGTH;
+        default:
+            return 0;
+    }
+}
+
+void
+hpke_suite_id(uint16_t kem_id, uint16_t kdf_id, uint16_t aead_id, uint8_t *suite_id)
+{
+    uint8_t offset = 0;
+    memcpy(suite_id, HPKE_SUIT_PREFIX, sizeof(HPKE_SUIT_PREFIX) - 1);
+    offset += sizeof(HPKE_SUIT_PREFIX) - 1;
+    suite_id[offset++] = (kem_id >> 8) & 0xFF;
+    suite_id[offset++] = kem_id & 0xFF;
+    suite_id[offset++] = (kdf_id >> 8) & 0xFF;
+    suite_id[offset++] = kdf_id & 0xFF;
+    suite_id[offset++] = (aead_id >> 8) & 0xFF;
+    suite_id[offset++] = aead_id & 0xFF;
+}
+
+static gcry_error_t
+hpke_expand(uint16_t kdf_id, const uint8_t *prk, const uint8_t *suite_id, const char *label,
+            const uint8_t *info, uint8_t *out, uint16_t out_len)
+{
+    int hashalgo;
+    GByteArray * labeled_info = g_byte_array_new();
+    uint16_t out_len_be = GUINT16_TO_BE(out_len);
+    gcry_error_t result;
+    switch (kdf_id) {
+	case HPKE_HKDF_SHA256:
+            hashalgo = GCRY_MD_SHA256;
+            break;
+        case HPKE_HKDF_SHA384:
+            hashalgo = GCRY_MD_SHA384;
+            break;
+	case HPKE_HKDF_SHA512:
+            hashalgo = GCRY_MD_SHA512;
+            break;
+        default:
+            return GPG_ERR_DIGEST_ALGO;
+    }
+    g_byte_array_append(labeled_info, (uint8_t *)&out_len_be, 2);
+    g_byte_array_append(labeled_info, (const uint8_t*)HPKE_VERSION_ID, sizeof(HPKE_VERSION_ID) - 1);
+    g_byte_array_append(labeled_info, suite_id, HPKE_SUIT_ID_LEN);
+    g_byte_array_append(labeled_info, (const uint8_t*)label, (unsigned)strlen(label));
+    g_byte_array_append(labeled_info, info, (unsigned)(1 + hpke_hkdf_len(kdf_id) * 2));
+    result = hkdf_expand(hashalgo, prk, (unsigned)hpke_hkdf_len(kdf_id), labeled_info->data, labeled_info->len, out, out_len);
+    g_byte_array_free(labeled_info, TRUE);
+    return result;
+}
+
+gcry_error_t
+hpke_key_schedule(uint16_t kdf_id, uint16_t aead_id, const uint8_t *salt, unsigned salt_len, const uint8_t *suite_id,
+                  const uint8_t *ikm, unsigned ikm_len, uint8_t mode, uint8_t *key, uint8_t *base_nonce)
+{
+    uint8_t secret[HPKE_MAX_KDF_LEN];
+    uint8_t context[HPKE_MAX_KDF_LEN * 2 + 1];
+    size_t kdf_len = hpke_hkdf_len(kdf_id);
+    context[0] = mode;
+    gcry_error_t result = hpke_extract(kdf_id, NULL, 0, suite_id, "psk_id_hash", NULL, 0, context + 1);
+    if (result) {
+        return result;
+    }
+    result = hpke_extract(kdf_id, NULL, 0, suite_id, "info_hash", ikm, ikm_len, context + 1 + kdf_len);
+    if (result) {
+        return result;
+    }
+    result = hpke_extract(kdf_id, salt, salt_len, suite_id, "secret", NULL, 0, secret);
+    if (result) {
+        return result;
+    }
+    result = hpke_expand(kdf_id, secret, suite_id, "key", context, key, hpke_aead_key_len(aead_id));
+    if (result) {
+        return result;
+    }
+    result = hpke_expand(kdf_id, secret, suite_id, "base_nonce", context, base_nonce, hpke_aead_nonce_len(aead_id));
+    return result;
+}
+
+gcry_error_t
+hpke_setup_aead(gcry_cipher_hd_t* cipher, uint16_t aead_id, uint8_t *key)
+{
+    gcry_error_t err;
+    switch (aead_id) {
+        case HPKE_AEAD_AES_128_GCM:
+            err = gcry_cipher_open(cipher, GCRY_CIPHER_AES128, GCRY_CIPHER_MODE_GCM, 0);
+            break;
+        case HPKE_AEAD_AES_256_GCM:
+            err = gcry_cipher_open(cipher, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
+            break;
+        case HPKE_AEAD_CHACHA20POLY1305:
+            err = gcry_cipher_open(cipher, GCRY_CIPHER_CHACHA20, GCRY_CIPHER_MODE_POLY1305, 0);
+            break;
+        default:
+            return GPG_ERR_CIPHER_ALGO;
+    }
+    if (err)
+		return err;
+    return gcry_cipher_setkey(*(cipher), key, hpke_aead_key_len(aead_id));
+}
+
+gcry_error_t
+hpke_set_nonce(gcry_cipher_hd_t cipher, uint64_t seq, uint8_t *base_nonce, size_t nonce_len)
+{
+    size_t i;
+    uint8_t *nonce = (uint8_t *)wmem_alloc0(NULL, nonce_len);
+    gcry_error_t err;
+
+    for (i = 1; i < 9; i++) {
+        nonce[nonce_len - i] = seq & 255;
+        seq >>= 8;
+    }
+    for (i = 0; i < nonce_len; i++) {
+        nonce[i] ^= base_nonce[i];
+    }
+    err = gcry_cipher_setiv(cipher, nonce, nonce_len);
+    wmem_free(NULL, nonce);
+    return err;
 }
 
 /*

@@ -25,17 +25,19 @@
 static QHash<const QString, register_srt_t *> cfg_str_to_srt_;
 
 extern "C" {
-static void
+static bool
 srt_init(const char *args, void*) {
     QStringList args_l = QString(args).split(',');
     if (args_l.length() > 1) {
-        QString srt = QString("%1,%2").arg(args_l[0]).arg(args_l[1]);
+        QString srt = QStringLiteral("%1,%2").arg(args_l[0]).arg(args_l[1]);
         QString filter;
         if (args_l.length() > 2) {
             filter = QStringList(args_l.mid(2)).join(",");
         }
         mainApp->emitTapParameterSignal(srt, filter, NULL);
     }
+
+    return true;
 }
 }
 
@@ -66,7 +68,7 @@ bool register_service_response_tables(const void *, void *value, void*)
                 srt_init,
                 tpd_creator);
     g_free(cfg_abbr);
-    return FALSE;
+    return false;
 }
 
 enum {
@@ -170,7 +172,7 @@ ServiceResponseTimeDialog::ServiceResponseTimeDialog(QWidget &parent, CaptureFil
     TapParameterDialog(parent, cf, help_topic),
     srt_(srt)
 {
-    QString subtitle = QString("%1 Service Response Time Statistics")
+    QString subtitle = QStringLiteral("%1 Service Response Time Statistics")
             .arg(proto_get_protocol_short_name(find_protocol_by_id(get_srt_proto_id(srt))));
     setWindowSubtitle(subtitle);
     loadGeometry(0, 0, "ServiceResponseTimeDialog");
@@ -205,7 +207,7 @@ ServiceResponseTimeDialog::~ServiceResponseTimeDialog()
 {
     if (srt_data_.srt_array) {
         free_srt_table(srt_, srt_data_.srt_array);
-        g_array_free(srt_data_.srt_array, TRUE);
+        g_array_free(srt_data_.srt_array, true);
     }
 }
 
@@ -259,7 +261,7 @@ void ServiceResponseTimeDialog::tapDraw(void *srtd_ptr)
 
 void ServiceResponseTimeDialog::endRetapPackets()
 {
-    for (guint i = 0; i < srt_data_.srt_array->len; i++) {
+    for (unsigned i = 0; i < srt_data_.srt_array->len; i++) {
         srt_stat_table *srt_table = g_array_index(srt_data_.srt_array, srt_stat_table*, i);
         addSrtTable(srt_table);
     }
@@ -270,9 +272,9 @@ void ServiceResponseTimeDialog::fillTree()
 {
     if (srt_data_.srt_array) {
         free_srt_table(srt_, srt_data_.srt_array);
-        g_array_free(srt_data_.srt_array, TRUE);
+        g_array_free(srt_data_.srt_array, true);
     }
-    srt_data_.srt_array = g_array_new(FALSE, TRUE, sizeof(srt_stat_table*));
+    srt_data_.srt_array = g_array_new(false, true, sizeof(srt_stat_table*));
     srt_data_.user_data = this;
 
     provideParameterData();
@@ -336,7 +338,7 @@ const QString ServiceResponseTimeDialog::filterExpression()
             QString field = srtt_ti->filterField();
             QString value = ti->text(SRT_COLUMN_INDEX);
             if (!field.isEmpty() && !value.isEmpty()) {
-                filter_expr = QString("%1==%2").arg(field).arg(value);
+                filter_expr = QStringLiteral("%1==%2").arg(field).arg(value);
             }
         }
     }

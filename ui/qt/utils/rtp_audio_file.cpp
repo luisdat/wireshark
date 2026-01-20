@@ -45,7 +45,7 @@ RtpAudioFile::RtpAudioFile(bool use_disk_for_temp, bool use_disk_for_frames):
 
     tempname = "memory";
     if (use_disk_for_temp) {
-        tempname = QString("%1/wireshark_rtp_stream").arg(QDir::tempPath());
+        tempname = QStringLiteral("%1/wireshark_rtp_stream").arg(QDir::tempPath());
         sample_file_ = new QTemporaryFile(tempname, this);
     } else {
         sample_file_ = new QBuffer(this);
@@ -59,7 +59,7 @@ RtpAudioFile::RtpAudioFile(bool use_disk_for_temp, bool use_disk_for_frames):
 
     tempname = "memory";
     if (use_disk_for_frames) {
-        tempname = QString("%1/wireshark_rtp_frames").arg(QDir::tempPath());
+        tempname = QStringLiteral("%1/wireshark_rtp_frames").arg(QDir::tempPath());
         sample_file_frame_ = new QTemporaryFile(tempname, this);
     } else {
         sample_file_frame_ = new QBuffer(this);
@@ -170,7 +170,7 @@ void RtpAudioFile::setFrameReadStage(qint64 prepend_samples)
 {
     sample_file_frame_->seek(0);
     if (prepend_samples > 0) {
-        // Skip first frame which contains openning silence
+        // Skip first frame which contains opening silence
         sample_file_frame_->read((char *)&cur_frame_, sizeof(cur_frame_));
     }
 }

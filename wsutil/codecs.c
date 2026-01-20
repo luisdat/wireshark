@@ -10,17 +10,18 @@
 
 #include "config.h"
 
-#include "codecs_priv.h"
+#include "codecs.h"
 
+#include <wsutil/wslog.h>
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
 #endif
 
 #ifdef HAVE_PLUGINS
-static plugins_t *libwscodecs_plugins = NULL;
+static plugins_t *libwscodecs_plugins;
 #endif
 
-static GSList *codecs_plugins = NULL;
+static GSList *codecs_plugins;
 
 #ifdef HAVE_PLUGINS
 void
@@ -51,10 +52,10 @@ call_plugin_register_codec_module(void * data, void * user_data _U_)
  * For all codec plugins, call their register routines.
  */
 void
-codecs_init(void)
+codecs_init(const char* app_env_var_prefix _U_)
 {
 #ifdef HAVE_PLUGINS
-    libwscodecs_plugins = plugins_init(WS_PLUGIN_CODEC);
+    libwscodecs_plugins = plugins_init(WS_PLUGIN_CODEC, app_env_var_prefix);
 #endif
     g_slist_foreach(codecs_plugins, call_plugin_register_codec_module, NULL);
 }
@@ -83,7 +84,7 @@ struct codec_handle {
 /*
  * List of registered codecs.
  */
-static GHashTable *registered_codecs = NULL;
+static GHashTable *registered_codecs;
 
 
 /* Find a registered codec by name. */

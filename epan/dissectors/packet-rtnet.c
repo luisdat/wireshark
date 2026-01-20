@@ -18,7 +18,8 @@
 #include <epan/packet.h>
 #include <epan/addr_resolv.h>
 #include <epan/etypes.h>
-
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 /*
  * See
  *
@@ -226,14 +227,14 @@ static int ett_rtmac_flags;
 static int ett_tdma;
 static int ett_rtcfg;
 
-static guint
-dissect_rtnet_tdma_notify_master(tvbuff_t *tvb _U_, guint offset, proto_tree *tree _U_)
+static unsigned
+dissect_rtnet_tdma_notify_master(tvbuff_t *tvb _U_, unsigned offset, proto_tree *tree _U_)
 {
   return offset;
 }
 
-static guint
-dissect_rtnet_tdma_request_test(tvbuff_t *tvb, guint offset, proto_tree *tree)
+static unsigned
+dissect_rtnet_tdma_request_test(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
   proto_tree_add_item(tree, hf_tdma_v1_msg_request_test_counter, tvb,
                        offset, 4, ENC_LITTLE_ENDIAN );
@@ -246,8 +247,8 @@ dissect_rtnet_tdma_request_test(tvbuff_t *tvb, guint offset, proto_tree *tree)
   return offset;
 }
 
-static guint
-dissect_rtnet_tdma_ack_test(tvbuff_t *tvb, guint offset, proto_tree *tree)
+static unsigned
+dissect_rtnet_tdma_ack_test(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
   proto_tree_add_item(tree, hf_tdma_v1_msg_ack_test_counter, tvb,
                        offset, 4, ENC_LITTLE_ENDIAN );
@@ -260,8 +261,8 @@ dissect_rtnet_tdma_ack_test(tvbuff_t *tvb, guint offset, proto_tree *tree)
   return offset;
 }
 
-static guint
-dissect_rtnet_tdma_request_conf(tvbuff_t *tvb, guint offset, proto_tree *tree)
+static unsigned
+dissect_rtnet_tdma_request_conf(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
   proto_tree_add_item(tree, hf_tdma_v1_msg_request_conf_station, tvb,
                        offset, 1, ENC_BIG_ENDIAN );
@@ -283,8 +284,8 @@ dissect_rtnet_tdma_request_conf(tvbuff_t *tvb, guint offset, proto_tree *tree)
 }
 
 
-static guint
-dissect_rtnet_tdma_ack_conf(tvbuff_t *tvb, guint offset, proto_tree *tree)
+static unsigned
+dissect_rtnet_tdma_ack_conf(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
   proto_tree_add_item(tree, hf_tdma_v1_msg_ack_conf_station, tvb,
                        offset, 1, ENC_BIG_ENDIAN );
@@ -305,8 +306,8 @@ dissect_rtnet_tdma_ack_conf(tvbuff_t *tvb, guint offset, proto_tree *tree)
   return offset;
 }
 
-static guint
-dissect_rtnet_tdma_ack_ack_conf(tvbuff_t *tvb, guint offset, proto_tree *tree) {
+static unsigned
+dissect_rtnet_tdma_ack_ack_conf(tvbuff_t *tvb, unsigned offset, proto_tree *tree) {
 
   proto_tree_add_item(tree, hf_tdma_v1_msg_ack_ack_conf_station, tvb,
                        offset, 1, ENC_BIG_ENDIAN );
@@ -320,13 +321,13 @@ dissect_rtnet_tdma_ack_ack_conf(tvbuff_t *tvb, guint offset, proto_tree *tree) {
   return offset;
 }
 
-static guint
-dissect_rtnet_tdma_station_list(tvbuff_t *tvb, guint offset, proto_tree *tree)
+static unsigned
+dissect_rtnet_tdma_station_list(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
-  guint8 nr_stations;
-  guint8 i;
+  uint8_t nr_stations;
+  uint8_t i;
 
-  nr_stations = tvb_get_guint8(tvb, offset);
+  nr_stations = tvb_get_uint8(tvb, offset);
   proto_tree_add_uint(tree, hf_tdma_v1_msg_station_list_nr_stations, tvb,
                       offset, 1, nr_stations);
 
@@ -357,8 +358,8 @@ dissect_rtnet_tdma_station_list(tvbuff_t *tvb, guint offset, proto_tree *tree)
   return offset;
 }
 
-static guint
-dissect_rtnet_tdma_request_change_offset(tvbuff_t *tvb, guint offset, proto_tree *tree)
+static unsigned
+dissect_rtnet_tdma_request_change_offset(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
   proto_tree_add_item(tree, hf_tdma_v1_msg_request_change_offset_offset, tvb,
                        offset, 4, ENC_BIG_ENDIAN );
@@ -368,8 +369,8 @@ dissect_rtnet_tdma_request_change_offset(tvbuff_t *tvb, guint offset, proto_tree
   return offset;
 }
 
-static guint
-dissect_rtnet_tdma_start_of_frame(tvbuff_t *tvb, guint offset, proto_tree *tree)
+static unsigned
+dissect_rtnet_tdma_start_of_frame(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
   proto_tree_add_item(tree, hf_tdma_v1_msg_start_of_frame_timestamp, tvb,
                        offset, 8, ENC_BIG_ENDIAN );
@@ -380,30 +381,27 @@ dissect_rtnet_tdma_start_of_frame(tvbuff_t *tvb, guint offset, proto_tree *tree)
 
 static void
 dissect_rtnet_tdma_v1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root) {
-  guint offset = 0;
-  guint32 msg;
+  unsigned offset = 0;
+  uint32_t msg;
   proto_tree *tree;
   proto_item *ti;
-
-  msg = tvb_get_ntohl(tvb, offset);
+  char* str_msg;
 
   /* Set the protocol column */
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "TDMA-V1");
 
-  /* set the info column */
-  col_add_fstr(pinfo->cinfo, COL_INFO, "%s",
-      val_to_str(msg, tdma_v1_msg_vals, "Unknown (0x%04x)"));
-
-  if (root) {
     ti = proto_tree_add_item(root, proto_tdma, tvb, 0, -1, ENC_NA);
     tree = proto_item_add_subtree(ti, ett_tdma);
 
-    proto_item_append_text(ti, ", Version 1, %s",
-      val_to_str(msg, tdma_v1_msg_vals, "Unknown (0x%04x)"));
-
-    proto_tree_add_item(tree, hf_tdma_v1_msg, tvb,
-                        offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_tdma_v1_msg, tvb,
+                        offset, 4, ENC_BIG_ENDIAN, &msg);
     offset += 4;
+
+    str_msg = val_to_str(pinfo->pool, msg, tdma_v1_msg_vals, "Unknown (0x%04x)");
+    proto_item_append_text(ti, ", Version 1, %s", str_msg);
+
+    /* set the info column */
+    col_add_str(pinfo->cinfo, COL_INFO, str_msg);
 
     switch( msg ) {
       case TDMA_V1_MSG_NOTIFY_MASTER:
@@ -445,12 +443,11 @@ dissect_rtnet_tdma_v1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root) {
       default:
         break;
     }
-  }
 }
 
 static void
-dissect_tdma_sync(tvbuff_t *tvb, guint offset, proto_tree *tree) {
-  gint64 timestamp;
+dissect_tdma_sync(tvbuff_t *tvb, unsigned offset, proto_tree *tree) {
+  int64_t timestamp;
   proto_item *ti;
 
   proto_tree_add_item(tree, hf_tdma_sync_cycle, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -465,7 +462,7 @@ dissect_tdma_sync(tvbuff_t *tvb, guint offset, proto_tree *tree) {
 }
 
 static void
-dissect_tdma_request_cal(tvbuff_t *tvb, guint offset, proto_tree *tree) {
+dissect_tdma_request_cal(tvbuff_t *tvb, unsigned offset, proto_tree *tree) {
 
   proto_tree_add_item(tree, hf_tdma_req_cal_xmit_stamp, tvb, offset, 8, ENC_BIG_ENDIAN);
   offset += 8;
@@ -477,8 +474,8 @@ dissect_tdma_request_cal(tvbuff_t *tvb, guint offset, proto_tree *tree) {
 }
 
 static void
-dissect_tdma_reply_cal(tvbuff_t *tvb, guint offset, proto_tree *tree) {
-  gint64 timestamp;
+dissect_tdma_reply_cal(tvbuff_t *tvb, unsigned offset, proto_tree *tree) {
+  int64_t timestamp;
   proto_item *ti;
 
   proto_tree_add_item(tree, hf_tdma_rpl_cal_req_stamp, tvb, offset, 8, ENC_BIG_ENDIAN);
@@ -495,66 +492,62 @@ dissect_tdma_reply_cal(tvbuff_t *tvb, guint offset, proto_tree *tree) {
 
 static void
 dissect_rtnet_tdma(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root) {
-  guint offset = 0;
-  guint16 msg;
+  unsigned offset = 0;
+  uint32_t msg;
   proto_item *ti;
   proto_tree *tree;
-
-  msg = tvb_get_ntohs(tvb, 2);
+  char* str_msg;
 
   /* Set the protocol column */
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "TDMA");
 
+  ti = proto_tree_add_item(root, proto_tdma, tvb, 0, -1, ENC_NA);
+  tree = proto_item_add_subtree(ti, ett_tdma);
+
+  proto_tree_add_item(tree, hf_tdma_ver, tvb, offset, 2, ENC_BIG_ENDIAN);
+  offset += 2;
+
+  proto_tree_add_item_ret_uint(tree, hf_tdma_id, tvb, offset, 2, ENC_BIG_ENDIAN, &msg);
+  str_msg = val_to_str(pinfo->pool, msg, tdma_msg_vals, "Unknown (0x%04x)");
+  offset += 2;
+
+  proto_item_append_text(ti, ", %s", str_msg);
   /* Set the info column */
-  col_add_fstr(pinfo->cinfo, COL_INFO, "%s",
-                 val_to_str(msg, tdma_msg_vals, "Unknown (0x%04x)"));
+  col_add_str(pinfo->cinfo, COL_INFO, str_msg);
 
-  if (root) {
-    ti = proto_tree_add_item(root, proto_tdma, tvb, 0, -1, ENC_NA);
-    tree = proto_item_add_subtree(ti, ett_tdma);
+  switch (msg) {
+    case TDMA_MSG_SYNC:
+      dissect_tdma_sync(tvb, offset, tree);
+      break;
 
-    proto_item_append_text(ti, ", %s", val_to_str(msg, tdma_msg_vals, "Unknown (0x%04x)"));
+    case TDMA_MSG_CAL_REQUEST:
+      dissect_tdma_request_cal(tvb, offset, tree);
+      break;
 
-    proto_tree_add_item(tree, hf_tdma_ver, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 2;
+    case TDMA_MSG_CAL_REPLY:
+      dissect_tdma_reply_cal(tvb, offset, tree);
+      break;
 
-    proto_tree_add_item(tree, hf_tdma_id, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 2;
-
-    switch (msg) {
-      case TDMA_MSG_SYNC:
-        dissect_tdma_sync(tvb, offset, tree);
-        break;
-
-      case TDMA_MSG_CAL_REQUEST:
-        dissect_tdma_request_cal(tvb, offset, tree);
-        break;
-
-      case TDMA_MSG_CAL_REPLY:
-        dissect_tdma_reply_cal(tvb, offset, tree);
-        break;
-
-      default:
-        break;
-    }
+    default:
+      break;
   }
 }
 
 static int
 dissect_rtmac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_) {
-  gint offset = 0;
-  guint8 ver,flags;
-  guint16 type;
+  int offset = 0;
+  uint8_t ver,flags;
+  uint16_t type;
   tvbuff_t *next_tvb;
   proto_tree *ti=NULL, *rtmac_tree=NULL;
   proto_item *item;
   dissector_handle_t dissector=NULL;
-  const gchar *type_str=NULL;
+  const char *type_str=NULL;
 
   /* Read the header */
   type = tvb_get_ntohs(tvb, offset);
-  ver = tvb_get_guint8(tvb, offset+2);
-  flags = tvb_get_guint8(tvb, offset+3);
+  ver = tvb_get_uint8(tvb, offset+2);
+  flags = tvb_get_uint8(tvb, offset+3);
 
   if (ver == 1) {
     type_str = try_val_to_str(type, rtmac_type_vals);
@@ -652,12 +645,13 @@ dissect_rtmac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 
 static int
 dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_) {
-  gint offset = 0;
+  int offset = 0;
   proto_tree *vers_id_tree, *vers_id_item, *flags_tree, *flags_item;
-  guint8 vers_id;
-  guint8 addr_type;
-  guint32 config_length,len;
+  uint32_t vers_id;
+  uint8_t addr_type;
+  uint32_t config_length,len;
   proto_tree *ti=NULL,*rtcfg_tree=NULL;
+  char* str_vers_id;
 
   /* Set the protocol column */
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "RTcfg");
@@ -670,29 +664,23 @@ dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
     rtcfg_tree = proto_item_add_subtree(ti, ett_rtcfg);
   }
 
-  vers_id = tvb_get_guint8(tvb, offset);
-
-  col_add_fstr(pinfo->cinfo, COL_INFO, "%s",
-           val_to_str(vers_id, rtcfg_msg_vals, "Unknown (0x%04x)"));
-
-  if( rtcfg_tree )
-  {
-    vers_id_item = proto_tree_add_uint(rtcfg_tree, hf_rtcfg_vers_id, tvb,
-                                       offset, 1, vers_id);
+    vers_id_item = proto_tree_add_item_ret_uint(rtcfg_tree, hf_rtcfg_vers_id, tvb,
+                                       offset, 1, ENC_NA, &vers_id);
 
     vers_id_tree=proto_item_add_subtree(vers_id_item, ett_rtcfg);
     proto_tree_add_item(vers_id_tree, hf_rtcfg_vers, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(vers_id_tree, hf_rtcfg_id, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-    proto_item_append_text(ti, ", Version %d, %s",
-             (vers_id >> 5),
-             val_to_str(vers_id, rtcfg_msg_vals, "Unknown (0x%04x)"));
+    str_vers_id = val_to_str(pinfo->pool, vers_id, rtcfg_msg_vals, "Unknown (0x%04x)");
+    proto_item_append_text(ti, ", Version %d, %s", (vers_id >> 5), str_vers_id);
+
+    col_add_str(pinfo->cinfo, COL_INFO, str_vers_id);
 
     switch( vers_id & 0x1f )
     {
        case RTCFG_MSG_S1_CONFIG:
-         addr_type = tvb_get_guint8(tvb, offset);
+         addr_type = tvb_get_uint8(tvb, offset);
          proto_tree_add_item( rtcfg_tree, hf_rtcfg_address_type, tvb, offset, 1, ENC_BIG_ENDIAN );
          offset += 1;
 
@@ -727,7 +715,7 @@ dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
          break;
 
        case RTCFG_MSG_ANN_NEW:
-         addr_type = tvb_get_guint8(tvb, offset);
+         addr_type = tvb_get_uint8(tvb, offset);
          proto_tree_add_item( rtcfg_tree, hf_rtcfg_address_type, tvb, offset, 1, ENC_BIG_ENDIAN );
          offset += 1;
 
@@ -758,7 +746,7 @@ dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
          break;
 
        case RTCFG_MSG_ANN_REPLY:
-         addr_type = tvb_get_guint8(tvb, offset);
+         addr_type = tvb_get_uint8(tvb, offset);
          proto_tree_add_item( rtcfg_tree, hf_rtcfg_address_type, tvb, offset, 1, ENC_BIG_ENDIAN );
          offset += 1;
 
@@ -838,7 +826,7 @@ dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
          break;
 
        case RTCFG_MSG_DEAD_STN:
-         addr_type = tvb_get_guint8(tvb, offset);
+         addr_type = tvb_get_uint8(tvb, offset);
          proto_tree_add_item( rtcfg_tree, hf_rtcfg_address_type, tvb, offset, 1, ENC_BIG_ENDIAN );
          offset += 1;
 
@@ -875,7 +863,7 @@ dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
          break;
 
     }
-  }
+
   return tvb_captured_length(tvb);
 }
 
@@ -1143,12 +1131,12 @@ proto_register_rtmac(void) {
         "TDMA Reply Calibration Transmission Time Stamp", HFILL }},
   };
 
-  static gint *ett_array_rtmac[] = {
+  static int *ett_array_rtmac[] = {
     &ett_rtmac,
     &ett_rtmac_flags,
   };
 
-  static gint *ett_array_tdma[] = {
+  static int *ett_array_tdma[] = {
     &ett_tdma,
   };
 
@@ -1312,7 +1300,7 @@ proto_register_rtcfg(void) {
         "RTcfg Client Hardware Address", HFILL }}
   };
 
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_rtcfg,
   };
 

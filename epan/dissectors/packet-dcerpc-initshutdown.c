@@ -5,14 +5,15 @@
 	Pidl is a perl based IDL compiler for DCE/RPC idl files.
 	It is maintained by the Samba team, not the Wireshark team.
 	Instructions on how to download and install Pidl can be
-	found at https://gitlab.com/wireshark/wireshark/-/wikis/Pidl
+	found at https://wiki.wireshark.org/Pidl
 */
 
 
 #include "config.h"
-#include <glib.h>
 #include <string.h>
+#include <wsutil/array.h>
 #include <epan/packet.h>
+#include <epan/tfs.h>
 
 #include "packet-dcerpc.h"
 #include "packet-dcerpc-nt.h"
@@ -22,29 +23,29 @@ void proto_register_dcerpc_initshutdown(void);
 void proto_reg_handoff_dcerpc_initshutdown(void);
 
 /* Ett declarations */
-static gint ett_dcerpc_initshutdown = -1;
-static gint ett_initshutdown_initshutdown_ReasonFlags = -1;
+static int ett_dcerpc_initshutdown;
+static int ett_initshutdown_initshutdown_ReasonFlags;
 
 
 /* Header field declarations */
-static gint hf_initshutdown_initshutdown_Abort_server = -1;
-static gint hf_initshutdown_initshutdown_InitEx_do_reboot = -1;
-static gint hf_initshutdown_initshutdown_InitEx_force_apps = -1;
-static gint hf_initshutdown_initshutdown_InitEx_hostname = -1;
-static gint hf_initshutdown_initshutdown_InitEx_message = -1;
-static gint hf_initshutdown_initshutdown_InitEx_reason = -1;
-static gint hf_initshutdown_initshutdown_InitEx_timeout = -1;
-static gint hf_initshutdown_initshutdown_Init_do_reboot = -1;
-static gint hf_initshutdown_initshutdown_Init_force_apps = -1;
-static gint hf_initshutdown_initshutdown_Init_hostname = -1;
-static gint hf_initshutdown_initshutdown_Init_message = -1;
-static gint hf_initshutdown_initshutdown_Init_timeout = -1;
-static gint hf_initshutdown_initshutdown_ReasonFlags_SHTDN_REASON_FLAG_PLANNED = -1;
-static gint hf_initshutdown_initshutdown_ReasonFlags_SHTDN_REASON_FLAG_USER_DEFINED = -1;
-static gint hf_initshutdown_opnum = -1;
-static gint hf_initshutdown_werror = -1;
+static int hf_initshutdown_initshutdown_Abort_server;
+static int hf_initshutdown_initshutdown_InitEx_do_reboot;
+static int hf_initshutdown_initshutdown_InitEx_force_apps;
+static int hf_initshutdown_initshutdown_InitEx_hostname;
+static int hf_initshutdown_initshutdown_InitEx_message;
+static int hf_initshutdown_initshutdown_InitEx_reason;
+static int hf_initshutdown_initshutdown_InitEx_timeout;
+static int hf_initshutdown_initshutdown_Init_do_reboot;
+static int hf_initshutdown_initshutdown_Init_force_apps;
+static int hf_initshutdown_initshutdown_Init_hostname;
+static int hf_initshutdown_initshutdown_Init_message;
+static int hf_initshutdown_initshutdown_Init_timeout;
+static int hf_initshutdown_initshutdown_ReasonFlags_SHTDN_REASON_FLAG_PLANNED;
+static int hf_initshutdown_initshutdown_ReasonFlags_SHTDN_REASON_FLAG_USER_DEFINED;
+static int hf_initshutdown_opnum;
+static int hf_initshutdown_werror;
 
-static gint proto_dcerpc_initshutdown = -1;
+static int proto_dcerpc_initshutdown;
 /* Version information */
 
 
@@ -52,7 +53,7 @@ static e_guid_t uuid_dcerpc_initshutdown = {
 	0x894de0c0, 0x0d55, 0x11d3,
 	{ 0xa3, 0x22, 0x00, 0xc0, 0x4f, 0xa3, 0x21, 0xa1 }
 };
-static guint16 ver_dcerpc_initshutdown = 1;
+static uint16_t ver_dcerpc_initshutdown = 1;
 
 const value_string initshutdown_initshutdown_ReasonMajor_vals[] = {
 	{ SHTDN_REASON_MAJOR_OTHER, "SHTDN_REASON_MAJOR_OTHER" },
@@ -103,23 +104,23 @@ static const true_false_string initshutdown_ReasonFlags_SHTDN_REASON_FLAG_PLANNE
    "SHTDN_REASON_FLAG_PLANNED is SET",
    "SHTDN_REASON_FLAG_PLANNED is NOT SET",
 };
-static int initshutdown_dissect_element_Init_hostname(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Init_hostname_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Init_message(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Init_message_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Init_timeout(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Init_force_apps(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Init_do_reboot(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Abort_server(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_Abort_server_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_hostname(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_hostname_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_message(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_message_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_timeout(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_force_apps(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_do_reboot(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
-static int initshutdown_dissect_element_InitEx_reason(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_);
+static unsigned initshutdown_dissect_element_Init_hostname(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Init_hostname_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Init_message(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Init_message_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Init_timeout(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Init_force_apps(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Init_do_reboot(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Abort_server(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_Abort_server_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_hostname(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_hostname_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_message(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_message_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_timeout(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_force_apps(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_do_reboot(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
+static unsigned initshutdown_dissect_element_InitEx_reason(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
 
 
 /* IDL: enum { */
@@ -133,10 +134,10 @@ static int initshutdown_dissect_element_InitEx_reason(tvbuff_t *tvb _U_, int off
 /* IDL: 	SHTDN_REASON_MAJOR_LEGACY_API=0x00070000, */
 /* IDL: } */
 
-int
-initshutdown_dissect_enum_ReasonMajor(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 *param _U_)
+unsigned
+initshutdown_dissect_enum_ReasonMajor(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t *param _U_)
 {
-	guint32 parameter=0;
+	uint32_t parameter=0;
 	if (param) {
 		parameter = *param;
 	}
@@ -178,10 +179,10 @@ initshutdown_dissect_enum_ReasonMajor(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL: 	SHTDN_REASON_MINOR_TERMSRV=0x00000020, */
 /* IDL: } */
 
-int
-initshutdown_dissect_enum_ReasonMinor(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 *param _U_)
+unsigned
+initshutdown_dissect_enum_ReasonMinor(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t *param _U_)
 {
-	guint32 parameter=0;
+	uint32_t parameter=0;
 	if (param) {
 		parameter = *param;
 	}
@@ -198,8 +199,8 @@ initshutdown_dissect_enum_ReasonMinor(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL: 	SHTDN_REASON_FLAG_PLANNED =  0x80000000 , */
 /* IDL: } */
 
-int
-initshutdown_dissect_bitmap_ReasonFlags(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+unsigned
+initshutdown_dissect_bitmap_ReasonFlags(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	proto_item *item;
 	static int * const initshutdown_initshutdown_ReasonFlags_fields[] = {
@@ -207,7 +208,7 @@ initshutdown_dissect_bitmap_ReasonFlags(tvbuff_t *tvb _U_, int offset _U_, packe
 		&hf_initshutdown_initshutdown_ReasonFlags_SHTDN_REASON_FLAG_PLANNED,
 		NULL
 	};
-	guint32 flags;
+	uint32_t flags;
 	ALIGN_TO_4_BYTES;
 
 	item = proto_tree_add_bitmask_with_flags(parent_tree, tvb, offset, hf_index,
@@ -226,56 +227,56 @@ initshutdown_dissect_bitmap_ReasonFlags(tvbuff_t *tvb _U_, int offset _U_, packe
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Init_hostname(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Init_hostname(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, initshutdown_dissect_element_Init_hostname_, NDR_POINTER_UNIQUE, "Pointer to Hostname (uint16)",hf_initshutdown_initshutdown_Init_hostname);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Init_hostname_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Init_hostname_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint16(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_Init_hostname, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Init_message(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Init_message(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, initshutdown_dissect_element_Init_message_, NDR_POINTER_UNIQUE, "Pointer to Message (lsa_StringLarge)",hf_initshutdown_initshutdown_Init_message);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Init_message_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Init_message_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset=lsarpc_dissect_struct_lsa_StringLarge(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_Init_message, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Init_timeout(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Init_timeout(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_Init_timeout, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Init_force_apps(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Init_force_apps(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint8(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_Init_force_apps, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Init_do_reboot(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Init_do_reboot(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint8(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_Init_do_reboot, 0);
 
@@ -290,22 +291,22 @@ initshutdown_dissect_element_Init_do_reboot(tvbuff_t *tvb _U_, int offset _U_, p
 /* IDL: [in] uint8 do_reboot */
 /* IDL: ); */
 
-static int
-initshutdown_dissect_Init_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_Init_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="Init";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_Init_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_Init_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="Init";
 	offset = initshutdown_dissect_element_Init_hostname(tvb, offset, pinfo, tree, di, drep);
@@ -321,16 +322,16 @@ initshutdown_dissect_Init_request(tvbuff_t *tvb _U_, int offset _U_, packet_info
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Abort_server(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Abort_server(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, initshutdown_dissect_element_Abort_server_, NDR_POINTER_UNIQUE, "Pointer to Server (uint16)",hf_initshutdown_initshutdown_Abort_server);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_Abort_server_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_Abort_server_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint16(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_Abort_server, 0);
 
@@ -341,22 +342,22 @@ initshutdown_dissect_element_Abort_server_(tvbuff_t *tvb _U_, int offset _U_, pa
 /* IDL: [in] [unique(1)] uint16 *server */
 /* IDL: ); */
 
-static int
-initshutdown_dissect_Abort_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_Abort_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="Abort";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_Abort_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_Abort_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="Abort";
 	offset = initshutdown_dissect_element_Abort_server(tvb, offset, pinfo, tree, di, drep);
@@ -364,64 +365,64 @@ initshutdown_dissect_Abort_request(tvbuff_t *tvb _U_, int offset _U_, packet_inf
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_hostname(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_hostname(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, initshutdown_dissect_element_InitEx_hostname_, NDR_POINTER_UNIQUE, "Pointer to Hostname (uint16)",hf_initshutdown_initshutdown_InitEx_hostname);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_hostname_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_hostname_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint16(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_InitEx_hostname, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_message(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_message(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = dissect_ndr_toplevel_pointer(tvb, offset, pinfo, tree, di, drep, initshutdown_dissect_element_InitEx_message_, NDR_POINTER_UNIQUE, "Pointer to Message (lsa_StringLarge)",hf_initshutdown_initshutdown_InitEx_message);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_message_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_message_(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset=lsarpc_dissect_struct_lsa_StringLarge(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_InitEx_message, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_timeout(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_timeout(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_InitEx_timeout, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_force_apps(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_force_apps(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint8(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_InitEx_force_apps, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_do_reboot(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_do_reboot(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint8(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_InitEx_do_reboot, 0);
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_element_InitEx_reason(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_element_InitEx_reason(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_initshutdown_InitEx_reason, 0);
 
@@ -437,22 +438,22 @@ initshutdown_dissect_element_InitEx_reason(tvbuff_t *tvb _U_, int offset _U_, pa
 /* IDL: [in] uint32 reason */
 /* IDL: ); */
 
-static int
-initshutdown_dissect_InitEx_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_InitEx_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="InitEx";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_initshutdown_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(pinfo->pool, status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
 
-static int
-initshutdown_dissect_InitEx_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+initshutdown_dissect_InitEx_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="InitEx";
 	offset = initshutdown_dissect_element_InitEx_hostname(tvb, offset, pinfo, tree, di, drep);
@@ -471,7 +472,7 @@ initshutdown_dissect_InitEx_request(tvbuff_t *tvb _U_, int offset _U_, packet_in
 }
 
 
-static dcerpc_sub_dissector initshutdown_dissectors[] = {
+static const dcerpc_sub_dissector initshutdown_dissectors[] = {
 	{ 0, "Init",
 	   initshutdown_dissect_Init_request, initshutdown_dissect_Init_response},
 	{ 1, "Abort",
@@ -515,11 +516,11 @@ void proto_register_dcerpc_initshutdown(void)
 	{ &hf_initshutdown_opnum,
 	  { "Operation", "initshutdown.opnum", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},
 	{ &hf_initshutdown_werror,
-	  { "Windows Error", "initshutdown.werror", FT_UINT32, BASE_HEX, VALS(WERR_errors), 0, NULL, HFILL }},
+	  { "Windows Error", "initshutdown.werror", FT_UINT32, BASE_HEX|BASE_EXT_STRING, &WERR_errors_ext, 0, NULL, HFILL }},
 	};
 
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_dcerpc_initshutdown,
 		&ett_initshutdown_initshutdown_ReasonFlags,
 	};

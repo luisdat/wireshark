@@ -14,7 +14,7 @@ local n_frames = 4
 local taptests = {
     [FRAME]=n_frames,
     [PER_FRAME]=n_frames*8,
-    [OTHER]=52,
+    [OTHER]=57,
 }
 testlib.init(taptests)
 
@@ -44,6 +44,9 @@ testlib.test(OTHER,"ProtoField-char-unit-string", not success)
 
 success = pcall(ProtoField.new, "char base RANGE_STRING", "test.char5", ftypes.CHAR, {{1, 2, "Value"}}, base.RANGE_STRING)
 testlib.test(OTHER,"ProtoField-char-range-string", success)
+
+success = pcall(ProtoField.new, "char base RANGE_STRING and SPECIAL_VALS", "test.char6", ftypes.CHAR, {{1, 2, "Value"}}, base.RANGE_STRING | base.SPECIAL_VALS)
+testlib.test(OTHER,"ProtoField-char-range-string-special-vals", success)
 
 -- Field type: BOOLEAN/UINT64 with (64 bit) mask
 success = pcall(ProtoField.new, "boolean", "test.boolean0", ftypes.BOOLEAN, nil, base.HEX, 0x1)
@@ -192,6 +195,17 @@ testlib.test(OTHER,"ProtoField-unitstring-userdata", not success)
 success = pcall(ProtoField.uint16, "test.bad3", "Bad3", base.UNIT_STRING, {"too", "many", "items"})
 testlib.test(OTHER,"ProtoField-unitstring-too-many-items", not success)
 
+-- base.SPECIAL_VALS
+success = pcall(ProtoField.uint16, "test.special_vals", "SPECIAL_VALS base with empty table", base.DEC | base.SPECIAL_VALS, {})
+testlib.test(OTHER,"ProtoField-special-vals", success)
+success = pcall(ProtoField.uint16, "test.special_vals.no_table", "SPECIAL_VALS base with range string", base.DEC | base.RANGE_STRING | base.SPECIAL_VALS, {{0, 1, "Value"}})
+testlib.test(OTHER,"ProtoField-special-vals-with-range-string", success)
+success = pcall(ProtoField.uint16, "test.special_vals.unitstring", "SPECIAL_VALS base with unit string", base.DEC | base.UNIT_STRING | base.SPECIAL_VALS, {" sec", " secs"})
+testlib.test(OTHER,"ProtoField-special-vals-with-unitstring", not success)
+success = pcall(ProtoField.uint16, "test.special_vals.no_table", "SPECIAL_VALS base without table", base.DEC | base.SPECIAL_VALS)
+testlib.test(OTHER,"ProtoField-special-vals-no-table", not success)
+
+
 local numinits = 0
 function test_proto.init()
     numinits = numinits + 1
@@ -202,26 +216,42 @@ end
 
 -- Test expected text with singular and plural forms
 function test_proto.dissector(tvb, pinfo, tree)
-    local ti
+    local ti_time
+    local ti_distance
     testlib.countPacket(FRAME)
 
     local tvb1 = ByteArray.new("00 00"):tvb("Tvb1")
-    ti = tree:add(test_proto.fields.time_field, tvb1())
-    testlib.test(PER_FRAME,"Time: 0 secs", ti.text == "Time: 0 secs")
-    ti = tree:add(test_proto.fields.dist_field, tvb1())
-    testlib.test(PER_FRAME,"Distance: 0 km", ti.text == "Distance: 0 km")
+    ti_time = tree:add(test_proto.fields.time_field, tvb1())
+    ti_distance = tree:add(test_proto.fields.dist_field, tvb1())
+    if tree.visible then
+        testlib.test(PER_FRAME,"Time: 0 secs", ti_time.text == "Time: 0 secs")
+        testlib.test(PER_FRAME,"Distance: 0 km", ti_distance.text == "Distance: 0 km")
+    else
+        testlib.test(PER_FRAME,"Time: 0 secs", ti_time.text == nil)
+        testlib.test(PER_FRAME,"Distance: 0 km", ti_distance.text == nil)
+    end
 
     local tvb2 = ByteArray.new("00 01"):tvb("Tvb2")
-    ti = tree:add(test_proto.fields.time_field, tvb2())
-    testlib.test(PER_FRAME,"Time: 1 sec", ti.text == "Time: 1 sec")
-    ti = tree:add(test_proto.fields.dist_field, tvb2())
-    testlib.test(PER_FRAME,"Distance: 1 km", ti.text == "Distance: 1 km")
+    ti_time = tree:add(test_proto.fields.time_field, tvb2())
+    ti_distance = tree:add(test_proto.fields.dist_field, tvb2())
+    if tree.visible then
+        testlib.test(PER_FRAME,"Time: 1 sec", ti_time.text == "Time: 1 sec")
+        testlib.test(PER_FRAME,"Distance: 1 km", ti_distance.text == "Distance: 1 km")
+    else
+        testlib.test(PER_FRAME,"Time: 1 sec", ti_time.text == nil)
+        testlib.test(PER_FRAME,"Distance: 1 km", ti_distance.text == nil)
+    end
 
     local tvb3 = ByteArray.new("ff ff"):tvb("Tvb3")
-    ti = tree:add(test_proto.fields.time_field, tvb3())
-    testlib.test(PER_FRAME,"Time: 65535 secs", ti.text == "Time: 65535 secs")
-    ti = tree:add(test_proto.fields.dist_field, tvb3())
-    testlib.test(PER_FRAME,"Distance: 65535 km", ti.text == "Distance: 65535 km")
+    ti_time = tree:add(test_proto.fields.time_field, tvb3())
+    ti_distance = tree:add(test_proto.fields.dist_field, tvb3())
+    if tree.visible then
+        testlib.test(PER_FRAME,"Time: 65535 secs", ti_time.text == "Time: 65535 secs")
+        testlib.test(PER_FRAME,"Distance: 65535 km", ti_distance.text == "Distance: 65535 km")
+    else
+        testlib.test(PER_FRAME,"Time: 65535 secs", ti_time.text == nil)
+        testlib.test(PER_FRAME,"Distance: 65535 km", ti_distance.text == nil)
+    end
 
     ti = tree:add(test_proto.fields.filtered_field, tvb2())
     -- Note that this file should be loaded in tshark twice. Once with a visible
@@ -238,5 +268,4 @@ function test_proto.dissector(tvb, pinfo, tree)
     testlib.pass(FRAME)
 end
 
-DissectorTable.get("udp.port"):add(65333, test_proto)
-DissectorTable.get("udp.port"):add(65346, test_proto)
+DissectorTable.get("udp.port"):add("65333,65346", test_proto)

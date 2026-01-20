@@ -9,11 +9,10 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "ws_symbol_export.h"
 
 /*
  * Routine used to register file record end routine.  The routine should only
- * be registred when the dissector is used in the file record, not in the
+ * be registered when the dissector is used in the file record, not in the
  * proto_register_XXX function.
  */
 void

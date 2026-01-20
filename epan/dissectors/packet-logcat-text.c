@@ -31,7 +31,7 @@ static int hf_logcat_text_priority;
 static int hf_logcat_text_tag;
 static int hf_logcat_text_log;
 
-static gint ett_logcat;
+static int ett_logcat;
 
 static expert_field ei_malformed_time;
 static expert_field ei_malformed_token;
@@ -44,36 +44,41 @@ static dissector_handle_t logcat_text_thread_handle;
 static dissector_handle_t logcat_text_threadtime_handle;
 static dissector_handle_t logcat_text_long_handle;
 
-static gint exported_pdu_tap = -1;
+static int exported_pdu_tap = -1;
 
-static GRegex *special_regex = NULL;
-static GRegex *brief_regex = NULL;
-static GRegex *tag_regex = NULL;
-static GRegex *time_regex = NULL;
-static GRegex *process_regex = NULL;
-static GRegex *thread_regex = NULL;
-static GRegex *threadtime_regex = NULL;
-static GRegex *long_regex = NULL;
+static GRegex *special_regex;
+static GRegex *brief_regex;
+static GRegex *tag_regex;
+static GRegex *time_regex;
+static GRegex *process_regex;
+static GRegex *thread_regex;
+static GRegex *threadtime_regex;
+static GRegex *long_regex;
 
-static const gchar dissector_name[] = "Logcat Text";
+static const char dissector_name[] = "Logcat Text";
 
-typedef int (*tGETTER) (const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint start_offset, packet_info *pinfo);
+typedef unsigned (*tGETTER) (const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, unsigned start_offset, packet_info *pinfo);
 
 typedef struct {
     GRegex **regex;
     const tGETTER *getters;
-    guint no_of_getters;
+    unsigned no_of_getters;
 } dissect_info_t;
 
 void proto_register_logcat_text(void);
 void proto_reg_handoff_logcat_text(void);
 
-static int get_priority(const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint start_offset, packet_info *pinfo _U_) {
-    int prio;
-    gchar *p = g_strstr_len(frame + start_offset, -1, token);
-    int offset = (int)(p - frame);
+static unsigned get_priority(const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, unsigned start_offset, packet_info *pinfo) {
+    unsigned prio;
+    char *p = g_strstr_len(frame + start_offset, -1, token);
+    unsigned offset = (unsigned)(p - frame);
+
+    if (!p) {
+        proto_tree_add_expert_remaining(maintree, pinfo, &ei_malformed_token, tvb, start_offset);
+        return (start_offset + 1);
+    }
 
     switch (*p) {
     case 'I':
@@ -102,12 +107,12 @@ static int get_priority(const gchar *frame, const gchar *token, tvbuff_t *tvb,
     return offset + 1;
 }
 
-static int get_tag(const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint start_offset, packet_info *pinfo) {
-    gchar *p = g_strstr_len(frame + start_offset, -1, token);
-    int offset = (int)(p - frame);
-    guint8 *src_addr = wmem_strdup(pinfo->pool, token);
-    gint tok_len = (gint)strlen(token);
+static unsigned get_tag(const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, unsigned start_offset, packet_info *pinfo) {
+    char *p = g_strstr_len(frame + start_offset, -1, token);
+    unsigned offset = (unsigned)(p - frame);
+    uint8_t *src_addr = (uint8_t*)wmem_strdup(pinfo->pool, token);
+    unsigned tok_len = (unsigned)strlen(token);
 
     proto_tree_add_string(maintree, hf_logcat_text_tag, tvb, offset, tok_len,
             token);
@@ -116,48 +121,47 @@ static int get_tag(const gchar *frame, const gchar *token, tvbuff_t *tvb,
     return offset + tok_len;
 }
 
-static int get_ptid(const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint header_field, gint start_offset) {
-    gchar *p = g_strstr_len(frame + start_offset, -1, token);
-    int offset = (int)(p - frame);
+static unsigned get_ptid(const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, int header_field, unsigned start_offset) {
+    char *p = g_strstr_len(frame + start_offset, -1, token);
+    unsigned offset = (unsigned)(p - frame);
 
-    proto_tree_add_uint(maintree, header_field, tvb, offset, (gint)strlen(token),
-            (guint32)g_ascii_strtoull(token, NULL, 10));
-    return offset + (int)strlen(token);
+    proto_tree_add_uint(maintree, header_field, tvb, offset, (int)strlen(token),
+            (uint32_t)g_ascii_strtoull(token, NULL, 10));
+    return offset + (unsigned)strlen(token);
 }
 
-static int get_pid(const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint start_offset, packet_info *pinfo _U_) {
+static unsigned get_pid(const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, unsigned start_offset, packet_info *pinfo _U_) {
     return get_ptid(frame, token, tvb, maintree, hf_logcat_text_pid, start_offset);
 }
 
-static int get_tid(const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint start_offset, packet_info *pinfo _U_) {
+static unsigned get_tid(const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, unsigned start_offset, packet_info *pinfo _U_) {
     return get_ptid(frame, token, tvb, maintree, hf_logcat_text_tid, start_offset);
 }
 
-static int get_log(const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint start_offset, packet_info *pinfo) {
-    gchar *p = g_strstr_len(frame + start_offset, -1, token);
-    int offset = (int)(p - frame);
+static unsigned get_log(const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, unsigned start_offset, packet_info *pinfo) {
+    char *p = g_strstr_len(frame + start_offset, -1, token);
+    unsigned offset = (unsigned)(p - frame);
 
-    proto_tree_add_string(maintree, hf_logcat_text_log, tvb, offset,
-            (int)strlen(token), token);
+    proto_tree_add_string(maintree, hf_logcat_text_log, tvb, offset, (unsigned)strlen(token), token);
     col_add_str(pinfo->cinfo, COL_INFO, token);
-    return offset + (int)strlen(token);
+    return offset + (unsigned)strlen(token);
 }
 
-static int get_time(const gchar *frame, const gchar *token, tvbuff_t *tvb,
-        proto_tree *maintree, gint start_offset, packet_info *pinfo) {
-    gint offset;
-    gchar *p;
-    gint ms;
+static unsigned get_time(const char *frame, const char *token, tvbuff_t *tvb,
+        proto_tree *maintree, unsigned start_offset, packet_info *pinfo) {
+    unsigned offset;
+    char *p;
+    unsigned ms;
     struct tm date;
     time_t seconds;
     nstime_t ts;
 
     p = g_strstr_len(frame + start_offset, -1, token);
-    offset = (int)(p - frame);
+    offset = (unsigned)(p - frame);
 
     if (6 == sscanf(token, "%d-%d %d:%d:%d.%d", &date.tm_mon, &date.tm_mday,
                     &date.tm_hour, &date.tm_min, &date.tm_sec, &ms)) {
@@ -168,22 +172,22 @@ static int get_time(const gchar *frame, const gchar *token, tvbuff_t *tvb,
         ts.secs = seconds;
         ts.nsecs = (int) (ms * 1e6);
         proto_tree_add_time(maintree, hf_logcat_text_timestamp, tvb, offset,
-                (int)strlen(token), &ts);
+            (unsigned)strlen(token), &ts);
     } else {
-        proto_tree_add_expert(maintree, pinfo, &ei_malformed_time, tvb, offset, -1);
+        proto_tree_add_expert_remaining(maintree, pinfo, &ei_malformed_time, tvb, offset);
     }
-    return offset + (int)strlen(token);
+    return offset + (unsigned)strlen(token);
 }
 
-static int dissect_logcat_text(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
+static unsigned dissect_logcat_text(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
         const dissect_info_t *dinfo) {
-    gchar **tokens;
-    guint i;
-    gchar *frame = tvb_get_string_enc(pinfo->pool, tvb, 0, tvb_captured_length(tvb),
+    char **tokens;
+    unsigned i;
+    char *frame = (char*)tvb_get_string_enc(pinfo->pool, tvb, 0, tvb_captured_length(tvb),
             ENC_UTF_8);
     proto_item *mainitem = proto_tree_add_item(tree, proto_logcat_text, tvb, 0, -1, ENC_NA);
     proto_tree *maintree = proto_item_add_subtree(mainitem, ett_logcat);
-    gint offset = 0;
+    unsigned offset = 0;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, dissector_name);
 
@@ -192,7 +196,7 @@ static int dissect_logcat_text(tvbuff_t *tvb, proto_tree *tree, packet_info *pin
         tokens = g_regex_split(*dinfo->regex, frame, G_REGEX_MATCH_NOTEMPTY);
         if (NULL == tokens) return 0;
         if (g_strv_length(tokens) != dinfo->no_of_getters + 2) {
-            proto_tree_add_expert(maintree, pinfo, &ei_malformed_token, tvb, offset, -1);
+            proto_tree_add_expert_remaining(maintree, pinfo, &ei_malformed_token, tvb, offset);
             g_strfreev(tokens);
             return 0;
         }
@@ -291,7 +295,7 @@ static int dissect_logcat_text_long(tvbuff_t *tvb, packet_info *pinfo, proto_tre
     return dissect_logcat_text(tvb, tree, pinfo, &dinfo);
 }
 
-static void logcat_text_init(void)
+static void logcat_text_create_regex(void)
 {
     special_regex =    g_regex_new(SPECIAL_STRING,    (GRegexCompileFlags)(G_REGEX_ANCHORED | G_REGEX_OPTIMIZE | G_REGEX_RAW),  G_REGEX_MATCH_NOTEMPTY, NULL);
     brief_regex =      g_regex_new(BRIEF_STRING,      (GRegexCompileFlags)(G_REGEX_ANCHORED | G_REGEX_OPTIMIZE | G_REGEX_RAW),  G_REGEX_MATCH_NOTEMPTY, NULL);
@@ -303,7 +307,7 @@ static void logcat_text_init(void)
     long_regex =       g_regex_new(LONG_STRING,       (GRegexCompileFlags)(G_REGEX_MULTILINE | G_REGEX_OPTIMIZE | G_REGEX_RAW), G_REGEX_MATCH_NOTEMPTY, NULL);
 }
 
-static void logcat_text_cleanup(void)
+static void logcat_text_shutdown(void)
 {
     g_regex_unref(special_regex);
     g_regex_unref(brief_regex);
@@ -355,7 +359,7 @@ void proto_register_logcat_text(void) {
             { &ei_malformed_token, { "logcat_text.malformed_token", PI_PROTOCOL, PI_ERROR, "Failed to decode one or more tokens", EXPFILL }},
     };
 
-    static gint *ett[] = { &ett_logcat};
+    static int *ett[] = { &ett_logcat};
 
     proto_logcat_text = proto_register_protocol("Android Logcat Text", dissector_name,
             "logcat_text");
@@ -377,8 +381,8 @@ void proto_register_logcat_text(void) {
     logcat_text_long_handle =       register_dissector("logcat_text_long",
             dissect_logcat_text_long, proto_logcat_text);
 
-    register_init_routine(logcat_text_init);
-    register_cleanup_routine(logcat_text_cleanup);
+    logcat_text_create_regex();
+    register_shutdown_routine(logcat_text_shutdown);
 
     expert_module = expert_register_protocol(proto_logcat_text);
     expert_register_field_array(expert_module, ei, array_length(ei));

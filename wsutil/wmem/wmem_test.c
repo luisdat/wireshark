@@ -91,7 +91,7 @@ wmem_test_rand_string(wmem_allocator_t *allocator, int minlen, int maxlen)
 }
 
 static int
-wmem_test_compare_guint32(const void *a, const void *b)
+wmem_test_compare_uint32(const void *a, const void *b)
 {
     uint32_t l, r;
 
@@ -692,7 +692,7 @@ wmem_test_array(void)
         }
     }
 
-    wmem_array_sort(array, wmem_test_compare_guint32);
+    wmem_array_sort(array, wmem_test_compare_uint32);
     for (i=0, k=0; i<8; i++) {
         for (j=0; j<=i; j++, k++) {
             val = *(uint32_t*)wmem_array_index(array, k);
@@ -736,7 +736,7 @@ check_val_list(void * val, void * val_to_check)
 }
 
 static int
-str_compare(gconstpointer a, gconstpointer b)
+str_compare(const void *a, const void *b)
 {
     return strcmp((const char*)a, (const char*)b);
 }
@@ -998,7 +998,7 @@ wmem_test_map(void)
         wmem_map_insert(map, str_key, GINT_TO_POINTER(2));
     }
     wmem_map_foreach(map, check_val_map, GINT_TO_POINTER(2));
-
+    g_assert_true(wmem_map_find(map, equal_val_map, GINT_TO_POINTER(2)) == GINT_TO_POINTER(2));
     wmem_map_foreach_remove(map, equal_val_map, GINT_TO_POINTER(2));
     g_assert_true(wmem_map_size(map) == 0);
 
@@ -1186,8 +1186,10 @@ wmem_test_tree(void)
     wmem_allocator_t   *allocator, *extra_allocator;
     wmem_tree_t        *tree;
     uint32_t            i;
+    uint32_t            rand_int;
     int                 seen_values = 0;
     int                 j;
+    uint32_t            int_key;
     char               *str_key;
 #define WMEM_TREE_MAX_KEY_COUNT 8
 #define WMEM_TREE_MAX_KEY_LEN   4
@@ -1205,18 +1207,29 @@ wmem_test_tree(void)
     for (i=0; i<CONTAINER_ITERS; i++) {
         g_assert_true(wmem_tree_lookup32(tree, i) == NULL);
         if (i > 0) {
-            g_assert_true(wmem_tree_lookup32_le(tree, i) == GINT_TO_POINTER(i-1));
+            g_assert_true(wmem_tree_lookup32_le_full(tree, i, &int_key) == GINT_TO_POINTER(i-1));
+            g_assert_true(int_key == i - 1);
         }
         wmem_tree_insert32(tree, i, GINT_TO_POINTER(i));
         g_assert_true(wmem_tree_lookup32(tree, i) == GINT_TO_POINTER(i));
         g_assert_true(!wmem_tree_is_empty(tree));
     }
     g_assert_true(wmem_tree_count(tree) == CONTAINER_ITERS);
+
+    rand_int = ((uint32_t)g_test_rand_int()) % CONTAINER_ITERS;
+    wmem_tree_remove32(tree, rand_int);
+    g_assert_true(wmem_tree_lookup32(tree, rand_int) == NULL);
+    if (rand_int > 0) {
+        g_assert_true(wmem_tree_lookup32_le(tree, rand_int) == GINT_TO_POINTER(rand_int - 1));
+    }
+    if (rand_int + 1 < CONTAINER_ITERS) {
+        g_assert_true(wmem_tree_lookup32_ge(tree, rand_int) == GINT_TO_POINTER(rand_int + 1));
+    }
+    g_assert_true(wmem_tree_count(tree) == CONTAINER_ITERS - 1);
     wmem_free_all(allocator);
 
     tree = wmem_tree_new(allocator);
     for (i=0; i<CONTAINER_ITERS; i++) {
-        uint32_t rand_int;
         do {
             rand_int = g_test_rand_int();
         } while (wmem_tree_lookup32(tree, rand_int));

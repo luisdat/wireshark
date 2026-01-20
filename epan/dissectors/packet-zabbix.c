@@ -20,6 +20,8 @@
 #include <epan/expert.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include <wsutil/inet_addr.h>
 #include <wsutil/nstime.h>
 #include <wsutil/wsjson.h>
@@ -33,7 +35,7 @@ static dissector_handle_t zabbix_handle;
 /* Desegmentation of Zabbix protocol over TCP */
 static bool zabbix_desegment = true;
 
-/* Initialize the protocol and registered fields */
+/* The protocol and registered fields */
 static int proto_zabbix;
 static int hf_zabbix_header;
 static int hf_zabbix_flags;
@@ -48,10 +50,13 @@ static int hf_zabbix_large_length;
 static int hf_zabbix_large_reserved;
 static int hf_zabbix_large_uncompressed_length;
 static int hf_zabbix_data;
+static int hf_zabbix_error;
 static int hf_zabbix_time;
 static int hf_zabbix_agent;
+static int hf_zabbix_agent_commands;
 static int hf_zabbix_agent_config;
 static int hf_zabbix_agent_data;
+static int hf_zabbix_agent_redirection;
 static int hf_zabbix_agent_passive;
 static int hf_zabbix_agent_name;
 static int hf_zabbix_agent_hb;
@@ -61,6 +66,7 @@ static int hf_zabbix_agent_hostinterface;
 static int hf_zabbix_agent_listenipv4;
 static int hf_zabbix_agent_listenipv6;
 static int hf_zabbix_agent_listenport;
+static int hf_zabbix_agent_variant;
 static int hf_zabbix_proxy;
 static int hf_zabbix_proxy_hb;
 static int hf_zabbix_proxy_name;
@@ -69,34 +75,48 @@ static int hf_zabbix_proxy_config;
 static int hf_zabbix_proxy_fullsync;
 static int hf_zabbix_proxy_incr_config;
 static int hf_zabbix_proxy_no_config_change;
+static int hf_zabbix_proxy_tasks;
 static int hf_zabbix_sender;
 static int hf_zabbix_sender_name;
+static int hf_zabbix_frontend;
+static int hf_zabbix_frontend_sysinfo;
+static int hf_zabbix_frontend_queueinfo;
+static int hf_zabbix_frontend_historypush;
+static int hf_zabbix_frontend_itemtest;
+static int hf_zabbix_frontend_mediatest;
+static int hf_zabbix_frontend_reporttest;
+static int hf_zabbix_frontend_expressioneval;
+static int hf_zabbix_frontend_scriptexec;
+static int hf_zabbix_metrics;
 static int hf_zabbix_request;
 static int hf_zabbix_response;
 static int hf_zabbix_success;
 static int hf_zabbix_failed;
 static int hf_zabbix_config_revision;
+static int hf_zabbix_hostmap_revision;
 static int hf_zabbix_session;
 static int hf_zabbix_version;
 
-/* Initialize the subtree pointers */
+/* Subtree pointers */
 static int ett_zabbix;
+static int ett_zabbix_flags;
 
-/* Initialize expert fields */
+/* Expert fields */
 static expert_field ei_zabbix_packet_too_large;
 static expert_field ei_zabbix_json_error;
 
 /* Other dissector-specifics */
 static range_t *zabbix_port_range;
 
-static const guint8 ZABBIX_HDR_SIGNATURE[] = "ZBXD";
+static const char ZABBIX_HDR_SIGNATURE[] = "ZBXD";
 static const char ZABBIX_UNKNOWN[] = "<unknown>";
+static const char ZABBIX_ZBX_NOTSUPPORTED[] = "ZBX_NOTSUPPORTED";
 
 typedef struct _zabbix_conv_info_t {
-    guint32 req_framenum;
+    uint32_t req_framenum;
     nstime_t req_timestamp;
-    uint16_t oper_flags;         /* ZABBIX_T_XXX macros below */
-    const guint8 *host_name;
+    uint32_t oper_flags;         /* ZABBIX_T_XXX macros below */
+    const char *host_name;
 } zabbix_conv_info_t;
 
 #define ZABBIX_HDR_MIN_LEN          13              /* When not large packet */
@@ -117,8 +137,8 @@ typedef struct _zabbix_conv_info_t {
 #define ZABBIX_RESPONSE_NOCHANGE    0x10
 
 /* Flags for saving and comparing operation types,
- * max 16 bits as defined in zabbix_conv_info_t above */
-#define ZABBIX_T_REQUEST            0x00000001   /* Not set for heartbeats */
+ * max 32 bits as defined in zabbix_conv_info_t above */
+#define ZABBIX_T_REQUEST            0x00000001
 #define ZABBIX_T_RESPONSE           0x00000002
 #define ZABBIX_T_ACTIVE             0x00000004
 #define ZABBIX_T_PASSIVE            0x00000008
@@ -127,14 +147,28 @@ typedef struct _zabbix_conv_info_t {
 #define ZABBIX_T_SENDER             0x00000040
 #define ZABBIX_T_CONFIG             0x00000080
 #define ZABBIX_T_DATA               0x00000100
-#define ZABBIX_T_HEARTBEAT          0x00000200
+#define ZABBIX_T_TASKS              0x00000200
+#define ZABBIX_T_HEARTBEAT          0x00000400
+#define ZABBIX_T_LEGACY             0x00000800   /* pre-7.0 non-JSON protocol */
+#define ZABBIX_T_FRONTEND           0x00001000
+#define ZABBIX_T_SYSINFO            0x00002000
+#define ZABBIX_T_QUEUEINFO          0x00004000
+#define ZABBIX_T_HISTORYPUSH        0x00008000
+#define ZABBIX_T_ITEMTEST           0x00010000
+#define ZABBIX_T_MEDIATEST          0x00020000
+#define ZABBIX_T_REPORTTEST         0x00040000
+#define ZABBIX_T_METRICS            0x00080000
+#define ZABBIX_T_EXPRESSIONEVAL     0x00100000
+#define ZABBIX_T_SCRIPTEXEC         0x00200000
 
 #define ADD_ZABBIX_T_FLAGS(flags)       (zabbix_info->oper_flags |= (flags))
-#define CLEAR_ZABBIX_T_FLAGS(flags)     (zabbix_info->oper_flags &= (0xffff-(flags)))
+#define CLEAR_ZABBIX_T_FLAGS(flags)     (zabbix_info->oper_flags &= (0xffffffff-(flags)))
 #define IS_ZABBIX_T_FLAGS(flags)        ((zabbix_info->oper_flags & (flags)) == (flags))
 
 #define CONV_IS_ZABBIX_REQUEST(zabbix_info,pinfo)           ((zabbix_info)->req_framenum == (pinfo)->fd->num)
 #define CONV_IS_ZABBIX_RESPONSE(zabbix_info,pinfo)          ((zabbix_info)->req_framenum != (pinfo)->fd->num)
+
+#define ZABBIX_NAME_OR_UNKNOWN(name)       ((name) ? (name) : ZABBIX_UNKNOWN)
 
 
 static zabbix_conv_info_t*
@@ -202,11 +236,16 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     uint64_t length;
     uint64_t uncompressed_length;
     uint64_t datalen;
+    int64_t agent_variant = 0;
     int64_t config_revision = -1;
+    int64_t hostmap_revision = -1;
     bool is_compressed;
     bool is_large_packet;
     bool is_too_large = false;
+    bool is_redirection = false;
     char *json_str;
+    char *passive_agent_data_str = NULL;
+    jsmntok_t *commands_array = NULL;
     jsmntok_t *data_array = NULL;
     jsmntok_t *data_object = NULL;
     const char *agent_name = NULL;
@@ -219,7 +258,7 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     const char *request_type = NULL;
     const char *response_status = NULL;
     const char *version = NULL;
-    gdouble temp_double;
+    double temp_double;
     tvbuff_t *next_tvb;
     zabbix_conv_info_t *zabbix_info;
     static int* const flagbits[] = {
@@ -235,11 +274,11 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     col_clear(pinfo->cinfo, COL_INFO);
 
     if ((tvb_reported_length(tvb) < ZABBIX_HDR_MIN_LEN) ||
-        (tvb_memeql(tvb, offset, ZABBIX_HDR_SIGNATURE, 4) == -1)) {
+        (tvb_strneql(tvb, offset, ZABBIX_HDR_SIGNATURE, 4) != 0)) {
         /* Encrypted or not Zabbix at all */
         return 0;
     }
-    flags = tvb_get_guint8(tvb, offset+4);
+    flags = tvb_get_uint8(tvb, offset+4);
     if (!(flags & ZABBIX_FLAG_ZABBIX_COMMUNICATIONS)) {
         return 0;
     }
@@ -254,7 +293,7 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     zabbix_tree = proto_item_add_subtree(ti, ett_zabbix);
     proto_tree_add_item(zabbix_tree, hf_zabbix_header, tvb, offset, 4, ENC_UTF_8);
     offset += 4;
-    proto_tree_add_bitmask(zabbix_tree, tvb, offset, hf_zabbix_flags, ett_zabbix, flagbits, ENC_BIG_ENDIAN);
+    proto_tree_add_bitmask(zabbix_tree, tvb, offset, hf_zabbix_flags, ett_zabbix_flags, flagbits, ENC_BIG_ENDIAN);
     offset += 1;
     if (is_large_packet) {
         /* 8-byte values */
@@ -294,7 +333,7 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
         /* ... but don't do any content-based inspection, just skip to the end */
         goto final_outputs;
     } else if (is_compressed) {
-        next_tvb = tvb_uncompress(tvb, offset, tvb_reported_length_remaining(tvb, offset));
+        next_tvb = tvb_uncompress_zlib(tvb, offset, tvb_reported_length_remaining(tvb, offset));
         if (next_tvb) {
             tvb_set_child_real_data_tvbuff(tvb, next_tvb);
             add_new_data_source(pinfo, next_tvb, "Uncompressed data");
@@ -326,30 +365,36 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 
     /*
      * Note that json_str is modified when using json_get_xxx() functions below!
-     * So don't use it to anything else (make a wmem_strdup() if needed)
+     * So don't use it to anything else (make a wmem_strdup() if needed, see below)
      */
-    json_str = tvb_get_string_enc(pinfo->pool, next_tvb, offset, (int)datalen, ENC_UTF_8);
-    if (CONV_IS_ZABBIX_REQUEST(zabbix_info, pinfo) && !json_validate(json_str, datalen)) {
-        /* The only non-JSON Zabbix request is passive agent, update the conversation data */
-        ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_PASSIVE);
-    }
-    if (IS_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_PASSIVE)) {
-        if (CONV_IS_ZABBIX_REQUEST(zabbix_info, pinfo)) {
-            proto_item_set_text(ti, "Zabbix Passive agent request");
-            col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Passive agent request");
-        } else if (CONV_IS_ZABBIX_RESPONSE(zabbix_info, pinfo)) {
-            proto_item_set_text(ti, "Zabbix Passive agent response");
-            col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Passive agent response");
-        }
-        /* Don't do content-based searches for passive agents */
-        goto show_agent_outputs;
-    }
-    /* Parse JSON, first get the token count */
+    json_str = (char*)tvb_get_string_enc(pinfo->pool, next_tvb, offset, (int)datalen, ENC_UTF_8);
+    /* First check if this is a pre-7.0 passive agent.
+     * Note that even pre-7.0 passive agent *responses* can be JSON, so don't just check
+     * for JSON validation but check the conversation data!
+     */
     int token_count = json_parse(json_str, NULL, 0);
-    if (token_count <= 0) {
-        temp_ti = proto_tree_add_item(zabbix_tree, hf_zabbix_data, next_tvb, 0, (int)datalen, ENC_UTF_8);
-        expert_add_info_format(pinfo, temp_ti, &ei_zabbix_json_error, "Error in initial JSON parse");
-        goto final_outputs;
+    if (
+        token_count < 0 ||
+        (
+            CONV_IS_ZABBIX_RESPONSE(zabbix_info, pinfo) &&
+            IS_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_PASSIVE | ZABBIX_T_LEGACY)
+        )
+    ) {
+        /* The only non-JSON Zabbix request/response is passive agent before Zabbix 7.0,
+         * ensure the conversation data is set, then set the texts
+         */
+        ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_PASSIVE | ZABBIX_T_LEGACY);
+        if (CONV_IS_ZABBIX_REQUEST(zabbix_info, pinfo)) {
+            proto_item_set_text(ti, "Zabbix Server/proxy request for passive agent checks");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Server/proxy request for passive agent checks");
+        } else if (CONV_IS_ZABBIX_RESPONSE(zabbix_info, pinfo)) {
+            proto_item_set_text(ti, "Zabbix Agent response for passive checks");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Agent response for passive checks");
+        }
+        /* Make a copy of the data string for later error message lookup use */
+        passive_agent_data_str = wmem_strndup(pinfo->pool, json_str, (size_t)datalen);
+        /* Don't do content-based searches for pre-7.0 passive agents */
+        goto show_agent_outputs;
     }
     jsmntok_t *tokens = wmem_alloc_array(pinfo->pool, jsmntok_t, token_count);
     int ret = json_parse(json_str, tokens, token_count);
@@ -366,24 +411,41 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 
     /* First populate common fields */
     version = json_get_string(json_str, tokens, "version");
+    if (json_get_double(json_str, tokens, "variant", &temp_double)) {
+        agent_variant = (int64_t)temp_double;
+    }
     session = json_get_string(json_str, tokens, "session");
     if (json_get_double(json_str, tokens, "config_revision", &temp_double)) {
         config_revision = (int64_t)temp_double;
     }
+    if (json_get_double(json_str, tokens, "hostmap_revision", &temp_double)) {
+        hostmap_revision = (int64_t)temp_double;
+    } else {
+        jsmntok_t *proxy_group_object = json_get_object(json_str, tokens, "proxy_group");
+        if (proxy_group_object) {
+            if (json_get_double(json_str, proxy_group_object, "hostmap_revision", &temp_double)) {
+                hostmap_revision = (int64_t)temp_double;
+            }
+        }
+    }
     request_type = json_get_string(json_str, tokens, "request");
     response_status = json_get_string(json_str, tokens, "response");
+    commands_array = json_get_array(json_str, tokens, "commands");
     data_array = json_get_array(json_str, tokens, "data");
     data_object = json_get_object(json_str, tokens, "data");
+    /* Find the packet type primarily based on "request" field */
     if (request_type) {
         if (strcmp(request_type, "active checks") == 0) {
             /* Active agent requesting configs */
             ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_CONFIG | ZABBIX_T_ACTIVE);
             agent_name = json_get_string(json_str, tokens, "host");
-            zabbix_info->host_name = wmem_strdup(wmem_file_scope(), agent_name);
+            if (agent_name && !PINFO_FD_VISITED(pinfo)) {
+                zabbix_info->host_name = wmem_strdup(wmem_file_scope(), agent_name);
+            }
             proto_item_set_text(ti,
-                "Zabbix Request for active checks for \"%s\"", (agent_name ? agent_name : ZABBIX_UNKNOWN));
+                "Zabbix Agent request for active checks for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
             col_add_fstr(pinfo->cinfo, COL_INFO,
-                "Zabbix Request for active checks for \"%s\"", (agent_name ? agent_name : ZABBIX_UNKNOWN));
+                "Zabbix Agent request for active checks for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
             agent_hostmetadata = json_get_string(json_str, tokens, "host_metadata");
             agent_hostinterface = json_get_string(json_str, tokens, "interface");
             agent_listenip = json_get_string(json_str, tokens, "ip");
@@ -404,25 +466,40 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                     agent_name = json_get_string(json_str, datatok, "host");
                 }
             }
-            zabbix_info->host_name = wmem_strdup(wmem_file_scope(), agent_name);
+            if (agent_name && !PINFO_FD_VISITED(pinfo)) {
+                zabbix_info->host_name = wmem_strdup(wmem_file_scope(), agent_name);
+            }
             proto_item_set_text(ti,
-                "Zabbix Send agent data from \"%s\"", (agent_name ? agent_name : ZABBIX_UNKNOWN));
+                "Zabbix Agent data from \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
             col_add_fstr(pinfo->cinfo, COL_INFO,
-                "Zabbix Send agent data from \"%s\"", (agent_name ? agent_name : ZABBIX_UNKNOWN));
+                "Zabbix Agent data from \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
         }
         else if (strcmp(request_type, "active check heartbeat") == 0) {
             /* Active agent sending heartbeat */
-            /* Clear the request flag first */
-            zabbix_info->oper_flags = 0;
             ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_HEARTBEAT | ZABBIX_T_ACTIVE);
             agent_name = json_get_string(json_str, tokens, "host");
+            if (agent_name && !PINFO_FD_VISITED(pinfo)) {
+                zabbix_info->host_name = wmem_strdup(wmem_file_scope(), agent_name);
+            }
             if (json_get_double(json_str, tokens, "heartbeat_freq", &temp_double)) {
                 agent_hb_freq = (int)temp_double;
             }
             proto_item_set_text(ti,
-                "Zabbix Agent heartbeat from \"%s\"", (agent_name ? agent_name : ZABBIX_UNKNOWN));
+                "Zabbix Agent heartbeat from \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
             col_add_fstr(pinfo->cinfo, COL_INFO,
-                "Zabbix Agent heartbeat from \"%s\"", (agent_name ? agent_name : ZABBIX_UNKNOWN));
+                "Zabbix Agent heartbeat from \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
+        }
+        else if (strcmp(request_type, "passive checks") == 0) {
+            /* Passive agent checks since Zabbix 7.0 */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_PASSIVE);
+            proto_item_set_text(ti, "Zabbix Server/proxy request for passive agent checks");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Server/proxy request for passive agent checks");
+        }
+        else if (strcmp(request_type, "zabbix.stats") == 0) {
+            /* Agent requesting server/proxy internal metrics, since Zabbix 4.0.5 */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_METRICS);
+            proto_item_set_text(ti, "Zabbix Server/proxy internal metrics request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Server/proxy internal metrics request");
         }
         else if (strcmp(request_type, "sender data") == 0) {
             /* Sender/trapper */
@@ -432,12 +509,14 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
             if (tok && json_get_array_len(tok) > 0) {
                 jsmntok_t *datatok = json_get_array_index(tok, 0);
                 sender_name = json_get_string(json_str, datatok, "host");
+                if (sender_name && !PINFO_FD_VISITED(pinfo)) {
+                    zabbix_info->host_name = wmem_strdup(wmem_file_scope(), sender_name);
+                }
             }
-            zabbix_info->host_name = wmem_strdup(wmem_file_scope(), sender_name);
             proto_item_set_text(ti,
-                "Zabbix Sender data from \"%s\"", (sender_name ? sender_name : ZABBIX_UNKNOWN));
+                "Zabbix Sender data from \"%s\"", ZABBIX_NAME_OR_UNKNOWN(sender_name));
             col_add_fstr(pinfo->cinfo, COL_INFO,
-                "Zabbix Sender data from \"%s\"", (sender_name ? sender_name : ZABBIX_UNKNOWN));
+                "Zabbix Sender data from \"%s\"", ZABBIX_NAME_OR_UNKNOWN(sender_name));
         }
         else if ((strcmp(request_type, "proxy data") == 0) ||
                 (strcmp(request_type, "host availability") == 0) ||
@@ -450,13 +529,15 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
             if (token_count == 3) {     /* Only '{"request":"xxx"}' */
                 /* This is Zabbix server connecting to passive proxy */
                 ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_DATA | ZABBIX_T_PASSIVE);
-                proto_item_set_text(ti, "Zabbix Request for passive proxy data");
-                col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Request for passive proxy data");
+                proto_item_set_text(ti, "Zabbix Proxy data request to passive proxy");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Proxy data request to passive proxy");
             }
             else if (proxy_name) {
                 /* This is an active proxy connecting to server */
                 ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_DATA | ZABBIX_T_ACTIVE);
-                zabbix_info->host_name = wmem_strdup(wmem_file_scope(), proxy_name);
+                if (proxy_name && !PINFO_FD_VISITED(pinfo)) {
+                    zabbix_info->host_name = wmem_strdup(wmem_file_scope(), proxy_name);
+                }
                 proto_item_set_text(ti, "Zabbix Proxy data from \"%s\"", proxy_name);
                 col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Proxy data from \"%s\"", proxy_name);
             }
@@ -467,34 +548,94 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
             if (token_count == 3) {     /* Only '{"request":"proxy config"}' */
                 /* This is Zabbix 6.4+ server connecting to passive proxy */
                 ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_CONFIG | ZABBIX_T_PASSIVE);
-                proto_item_set_text(ti, "Zabbix Start send proxy config to passive proxy");
-                col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Start send proxy config to passive proxy");
+                proto_item_set_text(ti, "Zabbix Proxy config request to passive proxy");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Proxy config request to passive proxy");
             }
             else if (proxy_name) {
                 /* This is an active proxy connecting to server */
                 ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_CONFIG | ZABBIX_T_ACTIVE);
-                zabbix_info->host_name = wmem_strdup(wmem_file_scope(), proxy_name);
+                if (proxy_name && !PINFO_FD_VISITED(pinfo)) {
+                    zabbix_info->host_name = wmem_strdup(wmem_file_scope(), proxy_name);
+                }
                 proto_item_set_text(ti, "Zabbix Request proxy config for \"%s\"", proxy_name);
                 col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Request proxy config for \"%s\"", proxy_name);
             }
+        }
+        else if (strcmp(request_type, "proxy tasks") == 0) {
+            /* Zabbix server connecting to passive proxy, only '{"request":"proxy tasks"}' */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_TASKS | ZABBIX_T_PASSIVE);
+            proto_item_set_text(ti, "Zabbix Proxy tasks request to passive proxy");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Proxy tasks request to passive proxy");
         }
         else if (strcmp(request_type, "proxy heartbeat") == 0) {
             /* Heartbeat from active proxy, not used in Zabbix 6.4+ */
             ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_HEARTBEAT | ZABBIX_T_ACTIVE);
             proxy_name = json_get_string(json_str, tokens, "host");
-            zabbix_info->host_name = wmem_strdup(wmem_file_scope(), proxy_name);
+            if (proxy_name && !PINFO_FD_VISITED(pinfo)) {
+                zabbix_info->host_name = wmem_strdup(wmem_file_scope(), proxy_name);
+            }
             proto_item_set_text(ti, "Zabbix Proxy heartbeat from \"%s\"", proxy_name);
             col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Proxy heartbeat from \"%s\"", proxy_name);
         }
+        /* UI/API-specific requests */
+        else if (strcmp(request_type, "status.get") == 0) {
+            /* System information report */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_SYSINFO);
+            proto_item_set_text(ti, "Zabbix System information request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix System information request");
+        }
+        else if (strcmp(request_type, "queue.get") == 0) {
+            /* Queue information request */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_QUEUEINFO);
+            proto_item_set_text(ti, "Zabbix Queue information request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Queue information request");
+        }
+        else if (strcmp(request_type, "history.push") == 0) {
+            /* history.push API call, since Zabbix 7.0 */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_HISTORYPUSH);
+            proto_item_set_text(ti, "Zabbix History push request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix History push request");
+        }
+        else if (strcmp(request_type, "item.test") == 0) {
+            /* Item test in the frontend */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_ITEMTEST);
+            proto_item_set_text(ti, "Zabbix Item test request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Item test request");
+        }
+        else if (strcmp(request_type, "alert.send") == 0) {
+            /* Media test in the frontend */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_MEDIATEST);
+            proto_item_set_text(ti, "Zabbix Media test request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Media test request");
+        }
+        else if (strcmp(request_type, "report.test") == 0) {
+            /* Report test in the frontend */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_REPORTTEST);
+            proto_item_set_text(ti, "Zabbix Report test request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Report test request");
+        }
+        else if (strcmp(request_type, "expressions.evaluate") == 0) {
+            /* Trigger expression evaluation test in the frontend */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_EXPRESSIONEVAL);
+            proto_item_set_text(ti, "Zabbix Expression evaluation request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Expression evaluation request");
+        }
+        else if (strcmp(request_type, "command") == 0) {
+            /* Script execution from the frontend */
+            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_SCRIPTEXEC);
+            proto_item_set_text(ti, "Zabbix Script execution request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Script execution request");
+        }
     }
+    /* There was no "request" field match, continue with other ways to recognize the packet */
     else if (json_get_object(json_str, tokens, "globalmacro")) {
         /* This is Zabbix server before 6.4 sending configurations to active proxy */
         ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_CONFIG | ZABBIX_T_ACTIVE);
         proxy_name = zabbix_info->host_name;
         proto_item_set_text(ti,
-            "Zabbix Response for proxy config for \"%s\"", (proxy_name ? proxy_name : ZABBIX_UNKNOWN));
+            "Zabbix Server response for proxy config for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(proxy_name));
         col_add_fstr(pinfo->cinfo, COL_INFO,
-            "Zabbix Response for proxy config for \"%s\"", (proxy_name ? proxy_name : ZABBIX_UNKNOWN));
+            "Zabbix Server response for proxy config for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(proxy_name));
     }
     else if (json_get_double(json_str, tokens, "full_sync", &temp_double)) {
         /* This is Zabbix 6.4+ server sending proxy config to active or passive proxy */
@@ -505,14 +646,15 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
         if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PASSIVE)) {
             /* There is no proxy name anywhere to use */
             proto_item_set_text(ti, "Zabbix Passive proxy config");
-            col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy config");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy config");
         }
         else {
+            /* Active proxy */
             proxy_name = zabbix_info->host_name;
             proto_item_set_text(ti,
-                "Zabbix Response for proxy config for \"%s\"", (proxy_name ? proxy_name : ZABBIX_UNKNOWN));
+                "Zabbix Server response for proxy config for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(proxy_name));
             col_add_fstr(pinfo->cinfo, COL_INFO,
-                "Zabbix Response for proxy config for \"%s\"", (proxy_name ? proxy_name : ZABBIX_UNKNOWN));
+                "Zabbix Server response for proxy config for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(proxy_name));
         }
     }
     else if (response_status) {
@@ -524,67 +666,128 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
         }
         if (IS_ZABBIX_T_FLAGS(ZABBIX_T_AGENT)) {
             agent_name = zabbix_info->host_name;
-            if (IS_ZABBIX_T_FLAGS(ZABBIX_T_CONFIG | ZABBIX_T_ACTIVE)) {
+            if (json_get_object(json_str, tokens, "redirect")) {
+                /* Agent redirection response from a Zabbix 7.0+ proxy in load balancing configuration.
+                 * Not added in the conversation flags to prevent it from showing in the request packet,
+                 * just set a local variable for later usage.
+                 */
+                is_redirection = true;
                 proto_item_set_text(ti,
-                    "Zabbix Response for active checks for \"%s\" (%s)", (agent_name ? agent_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Agent redirection for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
                 col_add_fstr(pinfo->cinfo, COL_INFO,
-                    "Zabbix Response for active checks for \"%s\" (%s)", (agent_name ? agent_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Agent redirection for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(agent_name));
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_CONFIG | ZABBIX_T_ACTIVE)) {
+                proto_item_set_text(ti,
+                    "Zabbix Server/proxy response for active checks for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(agent_name), response_status);
+                col_add_fstr(pinfo->cinfo, COL_INFO,
+                    "Zabbix Server/proxy response for active checks for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(agent_name), response_status);
             }
             else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_DATA | ZABBIX_T_ACTIVE)) {
                 proto_item_set_text(ti,
-                    "Zabbix Response for agent data for \"%s\" (%s)", (agent_name ? agent_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Server/proxy response for agent data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(agent_name), response_status);
                 col_add_fstr(pinfo->cinfo, COL_INFO,
-                    "Zabbix Response for agent data for \"%s\" (%s)", (agent_name ? agent_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Server/proxy response for agent data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(agent_name), response_status);
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_METRICS)) {
+                proto_item_set_text(ti, "Zabbix Server/proxy internal metrics response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Server/proxy internal metrics response");
             }
         }
         else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY)) {
             proxy_name = zabbix_info->host_name;
             if (IS_ZABBIX_T_FLAGS(ZABBIX_T_CONFIG | ZABBIX_T_ACTIVE)) {
                 proto_item_set_text(ti,
-                    "Zabbix Response for active proxy config request for \"%s\" (%s)", (proxy_name ? proxy_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Response for active proxy config request for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(proxy_name), response_status);
                 col_add_fstr(pinfo->cinfo, COL_INFO,
-                    "Zabbix Response for active proxy config request for \"%s\" (%s)", (proxy_name ? proxy_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Response for active proxy config request for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(proxy_name), response_status);
             }
             else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_DATA | ZABBIX_T_ACTIVE)) {
                 proto_item_set_text(ti,
-                    "Zabbix Response for active proxy data for \"%s\" (%s)", (proxy_name ? proxy_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Server response for active proxy data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(proxy_name), response_status);
                 col_add_fstr(pinfo->cinfo, COL_INFO,
-                    "Zabbix Response for active proxy data for \"%s\" (%s)", (proxy_name ? proxy_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Server response for active proxy data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(proxy_name), response_status);
             }
             else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_CONFIG | ZABBIX_T_PASSIVE)) {
                 proto_item_set_text(ti,
-                    "Zabbix Response for passive proxy config (%s)", response_status);
+                    "Zabbix Proxy response for passive proxy config (%s)", response_status);
                 col_add_fstr(pinfo->cinfo, COL_INFO,
-                    "Zabbix Response for passive proxy config (%s)", response_status);
+                    "Zabbix Proxy response for passive proxy config (%s)", response_status);
             }
             else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_DATA | ZABBIX_T_PASSIVE)) {
                 proto_item_set_text(ti,
-                    "Zabbix Response for passive proxy data (%s)", response_status);
+                    "Zabbix Server response for passive proxy data (%s)", response_status);
                 col_add_fstr(pinfo->cinfo, COL_INFO,
-                    "Zabbix Response for passive proxy data (%s)", response_status);
+                    "Zabbix Server response for passive proxy data (%s)", response_status);
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_TASKS | ZABBIX_T_PASSIVE)) {
+                proto_item_set_text(ti,
+                    "Zabbix Server response for passive proxy tasks (%s)", response_status);
+                col_add_fstr(pinfo->cinfo, COL_INFO,
+                    "Zabbix Server response for passive proxy tasks (%s)", response_status);
             }
             else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_HEARTBEAT | ZABBIX_T_ACTIVE)) {
                 proto_item_set_text(ti,
-                    "Zabbix Response for active proxy heartbeat for \"%s\" (%s)", (proxy_name ? proxy_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Server response for active proxy heartbeat for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(proxy_name), response_status);
                 col_add_fstr(pinfo->cinfo, COL_INFO,
-                    "Zabbix Response for active proxy heartbeat for \"%s\" (%s)", (proxy_name ? proxy_name : ZABBIX_UNKNOWN), response_status);
+                    "Zabbix Server response for active proxy heartbeat for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(proxy_name), response_status);
             }
         }
         else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SENDER)) {
             sender_name = zabbix_info->host_name;
             proto_item_set_text(ti,
-                "Zabbix Response for sender data for \"%s\" (%s)", (sender_name ? sender_name : ZABBIX_UNKNOWN), response_status);
+                "Zabbix Server/proxy response for sender data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(sender_name), response_status);
             col_add_fstr(pinfo->cinfo, COL_INFO,
-                "Zabbix Response for sender data for \"%s\" (%s)", (sender_name ? sender_name : ZABBIX_UNKNOWN), response_status);
+                "Zabbix Server/proxy response for sender data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(sender_name), response_status);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND)) {
+            if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SYSINFO)) {
+                proto_item_set_text(ti, "Zabbix System information response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix System information response");
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_QUEUEINFO)) {
+                proto_item_set_text(ti, "Zabbix Queue information response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Queue information response");
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_HISTORYPUSH)) {
+                proto_item_set_text(ti, "Zabbix History push response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix History push response");
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_ITEMTEST)) {
+                proto_item_set_text(ti, "Zabbix Item test response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Item test response");
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_MEDIATEST)) {
+                proto_item_set_text(ti, "Zabbix Media test response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Media test response");
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_REPORTTEST)) {
+                proto_item_set_text(ti, "Zabbix Report test response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Report test response");
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_EXPRESSIONEVAL)) {
+                proto_item_set_text(ti, "Zabbix Expression evaluation response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Expression evaluation response");
+            }
+            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SCRIPTEXEC)) {
+                proto_item_set_text(ti, "Zabbix Script execution response");
+                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Script execution response");
+            }
         }
     }
-    else if (data_object || data_array) {
+    else if (version && data_array) {
+        /* This looks like passive agent response in Zabbix 7.0+ */
+        ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_PASSIVE);
+        proto_item_set_text(ti, "Zabbix Agent response for passive checks");
+        col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Agent response for passive checks");
+    }
+    else if (data_object || data_array || tokens->size == 0) {
         /* No other match above, let's assume this is server sending incremental
          * configuration to a proxy
          */
         ADD_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_CONFIG);
-        if (data_object && (data_object->size == 0)) {
-            /* Empty data object */
+        if ((data_object && (data_object->size == 0)) || tokens->size == 0) {
+            /* Empty data object or the whole JSON is empty */
             oper_response |= ZABBIX_RESPONSE_NOCHANGE;
         }
         else if (data_array) {
@@ -594,25 +797,33 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
         if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PASSIVE)) {
             /* There is no proxy name anywhere to use */
             proto_item_set_text(ti, "Zabbix Passive proxy config");
-            col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy config");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy config");
         }
         else {
             proxy_name = zabbix_info->host_name;
             proto_item_set_text(ti,
-                "Zabbix Response for proxy config for \"%s\"", (proxy_name ? proxy_name : ZABBIX_UNKNOWN));
+                "Zabbix Server response for proxy config for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(proxy_name));
             col_add_fstr(pinfo->cinfo, COL_INFO,
-                "Zabbix Response for proxy config for \"%s\"", (proxy_name ? proxy_name : ZABBIX_UNKNOWN));
+                "Zabbix Server response for proxy config for \"%s\"", ZABBIX_NAME_OR_UNKNOWN(proxy_name));
         }
     }
+    /* Final guesses to provide customized packet information */
     else if (session && version) {
-        /* Last guesses: responses from passive proxy */
+        /* Config or data responses from passive proxy */
         if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_CONFIG | ZABBIX_T_PASSIVE)) {
             proto_item_set_text(ti, "Zabbix Passive proxy response for config push");
-            col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy response for config push");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy response for config push");
         }
         else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_DATA | ZABBIX_T_PASSIVE)) {
             proto_item_set_text(ti, "Zabbix Passive proxy data response");
-            col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy data response");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy data response");
+        }
+    }
+    else if (version) {
+        /* Tasks response from passive proxy */
+        if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY | ZABBIX_T_TASKS | ZABBIX_T_PASSIVE)) {
+            proto_item_set_text(ti, "Zabbix Passive proxy response for tasks request");
+            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Passive proxy response for tasks request");
         }
     }
 
@@ -646,6 +857,9 @@ show_agent_outputs:
             proto_item_set_text(temp_ti, "Agent is in passive mode");
             proto_item_set_generated(temp_ti);
         }
+        if (is_redirection) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_agent_redirection, NULL, 0, 0, true);
+        }
     }
     else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY)) {
         temp_ti = proto_tree_add_boolean(zabbix_tree, hf_zabbix_proxy, NULL, 0, 0, true);
@@ -655,6 +869,11 @@ show_agent_outputs:
     else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SENDER)) {
         temp_ti = proto_tree_add_boolean(zabbix_tree, hf_zabbix_sender, NULL, 0, 0, true);
         proto_item_set_text(temp_ti, "This is a sender connection");
+        proto_item_set_generated(temp_ti);
+    }
+    else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND)) {
+        temp_ti = proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend, NULL, 0, 0, true);
+        proto_item_set_text(temp_ti, "This is a frontend connection");
         proto_item_set_generated(temp_ti);
     }
     if (oper_response & ZABBIX_RESPONSE_SUCCESS) {
@@ -671,6 +890,9 @@ show_agent_outputs:
                 proto_item_set_generated(temp_ti);
                 proto_item_append_text(temp_ti, " (from the request)");
             }
+        }
+        if (agent_variant) {
+            proto_tree_add_int64(zabbix_tree, hf_zabbix_agent_variant, NULL, 0, 0, agent_variant);
         }
         if (agent_hb_freq) {
             proto_tree_add_int(zabbix_tree, hf_zabbix_agent_hb_freq, NULL, 0, 0, agent_hb_freq);
@@ -698,6 +920,12 @@ show_agent_outputs:
         if (agent_listenport) {
             proto_tree_add_uint(zabbix_tree, hf_zabbix_agent_listenport, NULL, 0, 0, agent_listenport);
         }
+        if (commands_array) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_agent_commands, NULL, 0, 0, true);
+        }
+        if (IS_ZABBIX_T_FLAGS(ZABBIX_T_METRICS)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_metrics, NULL, 0, 0, true);
+        }
     }
     else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY)) {
         if (proxy_name) {
@@ -723,8 +951,37 @@ show_agent_outputs:
                 proto_tree_add_boolean(zabbix_tree, hf_zabbix_proxy_no_config_change, NULL, 0, 0, true);
             }
         }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_TASKS)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_proxy_tasks, NULL, 0, 0, true);
+        }
         else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_HEARTBEAT)) {
             proto_tree_add_boolean(zabbix_tree, hf_zabbix_proxy_hb, NULL, 0, 0, true);
+        }
+    }
+    else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND)) {
+        if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SYSINFO)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_sysinfo, NULL, 0, 0, true);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_QUEUEINFO)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_queueinfo, NULL, 0, 0, true);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_HISTORYPUSH)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_historypush, NULL, 0, 0, true);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_ITEMTEST)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_itemtest, NULL, 0, 0, true);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_MEDIATEST)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_mediatest, NULL, 0, 0, true);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_REPORTTEST)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_reporttest, NULL, 0, 0, true);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_EXPRESSIONEVAL)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_expressioneval, NULL, 0, 0, true);
+        }
+        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SCRIPTEXEC)) {
+            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_scriptexec, NULL, 0, 0, true);
         }
     }
     else if (sender_name) {
@@ -741,11 +998,28 @@ show_agent_outputs:
     if (config_revision > -1) {
         proto_tree_add_int64(zabbix_tree, hf_zabbix_config_revision, NULL, 0, 0, config_revision);
     }
+    if (hostmap_revision > -1) {
+        proto_tree_add_int64(zabbix_tree, hf_zabbix_hostmap_revision, NULL, 0, 0, hostmap_revision);
+    }
     if (session) {
         proto_tree_add_string(zabbix_tree, hf_zabbix_session, NULL, 0, 0, session);
     }
-    /* Show also the full JSON (or passive agent request/response) */
-    proto_tree_add_item(zabbix_tree, hf_zabbix_data, next_tvb, 0, (int)datalen, ENC_UTF_8);
+    /* Show also the full JSON, or pre-7.0 passive agent request/response (or error message).
+     * Note that ZABBIX_ZBX_NOTSUPPORTED does not include the \0 that is in the
+     * protocol specification! Therefore +1/-1's are present
+     */
+    if (passive_agent_data_str &&
+        strlen(passive_agent_data_str) >= strlen(ZABBIX_ZBX_NOTSUPPORTED) &&
+        strncmp(passive_agent_data_str, ZABBIX_ZBX_NOTSUPPORTED, strlen(ZABBIX_ZBX_NOTSUPPORTED)) == 0) {
+        /* Pre-7.0 passive agent error, first ZBX_NOTSUPPORTED\0 and then the error message */
+        proto_tree_add_item(zabbix_tree, hf_zabbix_data,
+            next_tvb, 0, (int)strlen(ZABBIX_ZBX_NOTSUPPORTED)+1, ENC_UTF_8);
+        proto_tree_add_item(zabbix_tree, hf_zabbix_error,
+            next_tvb, (int)strlen(ZABBIX_ZBX_NOTSUPPORTED)+1, (int)datalen-(int)strlen(ZABBIX_ZBX_NOTSUPPORTED)-1, ENC_UTF_8);
+    } else {
+        /* JSON or pre-7.0 passive agent without error */
+        proto_tree_add_item(zabbix_tree, hf_zabbix_data, next_tvb, 0, (int)datalen, ENC_UTF_8);
+    }
 
 final_outputs:
 
@@ -770,7 +1044,7 @@ final_outputs:
     /* Add length to the Zabbix tree text */
     proto_item_append_text(ti, ", Len=%u", (unsigned)length);
     /* Add/set Info column texts */
-    const gchar *info_text = col_get_text(pinfo->cinfo, COL_INFO);
+    const char *info_text = col_get_text(pinfo->cinfo, COL_INFO);
     if (!info_text || !strlen(info_text)) {
         /* Info column is still empty, set the default text */
         if (CONV_IS_ZABBIX_REQUEST(zabbix_info, pinfo)) {
@@ -795,16 +1069,16 @@ get_zabbix_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data
     uint8_t flags;
     uint64_t length;
 
-    flags = tvb_get_guint8(tvb, offset+4);
+    flags = tvb_get_uint8(tvb, offset+4);
     if (flags & ZABBIX_FLAG_LARGEPACKET) {
         /* 8-byte length field
          * Note that ZABBIX_HDR_MIN_LEN check (in dissect_zabbix()) is still enough
          * due to the header structure (there are reserved bytes)
          */
-        length = tvb_get_guint64(tvb, offset+5, ENC_LITTLE_ENDIAN) + ZABBIX_HDR_MAX_LEN;
+        length = tvb_get_uint64(tvb, offset+5, ENC_LITTLE_ENDIAN) + ZABBIX_HDR_MAX_LEN;
     } else {
         /* 4-byte length */
-        length = tvb_get_guint32(tvb, offset+5, ENC_LITTLE_ENDIAN) + ZABBIX_HDR_MIN_LEN;
+        length = tvb_get_uint32(tvb, offset+5, ENC_LITTLE_ENDIAN) + ZABBIX_HDR_MIN_LEN;
     }
     return (unsigned)length;
 }
@@ -819,11 +1093,11 @@ dissect_zabbix(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         /* Not enough data */
         return 0;
     }
-    if (tvb_memeql(tvb, 0, ZABBIX_HDR_SIGNATURE, 4)) {
+    if (tvb_strneql(tvb, 0, ZABBIX_HDR_SIGNATURE, 4) != 0) {
         /* Encrypted or not Zabbix at all */
         return 0;
     }
-    flags = tvb_get_guint8(tvb, 4);
+    flags = tvb_get_uint8(tvb, 4);
     if (!(flags & ZABBIX_FLAG_ZABBIX_COMMUNICATIONS)) {
         return 0;
     }
@@ -904,6 +1178,11 @@ proto_register_zabbix(void)
             FT_STRING, BASE_NONE, NULL, 0,
             NULL, HFILL }
         },
+        { &hf_zabbix_error,
+            { "Error message", "zabbix.error",
+            FT_STRING, BASE_NONE, NULL, 0,
+            NULL, HFILL }
+        },
         { &hf_zabbix_time,
             { "Response time", "zabbix.time",
             FT_RELATIVE_TIME, BASE_NONE, NULL, 0,
@@ -934,6 +1213,11 @@ proto_register_zabbix(void)
             FT_BOOLEAN, BASE_NONE, NULL, 0,
             NULL, HFILL }
         },
+        { &hf_zabbix_agent_commands,
+            { "Zabbix agent commands", "zabbix.agent.commands",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
         { &hf_zabbix_agent_config,
             { "Zabbix agent config", "zabbix.agent.config",
             FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
@@ -941,6 +1225,11 @@ proto_register_zabbix(void)
         },
         { &hf_zabbix_agent_data,
             { "Zabbix agent data", "zabbix.agent.data",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_agent_redirection,
+            { "Agent redirection", "zabbix.agent.redirection",
             FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
             NULL, HFILL }
         },
@@ -986,7 +1275,12 @@ proto_register_zabbix(void)
         },
         { &hf_zabbix_agent_listenport,
             { "Agent listen port", "zabbix.agent.listen_port",
-            FT_UINT16, BASE_DEC, NULL, 0,
+            FT_UINT16, BASE_PT_TCP, NULL, 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_agent_variant,
+            { "Agent variant", "zabbix.agent.variant",
+            FT_INT64, BASE_DEC, NULL, 0,
             NULL, HFILL }
         },
         { &hf_zabbix_proxy,
@@ -1029,6 +1323,11 @@ proto_register_zabbix(void)
             FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
             NULL, HFILL }
         },
+        { &hf_zabbix_proxy_tasks,
+            { "Proxy tasks", "zabbix.proxy.tasks",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
         { &hf_zabbix_sender,
             { "Sender connection", "zabbix.sender",
             FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
@@ -1054,6 +1353,61 @@ proto_register_zabbix(void)
             FT_INT64, BASE_DEC, NULL, 0,
             NULL, HFILL }
         },
+        { &hf_zabbix_hostmap_revision,
+            { "Hostmap revision", "zabbix.hostmap_revision",
+            FT_INT64, BASE_DEC, NULL, 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_metrics,
+            { "Server/proxy internal metrics", "zabbix.stats",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend,
+            { "Zabbix frontend", "zabbix.frontend",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_sysinfo,
+            { "System information", "zabbix.frontend.sysinfo",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_queueinfo,
+            { "Queue information", "zabbix.frontend.queueinfo",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_historypush,
+            { "History push", "zabbix.frontend.historypush",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_itemtest,
+            { "Item test", "zabbix.frontend.itemtest",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_mediatest,
+            { "Media test", "zabbix.frontend.mediatest",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_reporttest,
+            { "Report test", "zabbix.frontend.reporttest",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_expressioneval,
+            { "Expression evaluation", "zabbix.frontend.expressioneval",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
+        { &hf_zabbix_frontend_scriptexec,
+            { "Script execution", "zabbix.frontend.scriptexec",
+            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
+            NULL, HFILL }
+        },
     };
 
     static ei_register_info ei[] = {
@@ -1070,8 +1424,9 @@ proto_register_zabbix(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_zabbix,
+        &ett_zabbix_flags,
     };
 
     module_t *zabbix_module;

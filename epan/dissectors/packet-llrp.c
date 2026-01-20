@@ -17,6 +17,9 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
+
 #include "packet-tcp.h"
 
 void proto_register_llrp(void);
@@ -276,6 +279,7 @@ static int hf_llrp_impinj_peak_rssi_mode;
 static int hf_llrp_impinj_gps_coordinates_mode;
 static int hf_llrp_impinj_tid;
 static int hf_llrp_phase_angle;
+static int hf_llrp_doppler_frequency;
 static int hf_llrp_rssi;
 static int hf_llrp_latitude;
 static int hf_llrp_longitude;
@@ -292,8 +296,8 @@ static int hf_llrp_impinj_hub_fault_type;
 static int hf_llrp_impinj_hub_connected_type;
 
 /* Initialize the subtree pointers */
-static gint ett_llrp;
-static gint ett_llrp_param;
+static int ett_llrp;
+static int ett_llrp_param;
 
 static expert_field ei_llrp_req_conf;
 static expert_field ei_llrp_invalid_length;
@@ -1015,6 +1019,7 @@ static value_string_ext impinj_msg_subtype_ext = VALUE_STRING_EXT_INIT(impinj_ms
 #define LLRP_IMPINJ_PARAM_ENABLE_OPTIM_READ                        65
 #define LLRP_IMPINJ_PARAM_ACCESS_SPEC_ORDERING                     66
 #define LLRP_IMPINJ_PARAM_ENABLE_RF_DOPPLER_FREQ                   67
+#define LLRP_IMPINJ_PARAM_RF_DOPPLER_FREQ                          68
 #define LLRP_IMPINJ_PARAM_ARRAY_VERSION                            1520
 #define LLRP_IMPINJ_PARAM_HUB_VERSIONS                             1537
 #define LLRP_IMPINJ_PARAM_HUB_CONFIGURATION                        1538
@@ -1067,6 +1072,7 @@ static const value_string impinj_param_type[] = {
     { LLRP_IMPINJ_PARAM_ENABLE_OPTIM_READ,                       "Enable optimized read"                    },
     { LLRP_IMPINJ_PARAM_ACCESS_SPEC_ORDERING,                    "AccessSpec ordering"                      },
     { LLRP_IMPINJ_PARAM_ENABLE_RF_DOPPLER_FREQ,                  "Enable RF doppler frequency"              },
+    { LLRP_IMPINJ_PARAM_RF_DOPPLER_FREQ,                         "RF Doppler frequency"                     },
     { LLRP_IMPINJ_PARAM_ARRAY_VERSION,                           "Array specific HW and version info"       },
     { LLRP_IMPINJ_PARAM_HUB_VERSIONS,                            "Hub specific HW and version info"         },
     { LLRP_IMPINJ_PARAM_HUB_CONFIGURATION,                       "Hub connection and fault state"           },
@@ -1445,14 +1451,14 @@ static const value_string unique_all_gpo_ports[] = {
 };
 
 
-static guint
+static unsigned
 dissect_llrp_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-        guint offset, const guint end, const guint depth);
+        unsigned offset, const unsigned end, const unsigned depth);
 
-static guint dissect_llrp_utf8_parameter(tvbuff_t * const tvb, packet_info *pinfo,
-        proto_tree * const tree, const guint hfindex, const guint offset)
+static unsigned dissect_llrp_utf8_parameter(tvbuff_t * const tvb, packet_info *pinfo,
+        proto_tree * const tree, const unsigned hfindex, const unsigned offset)
 {
-    gint len;
+    unsigned len;
 
     len = tvb_get_ntohs(tvb, offset);
     if(tvb_reported_length_remaining(tvb, offset) < len) {
@@ -1467,10 +1473,10 @@ static guint dissect_llrp_utf8_parameter(tvbuff_t * const tvb, packet_info *pinf
     return offset + len + 2;
 }
 
-static guint dissect_llrp_bit_field(tvbuff_t * const tvb,
-        proto_tree * const tree, const guint hfindex, const guint offset)
+static unsigned dissect_llrp_bit_field(tvbuff_t * const tvb,
+        proto_tree * const tree, const unsigned hfindex, const unsigned offset)
 {
-    guint len;
+    unsigned len;
 
     len = tvb_get_ntohs(tvb, offset);
     len = (len + 7) / 8;
@@ -1481,10 +1487,10 @@ static guint dissect_llrp_bit_field(tvbuff_t * const tvb,
     return offset + len + 2;
 }
 
-static guint dissect_llrp_word_array(tvbuff_t * const tvb,
-        proto_tree * const tree, const guint hfindex, const guint offset)
+static unsigned dissect_llrp_word_array(tvbuff_t * const tvb,
+        proto_tree * const tree, const unsigned hfindex, const unsigned offset)
 {
-    guint len;
+    unsigned len;
 
     len = tvb_get_ntohs(tvb, offset);
     len *= 2;
@@ -1495,17 +1501,17 @@ static guint dissect_llrp_word_array(tvbuff_t * const tvb,
     return offset + len + 2;
 }
 
-static guint dissect_llrp_item_array(tvbuff_t * const tvb, packet_info *pinfo,
-        proto_tree * const tree, const guint hfindex_number,
-        const guint hfindex_item, const guint item_size, guint offset)
+static unsigned dissect_llrp_item_array(tvbuff_t * const tvb, packet_info *pinfo,
+        proto_tree * const tree, const unsigned hfindex_number,
+        const unsigned hfindex_item, const unsigned item_size, unsigned offset)
 {
-    guint num;
+    unsigned num;
 
     num = tvb_get_ntohs(tvb, offset);
     proto_tree_add_item(tree, hfindex_number, tvb,
             offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
-    if(tvb_reported_length_remaining(tvb, offset) < ((gint)(num*item_size))) {
+    if(tvb_reported_length_remaining(tvb, offset) < (num*item_size)) {
         expert_add_info_format(pinfo, tree, &ei_llrp_invalid_length,
                 "Array longer than message");
         return offset + tvb_reported_length_remaining(tvb, offset);
@@ -1518,16 +1524,16 @@ static guint dissect_llrp_item_array(tvbuff_t * const tvb, packet_info *pinfo,
     return offset;
 }
 
-static guint
+static unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
 dissect_llrp_impinj_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *param_tree,
-        guint suboffset, const guint param_end)
+        unsigned suboffset, const unsigned param_end)
 {
-    guint32 subtype;
+    uint32_t subtype;
 
     subtype = tvb_get_ntohl(tvb, suboffset);
     proto_item_append_text(param_tree, " (Impinj - %s)",
-            val_to_str_ext(subtype, &impinj_param_type_ext, "Unknown Type: %d"));
+            val_to_str_ext(pinfo->pool, subtype, &impinj_param_type_ext, "Unknown Type: %d"));
     proto_tree_add_item(param_tree, hf_llrp_impinj_param_type, tvb, suboffset, 4, ENC_BIG_ENDIAN);
     suboffset += 4;
 
@@ -1553,7 +1559,7 @@ dissect_llrp_impinj_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *par
         suboffset += 2;
         break;
     case LLRP_IMPINJ_PARAM_TAG_DIRECTION_REPORTING:
-        proto_tree_add_item(param_tree, hf_llrp_impinj_en_tag_dir, tvb, suboffset, 2, ENC_NA);
+        proto_tree_add_item(param_tree, hf_llrp_impinj_en_tag_dir, tvb, suboffset, 2, ENC_BIG_ENDIAN);
         suboffset += 2;
         proto_tree_add_item(param_tree, hf_llrp_impinj_antenna_conf, tvb, suboffset, 2, ENC_BIG_ENDIAN);
         suboffset += 2;
@@ -1741,6 +1747,10 @@ dissect_llrp_impinj_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *par
         proto_tree_add_item(param_tree, hf_llrp_phase_angle, tvb, suboffset, 2, ENC_BIG_ENDIAN);
         suboffset += 2;
         break;
+    case LLRP_IMPINJ_PARAM_RF_DOPPLER_FREQ:
+        proto_tree_add_item(param_tree, hf_llrp_doppler_frequency, tvb, suboffset, 2, ENC_BIG_ENDIAN);
+        suboffset += 2;
+        break;
     case LLRP_IMPINJ_PARAM_PEAK_RSSI:
         proto_tree_add_item(param_tree, hf_llrp_rssi, tvb, suboffset, 2, ENC_BIG_ENDIAN);
         suboffset += 2;
@@ -1800,28 +1810,27 @@ dissect_llrp_impinj_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *par
         break;
     default:
         return suboffset;
-        break;
     }
     /* Each custom parameters ends with optional custom parameter, disscect it */
     return dissect_llrp_parameters(tvb, pinfo, param_tree, suboffset, param_end, 0);
 }
 
-static guint
+static unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
 dissect_llrp_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-        guint offset, const guint end, const guint depth)
+        unsigned offset, const unsigned end, const unsigned depth)
 {
-    guint8      has_length;
-    guint16     len, type;
-    guint       real_len, param_end;
-    guint       suboffset;
-    guint       num;
+    uint8_t     has_length;
+    uint16_t    len, type;
+    unsigned    real_len, param_end;
+    unsigned    suboffset;
+    unsigned    num;
     proto_item *ti;
     proto_tree *param_tree;
 
-    while (((gint)(end - offset)) > 0)
+    while (((int)(end - offset)) > 0)
     {
-        has_length = !(tvb_get_guint8(tvb, offset) & 0x80);
+        has_length = !(tvb_get_uint8(tvb, offset) & 0x80);
 
         if (has_length)
         {
@@ -1843,7 +1852,7 @@ dissect_llrp_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
             ti = proto_tree_add_none_format(tree, hf_llrp_param, tvb,
                     offset, real_len, "TLV Parameter: %s",
-                    val_to_str_ext(type, &tlv_type_ext, "Unknown Type: %d"));
+                    val_to_str_ext(pinfo->pool, type, &tlv_type_ext, "Unknown Type: %d"));
             param_tree = proto_item_add_subtree(ti, ett_llrp_param);
 
             proto_tree_add_item(param_tree, hf_llrp_tlv_type, tvb,
@@ -1962,7 +1971,7 @@ dissect_llrp_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 suboffset = dissect_llrp_parameters(tvb, pinfo, param_tree, suboffset, param_end, depth+1);
                 break;
             case LLRP_TLV_FREQ_HOP_TABLE:
-                proto_tree_add_item(param_tree, hf_llrp_hop_table_id, tvb, suboffset, 1, ENC_NA);
+                proto_tree_add_item(param_tree, hf_llrp_hop_table_id, tvb, suboffset, 1, ENC_BIG_ENDIAN);
                 suboffset += 1;
                 proto_tree_add_item(param_tree, hf_llrp_rfu, tvb, suboffset, 1, ENC_NA);
                 suboffset += 1;
@@ -2520,7 +2529,7 @@ dissect_llrp_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         }
         else
         {
-            type = tvb_get_guint8(tvb, offset) & 0x7F;
+            type = tvb_get_uint8(tvb, offset) & 0x7F;
 
             switch (type)
             {
@@ -2574,7 +2583,7 @@ dissect_llrp_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
             ti = proto_tree_add_none_format(tree, hf_llrp_param, tvb,
                     offset, real_len + 1, "TV Parameter : %s",
-                    val_to_str_ext(type, &tv_type_ext, "Unknown Type: %d"));
+                    val_to_str_ext(pinfo->pool, type, &tv_type_ext, "Unknown Type: %d"));
             param_tree = proto_item_add_subtree(ti, ett_llrp_param);
 
             proto_tree_add_item(param_tree, hf_llrp_tv_type, tvb,
@@ -2648,15 +2657,15 @@ dissect_llrp_parameters(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     return offset;
 }
 
-static guint
-dissect_llrp_impinj_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset)
+static unsigned
+dissect_llrp_impinj_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
 {
-    guint8 subtype;
+    uint8_t subtype;
 
-    subtype = tvb_get_guint8(tvb, offset);
+    subtype = tvb_get_uint8(tvb, offset);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " (Impinj - %s)",
-            val_to_str_ext(subtype, &impinj_msg_subtype_ext, "Unknown Type: %d"));
+            val_to_str_ext(pinfo->pool, subtype, &impinj_msg_subtype_ext, "Unknown Type: %d"));
     proto_tree_add_item(tree, hf_llrp_impinj_msg_type, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
@@ -2682,16 +2691,16 @@ dissect_llrp_impinj_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 static void
 dissect_llrp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-        guint16 type, guint offset)
+        uint16_t type, unsigned offset)
 {
-    gboolean    ends_with_parameters;
-    guint8      requested_data;
-    guint32     vendor;
+    bool        ends_with_parameters;
+    uint8_t     requested_data;
+    uint32_t    vendor;
     proto_item *request_item, *antenna_item, *gpi_item, *gpo_item;
-    guint (*dissect_custom_message)(tvbuff_t *tvb,
-            packet_info *pinfo, proto_tree *tree, guint offset) = NULL;
+    unsigned (*dissect_custom_message)(tvbuff_t *tvb,
+            packet_info *pinfo, proto_tree *tree, unsigned offset) = NULL;
 
-    ends_with_parameters = FALSE;
+    ends_with_parameters = false;
     switch (type)
     {
         /* Simple cases just have normal TLV or TV parameters */
@@ -2722,7 +2731,7 @@ dissect_llrp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         case LLRP_TYPE_GET_ACCESSSPECS_RESPONSE:
         case LLRP_TYPE_GET_REPORT:
         case LLRP_TYPE_ENABLE_EVENTS_AND_REPORTS:
-            ends_with_parameters = TRUE;
+            ends_with_parameters = true;
             break;
         /* Some just have an ROSpec ID */
         case LLRP_TYPE_START_ROSPEC:
@@ -2743,14 +2752,14 @@ dissect_llrp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         case LLRP_TYPE_GET_READER_CAPABILITIES:
             proto_tree_add_item(tree, hf_llrp_req_cap, tvb, offset, 1, ENC_BIG_ENDIAN);
             offset++;
-            ends_with_parameters = TRUE;
+            ends_with_parameters = true;
             break;
         /* GET_READER_CONFIG is more complicated */
         case LLRP_TYPE_GET_READER_CONFIG:
             antenna_item = proto_tree_add_item(tree, hf_llrp_antenna_id, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
 
-            requested_data = tvb_get_guint8(tvb, offset);
+            requested_data = tvb_get_uint8(tvb, offset);
             request_item = proto_tree_add_item(tree, hf_llrp_req_conf, tvb,
                     offset, 1, ENC_BIG_ENDIAN);
             offset++;
@@ -2808,14 +2817,14 @@ dissect_llrp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                     proto_item_append_text(gpo_item, " (Ignored)");
                     break;
             };
-            ends_with_parameters = TRUE;
+            ends_with_parameters = true;
             break;
         /* END GET_READER_CONFIG */
         /* Misc */
         case LLRP_TYPE_SET_READER_CONFIG:
             proto_tree_add_item(tree, hf_llrp_rest_fact, tvb, offset, 1, ENC_NA);
             offset++;
-            ends_with_parameters = TRUE;
+            ends_with_parameters = true;
             break;
         case LLRP_TYPE_SET_PROTOCOL_VERSION:
             proto_tree_add_item(tree, hf_llrp_version, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -2825,17 +2834,16 @@ dissect_llrp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             offset++;
             proto_tree_add_item(tree, hf_llrp_sup_ver, tvb, offset, 1, ENC_BIG_ENDIAN);
             offset++;
-            ends_with_parameters = TRUE;
+            ends_with_parameters = true;
             break;
         case LLRP_TYPE_CUSTOM_MESSAGE:
-            vendor = tvb_get_ntohl(tvb, offset);
-            proto_tree_add_item(tree, hf_llrp_vendor, tvb, offset, 4, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_llrp_vendor, tvb, offset, 4, ENC_BIG_ENDIAN, &vendor);
             offset += 4;
             /* Do vendor specific dissection */
             switch(vendor) {
             case LLRP_VENDOR_IMPINJ:
                 dissect_custom_message = dissect_llrp_impinj_message;
-                ends_with_parameters = TRUE;
+                ends_with_parameters = true;
                 break;
             }
             if (dissect_custom_message)
@@ -2869,9 +2877,9 @@ dissect_llrp_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 {
     proto_item *ti;
     proto_tree *llrp_tree;
-    guint16     type;
-    guint32     len;
-    guint       offset = 0;
+    uint16_t    type;
+    uint32_t    len;
+    unsigned    offset = 0;
 
     /* Check that there's enough data */
     if (tvb_reported_length(tvb) < LLRP_HEADER_LENGTH) {
@@ -2886,7 +2894,7 @@ dissect_llrp_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
     type = tvb_get_ntohs(tvb, offset) & 0x03FF;
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)",
-                    val_to_str_ext(type, &message_types_ext, "Unknown Type: %d"));
+                    val_to_str_ext(pinfo->pool, type, &message_types_ext, "Unknown Type: %d"));
 
     ti = proto_tree_add_item(tree, proto_llrp, tvb, offset, -1, ENC_NA);
     llrp_tree = proto_item_add_subtree(ti, ett_llrp);
@@ -2915,18 +2923,18 @@ dissect_llrp_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 }
 
 /* Determine length of LLRP message */
-static guint
+static unsigned
 get_llrp_message_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
     /* Peek into the header to determine the total message length */
-    return (guint)tvb_get_ntohl(tvb, offset+2);
+    return (unsigned)tvb_get_ntohl(tvb, offset+2);
 }
 
 /* The main dissecting routine */
 static int
 dissect_llrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-    tcp_dissect_pdus(tvb, pinfo, tree, TRUE, LLRP_HEADER_LENGTH,
+    tcp_dissect_pdus(tvb, pinfo, tree, true, LLRP_HEADER_LENGTH,
         get_llrp_message_len, dissect_llrp_packet, data);
     return tvb_captured_length(tvb);
 }
@@ -3330,7 +3338,7 @@ proto_register_llrp(void)
           NULL, HFILL }},
 
         { &hf_llrp_gpi_state,
-        { "GPI state", "llrp.param.gpi_state", FT_UINT16, BASE_DEC, NULL, 0,
+        { "GPI state", "llrp.param.gpi_state", FT_UINT8, BASE_DEC, NULL, 0,
           NULL, HFILL }},
 
         { &hf_llrp_hold_events_and_reports,
@@ -3929,6 +3937,10 @@ proto_register_llrp(void)
         { "Phase angle", "llrp.param.phase_angle", FT_UINT16, BASE_DEC, NULL, 0,
           NULL, HFILL }},
 
+        { &hf_llrp_doppler_frequency,
+        { "Doppler frequency", "llrp.param.doppler_frequency", FT_INT16, BASE_DEC, NULL, 0,
+          NULL, HFILL }},
+
         { &hf_llrp_rssi,
         { "RSSI", "llrp.param.rssi", FT_INT16, BASE_DEC, NULL, 0,
           NULL, HFILL }},
@@ -3987,14 +3999,14 @@ proto_register_llrp(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_llrp,
         &ett_llrp_param
     };
 
     static ei_register_info ei[] = {
-        { &ei_llrp_invalid_length, { "llrp.invalid_length_of_string_claimed", PI_MALFORMED, PI_ERROR, "invalid length of string: claimed %u, available %u.", EXPFILL }},
-        { &ei_llrp_req_conf, { "llrp.req_conf.invalid", PI_PROTOCOL, PI_ERROR, "Unrecognized configuration request: %u", EXPFILL }},
+        { &ei_llrp_invalid_length, { "llrp.invalid_length_of_string_claimed", PI_MALFORMED, PI_ERROR, "Invalid Length", EXPFILL }},
+        { &ei_llrp_req_conf, { "llrp.req_conf.invalid", PI_PROTOCOL, PI_ERROR, "Unrecognized configuration request", EXPFILL }},
     };
 
     expert_module_t* expert_llrp;

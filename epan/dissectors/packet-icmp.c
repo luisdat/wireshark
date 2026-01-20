@@ -30,13 +30,13 @@
 #include <epan/to_str.h>
 #include <epan/conversation.h>
 #include <epan/tap.h>
-#include <epan/ipproto.h>
 #include <epan/capture_dissectors.h>
 #include <epan/proto_data.h>
-#include <epan/afn.h>
-
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include <wsutil/pint.h>
 
+#include "packet-iana-data.h"
 #include "packet-ip.h"
 #include "packet-icmp.h"
 
@@ -61,14 +61,16 @@ typedef struct _icmp_conv_info_t {
 
 static icmp_transaction_t *transaction_start(packet_info * pinfo,
 					     proto_tree * tree,
-					     guint32 * key);
+					     uint32_t * key);
 static icmp_transaction_t *transaction_end(packet_info * pinfo,
 					   proto_tree * tree,
-					   guint32 * key);
+					   uint32_t * key);
 
 /* Decode the end of the ICMP payload as ICMP MPLS extensions
 if the packet in the payload has more than 128 bytes */
-static bool favor_icmp_mpls_ext = false;
+static bool favor_icmp_mpls_ext;
+/* Never try to interpret ICMP echo data as timestamp */
+static bool never_timestamp;
 
 static int proto_icmp;
 
@@ -96,6 +98,7 @@ static int hf_icmp_transmit_timestamp;
 static int hf_icmp_address_mask;
 static int hf_icmp_length;
 static int hf_icmp_length_original_datagram;
+static int hf_icmp_data;
 
 /* Mobile ip */
 static int hf_icmp_mip_type;
@@ -145,9 +148,9 @@ static int hf_icmp_int_info_name_length;
 static int hf_icmp_int_info_name_string;
 static int hf_icmp_int_info_role;
 static int hf_icmp_int_info_reserved;
-static gint ett_icmp_interface_info_object;
-static gint ett_icmp_interface_ipaddr;
-static gint ett_icmp_interface_name;
+static int ett_icmp_interface_info_object;
+static int ett_icmp_interface_ipaddr;
+static int ett_icmp_interface_name;
 /* MPLS extension object*/
 static int hf_icmp_mpls_label;
 static int hf_icmp_mpls_exp;
@@ -155,17 +158,19 @@ static int hf_icmp_mpls_s;
 static int hf_icmp_mpls_ttl;
 static int hf_icmp_mpls_data;
 
-static gint ett_icmp;
-static gint ett_icmp_mip;
-static gint ett_icmp_mip_flags;
+static int ett_icmp;
+static int ett_icmp_data;
+static int ett_icmp_mip;
+static int ett_icmp_mip_flags;
 
 /* extensions */
-static gint ett_icmp_ext;
-static gint ett_icmp_ext_object;
+static int ett_icmp_ext;
+static int ett_icmp_ext_object;
 
 /* MPLS extensions */
-static gint ett_icmp_mpls_stack_object;
+static int ett_icmp_mpls_stack_object;
 
+static expert_field ei_icmp_type_error;
 static expert_field ei_icmp_type_deprecated;
 static expert_field ei_icmp_resp_not_found;
 static expert_field ei_icmp_checksum;
@@ -431,10 +436,10 @@ static const value_string interface_role_str[] = {
  * rather than ICMP6 in the next header field.
  */
 #define ADDR_IS_MULTICAST(addr) \
-	(((addr)->type == AT_IPv4) && is_a_multicast_addr(pntoh32((addr)->data)))
+	(((addr)->type == AT_IPv4) && is_a_multicast_addr(pntohu32((addr)->data)))
 
 #define ADDR_IS_BROADCAST(addr) \
-	(((addr)->type == AT_IPv4) && is_a_broadcast_addr(pntoh32((addr)->data)))
+	(((addr)->type == AT_IPv4) && is_a_broadcast_addr(pntohu32((addr)->data)))
 
 #define ADDR_IS_NOT_UNICAST(addr) \
 	(ADDR_IS_MULTICAST(addr) || ADDR_IS_BROADCAST(addr))
@@ -471,7 +476,7 @@ icmp_seq_analysis_packet( void *ptr, packet_info *pinfo, epan_dissect_t *edt _U_
 
 	sai->line_style = 1;
 	sai->conv_num = 0;
-	sai->display = TRUE;
+	sai->display = true;
 
 	g_queue_push_tail(sainfo->items, sai);
 
@@ -499,14 +504,14 @@ static conversation_t *_find_or_create_conversation(packet_info * pinfo)
  * Dissect the mobile ip advertisement extensions.
  */
 static void
-dissect_mip_extensions(tvbuff_t * tvb, int offset, proto_tree * tree)
+dissect_mip_extensions(tvbuff_t * tvb, packet_info* pinfo, int offset, proto_tree * tree)
 {
-	guint8 type;
-	guint8 length;
+	uint8_t type;
+	uint8_t length;
 	proto_item *ti;
 	proto_tree *mip_tree = NULL;
-	gint numCOAs;
-	gint i;
+	int numCOAs;
+	int i;
 	static int * const flags[] = {
 		&hf_icmp_mip_r,
 		&hf_icmp_mip_b,
@@ -527,16 +532,16 @@ dissect_mip_extensions(tvbuff_t * tvb, int offset, proto_tree * tree)
 		return;
 
 	while (tvb_reported_length_remaining(tvb, offset) > 0) {
-		type = tvb_get_guint8(tvb, offset + 0);
+		type = tvb_get_uint8(tvb, offset + 0);
 		if (type) {
-			length = tvb_get_guint8(tvb, offset + 1);
+			length = tvb_get_uint8(tvb, offset + 1);
 		} else {
 			length = 0;
 		}
 
 		mip_tree = proto_tree_add_subtree_format(tree, tvb, offset,
 								1, ett_icmp_mip, &ti,
-								"Ext: %s", val_to_str(type,
+								"Ext: %s", val_to_str(pinfo->pool, type,
 								mip_extensions,
 								"Unknown ext %u"));
 		proto_tree_add_item(mip_tree, hf_icmp_mip_type,
@@ -619,16 +624,16 @@ dissect_mip_extensions(tvbuff_t * tvb, int offset, proto_tree * tree)
 
 }				/* dissect_mip_extensions */
 
-static gboolean
-dissect_mpls_extended_payload_object(tvbuff_t * tvb, gint offset,
+static bool
+dissect_mpls_extended_payload_object(tvbuff_t * tvb, int offset,
 				     proto_tree * ext_object_tree,
 				     proto_item * tf_object)
 {
 
-	guint16 obj_length, obj_trunc_length;
-	gboolean unknown_object;
-	guint8 c_type;
-	unknown_object = FALSE;
+	uint16_t obj_length, obj_trunc_length;
+	bool unknown_object;
+	uint8_t c_type;
+	unknown_object = false;
 	/* Object length */
 	obj_length = tvb_get_ntohs(tvb, offset);
 
@@ -636,7 +641,7 @@ dissect_mpls_extended_payload_object(tvbuff_t * tvb, gint offset,
 	    MIN(obj_length, tvb_reported_length_remaining(tvb, offset));
 
 	/* C-Type */
-	c_type = tvb_get_guint8(tvb, offset + 3);
+	c_type = tvb_get_uint8(tvb, offset + 3);
 	proto_tree_add_uint(ext_object_tree, hf_icmp_ext_c_type, tvb,
 			    offset + 3, 1, c_type);
 
@@ -654,27 +659,27 @@ dissect_mpls_extended_payload_object(tvbuff_t * tvb, gint offset,
 		}
 		break;
 	default:
-		unknown_object = TRUE;
+		unknown_object = true;
 	}			/* end switch c_type */
 	return unknown_object;
 }
 
-static gboolean
-dissect_mpls_stack_entry_object(tvbuff_t * tvb, gint offset,
+static bool
+dissect_mpls_stack_entry_object(tvbuff_t * tvb, int offset,
 				proto_tree * ext_object_tree,
 				proto_item * tf_object)
 {
 
 	proto_item *tf_entry;
 	proto_tree *mpls_stack_object_tree;
-	guint16 obj_length, obj_trunc_length;
-	gint obj_end_offset;
-	guint label;
-	guint8 ttl;
-	guint8 tmp;
-	gboolean unknown_object;
-	guint8 c_type;
-	unknown_object = FALSE;
+	uint16_t obj_length, obj_trunc_length;
+	int obj_end_offset;
+	unsigned label;
+	uint8_t ttl;
+	uint8_t tmp;
+	bool unknown_object;
+	uint8_t c_type;
+	unknown_object = false;
 	/* Object length */
 	obj_length = tvb_get_ntohs(tvb, offset);
 
@@ -682,7 +687,7 @@ dissect_mpls_stack_entry_object(tvbuff_t * tvb, gint offset,
 	    MIN(obj_length, tvb_reported_length_remaining(tvb, offset));
 	obj_end_offset = offset + obj_trunc_length;
 	/* C-Type */
-	c_type = tvb_get_guint8(tvb, offset + 3);
+	c_type = tvb_get_uint8(tvb, offset + 3);
 	proto_tree_add_uint(ext_object_tree, hf_icmp_ext_c_type, tvb,
 			    offset + 3, 1, c_type);
 
@@ -704,8 +709,8 @@ dissect_mpls_stack_entry_object(tvbuff_t * tvb, gint offset,
 								ett_icmp_mpls_stack_object, &tf_entry, " ");
 
 			/* Label */
-			label = (guint) tvb_get_ntohs(tvb, offset);
-			tmp = tvb_get_guint8(tvb, offset + 2);
+			label = (unsigned) tvb_get_ntohs(tvb, offset);
+			tmp = tvb_get_uint8(tvb, offset + 2);
 			label = (label << 4) + (tmp >> 4);
 
 			proto_tree_add_uint(mpls_stack_object_tree,
@@ -731,7 +736,7 @@ dissect_mpls_stack_entry_object(tvbuff_t * tvb, gint offset,
 					       tmp & 0x01);
 
 			/* TTL */
-			ttl = tvb_get_guint8(tvb, offset + 3);
+			ttl = tvb_get_uint8(tvb, offset + 3);
 
 			proto_tree_add_item(mpls_stack_object_tree,
 					    hf_icmp_mpls_ttl, tvb,
@@ -750,7 +755,7 @@ dissect_mpls_stack_entry_object(tvbuff_t * tvb, gint offset,
 
 	default:
 
-		unknown_object = TRUE;
+		unknown_object = true;
 
 		break;
 	}			/* end switch c_type */
@@ -759,25 +764,25 @@ dissect_mpls_stack_entry_object(tvbuff_t * tvb, gint offset,
 }				/* end dissect_mpls_stack_entry_object */
 
 /* Dissect Interface Information Object RFC 5837*/
-static gboolean
-dissect_interface_information_object(tvbuff_t * tvb, gint offset,
+static bool
+dissect_interface_information_object(tvbuff_t * tvb, int offset,
 				     proto_tree * ext_object_tree,
 				     proto_item * tf_object)
 {
 	proto_tree *int_name_object_tree = NULL;
 	proto_tree *int_ipaddr_object_tree;
-	guint16 obj_length, obj_trunc_length;
-	gint obj_end_offset;
-	guint8 c_type;
-	gboolean unknown_object;
-	guint8 if_index_flag;
-	guint8 ipaddr_flag;
-	guint8 name_flag;
-	guint8 mtu_flag;
-	guint16 afi;
-	guint8 int_name_length = 0;
+	uint16_t obj_length, obj_trunc_length;
+	int obj_end_offset;
+	uint8_t c_type;
+	bool unknown_object;
+	uint8_t if_index_flag;
+	uint8_t ipaddr_flag;
+	uint8_t name_flag;
+	uint8_t mtu_flag;
+	uint16_t afi;
+	uint8_t int_name_length = 0;
 
-	unknown_object = FALSE;
+	unknown_object = false;
 	/* Object length */
 	obj_length = tvb_get_ntohs(tvb, offset);
 
@@ -786,12 +791,12 @@ dissect_interface_information_object(tvbuff_t * tvb, gint offset,
 	obj_end_offset = offset + obj_trunc_length;
 
 	/* C-Type */
-	c_type = tvb_get_guint8(tvb, offset + 3);
+	c_type = tvb_get_uint8(tvb, offset + 3);
 
 	proto_item_set_text(tf_object, "Interface Information Object");
 	if (tvb_reported_length_remaining(tvb, offset) < 4) {
-		/* Not enough room in the packet ! return unknown_object = TRUE */
-		return TRUE;
+		/* Not enough room in the packet ! return unknown_object = true */
+		return true;
 	}
 
 	if_index_flag = (c_type & INT_INFO_IFINDEX) >> 3;
@@ -820,7 +825,7 @@ dissect_interface_information_object(tvbuff_t * tvb, gint offset,
 
 	/*if ifIndex is set, next 32 bits are ifIndex */
 	if (if_index_flag) {
-		proto_tree_add_item(ext_object_tree, hf_icmp_int_info_index, tvb, offset, 4, ENC_NA);
+		proto_tree_add_item(ext_object_tree, hf_icmp_int_info_index, tvb, offset, 4, ENC_BIG_ENDIAN);
 		offset += 4;
 	}
 
@@ -856,7 +861,7 @@ dissect_interface_information_object(tvbuff_t * tvb, gint offset,
 			break;
 			default: /* Unknown ?! */
 			proto_tree_add_item(int_ipaddr_object_tree, hf_icmp_int_info_ipunknown, tvb, offset, offset - obj_end_offset, ENC_NA);
-			return FALSE;
+			return false;
 		}
 
 	}
@@ -864,7 +869,7 @@ dissect_interface_information_object(tvbuff_t * tvb, gint offset,
 	/* Interface Name Sub Object */
 	if (name_flag) {
 		if (obj_end_offset >= offset + 1) {
-			int_name_length = tvb_get_guint8(tvb, offset);
+			int_name_length = tvb_get_uint8(tvb, offset);
 			int_name_object_tree = proto_tree_add_subtree(ext_object_tree, tvb,
 						 offset, int_name_length, ett_icmp_interface_name, NULL,
 						 "Interface Name Sub-Object");
@@ -879,7 +884,7 @@ dissect_interface_information_object(tvbuff_t * tvb, gint offset,
 	}
 	/* MTU Sub Object */
 	if (mtu_flag) {
-		proto_tree_add_item(ext_object_tree, hf_icmp_int_info_mtu, tvb, offset, 4, ENC_NA);
+		proto_tree_add_item(ext_object_tree, hf_icmp_int_info_mtu, tvb, offset, 4, ENC_BIG_ENDIAN);
 	}
 
 
@@ -888,33 +893,33 @@ dissect_interface_information_object(tvbuff_t * tvb, gint offset,
 }				/*end dissect_interface_information_object */
 
 /* Dissect Interface Identification Object RFC 8335*/
-static gboolean
-dissect_interface_identification_object(tvbuff_t * tvb, gint offset,
+static bool
+dissect_interface_identification_object(tvbuff_t * tvb, packet_info* pinfo, int offset,
 				     proto_tree * ext_object_tree,
 				     proto_item * tf_object)
 {
 	proto_item *ti;
-	guint16 obj_length;
-	guint8 c_type;
-	gboolean unknown_object;
-	guint32 afi;
-	guint32 addr_length;
+	uint16_t obj_length;
+	uint8_t c_type;
+	bool unknown_object;
+	uint32_t afi;
+	uint32_t addr_length;
 
-	unknown_object = FALSE;
+	unknown_object = false;
 	/* Object length */
 	obj_length = tvb_get_ntohs(tvb, offset);
 
 	/* C-Type */
-	c_type = tvb_get_guint8(tvb, offset + 3);
+	c_type = tvb_get_uint8(tvb, offset + 3);
 
 	proto_item_set_text(tf_object, "Interface Identification Object");
 	if (tvb_reported_length_remaining(tvb, offset) < 5) {
-		/* Not enough room in the packet ! return unknown_object = TRUE */
-		return TRUE;
+		/* Not enough room in the packet ! return unknown_object = true */
+		return true;
 	}
 
 	ti = proto_tree_add_uint(ext_object_tree, hf_icmp_ext_c_type, tvb, offset + 3, 1, c_type);
-	proto_item_append_text(ti, " (%s)", val_to_str(c_type, ext_echo_ident_str, "Unknown C-Type %u"));
+	proto_item_append_text(ti, " (%s)", val_to_str(pinfo->pool, c_type, ext_echo_ident_str, "Unknown C-Type %u"));
 	offset += 4;
 
 	switch(c_type) {
@@ -922,7 +927,7 @@ dissect_interface_identification_object(tvbuff_t * tvb, gint offset,
 			proto_tree_add_item(ext_object_tree, hf_icmp_int_ident_name_string, tvb, offset, obj_length - 4, ENC_ASCII);
 			break;
 		case ICMP_EXT_ECHO_IDENT_INDEX:
-			proto_tree_add_item(ext_object_tree, hf_icmp_int_ident_index, tvb, offset, 4, ENC_NA);
+			proto_tree_add_item(ext_object_tree, hf_icmp_int_ident_index, tvb, offset, 4, ENC_BIG_ENDIAN);
 			break;
 		case ICMP_EXT_ECHO_IDENT_ADDRESS:
 			proto_tree_add_item_ret_uint(ext_object_tree, hf_icmp_int_ident_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
@@ -932,14 +937,14 @@ dissect_interface_identification_object(tvbuff_t * tvb, gint offset,
 			proto_tree_add_item(ext_object_tree, hf_icmp_int_ident_reserved, tvb, offset, 1, ENC_NA);
 			offset += 1;
 			switch(afi){
-				case AFNUM_INET: /* IPv4 */
+				case AFNUM_IP: /* IPv4 */
 					while(addr_length >= 4 && tvb_reported_length_remaining(tvb, offset) >= 4) {
 						proto_tree_add_item(ext_object_tree, hf_icmp_int_ident_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
 						offset += 4;
 						addr_length -= 4;
 					}
 					break;
-				case AFNUM_INET6: /* IPv6 */
+				case AFNUM_IP6: /* IPv6 */
 					while(addr_length >= 16 && tvb_reported_length_remaining(tvb, offset) >= 16) {
 						proto_tree_add_item(ext_object_tree, hf_icmp_int_ident_ipv6, tvb, offset, 16, ENC_NA);
 						offset += 16;
@@ -959,16 +964,16 @@ static int
 dissect_icmp_extension(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data _U_)
 {
 	int offset = 0;
-	guint8 version;
-	guint8 class_num;
-	guint8 c_type;
-	guint16 obj_length, obj_trunc_length, checksum;
+	uint8_t version;
+	uint8_t class_num;
+	uint8_t c_type;
+	uint16_t obj_length, obj_trunc_length, checksum;
 	proto_item *ti, *tf_object;
 	proto_tree *ext_tree, *ext_object_tree;
-	gint obj_end_offset;
-	guint reported_length;
-	gboolean unknown_object;
-	guint8 int_info_obj_count;
+	int obj_end_offset;
+	unsigned reported_length;
+	bool unknown_object;
+	uint8_t int_info_obj_count;
 
 	int_info_obj_count = 0;
 
@@ -986,7 +991,7 @@ dissect_icmp_extension(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, v
 	ext_tree = proto_item_add_subtree(ti, ett_icmp_ext);
 
 	/* Version */
-	version = hi_nibble(tvb_get_guint8(tvb, offset));
+	version = hi_nibble(tvb_get_uint8(tvb, offset));
 	proto_tree_add_uint(ext_tree, hf_icmp_ext_version, tvb, offset, 1,
 			    version);
 
@@ -1035,12 +1040,12 @@ dissect_icmp_extension(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, v
 				    tvb, offset, 2, obj_length);
 
 		/* Class */
-		class_num = tvb_get_guint8(tvb, offset + 2);
+		class_num = tvb_get_uint8(tvb, offset + 2);
 		proto_tree_add_item(ext_object_tree, hf_icmp_ext_class,
 				    tvb, offset + 2, 1, ENC_BIG_ENDIAN);
 
 		/* C-Type */
-		c_type = tvb_get_guint8(tvb, offset + 3);
+		c_type = tvb_get_uint8(tvb, offset + 3);
 
 		if (obj_length < 4 /* Object header */ ) {
 			/* Thanks doc/README.developer :)) */
@@ -1078,20 +1083,20 @@ dissect_icmp_extension(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, v
 			break;
 		case INTERFACE_IDENTIFICATION_OBJECT_CLASS:
 			unknown_object =
-			    dissect_interface_identification_object(tvb,
+			    dissect_interface_identification_object(tvb, pinfo,
 								 offset,
 								 ext_object_tree,
 								 tf_object);
 			break;
 		default:
 
-			unknown_object = TRUE;
+			unknown_object = true;
 
 			break;
 		}		/* end switch class_num */
 
 		/* The switches couldn't decode the object */
-		if (unknown_object == TRUE) {
+		if (unknown_object == true) {
 			proto_tree_add_item(ext_object_tree, hf_icmp_ext_c_type, tvb, offset + 3, 1, ENC_BIG_ENDIAN);
 
 			/* Skip the object header */
@@ -1134,7 +1139,7 @@ dissect_icmp_extension(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, v
 */
 static icmp_transaction_t *transaction_start(packet_info * pinfo,
 					     proto_tree * tree,
-					     guint32 * key)
+					     uint32_t * key)
 {
 	conversation_t *conversation;
 	icmp_conv_info_t *icmp_info;
@@ -1171,7 +1176,7 @@ static icmp_transaction_t *transaction_start(packet_info * pinfo,
 				       (void *) icmp_trans);
 	} else {
 		/* Already visited this frame */
-		guint32 frame_num = pinfo->num;
+		uint32_t frame_num = pinfo->num;
 
 		icmp_key[0].length = 3;
 		icmp_key[0].key = key;
@@ -1194,12 +1199,11 @@ static icmp_transaction_t *transaction_start(packet_info * pinfo,
 						 ENC_NA);
 			proto_item_set_generated(it);
 
-			col_append_fstr(pinfo->cinfo, COL_INFO, " (no response found!)");
+			col_append_str(pinfo->cinfo, COL_INFO, " (no response found!)");
 
 			/* Expert info.  TODO: add to _icmp_transaction_t type and sequence number
 			   so can report here (and in taps) */
-			expert_add_info_format(pinfo, it, &ei_icmp_resp_not_found,
-					       "No response seen to ICMP request");
+			expert_add_info(pinfo, it, &ei_icmp_resp_not_found);
 		}
 
 		return NULL;
@@ -1222,7 +1226,7 @@ static icmp_transaction_t *transaction_start(packet_info * pinfo,
 /* ======================================================================= */
 static icmp_transaction_t *transaction_end(packet_info * pinfo,
 					   proto_tree * tree,
-					   guint32 * key)
+					   uint32_t * key)
 {
 	conversation_t *conversation;
 	icmp_conv_info_t *icmp_info;
@@ -1245,7 +1249,7 @@ static icmp_transaction_t *transaction_end(packet_info * pinfo,
 	}
 
 	if (!PINFO_FD_VISITED(pinfo)) {
-		guint32 frame_num;
+		uint32_t frame_num;
 
 		icmp_key[0].length = 3;
 		icmp_key[0].key = key;
@@ -1283,7 +1287,7 @@ static icmp_transaction_t *transaction_end(packet_info * pinfo,
 				       (void *) icmp_trans);
 	} else {
 		/* Already visited this frame */
-		guint32 frame_num = pinfo->num;
+		uint32_t frame_num = pinfo->num;
 
 		icmp_key[0].length = 3;
 		icmp_key[0].key = key;
@@ -1415,10 +1419,10 @@ get_best_guess_timestamp(tvbuff_t *tvb, int offset, nstime_t *comp_ts, nstime_t 
 #define MSPERDAY            86400000
 
 /* ======================================================================= */
-static guint32
-get_best_guess_mstimeofday(tvbuff_t * tvb, gint offset, guint32 comp_ts)
+static uint32_t
+get_best_guess_mstimeofday(tvbuff_t * tvb, int offset, uint32_t comp_ts)
 {
-	guint32 be_ts, le_ts;
+	uint32_t be_ts, le_ts;
 
 	/* Account for the special case from RFC 792 as best we can by clearing
 	 * the msb.  Ref: [Page 16] of https://tools.ietf.org/html/rfc792:
@@ -1440,8 +1444,8 @@ get_best_guess_mstimeofday(tvbuff_t * tvb, gint offset, guint32 comp_ts)
 	}
 
 	if (be_ts < MSPERDAY && le_ts < MSPERDAY) {
-		guint32 saved_be_ts = be_ts;
-		guint32 saved_le_ts = le_ts;
+		uint32_t saved_be_ts = be_ts;
+		uint32_t saved_le_ts = le_ts;
 
 		/* Is this a rollover to a new day, clocks not synchronized, different
 		 * timezones between originate and receive/transmit, .. what??? */
@@ -1466,11 +1470,11 @@ get_best_guess_mstimeofday(tvbuff_t * tvb, gint offset, guint32 comp_ts)
 	return le_ts;
 }				/* get_best_guess_mstimeofday() */
 
-static gboolean
-capture_icmp(const guchar *pd _U_, int offset _U_, int len _U_, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_)
+static bool
+capture_icmp(const unsigned char *pd _U_, int offset _U_, int len _U_, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_)
 {
 	capture_dissector_increment_count(cpinfo, proto_icmp);
-	return TRUE;
+	return true;
 }
 
 /*
@@ -1484,17 +1488,17 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 {
 	proto_tree *icmp_tree = NULL;
 	proto_item *ti, *checksum_item;
-	guint8 icmp_type;
-	guint8 icmp_code;
-	guint8 icmp_original_dgram_length;
-	guint captured_length, reported_length;
-	const gchar *type_str, *code_str;
-	guint32 num_addrs = 0;
-	guint32 addr_entry_size = 0;
-	guint32 i;
-	gboolean save_in_error_pkt;
+	uint8_t icmp_type;
+	uint8_t icmp_code;
+	uint8_t icmp_original_dgram_length;
+	unsigned captured_length, reported_length;
+	const char *type_str, *code_str;
+	uint32_t num_addrs = 0;
+	uint32_t addr_entry_size = 0;
+	uint32_t i;
+	bool save_in_error_pkt;
 	tvbuff_t *next_tvb;
-	guint32 conv_key[3];
+	uint32_t conv_key[3];
 	icmp_transaction_t *trans = NULL;
 	nstime_t ts, time_relative;
 	ws_ip4 *iph = WS_IP4_PTR(data);
@@ -1503,11 +1507,11 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	/* To do: check for runts, errs, etc. */
-	icmp_type = tvb_get_guint8(tvb, 0);
-	icmp_code = tvb_get_guint8(tvb, 1);
+	icmp_type = tvb_get_uint8(tvb, 0);
+	icmp_code = tvb_get_uint8(tvb, 1);
 	/* RFC 4884: Length of original datagram carried in the ICMP payload,
 	 * or 0 otherwise. Length in terms of 32 bit words.*/
-	icmp_original_dgram_length = tvb_get_guint8(tvb, 5);
+	icmp_original_dgram_length = tvb_get_uint8(tvb, 5);
 
 	type_str =
 	    val_to_str_const(icmp_type, icmp_type_str,
@@ -1516,17 +1520,17 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 	switch (icmp_type) {
 	case ICMP_UNREACH:
 		code_str =
-		    val_to_str(icmp_code, unreach_code_str,
+		    val_to_str(pinfo->pool, icmp_code, unreach_code_str,
 			       "Unknown code: %u");
 		break;
 	case ICMP_REDIRECT:
 		code_str =
-		    val_to_str(icmp_code, redir_code_str,
+		    val_to_str(pinfo->pool, icmp_code, redir_code_str,
 			       "Unknown code: %u");
 		break;
 	case ICMP_ALTHOST:
 		code_str =
-		    val_to_str(icmp_code, alt_host_code_str,
+		    val_to_str(pinfo->pool, icmp_code, alt_host_code_str,
 			       "Unknown code: %u");
 		icmp_original_dgram_length = 0;
 		break;
@@ -1538,32 +1542,32 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 			break;
 		}		/* switch icmp_code */
 		code_str =
-		    val_to_str(icmp_code, rtradvert_code_str,
+		    val_to_str(pinfo->pool, icmp_code, rtradvert_code_str,
 			       "Unknown code: %u");
 		break;
 	case ICMP_TIMXCEED:
 		code_str =
-		    val_to_str(icmp_code, ttl_code_str,
+		    val_to_str(pinfo->pool, icmp_code, ttl_code_str,
 			       "Unknown code: %u");
 		break;
 	case ICMP_PARAMPROB:
 		code_str =
-		    val_to_str(icmp_code, par_code_str,
+		    val_to_str(pinfo->pool, icmp_code, par_code_str,
 			       "Unknown code: %u");
 		break;
 	case ICMP_PHOTURIS:
 		code_str =
-		    val_to_str(icmp_code, photuris_code_str,
+		    val_to_str(pinfo->pool, icmp_code, photuris_code_str,
 			       "Unknown code: %u");
 		break;
 	case ICMP_EXTECHO:
 		code_str =
-		    val_to_str(icmp_code, ext_echo_req_code_str,
+		    val_to_str(pinfo->pool, icmp_code, ext_echo_req_code_str,
 			       "Unknown code: %u");
 		break;
 	case ICMP_EXTECHOREPLY:
 		code_str =
-		    val_to_str(icmp_code, ext_echo_reply_code_str,
+		    val_to_str(pinfo->pool, icmp_code, ext_echo_reply_code_str,
 			       "Unknown code: %u");
 		break;
 	default:
@@ -1584,8 +1588,13 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 
 	ti = proto_tree_add_item(icmp_tree, hf_icmp_type, tvb, 0, 1,
 				 ENC_BIG_ENDIAN);
-	proto_item_append_text(ti, " (%s)", type_str);
-        switch (icmp_type) {
+
+	switch (icmp_type) {
+	case ICMP_UNREACH:
+	case ICMP_REDIRECT:
+	case ICMP_TIMXCEED:
+		expert_add_info(pinfo, ti, &ei_icmp_type_error);
+		break;
 	case ICMP_SOURCEQUENCH:
 	case ICMP_ALTHOST:
 	case ICMP_IREQ:
@@ -1619,8 +1628,21 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 		/* The packet isn't part of a fragmented datagram, isn't
 		   truncated, and isn't the payload of an error packet, so we can checksum
 		   it. */
-		proto_tree_add_checksum(icmp_tree, tvb, 2, hf_icmp_checksum, hf_icmp_checksum_status, &ei_icmp_checksum, pinfo, ip_checksum_tvb(tvb, 0, reported_length),
-								ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY|PROTO_CHECKSUM_IN_CKSUM);
+		/* Since ICMP, unlike most protocols that use the Internet checksum,
+		 * can be all zeros except for the checksum, don't verify the checksum
+		 * by including the checksum field itself as RFCs 1071 and 1624
+		 * recommend, but compute it and compare against the header checksum
+		 * field. This also means that we won't accept 0xffff where 0x0000
+		 * is correct (Postel's Law is less appropriate here). We'll use
+		 * the standard "checksum incorrect" expert info warning for now
+		 * (we could have special handling like TCP), but handle it in the
+		 * request-reply matching specially. (See #5770, #16334). */
+		vec_t cksum_vec[2];
+		SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, 2);
+		SET_CKSUM_VEC_TVB(cksum_vec[1], tvb, 4, tvb_reported_length_remaining(tvb, 4));
+		uint16_t computed_cksum = g_ntohs(in_cksum(&cksum_vec[0], 2));
+		proto_tree_add_checksum(icmp_tree, tvb, 2, hf_icmp_checksum, hf_icmp_checksum_status, &ei_icmp_checksum, pinfo, computed_cksum,
+								ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
 	} else {
 		checksum_item = proto_tree_add_checksum(icmp_tree, tvb, 2, hf_icmp_checksum, hf_icmp_checksum_status, &ei_icmp_checksum, pinfo, 0,
 								ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
@@ -1739,7 +1761,7 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 		   that are the payload of error packets differently from
 		   "real" packets. */
 		save_in_error_pkt = pinfo->flags.in_error_pkt;
-		pinfo->flags.in_error_pkt = TRUE;
+		pinfo->flags.in_error_pkt = true;
 
 		/* Decode the IP header and first 64 bits of data from the
 		   original datagram. */
@@ -1753,14 +1775,14 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 		if (icmp_type == ICMP_REDIRECT) {
 			/* No icmp_original_dgram_length is available for redirect message,
 			 * we expect a max of Internet Header + 64 bits of Original Data Datagram */
-			set_actual_length(next_tvb, ((tvb_get_guint8(tvb, 8) & 0x0f) * 4) + 8);
+			set_actual_length(next_tvb, ((tvb_get_uint8(tvb, 8) & 0x0f) * 4) + 8);
 		} else if (icmp_original_dgram_length
 		    && (tvb_reported_length(tvb) >
-			(guint) (8 + icmp_original_dgram_length * 4))
+			(unsigned) (8 + icmp_original_dgram_length * 4))
 		    && (tvb_get_ntohs(tvb, 8 + 2) >
-			(guint) icmp_original_dgram_length * 4)) {
+			(unsigned) icmp_original_dgram_length * 4)) {
 			set_actual_length(next_tvb,
-					  ((tvb_get_guint8(tvb, 8) & 0x0f) + icmp_original_dgram_length) * 4);
+					  ((tvb_get_uint8(tvb, 8) & 0x0f) + icmp_original_dgram_length) * 4);
 		} else {
 			/* There is a collision between RFC 1812 and draft-ietf-mpls-icmp-02.
 			   We don't know how to decode the 128th and following bytes of the ICMP payload.
@@ -1798,14 +1820,14 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 		if (icmp_type == ICMP_ECHOREPLY) {
 			if (!pinfo->flags.in_error_pkt) {
 				conv_key[0] =
-				    (guint32) tvb_get_ntohs(tvb, 2);
+				    (uint32_t) tvb_get_ntohs(tvb, 2);
 				if (conv_key[0] == 0xffff) {
 					conv_key[0] = 0;
 				}
 				if (pinfo->flags.in_gre_pkt && prefs.strict_conversation_tracking_heuristics)
 					conv_key[0] |= 0x00010000;	/* set a bit for "in GRE" */
 				conv_key[1] =
-				    ((guint32) tvb_get_ntohs(tvb, 4) << 16) |
+				    ((uint32_t) tvb_get_ntohs(tvb, 4) << 16) |
 				     tvb_get_ntohs(tvb, 6);
 				conv_key[2] = prefs.strict_conversation_tracking_heuristics ? pinfo->vlan_id : 0;
 				trans =
@@ -1814,18 +1836,18 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 			}
 		} else {
 			if (!pinfo->flags.in_error_pkt) {
-				guint16 tmp[2];
+				uint16_t tmp[2];
 
 				tmp[0] = ~tvb_get_ntohs(tvb, 2);
 				tmp[1] = ~0x0800;	/* The difference between echo request & reply */
 				conv_key[0] =
-				    ip_checksum((guint8 *) & tmp,
+				    ip_checksum((uint8_t *) & tmp,
 						sizeof(tmp));
 				if (pinfo->flags.in_gre_pkt && prefs.strict_conversation_tracking_heuristics) {
 					conv_key[0] |= 0x00010000;	/* set a bit for "in GRE" */
 				}
 				conv_key[1] =
-				    ((guint32) tvb_get_ntohs(tvb, 4) << 16) |
+				    ((uint32_t) tvb_get_ntohs(tvb, 4) << 16) |
 				     tvb_get_ntohs(tvb, 6);
 				conv_key[2] = prefs.strict_conversation_tracking_heuristics ? pinfo->vlan_id : 0;
 				trans =
@@ -1839,34 +1861,44 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 		 * malformed packets as we try to access data that isn't there. */
 		if (tvb_captured_length_remaining(tvb, 8) < 8) {
 			if (tvb_captured_length_remaining(tvb, 8) > 0) {
-				call_data_dissector(tvb_new_subset_remaining
-					       (tvb, 8), pinfo, icmp_tree);
+				heur_dtbl_entry_t *hdtbl_entry;
+				next_tvb = tvb_new_subset_remaining(tvb, 8);
+				if (!dissector_try_heuristic(icmp_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL)) {
+					ti = proto_tree_add_item(icmp_tree, hf_icmp_data, next_tvb, 0, -1, ENC_NA);
+					proto_item_set_hidden(ti);
+					call_data_dissector(next_tvb, pinfo, icmp_tree);
+				}
 			}
 			break;
 		}
 
 		/* Interpret the first 8 or 16 bytes of the icmp data as a timestamp
 		 * But only if it does look like it's a timestamp.
-		 *
 		 */
-		int len = get_best_guess_timestamp(tvb, 8, &pinfo->abs_ts, &ts);
+		int len = never_timestamp ? 0 : get_best_guess_timestamp(tvb, 8, &pinfo->abs_ts, &ts);
+
 		if (len) {
-			proto_tree_add_time(icmp_tree, hf_icmp_data_time,
+			ti = proto_tree_add_item(icmp_tree, hf_icmp_data, tvb, 8, -1, ENC_NA);
+			proto_tree *icmp_data_tree = proto_item_add_subtree(ti, ett_icmp_data);
+
+			proto_tree_add_time(icmp_data_tree, hf_icmp_data_time,
 					    tvb, 8, len, &ts);
 			nstime_delta(&time_relative, &pinfo->abs_ts,
 				     &ts);
-			ti = proto_tree_add_time(icmp_tree,
+			ti = proto_tree_add_time(icmp_data_tree,
 						 hf_icmp_data_time_relative,
 						 tvb, 8, len,
 						 &time_relative);
 			proto_item_set_generated(ti);
 			call_data_dissector(tvb_new_subset_remaining(tvb,
 								8 + len),
-				       pinfo, icmp_tree);
+				       pinfo, icmp_data_tree);
 		} else {
 			heur_dtbl_entry_t *hdtbl_entry;
 			next_tvb = tvb_new_subset_remaining(tvb, 8);
 			if (!dissector_try_heuristic(icmp_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL)) {
+				ti = proto_tree_add_item(icmp_tree, hf_icmp_data, next_tvb, 0, -1, ENC_NA);
+				proto_item_set_hidden(ti);
 				call_data_dissector(next_tvb, pinfo, icmp_tree);
 			}
 		}
@@ -1875,12 +1907,12 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 	case ICMP_RTRADVERT:
 		if (addr_entry_size == 2) {
 			for (i = 0; i < num_addrs; i++) {
-				proto_tree_add_item(icmp_tree, hf_icmp_router_address, tvb, 8 + (i * 8), 4, ENC_NA);
-				proto_tree_add_item(icmp_tree, hf_icmp_pref_level, tvb, 12 + (i * 8), 4, ENC_NA);
+				proto_tree_add_item(icmp_tree, hf_icmp_router_address, tvb, 8 + (i * 8), 4, ENC_BIG_ENDIAN);
+				proto_tree_add_item(icmp_tree, hf_icmp_pref_level, tvb, 12 + (i * 8), 4, ENC_BIG_ENDIAN);
 			}
 			if ((icmp_code == 0) || (icmp_code == 16)) {
 				/* Mobile-Ip */
-				dissect_mip_extensions(tvb, 8 + i * 8,
+				dissect_mip_extensions(tvb, pinfo, 8 + i * 8,
 						       icmp_tree);
 			}
 		} else {
@@ -1892,9 +1924,9 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 	case ICMP_TSTAMP:
 	case ICMP_TSTAMPREPLY:
 		{
-			guint32 frame_ts, orig_ts;
+			uint32_t frame_ts, orig_ts;
 
-			frame_ts = (guint32)(((pinfo->abs_ts.secs * 1000) +
+			frame_ts = (uint32_t)(((pinfo->abs_ts.secs * 1000) +
 				    (pinfo->abs_ts.nsecs / 1000000)) %
 			    86400000);
 
@@ -1917,6 +1949,7 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
 		break;
 
 	case ICMP_EXTECHO:
+	case ICMP_EXTECHOREPLY:
 		if (tvb_reported_length(tvb) > 8) {
 			tvbuff_t * extension_tvb = tvb_new_subset_remaining(tvb, 8);
 			dissect_icmp_extension(extension_tvb, pinfo, icmp_tree, NULL);
@@ -1942,7 +1975,7 @@ void proto_register_icmp(void)
 {
 	static hf_register_info hf[] = {
 		{&hf_icmp_type,
-		 {"Type", "icmp.type", FT_UINT8, BASE_DEC, NULL, 0x0,
+		 {"Type", "icmp.type", FT_UINT8, BASE_DEC, VALS(icmp_type_str), 0x0,
 		  NULL, HFILL}},
 
 		{&hf_icmp_code,
@@ -2239,6 +2272,11 @@ void proto_register_icmp(void)
 		  "The time between the request and the response, in ms.",
 		  HFILL}},
 
+		{&hf_icmp_data,
+		 {"ICMP Data", "icmp.data",
+		  FT_BYTES, BASE_NONE, NULL, 0x0,
+		  NULL, HFILL}},
+
 		{&hf_icmp_data_time,
 		 {"Timestamp from icmp data", "icmp.data_time",
 		  FT_ABSOLUTE_TIME,
@@ -2396,8 +2434,9 @@ void proto_register_icmp(void)
 
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_icmp,
+		&ett_icmp_data,
 		&ett_icmp_mip,
 		&ett_icmp_mip_flags,
 		/* MPLS extensions */
@@ -2411,8 +2450,9 @@ void proto_register_icmp(void)
 	};
 
 	static ei_register_info ei[] = {
+		{ &ei_icmp_type_error, { "icmp.type.error", PI_RESPONSE_CODE, PI_NOTE, "Type indicates an error", EXPFILL }},
 		{ &ei_icmp_type_deprecated, { "icmp.type.deprecated", PI_DEPRECATED, PI_NOTE, "Type is deprecated", EXPFILL }},
-		{ &ei_icmp_resp_not_found, { "icmp.resp_not_found", PI_SEQUENCE, PI_WARN, "Response not found", EXPFILL }},
+		{ &ei_icmp_resp_not_found, { "icmp.resp_not_found", PI_SEQUENCE, PI_WARN, "No response seen to ICMP request", EXPFILL }},
 		{ &ei_icmp_checksum, { "icmp.checksum_bad", PI_CHECKSUM, PI_WARN, "Bad checksum", EXPFILL }},
 		{ &ei_icmp_ext_checksum, { "icmp.ext.checksum_bad", PI_CHECKSUM, PI_WARN, "Bad checksum", EXPFILL }},
 	};
@@ -2434,6 +2474,11 @@ void proto_register_icmp(void)
 				       "Favor ICMP extensions for MPLS",
 				       "Whether the 128th and following bytes of the ICMP payload should be decoded as MPLS extensions or as a portion of the original packet",
 				       &favor_icmp_mpls_ext);
+
+	prefs_register_bool_preference(icmp_module, "never_timestamp",
+				       "Never interpret ICMP echo data bytes as timestamp",
+				       "Rather than interpreting ICMP echo data as timestamp, always treat is as raw data",
+				       &never_timestamp);
 
 	register_seq_analysis("icmp", "ICMP Flows", proto_icmp, NULL, TL_REQUIRES_COLUMNS, icmp_seq_analysis_packet);
 	icmp_handle = register_dissector("icmp", dissect_icmp, proto_icmp);

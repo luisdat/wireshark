@@ -22,6 +22,8 @@
 #include <epan/packet.h>
 #include <epan/reassemble.h>
 #include <epan/to_str.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include "packet-mctp.h"
 #include "packet-sll.h"
 
@@ -45,11 +47,11 @@ static int hf_mctp_tag_value;
 static int hf_mctp_msg_ic;
 static int hf_mctp_msg_type;
 
-static gint ett_mctp;
-static gint ett_mctp_fst;
-static gint ett_mctp_flags;
-static gint ett_mctp_tag;
-static gint ett_mctp_type;
+static int ett_mctp;
+static int ett_mctp_fst;
+static int ett_mctp_flags;
+static int ett_mctp_tag;
+static int ett_mctp_type;
 
 static const true_false_string tfs_tag_to = { "Sender", "Receiver" };
 
@@ -65,8 +67,8 @@ static int hf_mctp_reassembled_in;
 static int hf_mctp_reassembled_length;
 static int hf_mctp_reassembled_data;
 
-static gint ett_mctp_fragment;
-static gint ett_mctp_fragments;
+static int ett_mctp_fragment;
+static int ett_mctp_fragments;
 
 static const fragment_items mctp_frag_items = {
     /* Fragment subtrees */
@@ -116,11 +118,11 @@ dissect_mctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         void *data _U_)
 {
     proto_tree *mctp_tree, *fst_tree;
-    guint len, ver, type, seq, fst;
+    unsigned len, ver, type, seq, fst;
     bool save_fragmented;
     proto_item *ti, *tti;
     tvbuff_t *next_tvb;
-    guint8 tag;
+    uint8_t tag;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "MCTP");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -170,7 +172,7 @@ dissect_mctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         NULL,
     };
 
-    fst = tvb_get_guint8(tvb, 3);
+    fst = tvb_get_uint8(tvb, 3);
     tag = fst & 0x0f;
     fst_tree = proto_tree_add_subtree_format(mctp_tree, tvb, 3, 1, ett_mctp_fst,
                                       &tti, "Flags %s, seq %d, tag %s%d",
@@ -225,7 +227,7 @@ dissect_mctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree *type_tree;
         int rc;
 
-        type = tvb_get_guint8(next_tvb, 0);
+        type = tvb_get_uint8(next_tvb, 0);
         type_tree = proto_tree_add_subtree_format(mctp_tree, next_tvb, 0, 1,
                                                   ett_mctp_type,
                                                   &tti, "Type: %s (0x%x)%s",
@@ -240,12 +242,12 @@ dissect_mctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_item(type_tree, hf_mctp_msg_ic, next_tvb, 0, 1,
                             ENC_NA);
 
-        rc = dissector_try_uint_new(mctp_dissector_table, type & 0x7f,
+        rc = dissector_try_uint_with_data(mctp_dissector_table, type & 0x7f,
                                     next_tvb, pinfo, tree, true, NULL);
 
         if (!rc && !(type & 0x80)) {
             tvbuff_t *encap_tvb = tvb_new_subset_remaining(next_tvb, 1);
-            dissector_try_uint_new(mctp_encap_dissector_table, type,
+            dissector_try_uint_with_data(mctp_encap_dissector_table, type,
                                    encap_tvb, pinfo, tree, true, NULL);
         }
     }
@@ -363,7 +365,7 @@ proto_register_mctp(void)
     };
 
     /* protocol subtree */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_mctp,
         &ett_mctp_flags,
         &ett_mctp_fst,
@@ -388,7 +390,7 @@ proto_register_mctp(void)
      *    message integrity check (which is type-specific!). For example,
      *    NVMe-MI, which includes the type byte in packet specifications
      *
-     * mctp.encap-type: for procotols that are trivially encapsulated in a
+     * mctp.encap-type: for protocols that are trivially encapsulated in a
      *    MCTP message, and do not handle the type byte themselves. For
      *    example, NC-SI over MCTP, which just wraps a NC-SI packet within
      *    a MCTP message.

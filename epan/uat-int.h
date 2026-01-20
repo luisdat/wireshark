@@ -65,7 +65,7 @@ struct epan_uat {
 };
 
 WS_DLL_PUBLIC
-char* uat_get_actual_filename(uat_t* uat, bool for_writing);
+char* uat_get_actual_filename(uat_t* uat, bool for_writing, const char* app_env_var_prefix);
 
 /**
  * Clones the given record and stores it internally in the UAT. If it is
@@ -96,9 +96,18 @@ void uat_insert_record_idx(uat_t *uat, unsigned rec_idx, const void *src_record)
 
 /**
  * Removes the record with the given index from the internal record list.
+ * If the UAT has a free_cb it is called for the removed record.
  */
 WS_DLL_PUBLIC
 void uat_remove_record_idx(uat_t *uat, unsigned rec_idx);
+
+/**
+ * Removes the given number of records starting with the given index from
+ * the internal record list. If the UAT has a free_cb it is called for
+ * the removed records.
+ */
+WS_DLL_PUBLIC
+void uat_remove_record_range(uat_t *uat, unsigned rec_idx, unsigned count);
 
 /**
  * Moves the entry from the old position to the new one
@@ -118,18 +127,29 @@ void uat_clear(uat_t *uat);
  * (which must be freed using g_free).
  */
 WS_DLL_PUBLIC
-bool uat_save(uat_t *uat, char **error);
+bool uat_save(uat_t *uat, const char* app_env_var_prefix, char **error);
 
 /**
  * Loads the records for all registered UATs from file.
  */
-void uat_load_all(void);
+void uat_load_all(const char* app_env_var_prefix);
 
 /**
- * Dump given UAT record to string in form, which can be later loaded with uat_load_str().
+ * Dump given UAT record to string in form which can be later loaded with uat_load_str().
+ * XXX - In fact this only dumps a single field. To produce the format for
+ * uat_load_str(), join all the fields as CSV records, escaping and double-
+ * quoting field types other than PT_TXTMOD_HEXBYTES. Perhaps we should have
+ * a function that dumps the entire record.
  */
 WS_DLL_PUBLIC
 char *uat_fld_tostr(void *rec, uat_field_t *f);
+
+/**
+ * Dump UAT record entries to string in form which can be later loaded with uat_load_str().
+ * Returns a g_malloced string.
+ */
+WS_DLL_PUBLIC
+char *uat_record_tostr(const uat_t *uat, void *rec);
 
 /**
  * Exposes the array of valid records to the UAT consumer (dissectors), updating

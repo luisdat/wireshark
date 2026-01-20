@@ -40,7 +40,7 @@ static int hf_vmware_hb_verification_signature;
 
 static dissector_handle_t vmware_hb_handle;
 
-static gint ett_vmware_hb;
+static int ett_vmware_hb;
 
 static const value_string vmware_hb_build_number[] = {
     { 164009, "ESXi 4.0.0 GA" },
@@ -396,6 +396,30 @@ static const value_string vmware_hb_build_number[] = {
     { 22348808, "ESXi 7.0 Update 3o (Security Only)" },
     { 22348816, "ESXi 7.0 Update 3o" },
     { 22380479, "ESXi 8.0 Update 2" },
+    { 23299997, "ESXi 8.0 Update 1d" },
+    { 23305545, "ESXi 8.0 Update 2b (Security Only)" },
+    { 23305546, "ESXi 8.0 Update 2b" },
+    { 23307199, "ESXi 7.0 Update 3p" },
+    { 23794019, "ESXi 7.0 Update 3q (Security Only)" },
+    { 23794027, "ESXi 7.0 Update 3q" },
+    { 23825572, "ESXi 8.0 Update 2c" },
+    { 24022510, "ESXi 8.0 Update 3" },
+    { 24118393, "ESXi 8.0d" },
+    { 24262298, "ESXi 8.0 Update 3b (Security Only)" },
+    { 24280767, "ESXi 8.0 Update 3b" },
+    { 24364478, "ESXi Arm Edition v2.0" },
+    { 24411414, "ESXi 7.0 Update 3r" },
+    { 24414501, "ESXi 8.0 Update 3c" },
+    { 24449057, "ESXi Arm Edition v2.1" },
+    { 24569005, "ESXi 8.0e" },
+    { 24585291, "ESXi 7.0 Update 3s" },
+    { 24585300, "ESXi 8.0 Update 2d" },
+    { 24585383, "ESXi 8.0 Update 3d" },
+    { 24659227, "ESXi 8.0 Update 3e (Security Only)" },
+    { 24674464, "ESXi 8.0 Update 3e" },
+    { 24723868, "ESXi 7.0 Update 3v (Security Only)" },
+    { 24723872, "ESXi 7.0 Update 3v" },
+    { 24755229, "ESXi 9.0" },
     {0, NULL}
 };
 static value_string_ext vmware_hb_build_number_ext = VALUE_STRING_EXT_INIT(vmware_hb_build_number);
@@ -406,8 +430,8 @@ dissect_vmware_hb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 {
     proto_item *ti;
     proto_tree *vmware_hb_tree;
-    guint       offset = 0, host_key_length, ip4_length;
-    const guint8 *host_key, *ip4_str;
+    unsigned    offset = 0, host_key_length, ip4_length;
+    const uint8_t *host_key, *ip4_str;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "VMWARE-HB");
 
@@ -541,7 +565,7 @@ proto_register_vmware_hb(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_vmware_hb
     };
 

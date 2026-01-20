@@ -12,6 +12,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/tfs.h>
 #include "packet-mpeg-sect.h"
 #include "packet-mpeg-descriptor.h"
 
@@ -39,8 +40,8 @@ static int hf_dvb_sdt_running_status;
 static int hf_dvb_sdt_free_ca_mode;
 static int hf_dvb_sdt_descriptors_loop_length;
 
-static gint ett_dvb_sdt;
-static gint ett_dvb_sdt_service;
+static int ett_dvb_sdt;
+static int ett_dvb_sdt_service;
 
 #define DVB_SDT_RESERVED1_MASK                  0xC0
 #define DVB_SDT_VERSION_NUMBER_MASK             0x3E
@@ -76,9 +77,9 @@ static int
 dissect_dvb_sdt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 
-    guint       offset = 0, length = 0;
-    guint       descriptor_len;
-    guint16     svc_id;
+    unsigned    offset = 0, length = 0;
+    unsigned    descriptor_len;
+    uint16_t    svc_id;
 
     proto_item *ti;
     proto_tree *dvb_sdt_tree;
@@ -139,7 +140,7 @@ dissect_dvb_sdt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
         descriptor_len = tvb_get_ntohs(tvb, offset) & DVB_SDT_DESCRIPTORS_LOOP_LENGTH_MASK;
         offset += 2;
 
-        offset += proto_mpeg_descriptor_loop_dissect(tvb, offset, descriptor_len, dvb_sdt_service_tree);
+        offset += proto_mpeg_descriptor_loop_dissect(tvb, pinfo, offset, descriptor_len, dvb_sdt_service_tree);
     }
 
     offset += packet_mpeg_sect_crc(tvb, pinfo, dvb_sdt_tree, 0, offset);
@@ -232,7 +233,7 @@ proto_register_dvb_sdt(void)
 
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_dvb_sdt,
         &ett_dvb_sdt_service
     };

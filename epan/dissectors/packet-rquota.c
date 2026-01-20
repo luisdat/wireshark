@@ -13,6 +13,9 @@
 
 #include "config.h"
 
+#include <epan/packet.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include "packet-rpc.h"
 
 void proto_register_rquota(void);
@@ -38,8 +41,8 @@ static int hf_rquota_curfiles;
 static int hf_rquota_btimeleft;
 static int hf_rquota_ftimeleft;
 
-static gint ett_rquota;
-static gint ett_rquota_rquota;
+static int ett_rquota;
+static int ett_rquota_rquota;
 
 #define RQUOTAPROC_NULL 		0
 #define RQUOTAPROC_GETQUOTA		1
@@ -109,7 +112,7 @@ dissect_rquota(tvbuff_t *tvb, int offset, proto_tree *tree)
 static int
 dissect_getquota_result(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	gint32	status;
+	int32_t	status;
 	int offset = 0;
 
 	status = tvb_get_ntohl(tvb, offset);
@@ -125,11 +128,11 @@ dissect_getquota_result(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
 }
 
 static int
-dissect_getquota_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_getquota_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_rquota_pathp, offset, NULL);
 
 	offset = dissect_rpc_uint32(tvb, tree,
@@ -161,11 +164,11 @@ static const value_string rquota1_proc_vals[] = {
 
 
 static int
-dissect_getquota2_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_getquota2_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_rquota_pathp, offset, NULL);
 
 	offset = dissect_rpc_uint32(tvb, tree,
@@ -279,7 +282,7 @@ proto_register_rquota(void)
 
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_rquota,
 		&ett_rquota_rquota,
 	};

@@ -16,6 +16,7 @@
 #include <epan/conversation.h>
 #include <epan/to_str.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
 
 void proto_reg_handoff_ceph(void);
 void proto_register_ceph(void);
@@ -723,111 +724,111 @@ static expert_field ei_oloc_both;
 static expert_field ei_sizeillogical;
 
 /* Initialize the subtree pointers */
-static gint ett_ceph;
-static gint ett_data;
-static gint ett_str;
-static gint ett_blob;
-static gint ett_sockaddr;
-static gint ett_entityaddr;
-static gint ett_entityname;
-static gint ett_EntityName;
-static gint ett_entityinst;
-static gint ett_kv;
-static gint ett_eversion;
-static gint ett_objectlocator;
-static gint ett_pg;
-static gint ett_pg_create;
-static gint ett_filepath;
-static gint ett_mds_release;
-static gint ett_hitset_params;
-static gint ett_snapinfo;
-static gint ett_pgpool;
-static gint ett_pgpool_snap;
-static gint ett_pgpool_snapdel;
-static gint ett_pgpool_property;
-static gint ett_mon_map;
-static gint ett_mon_map_address;
-static gint ett_osd_peerstat;
-static gint ett_featureset;
-static gint ett_featureset_name;
-static gint ett_compatset;
-static gint ett_osd_superblock;
-static gint ett_osd_info;
-static gint ett_osd_xinfo;
-static gint ett_perfstat;
-static gint ett_osdstat;
-static gint ett_pg_stat;
-static gint ett_osd_map;
-static gint ett_osd_map_client;
-static gint ett_osd_map_pool;
-static gint ett_osd_map_poolname;
-static gint ett_osd_map_pgtmp;
-static gint ett_osd_map_primarytmp;
-static gint ett_osd_map_erasurecodeprofile;
-static gint ett_osd_map_osd;
-static gint ett_osd_map_blacklist;
-static gint ett_osd_map_inc;
-static gint ett_osd_map_inc_client;
-static gint ett_osd_map_inc_osd;
-static gint ett_osd_op;
-static gint ett_redirect;
-static gint ett_statcollection;
-static gint ett_paxos;
-static gint ett_msg_mon_map;
-static gint ett_msg_statfs;
-static gint ett_msg_statfsreply;
-static gint ett_msg_mon_sub;
-static gint ett_msg_mon_sub_item;
-static gint ett_msg_mon_sub_flags;
-static gint ett_msg_mon_sub_ack;
-static gint ett_msg_auth;
-static gint ett_msg_auth_supportedproto;
-static gint ett_msg_auth_cephx;
-static gint ett_msg_authreply;
-static gint ett_msg_mon_getversion;
-static gint ett_msg_mon_getversionreply;
-static gint ett_msg_mds_map;
-static gint ett_msg_client_sess;
-static gint ett_msg_client_req;
-static gint ett_msg_client_reqfwd;
-static gint ett_msg_client_reply;
-static gint ett_msg_osd_map;
-static gint ett_msg_osd_map_inc;
-static gint ett_msg_osd_map_full;
-static gint ett_msg_osd_op;
-static gint ett_msg_osd_opreply;
-static gint ett_msg_poolopreply;
-static gint ett_msg_poolop;
-static gint ett_msg_mon_cmd;
-static gint ett_msg_mon_cmd_arg;
-static gint ett_msg_mon_cmdack;
-static gint ett_msg_mon_cmdack_arg;
-static gint ett_msg_poolstats;
-static gint ett_msg_poolstatsreply;
-static gint ett_msg_poolstatsreply_stat;
-static gint ett_msg_mon_election;
-static gint ett_msg_mon_paxos;
-static gint ett_msg_mon_paxos_value;
-static gint ett_msg_mon_probe;
-static gint ett_msg_osd_ping;
-static gint ett_msg_osd_boot;
-static gint ett_msg_pgstats;
-static gint ett_msg_pgstats_pgstat;
-static gint ett_msg_osd_pg_create;
-static gint ett_msg_osd_pg_create_mkpg;
-static gint ett_msg_client_caps;
-static gint ett_msg_client_caprel;
-static gint ett_msg_client_caprel_cap;
-static gint ett_msg_timecheck;
-static gint ett_msg_timecheck_skew;
-static gint ett_msg_timecheck_latency;
-static gint ett_head;
-static gint ett_foot;
-static gint ett_connect;
-static gint ett_connect_reply;
-static gint ett_filter_data;
+static int ett_ceph;
+static int ett_data;
+static int ett_str;
+static int ett_blob;
+static int ett_sockaddr;
+static int ett_entityaddr;
+static int ett_entityname;
+static int ett_EntityName;
+static int ett_entityinst;
+static int ett_kv;
+static int ett_eversion;
+static int ett_objectlocator;
+static int ett_pg;
+static int ett_pg_create;
+static int ett_filepath;
+static int ett_mds_release;
+static int ett_hitset_params;
+static int ett_snapinfo;
+static int ett_pgpool;
+static int ett_pgpool_snap;
+static int ett_pgpool_snapdel;
+static int ett_pgpool_property;
+static int ett_mon_map;
+static int ett_mon_map_address;
+static int ett_osd_peerstat;
+static int ett_featureset;
+static int ett_featureset_name;
+static int ett_compatset;
+static int ett_osd_superblock;
+static int ett_osd_info;
+static int ett_osd_xinfo;
+static int ett_perfstat;
+static int ett_osdstat;
+static int ett_pg_stat;
+static int ett_osd_map;
+static int ett_osd_map_client;
+static int ett_osd_map_pool;
+static int ett_osd_map_poolname;
+static int ett_osd_map_pgtmp;
+static int ett_osd_map_primarytmp;
+static int ett_osd_map_erasurecodeprofile;
+static int ett_osd_map_osd;
+static int ett_osd_map_blacklist;
+static int ett_osd_map_inc;
+static int ett_osd_map_inc_client;
+static int ett_osd_map_inc_osd;
+static int ett_osd_op;
+static int ett_redirect;
+static int ett_statcollection;
+static int ett_paxos;
+static int ett_msg_mon_map;
+static int ett_msg_statfs;
+static int ett_msg_statfsreply;
+static int ett_msg_mon_sub;
+static int ett_msg_mon_sub_item;
+static int ett_msg_mon_sub_flags;
+static int ett_msg_mon_sub_ack;
+static int ett_msg_auth;
+static int ett_msg_auth_supportedproto;
+static int ett_msg_auth_cephx;
+static int ett_msg_authreply;
+static int ett_msg_mon_getversion;
+static int ett_msg_mon_getversionreply;
+static int ett_msg_mds_map;
+static int ett_msg_client_sess;
+static int ett_msg_client_req;
+static int ett_msg_client_reqfwd;
+static int ett_msg_client_reply;
+static int ett_msg_osd_map;
+static int ett_msg_osd_map_inc;
+static int ett_msg_osd_map_full;
+static int ett_msg_osd_op;
+static int ett_msg_osd_opreply;
+static int ett_msg_poolopreply;
+static int ett_msg_poolop;
+static int ett_msg_mon_cmd;
+static int ett_msg_mon_cmd_arg;
+static int ett_msg_mon_cmdack;
+static int ett_msg_mon_cmdack_arg;
+static int ett_msg_poolstats;
+static int ett_msg_poolstatsreply;
+static int ett_msg_poolstatsreply_stat;
+static int ett_msg_mon_election;
+static int ett_msg_mon_paxos;
+static int ett_msg_mon_paxos_value;
+static int ett_msg_mon_probe;
+static int ett_msg_osd_ping;
+static int ett_msg_osd_boot;
+static int ett_msg_pgstats;
+static int ett_msg_pgstats_pgstat;
+static int ett_msg_osd_pg_create;
+static int ett_msg_osd_pg_create_mkpg;
+static int ett_msg_client_caps;
+static int ett_msg_client_caprel;
+static int ett_msg_client_caprel_cap;
+static int ett_msg_timecheck;
+static int ett_msg_timecheck_skew;
+static int ett_msg_timecheck_latency;
+static int ett_head;
+static int ett_foot;
+static int ett_connect;
+static int ett_connect_reply;
+static int ett_filter_data;
 
-static const guint8 *C_BANNER = (const guint8*)"ceph v";
+static const uint8_t *C_BANNER = (const uint8_t*)"ceph v";
 
 #define C_BANNER_SIZE     9
 #define C_BANNER_SIZE_MIN 6
@@ -888,7 +889,7 @@ static const guint8 *C_BANNER = (const guint8*)"ceph v";
 #define C_PGPOOL_FLAG_FULL	       (1U << 1) /* pool is full */
 #define C_PGPOOL_FLAG_FAKE_EC_POOL     (1U << 2) /* require ReplicatedPG to act like an EC pg */
 
-/** Macros to create value_stings.
+/** Macros to create value_strings.
  *
  * These are a quick wrapper around the functions in value_string.h.  They
  * create an enum `base` with the given values, a `value_string base_strings[]`
@@ -904,30 +905,30 @@ static const guint8 *C_BANNER = (const guint8*)"ceph v";
  *		this is generally 2*bytes.
  */
 #define C_MAKE_STRINGS(base, chars) \
-	typedef gint base; \
+	typedef int base; \
 	VALUE_STRING_ENUM(base##_strings); \
 	VALUE_STRING_ARRAY(base##_strings); \
-	static const char *base##_string(base val) { \
-		return val_to_str(val, base##_strings, "Unknown (0x0"#chars"X)"); \
+	static const char *base##_string(base val, wmem_allocator_t* scope) { \
+		return val_to_str(scope, val, base##_strings, "Unknown (0x0"#chars"X)"); \
 	}
 
 #define C_MAKE_STRINGS_EXT(base, chars) \
-	typedef gint base; \
+	typedef int base; \
 	VALUE_STRING_ENUM(base##_strings); \
 	VALUE_STRING_ARRAY(base##_strings); \
 	\
 	static value_string_ext \
 	base##_strings_ext = VALUE_STRING_EXT_INIT(base##_strings); \
 	\
-	static const char *base##_string(base val) { \
-		return val_to_str_ext(val, &base##_strings_ext, "Unknown (0x0"#chars"X)"); \
+	static const char *base##_string(base val, wmem_allocator_t* scope) { \
+		return val_to_str_ext(scope, val, &base##_strings_ext, "Unknown (0x0"#chars"X)"); \
 	}
 
 #define c_inet_strings_VALUE_STRING_LIST(V) \
 	V(C_IPv4, 0x0002, "IPv4") \
 	V(C_IPv6, 0x000A, "IPv6")
 
-typedef gint c_inet;
+typedef int c_inet;
 VALUE_STRING_ENUM(c_inet_strings);
 VALUE_STRING_ARRAY(c_inet_strings);
 
@@ -949,7 +950,7 @@ VALUE_STRING_ARRAY(c_inet_strings);
 	V(C_TAG_KEEPALIVE2,	0x0E, "keepalive2")					     \
 	V(C_TAG_KEEPALIVE2_ACK, 0x0F, "keepalive2 reply")				     \
 
-typedef gint c_tag;
+typedef int c_tag;
 VALUE_STRING_ENUM(c_tag_strings);
 VALUE_STRING_ARRAY(c_tag_strings);
 static value_string_ext c_tag_strings_ext = VALUE_STRING_EXT_INIT(c_tag_strings);
@@ -1369,12 +1370,6 @@ C_MAKE_STRINGS(c_node_type, 2)
 
 VALUE_STRING_ARRAY(c_node_type_abbr_strings);
 
-static
-const char *c_node_type_abbr_string(c_node_type val)
-{
-	return val_to_str(val, c_node_type_abbr_strings, "Unknown (0x%02x)");
-}
-
 #define C_MON_SUB_FLAG_ONETIME  0x01
 
 typedef enum _c_state {
@@ -1386,7 +1381,7 @@ typedef enum _c_state {
 typedef struct _c_node_name {
 	const char *slug;
 	const char *type_str;
-	guint64 id;
+	uint64_t id;
 	c_node_type type;
 } c_entityname;
 
@@ -1395,7 +1390,7 @@ void c_node_name_init(c_entityname *d)
 {
 	d->slug	    = NULL;
 	d->type_str = NULL;
-	d->id	    = G_MAXUINT64;
+	d->id	    = UINT64_MAX;
 	d->type	    = C_NODE_TYPE_UNKNOWN;
 }
 
@@ -1403,7 +1398,7 @@ typedef struct _c_node {
 	address addr;
 	c_entityname name;
 	c_state state;
-	guint16 port;
+	uint16_t port;
 } c_node;
 
 static
@@ -1463,11 +1458,11 @@ c_conv_data *c_conv_data_new(void)
 }
 
 typedef struct _c_header {
-	guint64 seq;
-	guint64 tid;
+	uint64_t seq;
+	uint64_t tid;
 	c_msg_type type;
-	guint16 ver;
-	guint16 priority;
+	uint16_t ver;
+	uint16_t priority;
 	c_entityname src;
 } c_header;
 
@@ -1507,7 +1502,7 @@ typedef struct _c_pkt_data {
  * it was dissected initially.
  */
 static void
-c_pkt_data_init(c_pkt_data *d, packet_info *pinfo, guint off)
+c_pkt_data_init(c_pkt_data *d, packet_info *pinfo, unsigned off)
 {
 	/* Get conversation to store/retrieve connection data. */
 	d->conv = find_or_create_conversation(pinfo);
@@ -1571,7 +1566,7 @@ c_pkt_data_init(c_pkt_data *d, packet_info *pinfo, guint off)
  * This function only actually saves the state when necessary.
  */
 static
-void c_pkt_data_save(c_pkt_data *d, packet_info *pinfo, guint off)
+void c_pkt_data_save(c_pkt_data *d, packet_info *pinfo, unsigned off)
 {
 	if (!pinfo->fd->visited)
 	{
@@ -1588,7 +1583,7 @@ void c_pkt_data_save(c_pkt_data *d, packet_info *pinfo, guint off)
  * Returns true iff the packet is from the client.
  */
 static
-gboolean c_from_client(c_pkt_data *d)
+bool c_from_client(c_pkt_data *d)
 {
 	return d->src == &d->convd->client;
 }
@@ -1598,7 +1593,7 @@ gboolean c_from_client(c_pkt_data *d)
  * See c_from_client()
  */
 static
-gboolean c_from_server(c_pkt_data *d)
+bool c_from_server(c_pkt_data *d)
 {
 	return d->src == &d->convd->server;
 }
@@ -1621,12 +1616,12 @@ void c_set_type(c_pkt_data *data, const char *type)
  * The returned string has packet lifetime.
  */
 static
-char *c_format_timespec(tvbuff_t *tvb, guint off)
+char *c_format_timespec(tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
 	nstime_t t;
 	t.secs	= tvb_get_letohl(tvb, off);
 	t.nsecs = tvb_get_letohl(tvb, off+4);
-	return abs_time_to_str(wmem_packet_scope(), &t, ABSOLUTE_TIME_LOCAL, 1);
+	return abs_time_to_str(pinfo->pool, &t, ABSOLUTE_TIME_LOCAL, 1);
 }
 
 /** Format a UUID
@@ -1634,14 +1629,14 @@ char *c_format_timespec(tvbuff_t *tvb, guint off)
  * The returned string has packet lifetime.
  */
 static
-char *c_format_uuid(tvbuff_t *tvb, guint off)
+char *c_format_uuid(tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
 	e_guid_t uuid;
 	tvb_get_guid(tvb, off, &uuid, ENC_BIG_ENDIAN);
-	return guid_to_str(wmem_packet_scope(), &uuid);
+	return guid_to_str(pinfo->pool, &uuid);
 }
 
-#define C_NEEDMORE      G_MAXUINT
+#define C_NEEDMORE      UINT_MAX
 #define C_INVALID       0
 
 /*** Expert info warning functions. ***/
@@ -1658,21 +1653,21 @@ char *c_format_uuid(tvbuff_t *tvb, guint off)
  * @return True iff there was unused data.
  */
 static
-gboolean c_warn_unused(proto_tree *tree,
-		       tvbuff_t *tvb, guint start, guint end, c_pkt_data *data)
+bool c_warn_unused(proto_tree *tree,
+		       tvbuff_t *tvb, unsigned start, unsigned end, c_pkt_data *data)
 {
-	guint diff;
+	unsigned diff;
 
 	DISSECTOR_ASSERT_CMPUINT(start, <=, end);
 
 	diff = end - start;
-	if (!diff) return FALSE; /* no unused space. */
+	if (!diff) return false; /* no unused space. */
 
 	proto_tree_add_expert_format(tree, data->pinfo, &ei_unused,
 				     tvb, start, diff,
 				     "%u unused byte%s", diff, diff == 1? "":"s");
 
-	return TRUE;
+	return true;
 }
 
 /** Warn about dissection using more data then expected.
@@ -1687,21 +1682,21 @@ gboolean c_warn_unused(proto_tree *tree,
  * @return True iff there was an overrun.
  */
 static
-gboolean c_warn_overrun(proto_tree *tree,
-			tvbuff_t *tvb, guint start, guint end, c_pkt_data *data)
+bool c_warn_overrun(proto_tree *tree,
+			tvbuff_t *tvb, unsigned start, unsigned end, c_pkt_data *data)
 {
-	guint diff;
+	unsigned diff;
 
 	DISSECTOR_ASSERT_CMPUINT(start, <=, end);
 
 	diff = end - start;
-	if (!diff) return FALSE; /* no unused space. */
+	if (!diff) return false; /* no unused space. */
 
 	proto_tree_add_expert_format(tree, data->pinfo, &ei_overrun,
 				     tvb, start, diff,
 				     "%u overrun byte%s", diff, diff == 1? "":"s");
 
-	return TRUE;
+	return true;
 }
 
 /** Warn about incorrect offset.
@@ -1716,8 +1711,8 @@ gboolean c_warn_overrun(proto_tree *tree,
  * @return True iff there was a mismatch.
  */
 static
-gboolean c_warn_size(proto_tree *tree,
-		     tvbuff_t *tvb, guint act, guint exp, c_pkt_data *data)
+bool c_warn_size(proto_tree *tree,
+		     tvbuff_t *tvb, unsigned act, unsigned exp, c_pkt_data *data)
 {
 	if (act < exp) return c_warn_unused (tree, tvb, act, exp, data);
 	else	       return c_warn_overrun(tree, tvb, exp, act, data);
@@ -1736,15 +1731,15 @@ gboolean c_warn_size(proto_tree *tree,
  *	   then zero if the version is too new.	 Otherwise return zero.
  */
 static
-gshort c_warn_ver(proto_item *ti,
-		  gint act, gint min, gint max, c_pkt_data *data)
+int c_warn_ver(proto_item *ti,
+	       int act, int min, int max, c_pkt_data *data)
 {
 	DISSECTOR_ASSERT_CMPINT(min, <=, max);
 
 	if (act < min)
 	{
 		expert_add_info_format(data->pinfo, ti, &ei_ver_tooold,
-				       "Version %d is lower then the minimum "
+				       "Version %d is lower than the minimum "
 				       "supported version (%d).",
 				       act, min);
 		return -1;
@@ -1752,7 +1747,7 @@ gshort c_warn_ver(proto_item *ti,
 	if (act > max)
 	{
 		expert_add_info_format(data->pinfo, ti, &ei_ver_toonew,
-				       "Version %d is higher then the maximum "
+				       "Version %d is higher than the maximum "
 				       "supported version (%d).",
 				       act, max);
 		return 1;
@@ -1766,12 +1761,12 @@ gshort c_warn_ver(proto_item *ti,
 /** Dissect a length-delimited binary blob.
  */
 static
-guint c_dissect_blob(proto_tree *root, int hf, int hf_data, int hf_len,
-		     tvbuff_t *tvb, guint off)
+unsigned c_dissect_blob(proto_tree *root, int hf, int hf_data, int hf_len,
+		     tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint32 size;
+	uint32_t size;
 
 	size = tvb_get_letohl(tvb, off);
 
@@ -1782,7 +1777,7 @@ guint c_dissect_blob(proto_tree *root, int hf, int hf_data, int hf_len,
 	if (size)
 	{
 		proto_item_append_text(ti, ", Data: %s",
-				       tvb_bytes_to_str(wmem_packet_scope(), tvb, off+4, size));
+				       tvb_bytes_to_str(pinfo->pool, tvb, off+4, size));
 	}
 
 	proto_tree_add_item(tree, hf_len,
@@ -1800,15 +1795,15 @@ guint c_dissect_blob(proto_tree *root, int hf, int hf_data, int hf_len,
  * This is intended for data that is not yet being dissected but will be later.
  */
 static
-guint c_dissect_data(proto_tree *tree, int hf,
-		     tvbuff_t *tvb, guint off)
+unsigned c_dissect_data(proto_tree *tree, int hf,
+		     tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
-	return c_dissect_blob(tree, hf, hf_data_data, hf_data_size, tvb, off);
+	return c_dissect_blob(tree, hf, hf_data_data, hf_data_size, tvb, pinfo, off);
 }
 
 typedef struct _c_str {
 	char	*str;  /** The string data ('\0' terminated). */
-	guint32	 size; /** The number of bytes in the string. */
+	uint32_t	 size; /** The number of bytes in the string. */
 } c_str;
 
 /** Dissect a length-delimited string.
@@ -1816,15 +1811,15 @@ typedef struct _c_str {
  * If \a out is provided the string will be stored there.
  */
 static
-guint c_dissect_str(proto_tree *root, int hf, c_str *out,
-		     tvbuff_t *tvb, guint off)
+unsigned c_dissect_str(proto_tree *root, int hf, c_str *out,
+		     tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
 	proto_item *ti;
 	proto_tree *tree;
 	c_str d;
 
 	d.size = tvb_get_letohl(tvb, off);
-	d.str  = (char*)tvb_get_string_enc(wmem_packet_scope(),
+	d.str  = (char*)tvb_get_string_enc(pinfo->pool,
 					   tvb, off+4, d.size, ENC_ASCII);
 
 	ti = proto_tree_add_string(root, hf, tvb, off, 4+d.size, d.str);
@@ -1845,11 +1840,11 @@ guint c_dissect_str(proto_tree *root, int hf, c_str *out,
 #define C_SIZE_SOCKADDR_STORAGE 128
 
 typedef struct _c_sockaddr {
-	const gchar *str;      /** A string representing the entire address. */
-	const gchar *addr_str; /** A string representing the address portion. */
+	const char *str;      /** A string representing the entire address. */
+	const char *addr_str; /** A string representing the address portion. */
 
 	c_inet af;	       /** Address family. */
-	guint16 port;	       /** Network Port. */
+	uint16_t port;	       /** Network Port. */
 } c_sockaddr;
 
 /** Dissect sockaddr structure.
@@ -1857,8 +1852,8 @@ typedef struct _c_sockaddr {
  * If \a out is provided the data will be stored there.
  */
 static
-guint c_dissect_sockaddr(proto_tree *root, c_sockaddr *out,
-			 tvbuff_t *tvb, guint off)
+unsigned c_dissect_sockaddr(proto_tree *root, c_sockaddr *out,
+			 tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -1866,21 +1861,21 @@ guint c_dissect_sockaddr(proto_tree *root, c_sockaddr *out,
 
 	/*
 	struct sockaddr_storage {
-		guint16 family;
-		guint8	pad[???]; // Implementation defined.
+		uint16_t family;
+		uint8_t	pad[???]; // Implementation defined.
 	};
 	struct sockaddr_in {
-		guint16 family;
-		guint16 port;
-		guint32 addr;
-		guint8	pad[8];
+		uint16_t family;
+		uint16_t port;
+		uint32_t addr;
+		uint8_t	pad[8];
 	};
 	struct sockaddr_in6 {
-		guint16 family;
-		guint16 port;
-		guint32 flow;
-		guint8	addr[16];
-		guint32 scope;
+		uint16_t family;
+		uint16_t port;
+		uint32_t flow;
+		uint8_t	addr[16];
+		uint32_t scope;
 	};
 	*/
 
@@ -1895,14 +1890,14 @@ guint c_dissect_sockaddr(proto_tree *root, c_sockaddr *out,
 	switch (d.af) {
 	case C_IPv4:
 		d.port	   = tvb_get_ntohs(tvb, off+2);
-		d.addr_str = tvb_ip_to_str(wmem_packet_scope(), tvb, off+4);
+		d.addr_str = tvb_ip_to_str(pinfo->pool, tvb, off+4);
 
 		proto_tree_add_item(tree, hf_port, tvb, off+2, 2, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_addr_ipv4, tvb, off+4, 4, ENC_BIG_ENDIAN);
 		break;
 	case C_IPv6:
 		d.port	   = tvb_get_ntohs (tvb, off+2);
-		d.addr_str = tvb_ip6_to_str(wmem_packet_scope(), tvb, off+8);
+		d.addr_str = tvb_ip6_to_str(pinfo->pool, tvb, off+8);
 
 		proto_tree_add_item(tree, hf_port, tvb, off+2, 2, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_addr_ipv6, tvb, off+8, 16, ENC_NA);
@@ -1913,7 +1908,7 @@ guint c_dissect_sockaddr(proto_tree *root, c_sockaddr *out,
 	}
 	off += C_SIZE_SOCKADDR_STORAGE; /* Skip over sockaddr_storage. */
 
-	d.str = wmem_strdup_printf(wmem_packet_scope(), "%s:%"PRIu16,
+	d.str = wmem_strdup_printf(pinfo->pool, "%s:%"PRIu16,
 				   d.addr_str,
 				   d.port);
 	proto_item_append_text(ti, ": %s", d.str);
@@ -1932,8 +1927,8 @@ typedef struct _c_entity_addr {
 } c_entityaddr;
 
 static
-guint c_dissect_entityaddr(proto_tree *root, int hf, c_entityaddr *out,
-			   tvbuff_t *tvb, guint off)
+unsigned c_dissect_entityaddr(proto_tree *root, int hf, c_entityaddr *out,
+			   tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -1945,14 +1940,14 @@ guint c_dissect_entityaddr(proto_tree *root, int hf, c_entityaddr *out,
 	tree = proto_item_add_subtree(ti, ett_entityaddr);
 
 	d.type = (c_node_type)tvb_get_letohl(tvb, off);
-	d.type_str = c_node_type_string(d.type);
+	d.type_str = c_node_type_string(d.type, pinfo->pool);
 	proto_tree_add_item(tree, hf_node_type,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 	proto_tree_add_item(tree, hf_node_nonce,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
-	off = c_dissect_sockaddr(tree, &d.addr, tvb, off);
+	off = c_dissect_sockaddr(tree, &d.addr, tvb, pinfo, off);
 
 	proto_item_append_text(ti, ", Type: %s, Address: %s",
 			       d.type_str, d.addr.str);
@@ -1969,8 +1964,8 @@ guint c_dissect_entityaddr(proto_tree *root, int hf, c_entityaddr *out,
  * If \a out is provided the data is stored there.
  */
 static
-guint c_dissect_entityname(proto_tree *root, int hf, c_entityname *out,
-			   tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_entityname(proto_tree *root, int hf, c_entityname *out,
+			   tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	/* From ceph:/src/include/msgr.h
 	struct ceph_entity_name {
@@ -1987,8 +1982,8 @@ guint c_dissect_entityname(proto_tree *root, int hf, c_entityname *out,
 				 tvb, off, C_SIZE_ENTITY_NAME, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_entityname);
 
-	d.type	   = (c_node_type)tvb_get_guint8(tvb, off);
-	d.type_str = c_node_type_abbr_string(d.type);
+	d.type	   = (c_node_type)tvb_get_uint8(tvb, off);
+	d.type_str = val_to_str(data->pinfo->pool, d.type, c_node_type_abbr_strings, "Unknown (0x%02x)");
 	proto_tree_add_item(tree, hf_node_type,
 			    tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -1998,13 +1993,13 @@ guint c_dissect_entityname(proto_tree *root, int hf, c_entityname *out,
 			    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
-	if (d.id == G_MAXUINT64)
+	if (d.id == UINT64_MAX)
 	{
 		d.slug = d.type_str;
 	}
 	else
 	{
-		d.slug = wmem_strdup_printf(wmem_packet_scope(), "%s%"PRIu64,
+		d.slug = wmem_strdup_printf(data->pinfo->pool, "%s%"PRIu64,
 					    d.type_str,
 					    d.id);
 	}
@@ -2023,8 +2018,8 @@ typedef struct _c_entityinst {
 /** Dissect an entity_inst_t.
  */
 static
-guint c_dissect_entityinst(proto_tree *root, int hf, c_entityinst *out,
-			   tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_entityinst(proto_tree *root, int hf, c_entityinst *out,
+			   tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -2035,7 +2030,7 @@ guint c_dissect_entityinst(proto_tree *root, int hf, c_entityinst *out,
 	tree = proto_item_add_subtree(ti, ett_entityinst);
 
 	off = c_dissect_entityname(tree, hf_entityinst_name, &d.name, tvb, off, data);
-	off = c_dissect_entityaddr(tree, hf_entityinst_addr, &d.addr, tvb, off);
+	off = c_dissect_entityaddr(tree, hf_entityinst_addr, &d.addr, tvb, data->pinfo, off);
 
 	proto_item_append_text(ti, ", Name: %s, Address: %s", d.name.slug, d.addr.addr.str);
 
@@ -2052,8 +2047,8 @@ guint c_dissect_entityinst(proto_tree *root, int hf, c_entityinst *out,
  * \note This is different then c_dissect_entityname()
  */
 static
-guint c_dissect_EntityName(proto_tree *root,
-			   tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_EntityName(proto_tree *root,
+			   tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	/* EntityName from ceph:/src/common/entity_name.h */
 
@@ -2071,10 +2066,9 @@ guint c_dissect_EntityName(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	off = c_dissect_str(tree, hf_EntityName_id, &name, tvb, off);
+	off = c_dissect_str(tree, hf_EntityName_id, &name, tvb, data->pinfo, off);
 
-	proto_item_append_text(ti, ": %s.%s",
-			       c_node_type_abbr_string(type), name.str);
+	proto_item_append_text(ti, ": %s.%s", val_to_str(data->pinfo->pool, type, c_node_type_abbr_strings, "Unknown (0x%02x)"), name.str);
 
 	proto_item_set_end(ti, tvb, off);
 	return off;
@@ -2082,8 +2076,8 @@ guint c_dissect_EntityName(proto_tree *root,
 
 /** Dissect a connection features list. */
 static
-guint c_dissect_features(proto_tree *tree,
-			 tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_features(proto_tree *tree,
+			 tvbuff_t *tvb, unsigned off, c_pkt_data *data _U_)
 {
 	static int * const lowword[] = {
 		&hf_feature_uid,
@@ -2154,8 +2148,8 @@ guint c_dissect_features(proto_tree *tree,
 
 /** Dissect message flags. */
 static
-guint c_dissect_flags(proto_tree *tree,
-		      tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_flags(proto_tree *tree,
+		      tvbuff_t *tvb, unsigned off, c_pkt_data *data _U_)
 {
 	static int * const flags[] = {
 		&hf_flag_lossy,
@@ -2192,8 +2186,8 @@ guint c_dissect_flags(proto_tree *tree,
 
 /** Dissect OSD flags. */
 static
-guint c_dissect_osd_flags(proto_tree *tree,
-			  tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_osd_flags(proto_tree *tree,
+			  tvbuff_t *tvb, unsigned off, c_pkt_data *data _U_)
 {
 	static int * const flags[] = {
 		&hf_osd_flag_ack,
@@ -2229,8 +2223,8 @@ guint c_dissect_osd_flags(proto_tree *tree,
 /** Dissect a map<string,string>
  */
 static
-guint c_dissect_kv(proto_tree *root, int hf, int hf_k, int hf_v,
-		   tvbuff_t *tvb, guint off)
+unsigned c_dissect_kv(proto_tree *root, int hf, int hf_k, int hf_v,
+		   tvbuff_t *tvb, packet_info* pinfo, unsigned off)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -2239,8 +2233,8 @@ guint c_dissect_kv(proto_tree *root, int hf, int hf_k, int hf_v,
 	ti = proto_tree_add_item(root, hf, tvb, off, -1, ENC_LITTLE_ENDIAN);
 	tree = proto_item_add_subtree(ti, ett_kv);
 
-	off = c_dissect_str(tree, hf_k, &k, tvb, off);
-	off = c_dissect_str(tree, hf_v, &v, tvb, off);
+	off = c_dissect_str(tree, hf_k, &k, tvb, pinfo, off);
+	off = c_dissect_str(tree, hf_v, &v, tvb, pinfo, off);
 
 	proto_item_append_text(ti, ", %s = %s", k.str, v.str);
 	proto_item_set_end(ti, tvb, off);
@@ -2249,10 +2243,10 @@ guint c_dissect_kv(proto_tree *root, int hf, int hf_k, int hf_v,
 }
 
 typedef struct _c_encoded {
-	guint8	version; /** The version of the struct. */
-	guint8	compat;	 /** The oldest compatible version. */
-	guint32 size;	 /** The size of the struct in bytes */
-	guint	end;	 /** The end of the structure's data. */
+	uint8_t	version; /** The version of the struct. */
+	uint8_t	compat;	 /** The oldest compatible version. */
+	uint32_t size;	 /** The size of the struct in bytes */
+	unsigned	end;	 /** The end of the structure's data. */
 } c_encoded;
 
 /** Dissect and 'encoded' struct.
@@ -2263,19 +2257,20 @@ typedef struct _c_encoded {
  * @return The offset of the data.
  */
 static
-guint c_dissect_encoded(proto_tree *tree, c_encoded *enc,
-			guint8 minver, guint8 maxver,
-			tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_encoded(proto_tree *tree, c_encoded *enc,
+			uint8_t minver, uint8_t maxver,
+			tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 
 	DISSECTOR_ASSERT_HINT(enc, "enc out parameter must be non-null.");
 
-	enc->version = tvb_get_guint8(tvb, off);
+	enc->version = tvb_get_uint8(tvb, off);
 	ti = proto_tree_add_item(tree, hf_encoded_ver,
 				 tvb, off++, 1, ENC_LITTLE_ENDIAN);
+	/* XXX - should we quit if this doesn't return 0? */
 	c_warn_ver(ti, enc->version, minver, maxver, data);
-	enc->compat = tvb_get_guint8(tvb, off);
+	enc->compat = tvb_get_uint8(tvb, off);
 	proto_tree_add_item(tree, hf_encoded_compat,
 			    tvb, off++, 1, ENC_LITTLE_ENDIAN);
 
@@ -2295,13 +2290,13 @@ guint c_dissect_encoded(proto_tree *tree, c_encoded *enc,
 
 /** Dissect a eversion_t */
 static
-guint c_dissect_eversion(proto_tree *root, gint hf,
-			 tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_eversion(proto_tree *root, int hf,
+			 tvbuff_t *tvb, unsigned off, c_pkt_data *data _U_)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint64 ver;
-	guint32 epoch;
+	uint64_t ver;
+	uint32_t epoch;
 
 	/** eversion_t from ceph:/src/osd/osd_types.h */
 
@@ -2329,14 +2324,14 @@ guint c_dissect_eversion(proto_tree *root, gint hf,
 
 /** Dissect an object locator. */
 static
-guint c_dissect_object_locator(proto_tree *root, gint hf,
-			       tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_object_locator(proto_tree *root, int hf,
+			       tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
 	c_encoded enchdr;
 	c_str key, nspace;
-	gint64 hash;
+	int64_t hash;
 
 	ti   = proto_tree_add_item(root, hf, tvb, off, -1, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_objectlocator);
@@ -2353,14 +2348,14 @@ guint c_dissect_object_locator(proto_tree *root, gint hf,
 	key.size = tvb_get_letohl(tvb, off);
 	if (key.size)
 	{
-		off = c_dissect_str(tree, hf_key, &key, tvb, off);
+		off = c_dissect_str(tree, hf_key, &key, tvb, data->pinfo, off);
 		proto_item_append_text(ti, ", Key: \"%s\"", key.str);
 	}
 	else off += 4; /* If string is empty we should use hash. */
 
 	if (enchdr.version >= 5)
 	{
-		off = c_dissect_str(tree, hf_namespace, &nspace, tvb, off);
+		off = c_dissect_str(tree, hf_namespace, &nspace, tvb, data->pinfo, off);
 		if (nspace.size)
 			proto_item_append_text(ti, ", Namespace: \"%s\"", nspace.str);
 	}
@@ -2391,21 +2386,22 @@ guint c_dissect_object_locator(proto_tree *root, gint hf,
 
 /** Dissect a placement group. */
 static
-guint c_dissect_pg(proto_tree *root, gint hf,
-		   tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_pg(proto_tree *root, int hf,
+		   tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree;
-	guint8 ver;
-	gint32 preferred;
+	uint8_t ver;
+	int32_t preferred;
 
 	/** pg_t from ceph:/src/osd/osd_types.h */
 
 	ti   = proto_tree_add_item(root, hf, tvb, off, -1, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_pg);
 
-	ver = tvb_get_guint8(tvb, off);
+	ver = tvb_get_uint8(tvb, off);
 	ti2 = proto_tree_add_item(tree, hf_pgid_ver, tvb, off, 1, ENC_LITTLE_ENDIAN);
+	/* XXX - should we quit if this doesn't return 0? */
 	c_warn_ver(ti2, ver, 1, 1, data);
 	off += 1;
 
@@ -2431,8 +2427,8 @@ guint c_dissect_pg(proto_tree *root, gint hf,
 
 /** Dissect a placement group creation. */
 static
-guint c_dissect_pg_create(proto_tree *root, gint hf,
-			  tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_pg_create(proto_tree *root, int hf,
+			  tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -2464,22 +2460,23 @@ guint c_dissect_pg_create(proto_tree *root, gint hf,
 
 /** Dissect a filepath. */
 static
-guint c_dissect_path(proto_tree *root, gint hf,
-		     tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_path(proto_tree *root, int hf,
+		     tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree;
-	guint64 inode;
+	uint64_t inode;
 	c_str rel;
-	guint v;
+	unsigned v;
 
 	/** filepath from ceph:/src/include/filepath.h */
 
 	ti   = proto_tree_add_item(root, hf, tvb, off, -1, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_filepath);
 
-	v = tvb_get_guint8(tvb, off);
+	v = tvb_get_uint8(tvb, off);
 	ti2 = proto_tree_add_item(tree, hf_path_ver, tvb, off, 1, ENC_LITTLE_ENDIAN);
+	/* XXX - should we quit if this doesn't return 0? */
 	c_warn_ver(ti2, v, 1, 1, data);
 	off += 1;
 
@@ -2487,7 +2484,7 @@ guint c_dissect_path(proto_tree *root, gint hf,
 	proto_tree_add_item(tree, hf_path_inode, tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
-	off = c_dissect_str(tree, hf_path_rel, &rel, tvb, off);
+	off = c_dissect_str(tree, hf_path_rel, &rel, tvb, data->pinfo, off);
 
 	if (inode)
 		proto_item_append_text(ti, ", Inode: 0x%016"PRIu64, inode);
@@ -2500,12 +2497,12 @@ guint c_dissect_path(proto_tree *root, gint hf,
 
 /** Dissect a capability release. */
 static
-guint c_dissect_mds_release(proto_tree *root, gint hf,
-			    tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_mds_release(proto_tree *root, int hf,
+			    tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint64 inode;
+	uint64_t inode;
 
 	/** MClientRequest::Release from ceph:/src/messages/MClientRequest.h */
 
@@ -2545,7 +2542,7 @@ guint c_dissect_mds_release(proto_tree *root, gint hf,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	off = c_dissect_str(tree, hf_mds_release_dname, NULL, tvb, off);
+	off = c_dissect_str(tree, hf_mds_release_dname, NULL, tvb, data->pinfo, off);
 
 	proto_item_append_text(ti, ", Inode: 0x%016"PRIu64, inode);
 
@@ -2555,14 +2552,14 @@ guint c_dissect_mds_release(proto_tree *root, gint hf,
 
 /** Dissect a HitSet::Params */
 static
-guint c_dissect_hitset_params(proto_tree *root,
-			      tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_hitset_params(proto_tree *root,
+			      tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree;
 	c_encoded enc, encimpl;
 	c_hitset_params_type type;
-	guint32 i;
+	uint32_t i;
 
 	/** HitSet::Params from ceph:/src/osd/HitSet.h */
 
@@ -2571,8 +2568,8 @@ guint c_dissect_hitset_params(proto_tree *root,
 
 	off = c_dissect_encoded(tree, &enc, 1, 1, tvb, off, data);
 
-	type = (c_hitset_params_type)tvb_get_guint8(tvb, off);
-	proto_item_append_text(ti, ", Type: %s", c_hitset_params_type_string(type));
+	type = (c_hitset_params_type)tvb_get_uint8(tvb, off);
+	proto_item_append_text(ti, ", Type: %s", c_hitset_params_type_string(type, data->pinfo->pool));
 	ti2 = proto_tree_add_item(tree, hf_hitset_params_type,
 				  tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -2614,13 +2611,13 @@ guint c_dissect_hitset_params(proto_tree *root,
 
 /** Dissect a pool_snap_info_t */
 static
-guint c_dissect_snapinfo(proto_tree *root,
-			 tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_snapinfo(proto_tree *root,
+			 tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
 	c_encoded enc;
-	guint64 id;
+	uint64_t id;
 	c_str name;
 	char *date;
 
@@ -2636,12 +2633,12 @@ guint c_dissect_snapinfo(proto_tree *root,
 			    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
-	date = c_format_timespec(tvb, off);
+	date = c_format_timespec(tvb, data->pinfo, off);
 	proto_tree_add_item(tree, hf_snapinfo_time,
 			    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
-	off = c_dissect_str(tree, hf_snapinfo_name, &name, tvb, off);
+	off = c_dissect_str(tree, hf_snapinfo_name, &name, tvb, data->pinfo, off);
 
 	proto_item_set_text(ti, ", ID: 0x%016"PRIX64
 			    ", Name: %s, Date: %s",
@@ -2657,13 +2654,13 @@ guint c_dissect_snapinfo(proto_tree *root,
 
 /** Dissect a pg pool. */
 static
-guint c_dissect_pgpool(proto_tree *root,
-		       tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_pgpool(proto_tree *root,
+		       tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree, *subtree;
 	c_encoded enc;
-	guint32 i;
+	uint32_t i;
 	c_pgpool_type type;
 	c_pgpool_cachemode cachemode;
 
@@ -2684,7 +2681,7 @@ guint c_dissect_pgpool(proto_tree *root,
 
 	off = c_dissect_encoded(tree, &enc, 5, 15, tvb, off, data);
 
-	type = (c_pgpool_type)tvb_get_guint8(tvb, off);
+	type = (c_pgpool_type)tvb_get_uint8(tvb, off);
 	proto_tree_add_item(tree, hf_pgpool_type,
 			    tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -2798,7 +2795,7 @@ guint c_dissect_pgpool(proto_tree *root,
 			    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
-	cachemode = (c_pgpool_cachemode)tvb_get_guint8(tvb, off);
+	cachemode = (c_pgpool_cachemode)tvb_get_uint8(tvb, off);
 	proto_tree_add_item(tree, hf_pgpool_cachemode,
 			    tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -2820,8 +2817,8 @@ guint c_dissect_pgpool(proto_tree *root,
 		ti2 = proto_tree_add_item(tree, hf_pgpool_property, tvb, off, -1, ENC_NA);
 		subtree = proto_item_add_subtree(ti2, ett_pgpool_property);
 
-		off = c_dissect_str(subtree, hf_pgpool_property_key, &k, tvb, off);
-		off = c_dissect_str(subtree, hf_pgpool_property_val, &v, tvb, off);
+		off = c_dissect_str(subtree, hf_pgpool_property_key, &k, tvb, data->pinfo, off);
+		off = c_dissect_str(subtree, hf_pgpool_property_val, &v, tvb, data->pinfo, off);
 
 		proto_item_append_text(ti2, ": %s=%s", k.str, v.str);
 
@@ -2866,7 +2863,7 @@ guint c_dissect_pgpool(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	off = c_dissect_str(tree, hf_pgpool_erasurecode_profile, NULL, tvb, off);
+	off = c_dissect_str(tree, hf_pgpool_erasurecode_profile, NULL, tvb, data->pinfo, off);
 
 	proto_tree_add_item(tree, hf_pgpool_lastforceresend,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
@@ -2876,21 +2873,21 @@ guint c_dissect_pgpool(proto_tree *root,
 	off = enc.end;
 
 	proto_item_append_text(ti, ", Type: %s, Cache Mode: %s",
-			       c_pgpool_type_string(type),
-			       c_pgpool_cachemode_string(cachemode));
+			       c_pgpool_type_string(type, data->pinfo->pool),
+			       c_pgpool_cachemode_string(cachemode, data->pinfo->pool));
 
 	return off;
 }
 
 /** Dissect a MonMap. */
 static
-guint c_dissect_monmap(proto_tree *root,
-		       tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_monmap(proto_tree *root,
+		       tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree, *subtree;
-	guint size, end;
-	guint32 i;
+	unsigned size, end;
+	uint32_t i;
 	c_encoded enc;
 	c_str str;
 	c_entityaddr addr;
@@ -2926,9 +2923,9 @@ guint c_dissect_monmap(proto_tree *root,
 					  tvb, off, -1, ENC_NA);
 		subtree = proto_item_add_subtree(ti2, ett_mon_map_address);
 
-		off = c_dissect_str(subtree, hf_monmap_address_name, &str, tvb, off);
+		off = c_dissect_str(subtree, hf_monmap_address_name, &str, tvb, data->pinfo, off);
 		off = c_dissect_entityaddr(subtree, hf_monmap_address_addr, &addr,
-					   tvb, off);
+					   tvb, data->pinfo, off);
 
 		proto_item_append_text(ti2, ", Name: %s, Address: %s",
 				       str.str, addr.addr.addr_str);
@@ -2950,8 +2947,8 @@ guint c_dissect_monmap(proto_tree *root,
 
 /** Dissect an osd_peer_stat_t */
 static
-guint c_dissect_osd_peerstat(proto_tree *root,
-			     tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osd_peerstat(proto_tree *root,
+			     tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -2977,13 +2974,13 @@ guint c_dissect_osd_peerstat(proto_tree *root,
 
 /** Dissect a CompatSet::FeatureSet */
 static
-guint c_dissect_featureset(proto_tree *root, int hf,
-			   tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_featureset(proto_tree *root, int hf,
+			   tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint32 i;
-	guint64 features;
+	uint32_t i;
+	uint64_t features;
 
 	/* CompatSet::FeatureSet from ceph:/src/include/FeatureSet.h */
 
@@ -3001,7 +2998,7 @@ guint c_dissect_featureset(proto_tree *root, int hf,
 	{
 		proto_item *ti2;
 		proto_tree *subtree;
-		guint64 val;
+		uint64_t val;
 		c_str name;
 
 		ti2 = proto_tree_add_item(tree, hf_featureset_name, tvb, off, -1, ENC_NA);
@@ -3012,7 +3009,7 @@ guint c_dissect_featureset(proto_tree *root, int hf,
 				    tvb, off, 8, ENC_LITTLE_ENDIAN);
 		off += 8;
 
-		off = c_dissect_str(subtree, hf_featureset_name_name, &name, tvb, off);
+		off = c_dissect_str(subtree, hf_featureset_name_name, &name, tvb, data->pinfo, off);
 
 		proto_item_append_text(ti2, ", Value: %"PRIu64", Name: %s",
 				       val, name.str);
@@ -3026,8 +3023,8 @@ guint c_dissect_featureset(proto_tree *root, int hf,
 
 /** Dissect a CompatSet */
 static
-guint c_dissect_compatset(proto_tree *root,
-			  tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_compatset(proto_tree *root,
+			  tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -3047,13 +3044,13 @@ guint c_dissect_compatset(proto_tree *root,
 
 /** Dissect an OSDSuperblock */
 static
-guint c_dissect_osd_superblock(proto_tree *root,
-			       tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osd_superblock(proto_tree *root,
+			       tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
 	c_encoded enc;
-	guint32 role, epoch;
+	uint32_t role, epoch;
 	double weight;
 
 	/* OSDSuperblock from ceph:/src/osd/osd_types.h */
@@ -3106,7 +3103,7 @@ guint c_dissect_osd_superblock(proto_tree *root,
 			       role, weight, epoch);
 	if (enc.version >= 4)
 	{
-		proto_item_append_text(ti, ", OSD FSID: %s", c_format_uuid(tvb, off));
+		proto_item_append_text(ti, ", OSD FSID: %s", c_format_uuid(tvb, data->pinfo, off));
 		proto_tree_add_item(tree, hf_osd_superblock_osdfsid,
 				    tvb, off, 16, ENC_BIG_ENDIAN);
 		off += 16;
@@ -3128,21 +3125,22 @@ guint c_dissect_osd_superblock(proto_tree *root,
 
 /** Dissect an osd_info_t. */
 static
-guint c_dissect_osdinfo(proto_tree *root, int hf,
-			tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osdinfo(proto_tree *root, int hf,
+			tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree;
-	guint8 ver;
+	uint8_t ver;
 
 	/* osd_info_t from ceph:/src/osd/OSDMap.h */
 
 	ti   = proto_tree_add_item(root, hf, tvb, off, 25, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_osd_info);
 
-	ver = tvb_get_guint8(tvb, off);
+	ver = tvb_get_uint8(tvb, off);
 	ti2 = proto_tree_add_item(tree, hf_osdinfo_ver,
 				  tvb, off, 1, ENC_LITTLE_ENDIAN);
+	/* XXX - should we quit if this doesn't return 0? */
 	c_warn_ver(ti2, ver, 1, 1, data);
 	off += 1;
 
@@ -3175,8 +3173,8 @@ guint c_dissect_osdinfo(proto_tree *root, int hf,
 
 /** Dissect an osd_xinfo_t. */
 static
-guint c_dissect_osd_xinfo(proto_tree *root, int hf,
-			  tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osd_xinfo(proto_tree *root, int hf,
+			  tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -3221,8 +3219,8 @@ guint c_dissect_osd_xinfo(proto_tree *root, int hf,
 
 /** Dissect an objectstore_perfstat_t. */
 static
-guint c_dissect_perfstat(proto_tree *root, int hf,
-			 tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_perfstat(proto_tree *root, int hf,
+			 tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -3252,13 +3250,13 @@ guint c_dissect_perfstat(proto_tree *root, int hf,
 
 /** Dissect an osd_stat_t. */
 static
-guint c_dissect_osd_stat(proto_tree *root,
-			 tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osd_stat(proto_tree *root,
+			 tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
 	c_encoded enc, enc2;
-	guint32 i;
+	uint32_t i;
 
 	/* osd_stat_t from ceph:/src/osd/osd_types.h */
 
@@ -3330,23 +3328,23 @@ guint c_dissect_osd_stat(proto_tree *root,
 
 /** Dissect a CRUSH Ruleset. */
 static
-guint c_dissect_crush(proto_tree *root,
-		      tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_crush(proto_tree *root,
+		      tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
-	off = c_dissect_data(root, hf_crush, tvb, off);
+	off = c_dissect_data(root, hf_crush, tvb, data->pinfo, off);
 
 	return off;
 }
 
 /** Dissect an OSDMap. */
 static
-guint c_dissect_osdmap(proto_tree *root,
-		       tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osdmap(proto_tree *root,
+		       tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree, *subtree;
-	guint size, end;
-	guint32 i;
+	unsigned size, end;
+	uint32_t i;
 	c_encoded enc, enc2; /* There is an outer one, and multiple inner ones. */
 
 	/*** Storage for values that will be formatted and
@@ -3376,7 +3374,7 @@ guint c_dissect_osdmap(proto_tree *root,
 	off = c_dissect_encoded(subtree, &enc2, 1, 3, tvb, off, data);
 	proto_item_set_len(ti2, enc2.size);
 
-	fsid = c_format_uuid(tvb, off);
+	fsid = c_format_uuid(tvb, data->pinfo, off);
 	proto_tree_add_item(subtree, hf_osdmap_fsid, tvb, off, 16, ENC_BIG_ENDIAN);
 	off += 16;
 
@@ -3384,12 +3382,12 @@ guint c_dissect_osdmap(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	time_created = c_format_timespec(tvb, off);
+	time_created = c_format_timespec(tvb, data->pinfo, off);
 	proto_tree_add_item(subtree, hf_osdmap_created,
 			    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
-	time_modified = c_format_timespec(tvb, off);
+	time_modified = c_format_timespec(tvb, data->pinfo, off);
 	proto_tree_add_item(subtree, hf_osdmap_modified,
 			    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
@@ -3400,7 +3398,7 @@ guint c_dissect_osdmap(proto_tree *root,
 	{
 		proto_item *poolti;
 		proto_tree *pooltree;
-		guint64 id;
+		uint64_t id;
 
 		poolti = proto_tree_add_item(subtree, hf_osdmap_pool,
 					     tvb, off, -1, ENC_NA);
@@ -3424,7 +3422,7 @@ guint c_dissect_osdmap(proto_tree *root,
 	{
 		proto_item *nameti;
 		proto_tree *nametree;
-		guint64 id;
+		uint64_t id;
 		c_str name;
 
 		nameti = proto_tree_add_item(subtree, hf_osdmap_poolname_item,
@@ -3436,7 +3434,7 @@ guint c_dissect_osdmap(proto_tree *root,
 				    tvb, off, 8, ENC_LITTLE_ENDIAN);
 		off += 8;
 
-		off = c_dissect_str(nametree, hf_osdmap_poolname, &name, tvb, off);
+		off = c_dissect_str(nametree, hf_osdmap_poolname, &name, tvb, data->pinfo, off);
 
 		proto_item_append_text(nameti,
 				       ", ID: 0x%016"PRIX64", Name: %s",
@@ -3479,14 +3477,14 @@ guint c_dissect_osdmap(proto_tree *root,
 	while (i--)
 	{
 		off = c_dissect_entityaddr(subtree, hf_osdmap_osd_addr, NULL,
-					   tvb, off);
+					   tvb, data->pinfo, off);
 	}
 
 	i = tvb_get_letohl(tvb, off);
 	off += 4;
 	while (i--)
 	{
-		guint32 j;
+		uint32_t j;
 		proto_item *pgtti;
 		proto_tree *pgttree;
 
@@ -3548,7 +3546,7 @@ guint c_dissect_osdmap(proto_tree *root,
 		off += 4;
 		while (i--)
 		{
-			guint32 j;
+			uint32_t j;
 			proto_item *ecti;
 			proto_tree *ectree;
 			c_str profile;
@@ -3558,7 +3556,7 @@ guint c_dissect_osdmap(proto_tree *root,
 			ectree = proto_item_add_subtree(ecti, ett_osd_map_erasurecodeprofile);
 
 			off = c_dissect_str(ectree, hf_osdmap_erasurecodeprofile_name, &profile,
-					    tvb, off);
+					    tvb, data->pinfo, off);
 			proto_item_append_text(ecti, ", Name: %s", profile.str);
 
 			j = tvb_get_letohl(tvb, off);
@@ -3568,7 +3566,7 @@ guint c_dissect_osdmap(proto_tree *root,
 				off = c_dissect_kv(ectree, hf_osdmap_erasurecodeprofile_prop,
 						   hf_osdmap_erasurecodeprofile_k,
 						   hf_osdmap_erasurecodeprofile_v,
-						   tvb, off);
+						   tvb, data->pinfo, off);
 			}
 
 			proto_item_set_end(ecti, tvb, off);
@@ -3590,7 +3588,7 @@ guint c_dissect_osdmap(proto_tree *root,
 	while (i--)
 	{
 		off = c_dissect_entityaddr(subtree, hf_osdmap_hbaddr_back, NULL,
-					   tvb, off);
+					   tvb, data->pinfo, off);
 	}
 
 	i = tvb_get_letohl(tvb, off);
@@ -3612,7 +3610,7 @@ guint c_dissect_osdmap(proto_tree *root,
 		bltree = proto_item_add_subtree(blti, ett_osd_map_blacklist);
 
 		off = c_dissect_entityaddr(bltree, hf_osdmap_blacklist_addr, NULL,
-					   tvb, off);
+					   tvb, data->pinfo, off);
 
 		proto_tree_add_item(bltree, hf_osdmap_blacklist_time,
 				    tvb, off, 8, ENC_LITTLE_ENDIAN);
@@ -3626,14 +3624,14 @@ guint c_dissect_osdmap(proto_tree *root,
 	while (i--)
 	{
 		off = c_dissect_entityaddr(subtree, hf_osdmap_cluster_addr, NULL,
-					   tvb, off);
+					   tvb, data->pinfo, off);
 	}
 
 	proto_tree_add_item(subtree, hf_osdmap_cluster_snapepoch,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	off = c_dissect_str(subtree, hf_osdmap_cluster_snap, NULL, tvb, off);
+	off = c_dissect_str(subtree, hf_osdmap_cluster_snap, NULL, tvb, data->pinfo, off);
 
 	i = tvb_get_letohl(tvb, off);
 	off += 4;
@@ -3656,7 +3654,7 @@ guint c_dissect_osdmap(proto_tree *root,
 	while (i--)
 	{
 		off = c_dissect_entityaddr(subtree, hf_osdmap_hbaddr_front, NULL,
-					   tvb, off);
+					   tvb, data->pinfo, off);
 	}
 
 	c_warn_size(subtree, tvb, off, enc2.end, data);
@@ -3675,12 +3673,12 @@ guint c_dissect_osdmap(proto_tree *root,
 
 /** Dissect an incremental OSDMap. */
 static
-guint c_dissect_osdmap_inc(proto_tree *root,
-			   tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osdmap_inc(proto_tree *root,
+			   tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree, *subtree;
-	guint size, end;
+	unsigned size, end;
 	c_encoded enc, enc2; /* There is an outer one, and multiple inner ones. */
 
 	/** OSDMap::Incremental from ceph:/src/osd/OSDMap.cc */
@@ -3734,22 +3732,22 @@ guint c_dissect_osdmap_inc(proto_tree *root,
 typedef struct _c_osd_op {
 	c_osd_optype type;    /** The type of operation. */
 	const char *type_str; /** The type of operation as a string. */
-	guint32 payload_size; /** The size of the operation payload. */
+	uint32_t payload_size; /** The size of the operation payload. */
 } c_osd_op;
 
 #define C_SIZE_OSD_OP_MIN 34
 
 /** Dissect OSD Operation. */
 static
-guint c_dissect_osd_op(proto_tree *root, gint hf, c_osd_op *out,
-		       tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_osd_op(proto_tree *root, int hf, c_osd_op *out,
+		       tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree;
 	c_osd_op d;
 
-	guint64 offset, size;
-	guint64 trunc_size, trunc_seq;
+	uint64_t offset, size;
+	uint64_t trunc_size, trunc_seq;
 
 	/* From ceph:/src/include/rados.h
 	struct ceph_osd_op {
@@ -3821,7 +3819,7 @@ guint c_dissect_osd_op(proto_tree *root, gint hf, c_osd_op *out,
 	ti   = proto_tree_add_item(root, hf, tvb, off, -1, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_osd_op);
 
-	d.type_str = c_osd_optype_string(d.type);
+	d.type_str = c_osd_optype_string(d.type, data->pinfo->pool);
 	proto_item_append_text(ti, ", Type: %s", d.type_str);
 	proto_tree_add_item(tree, hf_osd_op_type, tvb, off, 2, ENC_LITTLE_ENDIAN);
 	off += 2;
@@ -3884,8 +3882,8 @@ guint c_dissect_osd_op(proto_tree *root, gint hf, c_osd_op *out,
 
 /** Dissect a redirect. */
 static
-guint c_dissect_redirect(proto_tree *root, gint hf,
-			 tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_redirect(proto_tree *root, int hf,
+			 tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -3902,13 +3900,13 @@ guint c_dissect_redirect(proto_tree *root, gint hf,
 
 	if (tvb_get_letohl(tvb, off))
 	{
-		off = c_dissect_str(tree, hf_osd_redirect_obj, NULL, tvb, off);
+		off = c_dissect_str(tree, hf_osd_redirect_obj, NULL, tvb, data->pinfo, off);
 	}
 	else off += 4;
 
 	off = c_dissect_blob(tree, hf_osd_redirect_osdinstr,
 			     hf_osd_redirect_osdinstr_data, hf_osd_redirect_osdinstr_len,
-			     tvb, off);
+			     tvb, data->pinfo, off);
 
 	c_warn_size(tree, tvb, off, enc.end, data);
 	off = enc.end;
@@ -3919,8 +3917,8 @@ guint c_dissect_redirect(proto_tree *root, gint hf,
 
 /** Dissect a statsum object. */
 static
-guint c_dissect_statsum(proto_tree *tree,
-			tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_statsum(proto_tree *tree,
+			tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	c_encoded enc;
 
@@ -4016,13 +4014,13 @@ guint c_dissect_statsum(proto_tree *tree,
 
 /** Dissect a object_stat_collection_t object. */
 static
-guint c_dissect_statcollection(proto_tree *root, int key,
-			       tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_statcollection(proto_tree *root, int key,
+			       tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
 	c_encoded enc;
-	guint32 i;
+	uint32_t i;
 
 	/** object_stat_collection_t from ceph:/src/osd/osd_types.h */
 
@@ -4036,7 +4034,7 @@ guint c_dissect_statcollection(proto_tree *root, int key,
 	off += 4;
 	while (i--)
 	{
-		off = c_dissect_str(tree, key, NULL, tvb, off);
+		off = c_dissect_str(tree, key, NULL, tvb, data->pinfo, off);
 		off = c_dissect_statsum(tree, tvb, off, data);
 	}
 
@@ -4049,13 +4047,13 @@ guint c_dissect_statcollection(proto_tree *root, int key,
 
 /** Dissect an pg_stat_t. */
 static
-guint c_dissect_pg_stats(proto_tree *root, int hf,
-			 tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_pg_stats(proto_tree *root, int hf,
+			 tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
 	c_encoded enc;
-	guint32 i;
+	uint32_t i;
 
 	/* pg_stat_t from ceph:/src/osd/osd_types.h */
 
@@ -4221,8 +4219,8 @@ guint c_dissect_pg_stats(proto_tree *root, int hf,
 
 /** Dissect a Paxos Service Message */
 static
-guint c_dissect_paxos(proto_tree *root,
-		      tvbuff_t *tvb, guint off, c_pkt_data *data _U_)
+unsigned c_dissect_paxos(proto_tree *root,
+		      tvbuff_t *tvb, unsigned off, c_pkt_data *data _U_)
 {
 	proto_item *ti;
 	proto_tree *tree;
@@ -4253,17 +4251,17 @@ guint c_dissect_paxos(proto_tree *root,
  * Simply displays the front, middle and data portions as binary strings.
  */
 static
-guint c_dissect_msg_unknown(proto_tree *tree,
+unsigned c_dissect_msg_unknown(proto_tree *tree,
 			    tvbuff_t *tvb,
-			    guint front_len, guint middle_len, guint data_len,
+			    unsigned front_len, unsigned middle_len, unsigned data_len,
 			    c_pkt_data *data)
 {
-	guint off = 0;
+	unsigned off = 0;
 
-	c_set_type(data, c_msg_type_string(data->header.type));
+	c_set_type(data, c_msg_type_string(data->header.type, data->pinfo->pool));
 	proto_item_append_text(data->item_root,
 			       ", Type: %s, Front Len: %u, Middle Len: %u, Data Len %u",
-			       c_msg_type_string(data->header.type),
+			       c_msg_type_string(data->header.type, data->pinfo->pool),
 			       front_len, middle_len, data_len);
 	expert_add_info(data->pinfo, tree, &ei_msg_unknown);
 
@@ -4288,9 +4286,9 @@ guint c_dissect_msg_unknown(proto_tree *tree,
 
 /** Dissect ping 0x0002 */
 static
-guint c_dissect_msg_ping(proto_tree *root _U_,
+unsigned c_dissect_msg_ping(proto_tree *root _U_,
 			 tvbuff_t *tvb _U_,
-			 guint front_len _U_, guint middle_len _U_, guint data_len _U_,
+			 unsigned front_len _U_, unsigned middle_len _U_, unsigned data_len _U_,
 			 c_pkt_data *data)
 {
 	/* ceph:/src/messages/MPing.h */
@@ -4300,9 +4298,9 @@ guint c_dissect_msg_ping(proto_tree *root _U_,
 
 /** Dissect monmap message 0x0004 */
 static
-guint c_dissect_msg_mon_map(proto_tree *root,
+unsigned c_dissect_msg_mon_map(proto_tree *root,
 			    tvbuff_t *tvb,
-			    guint front_len, guint middle_len _U_, guint data_len _U_,
+			    unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			    c_pkt_data *data)
 {
 	proto_item *ti;
@@ -4320,14 +4318,14 @@ guint c_dissect_msg_mon_map(proto_tree *root,
 
 /** Stat FS 0x000D */
 static
-guint c_dissect_msg_statfs(proto_tree *root,
+unsigned c_dissect_msg_statfs(proto_tree *root,
 			   tvbuff_t *tvb,
-			   guint front_len, guint middle_len _U_, guint data_len _U_,
+			   unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			   c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 
 	/* ceph:/src/messages/MStatfs.h */
 
@@ -4347,14 +4345,14 @@ guint c_dissect_msg_statfs(proto_tree *root,
 
 /** Stat FS Reply 0x000E */
 static
-guint c_dissect_msg_statfsreply(proto_tree *root,
+unsigned c_dissect_msg_statfsreply(proto_tree *root,
 				tvbuff_t *tvb,
-				guint front_len, guint middle_len _U_, guint data_len _U_,
+				unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 
 	/* ceph:/src/messages/MStatfsReply.h */
 
@@ -4392,15 +4390,15 @@ guint c_dissect_msg_statfsreply(proto_tree *root,
 
 /** Mon subscribe message 0x000F */
 static
-guint c_dissect_msg_mon_sub(proto_tree *root,
+unsigned c_dissect_msg_mon_sub(proto_tree *root,
 			    tvbuff_t *tvb,
-			    guint front_len, guint middle_len _U_, guint data_len _U_,
+			    unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			    c_pkt_data *data)
 {
 	proto_item *ti, *subti, *subti2;
 	proto_tree *tree, *subtree;
-	guint off = 0;
-	guint len;
+	unsigned off = 0;
+	unsigned len;
 	c_str str;
 
 	/* ceph:/src/messages/MMonSubscribe.h */
@@ -4429,7 +4427,7 @@ guint c_dissect_msg_mon_sub(proto_tree *root,
 				    tvb, off, -1, ENC_NA);
 		subtree = proto_item_add_subtree(subti, ett_msg_mon_sub_item);
 
-		off = c_dissect_str(subtree, hf_msg_mon_sub_what, &str, tvb, off);
+		off = c_dissect_str(subtree, hf_msg_mon_sub_what, &str, tvb, data->pinfo, off);
 
 		c_append_text(data, ti, "%s%s", str.str, len? ",":"");
 
@@ -4458,14 +4456,14 @@ guint c_dissect_msg_mon_sub(proto_tree *root,
 
 /** Mon subscription ack 0x0010 */
 static
-guint c_dissect_msg_mon_sub_ack(proto_tree *root,
+unsigned c_dissect_msg_mon_sub_ack(proto_tree *root,
 				tvbuff_t *tvb,
-				guint front_len, guint middle_len _U_, guint data_len _U_,
+				unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 
 	/* ceph:/src/messages/MMonSubscribeAck.h */
 
@@ -4486,16 +4484,16 @@ guint c_dissect_msg_mon_sub_ack(proto_tree *root,
 
 /** Authentication Request 0x0011. */
 static
-guint c_dissect_msg_auth(proto_tree *root,
+unsigned c_dissect_msg_auth(proto_tree *root,
 			 tvbuff_t *tvb,
-			 guint front_len, guint middle_len _U_, guint data_len _U_,
+			 unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			 c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree, *subtree;
-	guint off = 0, expectedoff;
-	guint8 ver;
-	guint32 i, len;
+	unsigned off = 0, expectedoff;
+	uint8_t ver;
+	uint32_t i, len;
 	c_auth_proto proto;
 
 	/* ceph:/src/messages/MAuth.h */
@@ -4523,7 +4521,8 @@ guint c_dissect_msg_auth(proto_tree *root,
 					  tvb, off, -1, ENC_NA);
 		subtree = proto_item_add_subtree(ti2, ett_msg_auth_supportedproto);
 
-		ver = tvb_get_guint8(tvb, off);
+		ver = tvb_get_uint8(tvb, off);
+		/* XXX - should we quit if this doesn't return 0? */
 		c_warn_ver(ti2, ver, 1, 1, data);
 		proto_tree_add_item(tree, hf_msg_auth_supportedproto_ver,
 				    tvb, off, 1, ENC_LITTLE_ENDIAN);
@@ -4535,7 +4534,7 @@ guint c_dissect_msg_auth(proto_tree *root,
 		{
 			c_auth_proto sp;
 			sp = (c_auth_proto)tvb_get_letohl(tvb, off);
-			proto_item_append_text(ti2, i?",%s":": %s", c_auth_proto_string(sp));
+			proto_item_append_text(ti2, i?",%s":": %s", c_auth_proto_string(sp, data->pinfo->pool));
 			proto_tree_add_item(subtree, hf_msg_auth_supportedproto_proto,
 					    tvb, off, 4, ENC_LITTLE_ENDIAN);
 			off += 4;
@@ -4566,7 +4565,7 @@ guint c_dissect_msg_auth(proto_tree *root,
 		}
 
 		proto_item_append_text(ti2, ", Request Type: %s",
-				       c_cephx_req_type_string(type));
+				       c_cephx_req_type_string(type, data->pinfo->pool));
 		break;
 	}
 	default:
@@ -4582,21 +4581,21 @@ guint c_dissect_msg_auth(proto_tree *root,
 		off += 4;
 	}
 
-	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto));
+	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto, data->pinfo->pool));
 
 	return off;
 }
 
 /** Authentication response. 0x0012 */
 static
-guint c_dissect_msg_auth_reply(proto_tree *root,
+unsigned c_dissect_msg_auth_reply(proto_tree *root,
 			       tvbuff_t *tvb,
-			       guint front_len, guint middle_len _U_, guint data_len _U_,
+			       unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			       c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0, expectedoff;
+	unsigned off = 0, expectedoff;
 	c_auth_proto proto;
 
 	/* ceph:/src/messages/MAuthReply.h */
@@ -4629,24 +4628,24 @@ guint c_dissect_msg_auth_reply(proto_tree *root,
 	c_warn_size(tree, tvb, off, expectedoff, data);
 	off = expectedoff;
 
-	off = c_dissect_str(tree, hf_msg_auth_reply_msg, NULL, tvb, off);
+	off = c_dissect_str(tree, hf_msg_auth_reply_msg, NULL, tvb, data->pinfo, off);
 
-	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto));
+	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto, data->pinfo->pool));
 
 	return off;
 }
 
 /** Get map versions. 0x0013 */
 static
-guint c_dissect_msg_mon_getversion(proto_tree *root,
+unsigned c_dissect_msg_mon_getversion(proto_tree *root,
 				   tvbuff_t *tvb,
-				   guint front_len, guint middle_len _U_, guint data_len _U_,
+				   unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				   c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint64 tid;
+	unsigned off = 0;
+	uint64_t tid;
 	c_str what;
 
 	/* ceph:/src/messages/MMonGetVersion.h */
@@ -4661,7 +4660,7 @@ guint c_dissect_msg_mon_getversion(proto_tree *root,
 			    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
-	off = c_dissect_str(tree, hf_msg_mon_getversion_what, &what, tvb, off);
+	off = c_dissect_str(tree, hf_msg_mon_getversion_what, &what, tvb, data->pinfo, off);
 
 
 	c_append_text(data, ti, ", TID: %"PRIu64", What: %s",
@@ -4673,18 +4672,18 @@ guint c_dissect_msg_mon_getversion(proto_tree *root,
 
 /** Get map versions response. 0x0014 */
 static
-guint c_dissect_msg_mon_getversionreply(proto_tree *root,
+unsigned c_dissect_msg_mon_getversionreply(proto_tree *root,
 					tvbuff_t *tvb,
-					guint front_len,
-					guint middle_len _U_,
-					guint data_len _U_,
+					unsigned front_len,
+					unsigned middle_len _U_,
+					unsigned data_len _U_,
 					c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint64 tid;
-	guint64 ver, veroldest;
+	unsigned off = 0;
+	uint64_t tid;
+	uint64_t ver, veroldest;
 
 	/* ceph:/src/messages/MMonGetVersionReply.h */
 
@@ -4718,14 +4717,14 @@ guint c_dissect_msg_mon_getversionreply(proto_tree *root,
 
 /** MDS Map 0x0015 */
 static
-guint c_dissect_msg_mds_map(proto_tree *root,
+unsigned c_dissect_msg_mds_map(proto_tree *root,
 			    tvbuff_t *tvb,
-			    guint front_len, guint middle_len _U_, guint data_len _U_,
+			    unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			    c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 
 	/* ceph:/src/messages/MMDSMap.h */
 
@@ -4746,21 +4745,21 @@ guint c_dissect_msg_mds_map(proto_tree *root,
 
 	off = c_dissect_blob(tree, hf_msg_mds_map_datai,
 			     hf_msg_mds_map_data, hf_msg_mds_map_data_size,
-			     tvb, off);
+			     tvb, data->pinfo, off);
 
 	return off;
 }
 
 /** Client Session 0x0016 */
 static
-guint c_dissect_msg_client_sess(proto_tree *root,
+unsigned c_dissect_msg_client_sess(proto_tree *root,
 				tvbuff_t *tvb,
-				guint front_len, guint middle_len _U_, guint data_len _U_,
+				unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 	c_session_op_type op;
 
 	/* ceph:/src/messages/MClientSession.h */
@@ -4791,22 +4790,22 @@ guint c_dissect_msg_client_sess(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	c_append_text(data, ti, ", Operation: %s", c_session_op_type_string(op));
+	c_append_text(data, ti, ", Operation: %s", c_session_op_type_string(op, data->pinfo->pool));
 
 	return off;
 }
 
 /** Client Request 0x0018 */
 static
-guint c_dissect_msg_client_req(proto_tree *root,
+unsigned c_dissect_msg_client_req(proto_tree *root,
 			       tvbuff_t *tvb,
-			       guint front_len, guint middle_len _U_, guint data_len _U_,
+			       unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			       c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 	c_mds_op_type type;
 
 	/* ceph:/src/messages/MClientRequest.h */
@@ -4876,23 +4875,23 @@ guint c_dissect_msg_client_req(proto_tree *root,
 		off += 8;
 	}
 
-	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type));
+	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type, data->pinfo->pool));
 
 	return off;
 }
 
 /** Client Request Forward 0x0019 */
 static
-guint c_dissect_msg_client_reqfwd(proto_tree *root,
+unsigned c_dissect_msg_client_reqfwd(proto_tree *root,
 				  tvbuff_t *tvb,
-				  guint front_len, guint middle_len _U_, guint data_len _U_,
+				  unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				  c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 to, fwd;
-	guint8 resend;
+	unsigned off = 0;
+	uint32_t to, fwd;
+	uint8_t resend;
 
 	/* ceph:/src/messages/MClientRequestForward.h */
 
@@ -4911,7 +4910,7 @@ guint c_dissect_msg_client_reqfwd(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	resend = tvb_get_guint8(tvb, off);
+	resend = tvb_get_uint8(tvb, off);
 	proto_tree_add_item(tree, hf_msg_client_reqfwd_resend,
 			    tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -4925,14 +4924,14 @@ guint c_dissect_msg_client_reqfwd(proto_tree *root,
 
 /** Client Reply 0x001A */
 static
-guint c_dissect_msg_client_reply(proto_tree *root,
+unsigned c_dissect_msg_client_reply(proto_tree *root,
 				 tvbuff_t *tvb,
-				 guint front_len, guint middle_len _U_, guint data_len _U_,
+				 unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				 c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 	c_mds_op_type type;
 
 	/* ceph:/src/messages/MClientReply.h */
@@ -4968,27 +4967,27 @@ guint c_dissect_msg_client_reply(proto_tree *root,
 	off += 1;
 
 	/* @TODO: Dissect these. */
-	off = c_dissect_data(tree, hf_msg_client_reply_trace, tvb, off);
-	off = c_dissect_data(tree, hf_msg_client_reply_extra, tvb, off);
-	off = c_dissect_data(tree, hf_msg_client_reply_snaps, tvb, off);
+	off = c_dissect_data(tree, hf_msg_client_reply_trace, tvb, data->pinfo, off);
+	off = c_dissect_data(tree, hf_msg_client_reply_extra, tvb, data->pinfo, off);
+	off = c_dissect_data(tree, hf_msg_client_reply_snaps, tvb, data->pinfo, off);
 
-	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type));
+	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type, data->pinfo->pool));
 
 	return off;
 }
 
 /** OSD Map 0x0029 */
 static
-guint c_dissect_msg_osd_map(proto_tree *root,
+unsigned c_dissect_msg_osd_map(proto_tree *root,
 			    tvbuff_t *tvb,
-			    guint front_len, guint middle_len _U_, guint data_len _U_,
+			    unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			    c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree, *subtree;
-	guint off = 0;
-	guint32 i;
-	guint32 epoch;
+	unsigned off = 0;
+	uint32_t i;
+	uint32_t epoch;
 
 	/* ceph:/src/messages/MOSDMap.h */
 
@@ -5064,15 +5063,15 @@ guint c_dissect_msg_osd_map(proto_tree *root,
 /** OSD Operation (0x002A)
  */
 static
-guint c_dissect_msg_osd_op(proto_tree *root,
+unsigned c_dissect_msg_osd_op(proto_tree *root,
 			   tvbuff_t *tvb,
-			   guint front_len, guint middle_len _U_, guint data_len _U_,
+			   unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			   c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree;
-	guint off = 0;
-	guint16 opslen, i;
+	unsigned off = 0;
+	uint16_t opslen, i;
 	c_osd_op *ops;
 	c_str str;
 
@@ -5104,7 +5103,7 @@ guint c_dissect_msg_osd_op(proto_tree *root,
 
 	off = c_dissect_pg(tree, hf_msg_osd_op_pgid, tvb, off, data);
 
-	off = c_dissect_str(tree, hf_msg_osd_op_oid, &str, tvb, off);
+	off = c_dissect_str(tree, hf_msg_osd_op_oid, &str, tvb, data->pinfo, off);
 
 	opslen = tvb_get_letohs(tvb, off);
 	c_append_text(data, ti, ", Operations: %"PRId32, opslen);
@@ -5116,13 +5115,13 @@ guint c_dissect_msg_osd_op(proto_tree *root,
 		/*
 			If the size is huge (maybe it was mangled on the wire) we want to
 			avoid allocating massive amounts of memory to handle it.  So, if
-			it is larger then can possibly fit in the rest of the message bail
+			it is larger than can possibly fit in the rest of the message, bail
 			out.
 		*/
 		expert_add_info(data->pinfo, ti2, &ei_sizeillogical);
 		return off;
 	}
-	ops = wmem_alloc_array(wmem_packet_scope(), c_osd_op, opslen);
+	ops = wmem_alloc_array(data->pinfo->pool, c_osd_op, opslen);
 	for (i = 0; i < opslen; i++)
 	{
 		off = c_dissect_osd_op(tree, hf_msg_osd_op_op, &ops[i], tvb, off, data);
@@ -5168,17 +5167,17 @@ guint c_dissect_msg_osd_op(proto_tree *root,
 /** OSD Operation Reply (0x002B)
  */
 static
-guint c_dissect_msg_osd_opreply(proto_tree *root,
+unsigned c_dissect_msg_osd_opreply(proto_tree *root,
 				tvbuff_t *tvb,
-				guint front_len, guint middle_len _U_, guint data_len _U_,
+				unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 	c_str str;
-	guint32 i;
-	guint32 opslen;
+	uint32_t i;
+	uint32_t opslen;
 	c_osd_op *ops;
 
 	/* ceph:/src/messages/MOSDOpReply.h */
@@ -5188,7 +5187,7 @@ guint c_dissect_msg_osd_opreply(proto_tree *root,
 	ti = proto_tree_add_item(root, hf_msg_osd_opreply, tvb, off, front_len, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_msg_osd_opreply);
 
-	off = c_dissect_str(tree, hf_msg_osd_opreply_oid, &str, tvb, off);
+	off = c_dissect_str(tree, hf_msg_osd_opreply_oid, &str, tvb, data->pinfo, off);
 
 	off = c_dissect_pg(tree, hf_msg_osd_opreply_pgid, tvb, off, data);
 
@@ -5221,7 +5220,7 @@ guint c_dissect_msg_osd_opreply(proto_tree *root,
 		expert_add_info(data->pinfo, ti2, &ei_sizeillogical);
 		return off;
 	}
-	ops = wmem_alloc_array(wmem_packet_scope(), c_osd_op, opslen);
+	ops = wmem_alloc_array(data->pinfo->pool, c_osd_op, opslen);
 	for (i = 0; i < opslen; i++)
 	{
 		off = c_dissect_osd_op(tree, hf_msg_osd_opreply_op, &ops[i],
@@ -5278,16 +5277,16 @@ guint c_dissect_msg_osd_opreply(proto_tree *root,
 
 /** Pool Op Reply 0x0030 */
 static
-guint c_dissect_msg_poolopreply(proto_tree *root,
+unsigned c_dissect_msg_poolopreply(proto_tree *root,
 				tvbuff_t *tvb,
-				guint front_len, guint middle_len _U_, guint data_len _U_,
+				unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	gint32 code;
-	guint8 b;
+	unsigned off = 0;
+	int32_t code;
+	uint8_t b;
 
 	/* ceph:/src/messages/MPoolOpReply.h */
 
@@ -5311,12 +5310,12 @@ guint c_dissect_msg_poolopreply(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	b = tvb_get_guint8(tvb, off);
+	b = tvb_get_uint8(tvb, off);
 	off += 1;
 	if (b)
 		off = c_dissect_blob(tree, hf_msg_poolopreply_datai,
 				     hf_msg_poolopreply_data, hf_msg_poolopreply_data_size,
-				     tvb, off);
+				     tvb, data->pinfo, off);
 
 	c_append_text(data, ti, ", Response Code: %"PRIu32, code);
 
@@ -5327,15 +5326,15 @@ guint c_dissect_msg_poolopreply(proto_tree *root,
  * Why this is a higher value than the reply?  Who knows?
  */
 static
-guint c_dissect_msg_poolop(proto_tree *root,
+unsigned c_dissect_msg_poolop(proto_tree *root,
 			   tvbuff_t *tvb,
-			   guint front_len, guint middle_len _U_, guint data_len _U_,
+			   unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			   c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	gint32 pool;
+	unsigned off = 0;
+	int32_t pool;
 	c_poolop_type type;
 	c_str name;
 
@@ -5358,7 +5357,7 @@ guint c_dissect_msg_poolop(proto_tree *root,
 	off += 4;
 
 	if (data->header.ver < 2)
-		off = c_dissect_str(tree, hf_msg_poolop_name, &name, tvb, off);
+		off = c_dissect_str(tree, hf_msg_poolop_name, &name, tvb, data->pinfo, off);
 
 	type = (c_poolop_type)tvb_get_letohl(tvb, off);
 	proto_tree_add_item(tree, hf_msg_poolop_type,
@@ -5374,7 +5373,7 @@ guint c_dissect_msg_poolop(proto_tree *root,
 	off += 8;
 
 	if (data->header.ver >= 2)
-		off = c_dissect_str(tree, hf_msg_poolop_name, &name, tvb, off);
+		off = c_dissect_str(tree, hf_msg_poolop_name, &name, tvb, data->pinfo, off);
 
 	if (data->header.ver >= 4)
 	{
@@ -5392,7 +5391,7 @@ guint c_dissect_msg_poolop(proto_tree *root,
 
 	c_append_text(data, ti,
 		      ", Type: %s, Name: %s, Pool: %"PRId32,
-		      c_poolop_type_string(type),
+		      c_poolop_type_string(type, data->pinfo->pool),
 		      name.str,
 		      pool);
 
@@ -5401,15 +5400,15 @@ guint c_dissect_msg_poolop(proto_tree *root,
 
 /** Monitor Command 0x0032 */
 static
-guint c_dissect_msg_mon_cmd(proto_tree *root,
+unsigned c_dissect_msg_mon_cmd(proto_tree *root,
 			    tvbuff_t *tvb,
-			    guint front_len, guint middle_len _U_, guint data_len _U_,
+			    unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			    c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree, *subtree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 	c_str str;
 
 	/* ceph:/src/messages/MMonCommand.h */
@@ -5435,7 +5434,7 @@ guint c_dissect_msg_mon_cmd(proto_tree *root,
 					 tvb, off, -1, ENC_NA);
 		subtree = proto_item_add_subtree(ti, ett_msg_mon_cmd_arg);
 
-		off = c_dissect_str(subtree, hf_msg_mon_cmd_str, &str, tvb, off);
+		off = c_dissect_str(subtree, hf_msg_mon_cmd_str, &str, tvb, data->pinfo, off);
 
 		c_append_text(data, ti, " %s", str.str);
 
@@ -5447,15 +5446,15 @@ guint c_dissect_msg_mon_cmd(proto_tree *root,
 
 /** Mon Command ACK 0x0033 */
 static
-guint c_dissect_msg_mon_cmd_ack(proto_tree *root,
+unsigned c_dissect_msg_mon_cmd_ack(proto_tree *root,
 				tvbuff_t *tvb,
-				guint front_len, guint middle_len _U_, guint data_len,
+				unsigned front_len, unsigned middle_len _U_, unsigned data_len,
 				c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree, *subtree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 
 	/* ceph:/src/messages/MMonCommandAck.h */
 
@@ -5470,7 +5469,7 @@ guint c_dissect_msg_mon_cmd_ack(proto_tree *root,
 	proto_tree_add_item(tree, hf_msg_mon_cmd_ack_code,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
-	off = c_dissect_str(tree, hf_msg_mon_cmd_ack_res, NULL, tvb, off);
+	off = c_dissect_str(tree, hf_msg_mon_cmd_ack_res, NULL, tvb, data->pinfo, off);
 
 	i = tvb_get_letohl(tvb, off);
 	proto_tree_add_item(tree, hf_msg_mon_cmd_ack_arg_len,
@@ -5482,7 +5481,7 @@ guint c_dissect_msg_mon_cmd_ack(proto_tree *root,
 		subtree = proto_item_add_subtree(ti, ett_msg_mon_cmdack_arg);
 
 		off = c_dissect_str(subtree, hf_msg_mon_cmd_ack_arg_str, NULL,
-				    tvb, off);
+				    tvb, data->pinfo, off);
 
 		proto_item_set_end(ti, tvb, off);
 	}
@@ -5497,15 +5496,15 @@ guint c_dissect_msg_mon_cmd_ack(proto_tree *root,
 
 /** Get Pool Stats 0x003A */
 static
-guint c_dissect_msg_poolstats(proto_tree *root,
+unsigned c_dissect_msg_poolstats(proto_tree *root,
 			      tvbuff_t *tvb,
-			      guint front_len, guint middle_len _U_, guint data_len _U_,
+			      unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			      c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 	c_str str;
 
 	/* ceph:/src/messages/MGetPoolStats.h */
@@ -5527,7 +5526,7 @@ guint c_dissect_msg_poolstats(proto_tree *root,
 	off += 4;
 	while (i--)
 	{
-		off = c_dissect_str(tree, hf_msg_poolstats_pool, &str, tvb, off);
+		off = c_dissect_str(tree, hf_msg_poolstats_pool, &str, tvb, data->pinfo, off);
 		c_append_text(data, ti, "%s%s", str.str, i? ",":" ");
 	}
 
@@ -5536,15 +5535,15 @@ guint c_dissect_msg_poolstats(proto_tree *root,
 
 /** Pool Stats Reply 0x003B */
 static
-guint c_dissect_msg_poolstatsreply(proto_tree *root,
+unsigned c_dissect_msg_poolstatsreply(proto_tree *root,
 				   tvbuff_t *tvb,
-				   guint front_len, guint middle_len _U_, guint data_len _U_,
+				   unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				   c_pkt_data *data)
 {
 	proto_item *ti, *ti2;
 	proto_tree *tree, *subtree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 	c_str str;
 	c_encoded encstat;
 
@@ -5571,7 +5570,7 @@ guint c_dissect_msg_poolstatsreply(proto_tree *root,
 					  tvb, off, -1, ENC_NA);
 		subtree = proto_item_add_subtree(ti2, ett_msg_poolstatsreply_stat);
 
-		off = c_dissect_str(subtree, hf_msg_poolstatsreply_pool, &str, tvb, off);
+		off = c_dissect_str(subtree, hf_msg_poolstatsreply_pool, &str, tvb, data->pinfo, off);
 		c_append_text(data, ti, "%s%s", str.str, i? ",":" ");
 		proto_item_append_text(ti2, ", For: %s", str.str);
 
@@ -5596,12 +5595,12 @@ guint c_dissect_msg_poolstatsreply(proto_tree *root,
 
 /** Monitor Global ID 0x003C */
 static
-guint c_dissect_msg_mon_globalid(proto_tree *root,
+unsigned c_dissect_msg_mon_globalid(proto_tree *root,
 				 tvbuff_t *tvb,
-				 guint front_len _U_, guint middle_len _U_, guint data_len _U_,
+				 unsigned front_len _U_, unsigned middle_len _U_, unsigned data_len _U_,
 				 c_pkt_data *data)
 {
-	guint off = 0;
+	unsigned off = 0;
 
 	/* ceph:/src/messages/MMonGlobalID.h */
 
@@ -5617,15 +5616,15 @@ guint c_dissect_msg_mon_globalid(proto_tree *root,
 
 /** Monitor Election 0x0041 */
 static
-guint c_dissect_msg_mon_election(proto_tree *root,
+unsigned c_dissect_msg_mon_election(proto_tree *root,
 				 tvbuff_t *tvb,
-				 guint front_len, guint middle_len _U_, guint data_len _U_,
+				 unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				 c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 	c_mon_election_type type;
 
 	/* ceph:/src/messages/MMonElection.h */
@@ -5673,25 +5672,25 @@ guint c_dissect_msg_mon_election(proto_tree *root,
 
 	off = c_dissect_blob(tree, hf_msg_mon_election_sharing,
 			     hf_msg_mon_election_sharing_data, hf_msg_mon_election_sharing_size,
-			     tvb, off);
+			     tvb, data->pinfo, off);
 
-	c_append_text(data, ti, ", Operation: %s", c_mon_election_type_string(type));
+	c_append_text(data, ti, ", Operation: %s", c_mon_election_type_string(type, data->pinfo->pool));
 
 	return off;
 }
 
 /** Monitor Paxos 0x0042 */
 static
-guint c_dissect_msg_mon_paxos(proto_tree *root,
+unsigned c_dissect_msg_mon_paxos(proto_tree *root,
 			      tvbuff_t *tvb,
-			      guint front_len, guint middle_len _U_, guint data_len _U_,
+			      unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			      c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
-	guint64 pn;
+	unsigned off = 0;
+	uint32_t i;
+	uint64_t pn;
 	c_mon_paxos_op op;
 
 	/* ceph:/src/messages/MMonPaxos.h */
@@ -5749,7 +5748,7 @@ guint c_dissect_msg_mon_paxos(proto_tree *root,
 	off = c_dissect_blob(tree, hf_msg_mon_paxos_latest_val,
 			     hf_msg_mon_paxos_latest_val_data,
 			     hf_msg_mon_paxos_latest_val_size,
-			     tvb, off);
+			     tvb, data->pinfo, off);
 
 	i = tvb_get_letohl(tvb, off);
 	off += 4;
@@ -5757,7 +5756,7 @@ guint c_dissect_msg_mon_paxos(proto_tree *root,
 	{
 		proto_item *ti2;
 		proto_tree *subtree;
-		guint64 ver;
+		uint64_t ver;
 
 		ti2 = proto_tree_add_item(tree, hf_msg_mon_paxos_value, tvb, off, -1, ENC_NA);
 		subtree = proto_item_add_subtree(ti2, ett_msg_mon_paxos_value);
@@ -5769,29 +5768,29 @@ guint c_dissect_msg_mon_paxos(proto_tree *root,
 
 		off = c_dissect_blob(subtree, hf_msg_mon_paxos_val,
 				     hf_msg_mon_paxos_val_data, hf_msg_mon_paxos_val_size,
-				     tvb, off);
+				     tvb, data->pinfo, off);
 
 		proto_item_append_text(ti2, ", Version: %"PRIu64, ver);
 		proto_item_set_end(ti2, tvb, off);
 	}
 
 	c_append_text(data, ti, ", Op: %s, Proposal Number: %"PRIu64,
-		      c_mon_paxos_op_string(op), pn);
+		      c_mon_paxos_op_string(op, data->pinfo->pool), pn);
 
 	return off;
 }
 
 /** Monitor Probe 0x0043 */
 static
-guint c_dissect_msg_mon_probe(proto_tree *root,
+unsigned c_dissect_msg_mon_probe(proto_tree *root,
 			     tvbuff_t *tvb,
-			     guint front_len, guint middle_len _U_, guint data_len _U_,
+			     unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			     c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 	c_mon_probe_type type;
 	c_str name;
 
@@ -5811,7 +5810,7 @@ guint c_dissect_msg_mon_probe(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	off = c_dissect_str(tree, hf_msg_mon_probe_name, &name, tvb, off);
+	off = c_dissect_str(tree, hf_msg_mon_probe_name, &name, tvb, data->pinfo, off);
 
 	i = tvb_get_letohl(tvb, off);
 	off += 4;
@@ -5842,7 +5841,7 @@ guint c_dissect_msg_mon_probe(proto_tree *root,
 	}
 
 	c_append_text(data, ti, ", Type: %s, Name: %s",
-		      c_mon_probe_type_string(type),
+		      c_mon_probe_type_string(type, data->pinfo->pool),
 		      name.str);
 
 	return off;
@@ -5850,14 +5849,14 @@ guint c_dissect_msg_mon_probe(proto_tree *root,
 
 /** OSD Ping (0x0046) */
 static
-guint c_dissect_msg_osd_ping(proto_tree *root,
+unsigned c_dissect_msg_osd_ping(proto_tree *root,
 			     tvbuff_t *tvb,
-			     guint front_len, guint middle_len _U_, guint data_len _U_,
+			     unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			     c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 	c_osd_ping_op op;
 
 	/* ceph:/src/messages/MOSDPing.h */
@@ -5879,7 +5878,7 @@ guint c_dissect_msg_osd_ping(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	op = (c_osd_ping_op)tvb_get_guint8(tvb, off);
+	op = (c_osd_ping_op)tvb_get_uint8(tvb, off);
 	proto_tree_add_item(tree, hf_msg_osd_ping_op,
 			    tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -5893,21 +5892,21 @@ guint c_dissect_msg_osd_ping(proto_tree *root,
 		off += 8;
 	}
 
-	c_append_text(data, ti, ", Operation: %s", c_osd_ping_op_string(op));
+	c_append_text(data, ti, ", Operation: %s", c_osd_ping_op_string(op, data->pinfo->pool));
 	return off;
 }
 
 /** OSD Boot (0x0047) */
 static
-guint c_dissect_msg_osd_boot(proto_tree *root,
+unsigned c_dissect_msg_osd_boot(proto_tree *root,
 			     tvbuff_t *tvb,
-			     guint front_len, guint middle_len _U_, guint data_len _U_,
+			     unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			     c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 
 	/* ceph:/src/messages/MOSDBoot.h */
 
@@ -5920,11 +5919,11 @@ guint c_dissect_msg_osd_boot(proto_tree *root,
 
 	off = c_dissect_osd_superblock(tree, tvb, off, data);
 
-	off = c_dissect_entityaddr(tree, hf_msg_osd_boot_addr_back, NULL, tvb, off);
+	off = c_dissect_entityaddr(tree, hf_msg_osd_boot_addr_back, NULL, tvb, data->pinfo, off);
 
 	if (data->header.ver >= 2)
 	{
-		off = c_dissect_entityaddr(tree, hf_msg_osd_boot_addr_cluster, NULL, tvb, off);
+		off = c_dissect_entityaddr(tree, hf_msg_osd_boot_addr_cluster, NULL, tvb, data->pinfo, off);
 	}
 	if (data->header.ver >= 3)
 	{
@@ -5934,7 +5933,7 @@ guint c_dissect_msg_osd_boot(proto_tree *root,
 	}
 	if (data->header.ver >= 4)
 	{
-		off = c_dissect_entityaddr(tree, hf_msg_osd_boot_addr_front, NULL, tvb, off);
+		off = c_dissect_entityaddr(tree, hf_msg_osd_boot_addr_front, NULL, tvb, data->pinfo, off);
 	}
 	if (data->header.ver >= 5)
 	{
@@ -5944,7 +5943,7 @@ guint c_dissect_msg_osd_boot(proto_tree *root,
 		{
 			off = c_dissect_kv(tree, hf_msg_osd_boot_metadata,
 					   hf_msg_osd_boot_metadata_k, hf_msg_osd_boot_metadata_v,
-					   tvb, off);
+					   tvb, data->pinfo, off);
 		}
 	}
 
@@ -5953,15 +5952,15 @@ guint c_dissect_msg_osd_boot(proto_tree *root,
 
 /** PG Stats (0x0057) */
 static
-guint c_dissect_msg_pgstats(proto_tree *root,
+unsigned c_dissect_msg_pgstats(proto_tree *root,
 			    tvbuff_t *tvb,
-			    guint front_len, guint middle_len _U_, guint data_len _U_,
+			    unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			    c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 
 	/* ceph:/src/messages/MPGStats.h */
 
@@ -6007,15 +6006,15 @@ guint c_dissect_msg_pgstats(proto_tree *root,
 
 /** OSD PG Create (0x0059) */
 static
-guint c_dissect_msg_osd_pg_create(proto_tree *root,
+unsigned c_dissect_msg_osd_pg_create(proto_tree *root,
 				  tvbuff_t *tvb,
-				  guint front_len, guint middle_len _U_, guint data_len _U_,
+				  unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 				  c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 
 	/* ceph:/src/messages/MOSDPGCreate.h */
 
@@ -6050,17 +6049,17 @@ guint c_dissect_msg_osd_pg_create(proto_tree *root,
 
 /** Client Caps 0x0310 */
 static
-guint c_dissect_msg_client_caps(proto_tree *root,
+unsigned c_dissect_msg_client_caps(proto_tree *root,
 				tvbuff_t *tvb,
-				guint front_len, guint middle_len, guint data_len _U_,
+				unsigned front_len, unsigned middle_len, unsigned data_len _U_,
 				c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
+	unsigned off = 0;
 	c_cap_op_type op;
-	guint64 inode, relam;
-	guint32 snap_trace_len, xattr_len;
+	uint64_t inode, relam;
+	uint32_t snap_trace_len, xattr_len;
 
 	/* ceph:/src/messages/MClientCaps.h */
 
@@ -6150,7 +6149,7 @@ guint c_dissect_msg_client_caps(proto_tree *root,
 
 	if (data->header.ver >= 2)
 	{
-		off = c_dissect_data(tree, hf_msg_client_caps_flock, tvb, off);
+		off = c_dissect_data(tree, hf_msg_client_caps_flock, tvb, data->pinfo, off);
 	}
 
 	if (data->header.ver >= 3 && op == C_CAP_OP_IMPORT)
@@ -6173,7 +6172,7 @@ guint c_dissect_msg_client_caps(proto_tree *root,
 		proto_tree_add_item(tree, hf_msg_client_caps_inline_ver,
 				    tvb, off, 8, ENC_LITTLE_ENDIAN);
 		off += 8;
-		off = c_dissect_data(tree, hf_msg_client_caps_inline_data, tvb, off);
+		off = c_dissect_data(tree, hf_msg_client_caps_inline_data, tvb, data->pinfo, off);
 	}
 
 	c_warn_size(tree, tvb, off, front_len, data);
@@ -6185,7 +6184,7 @@ guint c_dissect_msg_client_caps(proto_tree *root,
 	proto_item_append_text(ti, ", Op: %s"
 			       ", Inode: 0x%016"PRIX64
 			       ", Relam: 0x%"PRIX64,
-			       c_cap_op_type_string(op),
+			       c_cap_op_type_string(op, data->pinfo->pool),
 			       inode, relam);
 
 	return front_len+middle_len;
@@ -6193,15 +6192,15 @@ guint c_dissect_msg_client_caps(proto_tree *root,
 
 /** Client Cap Release 0x0310 */
 static
-guint c_dissect_msg_client_caprel(proto_tree *root,
+unsigned c_dissect_msg_client_caprel(proto_tree *root,
 				  tvbuff_t *tvb,
-				  guint front_len, guint middle_len, guint data_len _U_,
+				  unsigned front_len, unsigned middle_len, unsigned data_len _U_,
 				  c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree, *subtree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 
 	/* ceph:/src/messages/MClientCapRelease.h */
 
@@ -6242,17 +6241,17 @@ guint c_dissect_msg_client_caprel(proto_tree *root,
 
 /** Time Check 0x0600 */
 static
-guint c_dissect_msg_timecheck(proto_tree *root,
+unsigned c_dissect_msg_timecheck(proto_tree *root,
 			      tvbuff_t *tvb,
-			      guint front_len, guint middle_len _U_, guint data_len _U_,
+			      unsigned front_len, unsigned middle_len _U_, unsigned data_len _U_,
 			      c_pkt_data *data)
 {
 	proto_item *ti;
 	proto_tree *tree;
-	guint off = 0;
-	guint32 i;
+	unsigned off = 0;
+	uint32_t i;
 	c_timecheck_op op;
-	guint64 epoch, round;
+	uint64_t epoch, round;
 
 	/* ceph:/src/messages/MTimeCheck.h */
 
@@ -6278,12 +6277,12 @@ guint c_dissect_msg_timecheck(proto_tree *root,
 
 	c_append_text(data, ti, ", Operation: %s, Epoch: %"PRIu64
 		      ", Round: %"PRIu64,
-		      c_timecheck_op_string(op),
+		      c_timecheck_op_string(op, data->pinfo->pool),
 		      epoch, round);
 
 	if (op == C_TIMECHECK_OP_PONG)
 	{
-		c_append_text(data, ti, ", Time: %s", c_format_timespec(tvb, off));
+		c_append_text(data, ti, ", Time: %s", c_format_timespec(tvb, data->pinfo, off));
 		proto_tree_add_item(tree, hf_msg_timecheck_time,
 				    tvb, off, 8, ENC_LITTLE_ENDIAN);
 	}
@@ -6361,15 +6360,15 @@ guint c_dissect_msg_timecheck(proto_tree *root,
  * node types.
  */
 static
-guint c_dissect_msg(proto_tree *tree,
-		    tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_msg(proto_tree *tree,
+		    tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	tvbuff_t *subtvb;
 	proto_item *ti;
 	proto_tree *subtree;
 	c_msg_type type;
-	guint32 front_len, middle_len, data_len;
-	guint size, parsedsize;
+	uint32_t front_len, middle_len, data_len;
+	unsigned size, parsedsize;
 
 	front_len  = tvb_get_letohl(tvb, off + C_OFF_HEAD1 + 0);
 	middle_len = tvb_get_letohl(tvb, off + C_OFF_HEAD1 + 4);
@@ -6467,7 +6466,7 @@ guint c_dissect_msg(proto_tree *tree,
 	off += 4;
 
 	proto_item_append_text(ti, ", Type: %s, From: %s",
-			       c_msg_type_string(type),
+			       c_msg_type_string(type, data->pinfo->pool),
 			       data->header.src.slug);
 	if (front_len ) proto_item_append_text(ti, ", Front Len: %d", front_len);
 	if (middle_len) proto_item_append_text(ti, ", Mid Len: %d",   middle_len);
@@ -6572,8 +6571,8 @@ guint c_dissect_msg(proto_tree *tree,
 
 /** Dissect a connection request. */
 static
-guint c_dissect_connect(proto_tree *root,
-			tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_connect(proto_tree *root,
+			tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	/* From ceph:/src/include/msgr.h
 	struct ceph_msg_connect {
@@ -6590,7 +6589,7 @@ guint c_dissect_connect(proto_tree *root,
 
 	proto_item *ti;
 	proto_tree *tree;
-	guint32 authsize;
+	uint32_t authsize;
 
 	authsize = tvb_get_letohl(tvb, off+28);
 
@@ -6630,8 +6629,8 @@ guint c_dissect_connect(proto_tree *root,
 
 /** Dissect a connection reply. */
 static
-guint c_dissect_connect_reply(proto_tree *root,
-			      tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_connect_reply(proto_tree *root,
+			      tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	/* From ceph:/src/include/msgr.h
 	struct ceph_msg_connect_reply {
@@ -6647,7 +6646,7 @@ guint c_dissect_connect_reply(proto_tree *root,
 
 	proto_item *ti;
 	proto_tree *tree;
-	guint32 authsize;
+	uint32_t authsize;
 
 	authsize = tvb_get_letohl(tvb, off+C_CONNECT_REPLY_OFF_OFFLEN);
 
@@ -6687,10 +6686,10 @@ guint c_dissect_connect_reply(proto_tree *root,
  * This handles the data that is sent before the protocol is actually started.
  */
 static
-guint c_dissect_new(proto_tree *tree,
-		    tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_new(proto_tree *tree,
+		    tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
-	gint bansize;
+	int bansize;
 
 	/*
 		Since the packet is larger than the max banner length we can read it
@@ -6712,9 +6711,9 @@ guint c_dissect_new(proto_tree *tree,
 	c_set_type(data, "Connect");
 
 	if (c_from_server(data))
-		off = c_dissect_entityaddr(tree, hf_server_info, NULL, tvb, off);
+		off = c_dissect_entityaddr(tree, hf_server_info, NULL, tvb, data->pinfo, off);
 
-	off = c_dissect_entityaddr(tree, hf_client_info, NULL, tvb, off);
+	off = c_dissect_entityaddr(tree, hf_client_info, NULL, tvb, data->pinfo, off);
 
 	if (c_from_client(data))
 		off = c_dissect_connect(tree, tvb, off, data);
@@ -6725,11 +6724,11 @@ guint c_dissect_new(proto_tree *tree,
 }
 
 static
-gboolean c_unknowntagnext(tvbuff_t *tvb, guint off)
+bool c_unknowntagnext(tvbuff_t *tvb, unsigned off)
 {
-	if (!tvb_bytes_exist(tvb, off, 1)) return FALSE;
+	if (!tvb_bytes_exist(tvb, off, 1)) return false;
 
-	return (try_val_to_str_ext(tvb_get_guint8(tvb, off), &c_tag_strings_ext) == NULL);
+	return (try_val_to_str_ext(tvb_get_uint8(tvb, off), &c_tag_strings_ext) == NULL);
 }
 
 /* Dissect a MSGR message.
@@ -6737,14 +6736,14 @@ gboolean c_unknowntagnext(tvbuff_t *tvb, guint off)
  * MSGR is Ceph's outer message protocol.
  */
 static
-guint c_dissect_msgr(proto_tree *tree,
-		     tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_msgr(proto_tree *tree,
+		     tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti;
 	c_tag tag;
-	guint unknowntagcount = 1;
+	unsigned unknowntagcount = 1;
 
-	tag = (c_tag)tvb_get_guint8(tvb, off);
+	tag = (c_tag)tvb_get_uint8(tvb, off);
 	ti = proto_tree_add_item(tree, hf_tag, tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
 
@@ -6821,7 +6820,7 @@ guint c_dissect_msgr(proto_tree *tree,
 			unknowntagcount++;
 		}
 
-		c_set_type(data, wmem_strdup_printf(wmem_packet_scope(),
+		c_set_type(data, wmem_strdup_printf(data->pinfo->pool,
 						    "UNKNOWN x%u",
 						    unknowntagcount));
 		expert_add_info(data->pinfo, ti, &ei_tag_unknown);
@@ -6833,8 +6832,8 @@ guint c_dissect_msgr(proto_tree *tree,
 /* Dissect a Protocol Data Unit
  */
 static
-guint c_dissect_pdu(proto_tree *root,
-		    tvbuff_t *tvb, guint off, c_pkt_data *data)
+unsigned c_dissect_pdu(proto_tree *root,
+		    tvbuff_t *tvb, unsigned off, c_pkt_data *data)
 {
 	proto_item *ti, *tif;
 	proto_tree *tree, *tree_filter;
@@ -6895,7 +6894,7 @@ guint c_dissect_pdu(proto_tree *root,
 }
 
 static
-guint c_pdu_end(tvbuff_t *tvb, packet_info *pinfo, guint off, c_pkt_data *data)
+unsigned c_pdu_end(tvbuff_t *tvb, packet_info *pinfo, unsigned off, c_pkt_data *data)
 {
 	c_inet	af;
 
@@ -6945,7 +6944,7 @@ guint c_pdu_end(tvbuff_t *tvb, packet_info *pinfo, guint off, c_pkt_data *data)
 	case C_STATE_SEQ:
 		return off + 8;
 	default:
-		switch ((c_tag)tvb_get_guint8(tvb, off++))
+		switch ((c_tag)tvb_get_uint8(tvb, off++))
 		{
 		case C_TAG_READY:
 		case C_TAG_RESETSESSION:
@@ -6966,10 +6965,9 @@ guint c_pdu_end(tvbuff_t *tvb, packet_info *pinfo, guint off, c_pkt_data *data)
 				   + tvb_get_letohl(tvb, off+C_CONNECT_REPLY_OFF_OFFLEN);
 		case C_TAG_CLOSE:
 			return off;
-			break;
 		case C_TAG_MSG:
 		{
-			guint32 front_len, middle_len, data_len;
+			uint32_t front_len, middle_len, data_len;
 
 			if (!tvb_bytes_exist(tvb, off+C_OFF_HEAD1, C_SIZE_HEAD1))
 				return C_NEEDMORE;
@@ -7000,7 +6998,7 @@ static
 int dissect_ceph(tvbuff_t *tvb, packet_info *pinfo,
 		 proto_tree *tree, void *pdata _U_)
 {
-	guint off, offt, offt2;
+	unsigned off, offt, offt2;
 	c_pkt_data data;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "Ceph");
@@ -7070,12 +7068,12 @@ int dissect_ceph_old(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 }
 
 static
-gboolean dissect_ceph_heur(tvbuff_t *tvb, packet_info *pinfo,
+bool dissect_ceph_heur(tvbuff_t *tvb, packet_info *pinfo,
 			   proto_tree *tree, void *data)
 {
 	conversation_t *conv;
 
-	if (tvb_memeql(tvb, 0, C_BANNER, C_BANNER_SIZE_MIN) != 0) return FALSE;
+	if (tvb_memeql(tvb, 0, C_BANNER, C_BANNER_SIZE_MIN) != 0) return false;
 
 	/*** It's ours! ***/
 
@@ -7084,7 +7082,7 @@ gboolean dissect_ceph_heur(tvbuff_t *tvb, packet_info *pinfo,
 	conversation_set_dissector(conv, ceph_handle);
 
 	dissect_ceph(tvb, pinfo, tree, data);
-	return TRUE;
+	return true;
 }
 
 /* Register the protocol with Wireshark.
@@ -10326,7 +10324,7 @@ proto_register_ceph(void)
 	};
 
 	/* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_ceph,
 		&ett_data,
 		&ett_str,
@@ -10436,24 +10434,24 @@ proto_register_ceph(void)
 	static ei_register_info ei[] = {
 		{ &ei_unused, {
 			"ceph.unused", PI_UNDECODED, PI_WARN,
-			"Unused data in message.  This usually indicates an error by the "
+			"Unused data in message. This usually indicates an error by the "
 			"sender or a bug in the dissector.", EXPFILL
 		} },
 		{ &ei_overrun, {
 			"ceph.overrun", PI_UNDECODED, PI_WARN,
-			"There was less data then expected.  This usually indicates an "
+			"There was less data then expected. This usually indicates an "
 			"error by the sender or a bug in the dissector.", EXPFILL
 		} },
 		{ &ei_tag_unknown, {
 			"ceph.tag_unknown", PI_UNDECODED, PI_ERROR,
-			"Unknown tag.  This is either an error by the sender or an "
+			"Unknown tag. This is either an error by the sender or an "
 			"indication that the dissector is out of date.", EXPFILL
 		} },
 		{ &ei_msg_unknown, {
 			"ceph.msg_unknown", PI_UNDECODED, PI_WARN,
 			"Unknown message type. This most likely means that the dissector "
-			"is out of date.  However it could also be an error by the "
-			"sender ", EXPFILL
+			"is out of date. However, it could also be an error by the "
+			"sender.", EXPFILL
 		} },
 		{ &ei_union_unknown, {
 			"ceph.union_unknown", PI_UNDECODED, PI_WARN,

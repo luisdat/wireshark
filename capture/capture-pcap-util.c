@@ -42,7 +42,7 @@
  * trying pcap_can_set_rfmon(), as pcap_can_set_rfmon() will
  * end up trying SIOCGIWMODE on the device if that ioctl exists.
  */
-#if defined(HAVE_PCAP_CREATE) && defined(__linux__)
+#if defined(__linux__)
 
 #include <sys/ioctl.h>
 
@@ -63,7 +63,7 @@
 #define HAVE_BONDING
 #endif
 
-#endif /* defined(HAVE_PCAP_CREATE) && defined(__linux__) */
+#endif /* defined(__linux__) */
 
 #include "capture/capture_ifinfo.h"
 #include "capture/capture-pcap-util.h"
@@ -80,8 +80,6 @@
 
 #ifndef _WIN32
 #include <netinet/in.h>
-#else
-#include <ws2tcpip.h>
 #endif
 
 #ifdef _WIN32
@@ -429,7 +427,7 @@ if_addr_copy(const if_addr_t *addr)
 static void*
 if_addr_copy_cb(const void *data, void *user_data _U_)
 {
-	return if_addr_copy((if_addr_t*)data);
+	return if_addr_copy((const if_addr_t*)data);
 }
 
 void
@@ -452,7 +450,7 @@ if_info_free(if_info_t *if_info)
 static void*
 copy_linktype_cb(const void *data, void *user_data _U_)
 {
-	data_link_info_t *linktype_info = (data_link_info_t *)data;
+	const data_link_info_t *linktype_info = (const data_link_info_t *)data;
 
 	data_link_info_t *ret = g_new(data_link_info_t, 1);
 	ret->dlt = linktype_info->dlt;
@@ -464,7 +462,7 @@ copy_linktype_cb(const void *data, void *user_data _U_)
 static void*
 copy_timestamp_cb(const void *data, void *user_data _U_)
 {
-	timestamp_info_t *timestamp_info = (timestamp_info_t *)data;
+	const timestamp_info_t *timestamp_info = (const timestamp_info_t *)data;
 
 	timestamp_info_t *ret = g_new(timestamp_info_t, 1);
 	ret->name = g_strdup(timestamp_info->name);
@@ -567,7 +565,7 @@ if_info_new(const char *name, const char *description, bool loopback)
 
 	/*
 	 * On Windows, the "description" is a vendor description,
-	 * and the friendly name isn't returned by Npcap/WinPcap.
+	 * and the friendly name isn't returned by Npcap.
 	 * Fetch it ourselves.
 	 */
 
@@ -595,7 +593,7 @@ if_info_new(const char *name, const char *description, bool loopback)
 		 * support NT 5 (W2K) and later, so all regular interfaces
 		 * should have GUIDs at the end of the name.  Therefore,
 		 * the description, if supplied, is a friendly name
-		 * provided by WinPcap, and there is no vendor
+		 * provided by Npcap, and there is no vendor
 		 * description.
 		 */
 		if_info->friendly_name = g_strdup(description);
@@ -786,14 +784,14 @@ get_interface_list_findalldevs_ex(const char *hostname, const char *port,
 #endif
 
 GList *
-get_interface_list_findalldevs(int *err, char **err_str)
+get_interface_list_findalldevs(bool wire_interface, int *err, char **err_str)
 {
 	GList  *il = NULL;
-	pcap_if_t *alldevs, *dev;
+	pcap_if_t *alldevs = NULL, *dev;
 	if_info_t *if_info;
 	char errbuf[PCAP_ERRBUF_SIZE];
 
-	if (pcap_findalldevs(&alldevs, errbuf) == -1) {
+	if (wire_interface && pcap_findalldevs(&alldevs, errbuf) == -1) {
 		*err = CANT_GET_INTERFACE_LIST;
 		if (err_str != NULL)
 			*err_str = cant_get_if_list_error_message(errbuf);
@@ -1072,7 +1070,6 @@ get_data_link_types(pcap_t *pch, interface_options *interface_opts,
 		/*
 		 * A negative return is an error.
 		 */
-#ifdef HAVE_PCAP_CREATE
 		/*
 		 * If we have pcap_create(), we have
 		 * pcap_statustostr(), and we can get back errors
@@ -1097,11 +1094,6 @@ get_data_link_types(pcap_t *pch, interface_options *interface_opts,
 			    pcap_statustostr(nlt), pcap_geterr(pch));
 			break;
 		}
-#else /* HAVE_PCAP_CREATE */
-		*status = CAP_DEVICE_OPEN_ERROR_OTHER;
-		*status_str = ws_strdup_printf("pcap_list_datalinks() failed: %s",
-		    pcap_geterr(pch));
-#endif /* HAVE_PCAP_CREATE */
 		return NULL;
 	}
 	data_link_types = NULL;
@@ -1120,31 +1112,7 @@ get_data_link_types(pcap_t *pch, interface_options *interface_opts,
 			data_link_types = g_list_append(data_link_types,
 			    data_link_info);
 	}
-#ifdef HAVE_PCAP_FREE_DATALINKS
 	pcap_free_datalinks(linktypes);
-#else
-	/*
-	 * In Windows, there's no guarantee that if you have a library
-	 * built with one version of the MSVC++ run-time library, and
-	 * it returns a pointer to allocated data, you can free that
-	 * data from a program linked with another version of the
-	 * MSVC++ run-time library.
-	 *
-	 * This is not an issue on UN*X.
-	 *
-	 * See the mail threads starting at
-	 *
-	 *	https://www.winpcap.org/pipermail/winpcap-users/2006-September/001421.html
-	 *
-	 * and
-	 *
-	 *	https://www.winpcap.org/pipermail/winpcap-users/2008-May/002498.html
-	 */
-#ifndef _WIN32
-#define xx_free free  /* hack so checkAPIs doesn't complain */
-	xx_free(linktypes);
-#endif /* _WIN32 */
-#endif /* HAVE_PCAP_FREE_DATALINKS */
 
 	*status_str = NULL;
 	return data_link_types;
@@ -1155,7 +1123,6 @@ static GList*
 get_pcap_timestamp_types(pcap_t *pch _U_, char **err_str _U_)
 {
 	GList *list = NULL;
-#ifdef HAVE_PCAP_SET_TSTAMP_TYPE
 	int *types;
 	int ntypes = pcap_list_tstamp_types(pch, &types);
 
@@ -1173,11 +1140,9 @@ get_pcap_timestamp_types(pcap_t *pch _U_, char **err_str _U_)
 	}
 
 	pcap_free_tstamp_types(types);
-#endif
 	return list;
 }
 
-#ifdef HAVE_PCAP_SET_TSTAMP_PRECISION
 /*
  * Request high-resolution time stamps.
  *
@@ -1205,6 +1170,11 @@ request_high_resolution_timestamp(pcap_t *pcap_h)
 	 * call it.  We have to, instead, use dlopen() to load
 	 * libpcap, and dlsym() to find a pointer to pcap_set_tstamp_precision(),
 	 * and if we find the pointer, call it.
+	 *
+	 * XXX - This shouldn't be needed anymore; we don't support running
+	 * on any release older than macOS 11, and starting with macOS 11 the
+	 * system libpcap is based on libpcap 1.5 or later and has
+	 * pcap_set_tstamp_precision().
 	 */
 	static bool initialized = false;
 	static int (*p_pcap_set_tstamp_precision)(pcap_t *, int);
@@ -1274,9 +1244,6 @@ have_high_resolution_timestamp(pcap_t *pcap_h)
 #endif /* __APPLE__ */
 }
 
-#endif /* HAVE_PCAP_SET_TSTAMP_PRECISION */
-
-#ifdef HAVE_PCAP_CREATE
 #ifdef HAVE_BONDING
 static bool
 is_linux_bonding_device(const char *ifname)
@@ -1381,6 +1348,20 @@ get_if_capabilities_pcap_create(interface_options *interface_opts,
 		caps->can_set_rfmon = false;
 	else if (status == 1) {
 		caps->can_set_rfmon = true;
+		if (interface_opts->monitor_mode) {
+			status = pcap_set_rfmon(pch, 1);
+			if (status < 0) {
+				/*
+				 * This "should not happen".
+				 */
+				*open_status = CAP_DEVICE_OPEN_ERROR_OTHER;
+				*open_status_str = ws_strdup_printf("pcap_set_rfmon() returned %d",
+				    status);
+				pcap_close(pch);
+				g_free(caps);
+				return NULL;
+			}
+		}
 	} else {
 		/*
 		 * This "should not happen".
@@ -1440,63 +1421,14 @@ get_if_capabilities_pcap_create(interface_options *interface_opts,
 		g_free(caps);
 		return NULL;
 	}
+	if (interface_opts->monitor_mode) {
+		caps->data_link_types_rfmon = caps->data_link_types;
+		caps->data_link_types = NULL;
+	}
 
 	caps->timestamp_types = get_pcap_timestamp_types(pch, NULL);
 
 	pcap_close(pch);
-
-	if (caps->can_set_rfmon) {
-		/* This devices claims it can set rfmon. Get the capabilities
-		 * when in monitor mode. We just succeeded above, so if we
-		 * fail on anything here, just say that despite claims we
-		 * can't actually set monitor mode.
-		 */
-		pch = pcap_create(interface_opts->name, errbuf);
-		if (pch == NULL) {
-			/*
-			 * This "should not happen".
-			 * It just succeeded above, what can this mean?
-			 */
-			return caps;
-		}
-
-		status = pcap_set_rfmon(pch, 1);
-		if (status < 0) {
-			/*
-			 * This "should not happen".
-			 * It claims that monitor mode can be set, but
-			 * there's an error when we try to do so.
-			 */
-#if 0
-			*open_status = CAP_DEVICE_OPEN_ERROR_OTHER;
-			*open_status_str = ws_strdup_printf("pcap_set_rfmon() returned %d",
-			    status);
-#endif
-			caps->can_set_rfmon = false;
-			pcap_close(pch);
-			return caps;
-		}
-
-		status = pcap_activate(pch);
-		if (status < 0) {
-			/*
-			 * This "should not happen". (It just succeeded above.)
-			 * pcap_set_rfmon didn't return an error, but it
-			 * can't be activated after setting monitor mode?
-			 */
-			caps->can_set_rfmon = false;
-			pcap_close(pch);
-			return NULL;
-		}
-
-		caps->data_link_types_rfmon = get_data_link_types(pch,
-		    interface_opts, open_status, open_status_str);
-		if (caps->data_link_types == NULL) {
-			caps->can_set_rfmon = false;
-		}
-
-		pcap_close(pch);
-	}
 
 	*open_status = CAP_DEVICE_OPEN_NO_ERR;
 	if (open_status_str != NULL)
@@ -1524,11 +1456,7 @@ set_open_status_str(int status, pcap_t *pcap_h,
 
 pcap_t *
 open_capture_device_pcap_create(
-#if defined(HAVE_PCAP_SET_TSTAMP_PRECISION)
-    capture_options* capture_opts,
-#else
     capture_options* capture_opts _U_,
-#endif
     interface_options *interface_opts, int timeout,
     cap_device_open_status *open_status,
     char (*open_status_str)[PCAP_ERRBUF_SIZE])
@@ -1574,39 +1502,30 @@ open_capture_device_pcap_create(
 		return NULL;
 	}
 
-#ifdef HAVE_PCAP_SET_TSTAMP_PRECISION
 	/*
-	 * If we're writing pcapng files, try to enable
-	 * nanosecond-resolution capture; any code that
-	 * can read pcapng files must be able to handle
-	 * nanosecond-resolution time stamps.  We don't
-	 * care whether it succeeds or fails - if it fails,
-	 * we just use the microsecond-precision time stamps
-	 * we get.
+	 * Try to enable nanosecond-resolution capture; any code
+	 * that can read pcapng files must be able to handle
+	 * nanosecond-resolution time stamps. We think at this
+	 * point that code that reads pcap files should recognize
+	 * the nanosecond-resolution pcap file magic number. If
+	 * it doesn't, we can downconvert via a program that
+	 * uses libwiretap.
 	 *
-	 * If we're writing pcap files, don't try to enable
-	 * nanosecond-resolution capture, as not all code
-	 * that reads pcap files recognizes the nanosecond-
-	 * resolution pcap file magic number.
 	 * We don't care whether this succeeds or fails; if it
 	 * fails (because we don't have pcap_set_tstamp_precision(),
 	 * or because we do but the OS or device doesn't support
-	 * nanosecond resolution timing), we just use microsecond-
-	 * resolution time stamps.
+	 * nanosecond resolution timing), we just use the microsecond-
+	 * resolution time stamps we get.
 	 */
-	if (capture_opts->use_pcapng) {
-		status = request_high_resolution_timestamp(pcap_h);
-		if (status < 0) {
-			/* Error. */
-			set_open_status_str(status, pcap_h, open_status_str);
-			*open_status = CAP_DEVICE_OPEN_ERROR_OTHER;
-			pcap_close(pcap_h);
-			return NULL;
-		}
+	status = request_high_resolution_timestamp(pcap_h);
+	if (status < 0) {
+		/* Error. */
+		set_open_status_str(status, pcap_h, open_status_str);
+		*open_status = CAP_DEVICE_OPEN_ERROR_OTHER;
+		pcap_close(pcap_h);
+		return NULL;
 	}
-#endif /* HAVE_PCAP_SET_TSTAMP_PRECISION */
 
-#ifdef HAVE_PCAP_SET_TSTAMP_TYPE
 	if (interface_opts->timestamp_type) {
 		status = pcap_set_tstamp_type(pcap_h, interface_opts->timestamp_type_id);
 		/*
@@ -1620,7 +1539,6 @@ open_capture_device_pcap_create(
 			return NULL;
 		}
 	}
-#endif /* HAVE_PCAP_SET_TSTAMP_PRECISION */
 
 	ws_debug("buffersize %d.", interface_opts->buffer_size);
 	if (interface_opts->buffer_size != 0) {
@@ -1661,13 +1579,11 @@ open_capture_device_pcap_create(
 			    sizeof *open_status_str);
 			break;
 
-#ifdef HAVE_PCAP_ERROR_PROMISC_PERM_DENIED
 		case PCAP_ERROR_PROMISC_PERM_DENIED:
 			*open_status = CAP_DEVICE_OPEN_ERROR_PROMISC_PERM_DENIED;
 			(void) g_strlcpy(*open_status_str, pcap_geterr(pcap_h),
 			    sizeof *open_status_str);
 			break;
-#endif
 
 		case PCAP_ERROR_RFMON_NOTSUP:
 			*open_status = CAP_DEVICE_OPEN_ERROR_RFMON_NOTSUP;
@@ -1709,13 +1625,11 @@ open_capture_device_pcap_create(
 			    sizeof *open_status_str);
 			break;
 
-#ifdef HAVE_PCAP_WARNING_TSTAMP_TYPE_NOTSUP
 		case PCAP_WARNING_TSTAMP_TYPE_NOTSUP:
 			*open_status = CAP_DEVICE_OPEN_WARNING_TSTAMP_TYPE_NOTSUP;
 			(void) g_strlcpy(*open_status_str, pcap_geterr(pcap_h),
 			    sizeof *open_status_str);
 			break;
-#endif
 
 		case PCAP_WARNING:
 			*open_status = CAP_DEVICE_OPEN_WARNING_OTHER;
@@ -1735,109 +1649,6 @@ open_capture_device_pcap_create(
 		 */
 		*open_status = CAP_DEVICE_OPEN_NO_ERR;
 	}
-	return pcap_h;
-}
-#endif /* HAVE_PCAP_CREATE */
-
-if_capabilities_t *
-get_if_capabilities_pcap_open_live(interface_options *interface_opts,
-    cap_device_open_status *open_status, char **open_status_str)
-{
-	if_capabilities_t *caps;
-	char errbuf[PCAP_ERRBUF_SIZE];
-	pcap_t *pch;
-
-	pch = pcap_open_live(interface_opts->name, MIN_PACKET_SIZE, 0, 0,
-	    errbuf);
-	if (pch == NULL) {
-		*open_status = CAP_DEVICE_OPEN_ERROR_OTHER;
-		*open_status_str = g_strdup(errbuf[0] == '\0' ? "Unknown error (pcap bug; actual error cause not reported)" : errbuf);
-		return NULL;
-	}
-
-	caps = (if_capabilities_t *)g_malloc0(sizeof *caps);
-	caps->can_set_rfmon = false;
-	caps->data_link_types = get_data_link_types(pch, interface_opts,
-	    open_status, open_status_str);
-	if (caps->data_link_types == NULL) {
-		pcap_close(pch);
-		g_free(caps);
-		return NULL;
-	}
-
-	caps->timestamp_types = get_pcap_timestamp_types(pch, NULL);
-
-	pcap_close(pch);
-
-	*open_status = CAP_DEVICE_OPEN_NO_ERR;
-	*open_status_str = NULL;
-	return caps;
-}
-
-pcap_t *
-open_capture_device_pcap_open_live(interface_options *interface_opts,
-    int timeout, cap_device_open_status *open_status,
-    char (*open_status_str)[PCAP_ERRBUF_SIZE])
-{
-	pcap_t *pcap_h;
-	int snaplen;
-
-	if (interface_opts->has_snaplen)
-		snaplen = interface_opts->snaplen;
-	else {
-		/*
-		 * Default - use the non-D-Bus maximum snapshot length of
-		 * 256KB, which should be big enough (libpcap didn't get
-		 * D-Bus support until after it goet pcap_create() and
-		 * pcap_activate(), so we don't have D-Bus support and
-		 * don't have to worry about really huge packets).
-		 */
-		snaplen = 256*1024;
-	}
-	ws_debug("pcap_open_live() calling using name %s, snaplen %d, promisc_mode %d.",
-	    interface_opts->name, snaplen, interface_opts->promisc_mode);
-	/*
-	 * This might succeed but put a messsage in *open_status_str;
-	 * that means that a warning was issued.
-	 *
-	 * Clear the error message buffer, so that if it's not an empty
-	 * string after the call, we know a warning was issued.
-	 */
-	(*open_status_str)[0] = '\0';
-	pcap_h = pcap_open_live(interface_opts->name, snaplen,
-	    interface_opts->promisc_mode, timeout, *open_status_str);
-	ws_debug("pcap_open_live() returned %p.", (void *)pcap_h);
-	if (pcap_h == NULL) {
-		*open_status = CAP_DEVICE_OPEN_ERROR_OTHER;
-		return NULL;
-	}
-	if ((*open_status_str)[0] != '\0') {
-		/*
-		 * Warning.  The call succeeded, but something happened
-		 * that the user might want to know.
-		 */
-		*open_status = CAP_DEVICE_OPEN_WARNING_OTHER;
-	} else {
-		/*
-		 * No warning issued.
-		 */
-		*open_status = CAP_DEVICE_OPEN_NO_ERR;
-	}
-
-#ifdef _WIN32
-	/* Try to set the capture buffer size. */
-	if (interface_opts->buffer_size > 1) {
-		/*
-		 * We have no mechanism to report a warning if this
-		 * fails; we just keep capturing with the smaller buffer,
-		 * as is the case on systems with BPF and pcap_create()
-		 * and pcap_set_buffer_size(), where pcap_activate() just
-		 * silently clamps the buffer size to the maximum.
-		 */
-		pcap_setbuff(pcap_h, interface_opts->buffer_size * 1024 * 1024);
-	}
-#endif
-
 	return pcap_h;
 }
 
@@ -2175,9 +1986,9 @@ get_pcap_failure_secondary_error_message(cap_device_open_status open_status,
     /*
      * On Windows, first make sure they *have* Npcap installed.
      */
-    if (!has_wpcap) {
+    if (!has_npcap) {
         return
-            "In order to capture packets, Npcap or WinPcap must be installed. See\n"
+            "In order to capture packets, Npcap must be installed. See\n"
             "\n"
             "        https://npcap.com/\n"
             "\n"

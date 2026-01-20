@@ -77,21 +77,21 @@ void SyntaxLineEdit::setSyntaxState(SyntaxState state) {
     syntax_state_ = state;
 
     // XXX Should we drop the background colors here in favor of ::paintEvent below?
-    QColor valid_bg = ColorUtils::fromColorT(&prefs.gui_text_valid);
-    QColor valid_fg = ColorUtils::contrastingTextColor(valid_bg);
-    QColor invalid_bg = ColorUtils::fromColorT(&prefs.gui_text_invalid);
-    QColor invalid_fg = ColorUtils::contrastingTextColor(invalid_bg);
-    QColor deprecated_bg = ColorUtils::fromColorT(&prefs.gui_text_deprecated);
-    QColor deprecated_fg = ColorUtils::contrastingTextColor(deprecated_bg);
+    QColor valid_bg = ColorUtils::fromColorT(&prefs.gui_filter_valid_bg);
+    QColor valid_fg = ColorUtils::fromColorT(&prefs.gui_filter_valid_fg);
+    QColor invalid_bg = ColorUtils::fromColorT(&prefs.gui_filter_invalid_bg);
+    QColor invalid_fg = ColorUtils::fromColorT(&prefs.gui_filter_invalid_fg);
+    QColor deprecated_bg = ColorUtils::fromColorT(&prefs.gui_filter_deprecated_bg);
+    QColor deprecated_fg = ColorUtils::fromColorT(&prefs.gui_filter_deprecated_fg);
 
-    // Try to matche QLineEdit's placeholder text color (which sets the
+    // Try to match QLineEdit's placeholder text color (which sets the
     // alpha channel to 50%, which doesn't work in style sheets).
     // Setting the foreground color lets us avoid yet another background
     // color preference and should hopefully make things easier to
     // distinguish for color blind folk.
     QColor busy_fg = ColorUtils::alphaBlend(QApplication::palette().text(), QApplication::palette().base(), 0.5);
 
-    state_style_sheet_ = QString(
+    state_style_sheet_ = QStringLiteral(
             "SyntaxLineEdit[syntaxState=\"%1\"] {"
             "  color: %2;"
             "  background-color: %3;"
@@ -151,7 +151,7 @@ QString SyntaxLineEdit::createSyntaxErrorMessageFull(
 
     if (loc_start >= 0 && loc_length >= 1) {
         // Add underlined location
-        msg = QString("<p>%1<pre>  %2\n  %3^%4</pre></p>")
+        msg = QStringLiteral("<p>%1<pre>  %2\n  %3^%4</pre></p>")
             .arg(msg)
             .arg(filter)
             .arg(QString(' ').repeated(static_cast<int>(loc_start)))
@@ -461,13 +461,13 @@ void SyntaxLineEdit::paintEvent(QPaintEvent *event)
 
     switch (syntax_state_) {
     case Valid:
-        bg = ColorUtils::fromColorT(&prefs.gui_text_valid);
+        bg = ColorUtils::fromColorT(&prefs.gui_filter_valid_bg);
         break;
     case Invalid:
-        bg = ColorUtils::fromColorT(&prefs.gui_text_invalid);
+        bg = ColorUtils::fromColorT(&prefs.gui_filter_invalid_bg);
         break;
     case Deprecated:
-        bg = ColorUtils::fromColorT(&prefs.gui_text_deprecated);
+        bg = ColorUtils::fromColorT(&prefs.gui_filter_deprecated_bg);
         break;
     default:
         bg = palette().base();

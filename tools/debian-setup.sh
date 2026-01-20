@@ -20,7 +20,7 @@ function print_usage() {
 	printf "\\t--install-optional: install optional software as well\\n"
 	printf "\\t--install-deb-deps: install packages required to build the .deb file\\n"
 	printf "\\t--install-test-deps: install packages required to run all tests\\n"
-	printf "\\t--install-qt5-deps: force installation of packages required to use Qt5\\n"
+	printf "\\t--install-qt5-deps: force installation of packages required to use Qt5 (not recommended)\\n"
 	printf "\\t--install-qt6-deps: force installation of packages required to use Qt6\\n"
 	printf "\\t--install-all: install everything\\n"
 	printf "\\t[other]: other options are passed as-is to apt\\n"
@@ -39,7 +39,7 @@ function add_package() {
 	elif [ -n "$versionreq" ]; then
 		# Require minimum version or fail.
 		# shellcheck disable=SC2086
-		dpkg --compare-versions $version $versionreq || return 1
+		dpkg --compare-versions $version ge $versionreq || return 1
 	fi
 
 	# package is found, append it to list
@@ -96,6 +96,7 @@ then
 fi
 
 BASIC_LIST="
+	cmake
 	flex
 	g++
 	gcc
@@ -105,6 +106,8 @@ BASIC_LIST="
 	libpcap-dev
 	libpcre2-dev
 	libspeexdsp-dev
+	libxml2-dev
+	libxml2-utils
 	make
 	python3
 	"
@@ -132,6 +135,10 @@ QT6_LIST="
 	qt6-tools-dev-tools
 	"
 
+# apt-get update must be called before calling add_package
+# otherwise available packages appear as unavailable
+apt-get update || exit 2
+
 # qt6-5compat-dev: Debian >= bookworm, Ubuntu >= 23.04
 # libqt6core5compat6-dev: Ubuntu 22.04
 add_package QT6_LIST qt6-5compat-dev ||
@@ -151,17 +158,8 @@ fi
 
 if [ $HAVE_ADD_QT -eq 0 ]
 then
-	# Try to select Qt version from distro
-	test -e /etc/os-release && os_release='/etc/os-release' || os_release='/usr/lib/os-release'
-	# shellcheck disable=SC1090
-	. "${os_release}"
-
-	# Ubuntu 22.04 (jammy) / Debian 12 (bookworm) or later
-	MAJOR=$(echo "$VERSION_ID" | cut -f1 -d.)
-	if [ "${ID:-linux}" = "ubuntu" ] && [ "${MAJOR:-0}" -ge "22" ]; then
-		echo "Installing Qt6."
-		BASIC_LIST="$BASIC_LIST $QT6_LIST"
-	elif [ "${ID:-linux}" = "debian" ] && [ "${MAJOR:-0}" -ge "12" ]; then
+	# The user didn't select a Qt version. Select Qt 6 if it's available, otherwise Qt 5.
+	if apt-cache show qt6-base-dev 2&> /dev/null ; then
 		echo "Installing Qt6."
 		BASIC_LIST="$BASIC_LIST $QT6_LIST"
 	else
@@ -174,20 +172,25 @@ ADDITIONAL_LIST="
 	ccache
 	doxygen
 	git
+	libbrotli-dev
 	libcap-dev
+	libgnutls28-dev
 	libkrb5-dev
-	liblua5.3-dev
 	liblz4-dev
+	libmaxminddb-dev
 	libminizip-dev
+	libnghttp2-dev
 	libnl-3-dev
 	libnl-cli-3-dev
 	libopencore-amrnb-dev
+	libopus-dev
 	libparse-yapp-perl
 	libsbc-dev
 	libsmi2-dev
 	libsnappy-dev
 	libspandsp-dev
-	libxml2-dev
+	libsystemd-dev
+	libxxhash-dev
 	libzstd-dev
 	ninja-build
 	perl
@@ -208,7 +211,6 @@ DEBDEPS_LIST="
 	dh-python
 	docbook-xml
 	docbook-xsl
-	libxml2-utils
 	lintian
 	lsb-release
 	po-debconf
@@ -220,72 +222,32 @@ TESTDEPS_LIST="
 	gdb
 	python3-pytest
 	python3-pytest-xdist
+	softhsm2
 	"
 
-# apt-get update must be called before calling add_package
-# otherwise available packages appear as unavailable
-apt-get update || exit 2
+# libssh-gcrypt-dev: Debian < trixie, Ubuntu < 25.04
+# libssh-dev: All releases, but trixie and 25.04 has relicensed OpenSSH
+# See: https://bugs.debian.org/1074337
+add_package ADDITIONAL_LIST libssh-dev 0.11.1-1 ||
+ADDITIONAL_LIST="$ADDITIONAL_LIST libssh-gcrypt-dev"
 
-# cmake3 3.5.1: Ubuntu 14.04
-# cmake >= 3.5: Debian >= jessie-backports, Ubuntu >= 16.04
-add_package BASIC_LIST cmake3 ||
-BASIC_LIST="$BASIC_LIST cmake"
-
-# Debian >= wheezy-backports, Ubuntu >= 16.04
-add_package ADDITIONAL_LIST libnghttp2-dev ||
-echo "libnghttp2-dev is unavailable" >&2
+# Lua 5.4: Debian >= bullseye, Ubuntu >= 22.04 (jammy)
+# Lua 5.3: Debian >= buster, Ubuntu >= 20.04 (focal)
+add_package ADDITIONAL_LIST liblua5.4-dev ||
+ADDITIONAL_LIST="$ADDITIONAL_LIST liblua5.3-dev"
 
 # Debian >= bookworm, Ubuntu >= 22.04
 add_package ADDITIONAL_LIST libnghttp3-dev ||
 echo "libnghttp3-dev is unavailable" >&2
 
-# libssh-gcrypt-dev: Debian >= jessie, Ubuntu >= 16.04
-# libssh-dev (>= 0.6): Debian >= jessie, Ubuntu >= 14.04
-add_package ADDITIONAL_LIST libssh-gcrypt-dev ||
-add_package ADDITIONAL_LIST libssh-dev ||
-echo "libssh-gcrypt-dev and libssh-dev are unavailable" >&2
-
-# libgnutls28-dev: Debian >= wheezy-backports, Ubuntu >= 12.04
-add_package ADDITIONAL_LIST libgnutls28-dev ||
-echo "libgnutls28-dev is unavailable" >&2
-
-# Debian >= jessie-backports, Ubuntu >= 16.04
-add_package ADDITIONAL_LIST libmaxminddb-dev ||
-echo "libmaxminddb-dev is unavailable" >&2
-
-# Debian >= stretch-backports, Ubuntu >= 16.04
-add_package ADDITIONAL_LIST libbrotli-dev ||
-echo "libbrotli-dev is unavailable" >&2
-
-# libsystemd-journal-dev: Ubuntu 14.04
-# libsystemd-dev: Ubuntu >= 16.04
-add_package ADDITIONAL_LIST libsystemd-dev ||
-add_package ADDITIONAL_LIST libsystemd-journal-dev ||
-echo "libsystemd-dev is unavailable"
-
 # ilbc library from http://www.deb-multimedia.org
 add_package ADDITIONAL_LIST libilbc-dev ||
 echo "libilbc-dev is unavailable"
 
-# opus library libopus-dev
-add_package ADDITIONAL_LIST libopus-dev ||
-    echo "libopus-dev is unavailable"
-
+# Debian >= bullseye, Ubuntu >= 22.04 (jammy)
 # bcg729 library libbcg729-dev
 add_package ADDITIONAL_LIST libbcg729-dev ||
     echo "libbcg729-dev is unavailable"
-
-# softhsm2 2.0.0: Ubuntu 16.04
-# softhsm2 2.2.0: Debian >= jessie-backports, Ubuntu 18.04
-# softhsm2 >= 2.4.0: Debian >= buster, Ubuntu >= 18.10
-if ! add_package TESTDEPS_LIST softhsm2 '>= 2.3.0'; then
-	if add_package TESTDEPS_LIST softhsm2; then
-		# If SoftHSM 2.3.0 is unavailble, install p11tool.
-		TESTDEPS_LIST="$TESTDEPS_LIST gnutls-bin"
-	else
-		echo "softhsm2 is unavailable" >&2
-	fi
-fi
 
 ACTUAL_LIST=$BASIC_LIST
 

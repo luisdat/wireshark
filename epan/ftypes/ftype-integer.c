@@ -9,14 +9,12 @@
 #include "config.h"
 
 #include <stdlib.h>
-#include <errno.h>
 #include "ftypes-int.h"
 #include <epan/addr_resolv.h>
 #include <epan/strutil.h>
 #include <epan/to_str.h>
 
-#include <wsutil/pint.h>
-#include <wsutil/safe-math.h>
+#include <wsutil/array.h>
 
 static void
 int_fvalue_new(fvalue_t *fv)
@@ -106,7 +104,7 @@ char_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _U_, in
 		default:
 			if (field_display == BASE_HEX) {
 				*buf++ = 'x';
-				buf = guint8_to_hex(buf, fv->value.uinteger64);
+				buf = uint8_to_hex(buf, (uint8_t)fv->value.uinteger64);
 			}
 			else {
 				*buf++ = ((fv->value.uinteger64 >> 6) & 0x7) + '0';
@@ -128,17 +126,27 @@ uint64_cmp_order(const fvalue_t *a, const fvalue_t *b, int *cmp)
 	enum ft_result res;
 
 	res = fvalue_to_uinteger64(a, &val_a);
+	/* As currently used, a should be an unsigned integer and this succeed. */
 	if (res != FT_OK)
 		return res;
 
 	res = fvalue_to_uinteger64(b, &val_b);
-	if (res != FT_OK)
+	switch (res) {
+	case FT_OK:
+		if (val_a == val_b)
+			*cmp = 0;
+		else
+			*cmp = val_a < val_b ? -1 : 1;
+		break;
+	case FT_UNDERFLOW:
+		*cmp = 1;
+		break;
+	case FT_OVERFLOW:
+		*cmp = -1;
+		break;
+	default:
 		return res;
-
-	if (val_a == val_b)
-		*cmp = 0;
-	else
-		*cmp = val_a < val_b ? -1 : 1;
+	}
 
 	return FT_OK;
 }
@@ -150,17 +158,27 @@ sint64_cmp_order(const fvalue_t *a, const fvalue_t *b, int *cmp)
 	enum ft_result res;
 
 	res = fvalue_to_sinteger64(a, &val_a);
+	/* As currently used, a should be a signed integer and this succeed. */
 	if (res != FT_OK)
 		return res;
 
 	res = fvalue_to_sinteger64(b, &val_b);
-	if (res != FT_OK)
+	switch (res) {
+	case FT_OK:
+		if (val_a == val_b)
+			*cmp = 0;
+		else
+			*cmp = val_a < val_b ? -1 : 1;
+		break;
+	case FT_UNDERFLOW:
+		*cmp = 1;
+		break;
+	case FT_OVERFLOW:
+		*cmp = -1;
+		break;
+	default:
 		return res;
-
-	if (val_a == val_b)
-		*cmp = 0;
-	else
-		*cmp = val_a < val_b ? -1 : 1;
+	}
 
 	return FT_OK;
 }
@@ -502,18 +520,18 @@ sinteger64_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _
 	else {
 		val = fv->value.sinteger64;
 	}
-	guint64_to_str_buf(val, buf, size);
+	uint64_to_str_buf(val, buf, size);
 	return result;
 }
 
 static char *
-uinteger64_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _U_, int field_display)
+uinteger64_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int field_display)
 {
 	size_t size = 20 + 1; /* enough for 2^64-1, in decimal or 0xXXXXXXXXXXXXXXXX */
 	char *result = wmem_alloc(scope, size);
 	char *buf = result;
 
-	if (FIELD_DISPLAY(field_display) == BASE_HEX || FIELD_DISPLAY(field_display) == BASE_HEX_DEC) {
+	if ((rtype != FTREPR_EK) && (FIELD_DISPLAY(field_display) == BASE_HEX || FIELD_DISPLAY(field_display) == BASE_HEX_DEC)) {
 		/* This format perfectly fits into 19 bytes. */
 		*buf++ = '0';
 		*buf++ = 'x';
@@ -521,16 +539,16 @@ uinteger64_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _
 		switch (fv->ftype->ftype) {
 
 		case FT_UINT8:
-			buf = guint8_to_hex(buf, fv->value.uinteger64);
+			buf = uint8_to_hex(buf, (uint8_t)fv->value.uinteger64);
 			break;
 
 		case FT_UINT16:
-			buf = word_to_hex(buf, fv->value.uinteger64);
+			buf = word_to_hex(buf, (uint16_t)fv->value.uinteger64);
 			break;
 
 		case FT_UINT24:
-			buf = guint8_to_hex(buf, (fv->value.uinteger64 & 0x00ff0000) >> 16);
-			buf = word_to_hex(buf, (fv->value.uinteger64 & 0x0000ffff));
+			buf = uint8_to_hex(buf, (uint8_t)((fv->value.uinteger64 & 0x00ff0000) >> 16));
+			buf = word_to_hex(buf, (uint16_t)(fv->value.uinteger64 & 0x0000ffff));
 			break;
 
 		case FT_UINT32:
@@ -544,7 +562,7 @@ uinteger64_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _
 		*buf++ = '\0';
 	}
 	else {
-		guint64_to_str_buf(fv->value.uinteger64, buf, size);
+		uint64_to_str_buf(fv->value.uinteger64, buf, size);
 	}
 	return result;
 }
@@ -581,7 +599,7 @@ uint64_unary_minus(fvalue_t *dst, const fvalue_t *src, char **err_ptr)
 	/* Unsigned64 integers are promoted to signed 64 bits. */
 	if (src->value.uinteger64 > INT64_MAX) {
 		if (err_ptr)
-			*err_ptr = ws_strdup_printf("%"PRIu64" overflows gint64",
+			*err_ptr = ws_strdup_printf("%"PRIu64" overflows int64",
 							src->value.uinteger64);
 		return FT_ERROR;
 	}
@@ -626,7 +644,7 @@ sint64_unary_minus(fvalue_t * dst, const fvalue_t *src, char **err_ptr _U_)
 static enum ft_result
 sint64_add(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
 {
-	if (!psnip_safe_int64_add(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64)) {
+	if (ckd_add(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64)) {
 		*err_ptr = ws_strdup_printf("sint64_add: overflow");
 		return FT_ERROR;
 	}
@@ -636,7 +654,7 @@ sint64_add(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
 static enum ft_result
 _sint64_subtract(int64_t *sint_dst, int64_t sint_a, int64_t sint_b, char **err_ptr)
 {
-	if (!psnip_safe_int64_sub(sint_dst, sint_a, sint_b)) {
+	if (ckd_sub(sint_dst, sint_a, sint_b)) {
 		*err_ptr = ws_strdup_printf("sint64_subtract: overflow");
 		return FT_ERROR;
 	}
@@ -652,7 +670,7 @@ sint64_subtract(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_
 static enum ft_result
 sint64_multiply(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
 {
-	if (!psnip_safe_int64_mul(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64)) {
+	if (ckd_mul(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64)) {
 		*err_ptr = ws_strdup_printf("sint64_multiply: overflow");
 		return FT_ERROR;
 	}
@@ -665,12 +683,12 @@ sint64_divide(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_pt
 	if (b->value.sinteger64 == 0) {
 		*err_ptr = ws_strdup_printf("sint64_divide: division by zero");
 		return FT_ERROR;
-	}
-
-	if (!psnip_safe_int64_div(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64)) {
+	} else if (a->value.sinteger64 == INT64_MIN && b->value.sinteger64 == -1) {
+		dst->value.sinteger64 = INT64_MIN; // wrap around value
 		*err_ptr = ws_strdup_printf("sint64_divide: overflow");
 		return FT_ERROR;
 	}
+	dst->value.sinteger64 = a->value.sinteger64 / b->value.sinteger64;
 	return FT_OK;
 }
 
@@ -680,19 +698,19 @@ sint64_modulo(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_pt
 	if (b->value.sinteger64 == 0) {
 		*err_ptr = ws_strdup_printf("sint64_modulo: division by zero");
 		return FT_ERROR;
-	}
-
-	if (!psnip_safe_int64_mod(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64)) {
+	} else if (a->value.sinteger64 == INT64_MIN && b->value.sinteger64 == -1) {
+		dst->value.sinteger64 = INT64_MIN; // wrap around value
 		*err_ptr = ws_strdup_printf("sint64_modulo: overflow");
 		return FT_ERROR;
 	}
+	dst->value.sinteger64 = a->value.sinteger64 % b->value.sinteger64;
 	return FT_OK;
 }
 
 static enum ft_result
 uint64_add(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
 {
-	if (!psnip_safe_uint64_add(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
+	if (ckd_add(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
 		*err_ptr = ws_strdup_printf("uint64_add: overflow");
 		return FT_ERROR;
 	}
@@ -704,16 +722,15 @@ uint64_subtract(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_
 {
 	if (b->value.uinteger64 > a->value.uinteger64) {
 		/* Uses signed arithmetic. */
-		if (a->value.uinteger64 > INT64_MAX ||
-				b->value.uinteger64 > INT64_MAX) {
+		if (ckd_sub(&dst->value.sinteger64, a->value.uinteger64, b->value.uinteger64)) {
 			*err_ptr = ws_strdup_printf("uint64_subtract: signed overflow");
 			return FT_ERROR;
 		}
 		FTYPE_LOOKUP(FT_INT64, dst->ftype);
-		return _sint64_subtract(&dst->value.sinteger64, (int64_t)a->value.uinteger64, (int64_t)b->value.uinteger64, err_ptr);
+		return FT_OK;
 	}
 
-	if (!psnip_safe_uint64_sub(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
+	if (ckd_sub(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
 		*err_ptr = ws_strdup_printf("uint64_subtract: overflow");
 		return FT_ERROR;
 	}
@@ -723,7 +740,7 @@ uint64_subtract(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_
 static enum ft_result
 uint64_multiply(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
 {
-	if (!psnip_safe_uint64_mul(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
+	if (ckd_mul(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
 		*err_ptr = ws_strdup_printf("uint64_multiply: overflow");
 		return FT_ERROR;
 	}
@@ -738,10 +755,7 @@ uint64_divide(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_pt
 		return FT_ERROR;
 	}
 
-	if (!psnip_safe_uint64_div(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
-		*err_ptr = ws_strdup_printf("uint64_divide: overflow");
-		return FT_ERROR;
-	}
+	dst->value.uinteger64 = a->value.uinteger64 / b->value.uinteger64;
 	return FT_OK;
 }
 
@@ -753,10 +767,7 @@ uint64_modulo(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_pt
 		return FT_ERROR;
 	}
 
-	if (!psnip_safe_uint64_mod(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
-		*err_ptr = ws_strdup_printf("uint64_modulo: overflow");
-		return FT_ERROR;
-	}
+	dst->value.uinteger64 = a->value.uinteger64 % b->value.uinteger64;
 	return FT_OK;
 }
 
@@ -778,7 +789,7 @@ static enum ft_result uint64_val_to_sinteger64(const fvalue_t *src, int64_t *dst
 static enum ft_result sint64_val_to_uinteger64(const fvalue_t *src, uint64_t *dst)
 {
 	if (src->value.sinteger64 < 0)
-		return FT_OVERFLOW;
+		return FT_UNDERFLOW;
 
 	*dst = (uint64_t)src->value.sinteger64;
 	return FT_OK;
@@ -787,6 +798,18 @@ static enum ft_result sint64_val_to_uinteger64(const fvalue_t *src, uint64_t *ds
 static enum ft_result sint64_val_to_sinteger64(const fvalue_t *src, int64_t *dst)
 {
 	*dst = src->value.sinteger64;
+	return FT_OK;
+}
+
+static enum ft_result uint64_val_to_double(const fvalue_t *src, double *dst)
+{
+	*dst = (double)src->value.uinteger64;
+	return FT_OK;
+}
+
+static enum ft_result sint64_val_to_double(const fvalue_t *src, double *dst)
+{
+	*dst = (double)src->value.sinteger64;
 	return FT_OK;
 }
 
@@ -823,23 +846,6 @@ boolean_from_sinteger64(fvalue_t *fv, const char *s _U_, int64_t value, char **e
 	return true;
 }
 
-static bool
-boolean_from_string(fvalue_t *fv, const char *s, size_t len, char **err_msg _U_)
-{
-	if (g_ascii_strncasecmp(s, "true", len) == 0) {
-		fv->value.uinteger64 = 1;
-		return true;
-	}
-	if (g_ascii_strncasecmp(s, "false", len) == 0) {
-		fv->value.uinteger64 = 0;
-		return true;
-	}
-
-	if (err_msg)
-		*err_msg = ws_strdup_printf("expected \"True\" or \"False\", not \"%s\"", s);
-	return false;
-}
-
 static char *
 boolean_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int field_display _U_)
 {
@@ -852,7 +858,11 @@ boolean_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int
 			str = val ? "True" : "False";
 			break;
 		case FTREPR_JSON:
+		case FTREPR_RAW:
 			str = val ? "1" : "0";
+			break;
+		case FTREPR_EK:
+			str = val ? "true" : "false";
 			break;
 	}
 
@@ -932,59 +942,10 @@ ipxnet_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int 
 	return uinteger64_to_repr(scope, fv, rtype, BASE_HEX);
 }
 
-/* EUI64-specific */
-static bool
-eui64_from_literal(fvalue_t *fv, const char *s, bool allow_partial_value _U_, char **err_msg)
-{
-	GByteArray	*bytes;
-	bool	res;
-	union {
-		uint64_t value;
-		uint8_t bytes[8];
-	} eui64;
-
-	bytes = g_byte_array_new();
-	res = hex_str_to_bytes(s, bytes, true);
-	if (!res || bytes->len != 8) {
-		if (err_msg != NULL)
-			*err_msg = ws_strdup_printf("\"%s\" is not a valid EUI-64 address.", s);
-		g_byte_array_free(bytes, true);
-		return false;
-	}
-
-	memcpy(eui64.bytes, bytes->data, 8);
-	g_byte_array_free(bytes, true);
-	fv->value.uinteger64 = GUINT64_FROM_BE(eui64.value);
-	return true;
-}
-
-static bool
-eui64_from_uinteger64(fvalue_t *fv, const char *s _U_, uint64_t value, char **err_msg _U_)
-{
-	fv->value.uinteger64 = value;
-	return true;
-}
-
-static char *
-eui64_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _U_, int field_display _U_)
-{
-	union {
-		uint64_t value;
-		uint8_t bytes[8];
-	} eui64;
-
-	/* Copy and convert the address from host to network byte order. */
-	eui64.value = GUINT64_TO_BE(fv->value.uinteger64);
-
-	return wmem_strdup_printf(scope, "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
-	    eui64.bytes[0], eui64.bytes[1], eui64.bytes[2], eui64.bytes[3],
-	    eui64.bytes[4], eui64.bytes[5], eui64.bytes[6], eui64.bytes[7]);
-}
-
 void
 ftype_register_integers(void)
 {
-	static ftype_t char_type = {
+	static const ftype_t char_type = {
 		FT_CHAR,			/* ftype */
 		1,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1000,7 +961,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger = set_uinteger },	/* union set_value */
 		{ .get_value_uinteger = get_uinteger },	/* union get_value */
@@ -1012,6 +973,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1022,7 +984,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint8_type = {
+	static const ftype_t uint8_type = {
 		FT_UINT8,			/* ftype */
 		1,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1038,7 +1000,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger = set_uinteger },	/* union set_value */
 		{ .get_value_uinteger = get_uinteger },	/* union get_value */
@@ -1050,6 +1012,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1060,7 +1023,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint16_type = {
+	static const ftype_t uint16_type = {
 		FT_UINT16,			/* ftype */
 		2,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1076,7 +1039,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger = set_uinteger },	/* union set_value */
 		{ .get_value_uinteger = get_uinteger },	/* union get_value */
@@ -1088,6 +1051,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1098,7 +1062,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint24_type = {
+	static const ftype_t uint24_type = {
 		FT_UINT24,			/* ftype */
 		3,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1114,7 +1078,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger = set_uinteger },	/* union set_value */
 		{ .get_value_uinteger = get_uinteger },	/* union get_value */
@@ -1126,6 +1090,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1136,7 +1101,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint32_type = {
+	static const ftype_t uint32_type = {
 		FT_UINT32,			/* ftype */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1152,7 +1117,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger = set_uinteger },	/* union set_value */
 		{ .get_value_uinteger = get_uinteger },	/* union get_value */
@@ -1164,6 +1129,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1174,7 +1140,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint40_type = {
+	static const ftype_t uint40_type = {
 		FT_UINT40,			/* ftype */
 		5,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1190,7 +1156,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
 		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
@@ -1202,6 +1168,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1212,7 +1179,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint48_type = {
+	static const ftype_t uint48_type = {
 		FT_UINT48,			/* ftype */
 		6,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1228,7 +1195,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
 		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
@@ -1240,6 +1207,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1250,7 +1218,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint56_type = {
+	static const ftype_t uint56_type = {
 		FT_UINT56,			/* ftype */
 		7,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1266,7 +1234,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
 		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
@@ -1278,6 +1246,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1288,7 +1257,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t uint64_type = {
+	static const ftype_t uint64_type = {
 		FT_UINT64,			/* ftype */
 		8,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1304,7 +1273,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
 		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
@@ -1316,6 +1285,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1326,7 +1296,7 @@ ftype_register_integers(void)
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
 	};
-	static ftype_t int8_type = {
+	static const ftype_t int8_type = {
 		FT_INT8,			/* ftype */
 		1,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1342,7 +1312,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger = set_sinteger },	/* union set_value */
 		{ .get_value_sinteger = get_sinteger },	/* union get_value */
@@ -1354,6 +1324,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1364,7 +1335,7 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t int16_type = {
+	static const ftype_t int16_type = {
 		FT_INT16,			/* ftype */
 		2,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1380,7 +1351,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger = set_sinteger },	/* union set_value */
 		{ .get_value_sinteger = get_sinteger },	/* union get_value */
@@ -1392,6 +1363,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1402,7 +1374,7 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t int24_type = {
+	static const ftype_t int24_type = {
 		FT_INT24,			/* ftype */
 		3,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1418,7 +1390,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger = set_sinteger },	/* union set_value */
 		{ .get_value_sinteger = get_sinteger },	/* union get_value */
@@ -1430,6 +1402,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1440,7 +1413,7 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t int32_type = {
+	static const ftype_t int32_type = {
 		FT_INT32,			/* ftype */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1456,7 +1429,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger = set_sinteger },	/* union set_value */
 		{ .get_value_sinteger = get_sinteger },	/* union get_value */
@@ -1468,6 +1441,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1478,7 +1452,7 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t int40_type = {
+	static const ftype_t int40_type = {
 		FT_INT40,			/* ftype */
 		5,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1494,7 +1468,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger64 = set_sinteger64 },	/* union set_value */
 		{ .get_value_sinteger64 = get_sinteger64 },	/* union get_value */
@@ -1506,6 +1480,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1516,7 +1491,7 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t int48_type = {
+	static const ftype_t int48_type = {
 		FT_INT48,			/* ftype */
 		6,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1532,7 +1507,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger64 = set_sinteger64 },	/* union set_value */
 		{ .get_value_sinteger64 = get_sinteger64 },	/* union get_value */
@@ -1544,6 +1519,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1554,7 +1530,7 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t int56_type = {
+	static const ftype_t int56_type = {
 		FT_INT56,			/* ftype */
 		7,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1570,7 +1546,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger64 = set_sinteger64 },	/* union set_value */
 		{ .get_value_sinteger64 = get_sinteger64 },	/* union get_value */
@@ -1582,6 +1558,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1592,7 +1569,7 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t int64_type = {
+	static const ftype_t int64_type = {
 		FT_INT64,			/* ftype */
 		8,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
@@ -1608,7 +1585,7 @@ ftype_register_integers(void)
 
 		sint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		sint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		sint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_sinteger64 = set_sinteger64 },	/* union set_value */
 		{ .get_value_sinteger64 = get_sinteger64 },	/* union get_value */
@@ -1620,6 +1597,7 @@ ftype_register_integers(void)
 		sint64_hash,			/* hash */
 		sint64_is_zero,			/* is_zero */
 		sint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
@@ -1630,14 +1608,14 @@ ftype_register_integers(void)
 		sint64_divide,			/* divide */
 		sint64_modulo,			/* modulo */
 	};
-	static ftype_t boolean_type = {
+	static const ftype_t boolean_type = {
 		FT_BOOLEAN,			/* ftype */
 		0,				/* wire_size */
 		int_fvalue_new,			/* new_value */
 		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		boolean_from_literal,		/* val_from_literal */
-		boolean_from_string,		/* val_from_string */
+		NULL,				/* val_from_string */
 		uint64_from_charconst,		/* val_from_charconst */
 		boolean_from_uinteger64,	/* val_from_uinteger64 */
 		boolean_from_sinteger64,	/* val_from_sinteger64 */
@@ -1646,7 +1624,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
 		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
@@ -1658,6 +1636,7 @@ ftype_register_integers(void)
 		boolean_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		NULL,				/* bitwise_and */
@@ -1669,7 +1648,7 @@ ftype_register_integers(void)
 		NULL,				/* modulo */
 	};
 
-	static ftype_t ipxnet_type = {
+	static const ftype_t ipxnet_type = {
 		FT_IPXNET,			/* ftype */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1685,7 +1664,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger = set_uinteger },	/* union set_value */
 		{ .get_value_uinteger = get_uinteger },	/* union get_value */
@@ -1697,6 +1676,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1708,7 +1688,7 @@ ftype_register_integers(void)
 		NULL,				/* modulo */
 	};
 
-	static ftype_t framenum_type = {
+	static const ftype_t framenum_type = {
 		FT_FRAMENUM,			/* ftype */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
@@ -1724,7 +1704,7 @@ ftype_register_integers(void)
 
 		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
 		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
+		uint64_val_to_double,		/* val_to_double */
 
 		{ .set_value_uinteger = set_uinteger },	/* union set_value */
 		{ .get_value_uinteger = get_uinteger },	/* union get_value */
@@ -1736,6 +1716,7 @@ ftype_register_integers(void)
 		uint64_hash,			/* hash */
 		uint64_is_zero,			/* is_zero */
 		uint64_is_negative,		/* is_negative */
+		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
@@ -1745,45 +1726,6 @@ ftype_register_integers(void)
 		uint64_multiply,		/* multiply */
 		uint64_divide,			/* divide */
 		uint64_modulo,			/* modulo */
-	};
-
-	static ftype_t eui64_type = {
-		FT_EUI64,			/* ftype */
-		FT_EUI64_LEN,			/* wire_size */
-		int64_fvalue_new,		/* new_value */
-		NULL,				/* copy_value */
-		NULL,				/* free_value */
-		eui64_from_literal,		/* val_from_literal */
-		NULL,				/* val_from_string */
-		NULL,				/* val_from_charconst */
-		eui64_from_uinteger64,		/* val_from_uinteger64 */
-		NULL,				/* val_from_sinteger64 */
-		NULL,				/* val_from_double */
-		eui64_to_repr,			/* val_to_string_repr */
-
-		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
-		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		NULL,				/* val_to_double */
-
-		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
-		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
-
-		uint64_cmp_order,		/* cmp_order */
-		NULL,				/* cmp_contains */
-		NULL,				/* cmp_matches */
-
-		uint64_hash,			/* hash */
-		uint64_is_zero,			/* is_zero */
-		uint64_is_negative,		/* is_negative */
-		NULL,				/* len */
-		NULL,				/* slice */
-		uint64_bitwise_and,		/* bitwise_and */
-		uint64_unary_minus,		/* unary_minus */
-		uint64_add,			/* add */
-		uint64_subtract,		/* subtract */
-		NULL,				/* multiply */
-		NULL,				/* divide */
-		NULL,				/* modulo */
 	};
 
 	ftype_register(FT_CHAR, &char_type);
@@ -1806,7 +1748,6 @@ ftype_register_integers(void)
 	ftype_register(FT_BOOLEAN, &boolean_type);
 	ftype_register(FT_IPXNET, &ipxnet_type);
 	ftype_register(FT_FRAMENUM, &framenum_type);
-	ftype_register(FT_EUI64, &eui64_type);
 }
 
 void
@@ -1832,7 +1773,6 @@ ftype_register_pseudofields_integer(int proto)
 	static int hf_ft_boolean;
 	static int hf_ft_ipxnet;
 	static int hf_ft_framenum;
-	static int hf_ft_eui64;
 
 	static hf_register_info hf_ftypes[] = {
 		{ &hf_ft_char,
@@ -1933,11 +1873,6 @@ ftype_register_pseudofields_integer(int proto)
 		{ &hf_ft_framenum,
 		    { "FT_FRAMENUM", "_ws.ftypes.framenum",
 			FT_FRAMENUM, BASE_NONE, NULL, 0x00,
-			NULL, HFILL }
-		},
-		{ &hf_ft_eui64,
-		    { "FT_EUI64", "_ws.ftypes.eui64",
-			FT_EUI64, BASE_NONE, NULL, 0x00,
 			NULL, HFILL }
 		},
 	};

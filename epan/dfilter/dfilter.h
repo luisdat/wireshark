@@ -52,7 +52,7 @@ df_error_free(df_error_t **ep);
 
 /* Module-level initialization */
 void
-dfilter_init(void);
+dfilter_init(const char* app_env_var_prefix);
 
 /* Module-level cleanup */
 void
@@ -102,6 +102,15 @@ dfilter_compile_full(const char *text, dfilter_t **dfp,
 				DF_EXPAND_MACROS|DF_OPTIMIZE, \
 				__func__)
 
+struct stnode;
+
+/** Build a syntax tree for a filter
+ * @param text A display filter.
+ * @return The root node of a syntax tree on success or NULL on failure.
+ */
+WS_DLL_PUBLIC
+struct stnode *dfilter_get_syntax_tree(const char *text);
+
 /* Frees all memory used by dfilter, and frees
  * the dfilter itself. */
 WS_DLL_PUBLIC
@@ -125,6 +134,10 @@ dfilter_apply_full(dfilter_t *df, proto_tree *tree, GPtrArray **fvals);
 /* Prime a proto_tree using the fields/protocols used in a dfilter. */
 void
 dfilter_prime_proto_tree(const dfilter_t *df, proto_tree *tree);
+
+/* Prime a proto_tree using the fields/protocols used in a dfilter, marked for print. */
+void
+dfilter_prime_proto_tree_print(const dfilter_t *df, proto_tree *tree);
 
 /* Refresh references in a compiled display filter. */
 WS_DLL_PUBLIC
@@ -184,10 +197,14 @@ WS_DLL_PUBLIC
 const char *
 dfilter_text(dfilter_t *df);
 
-/* Text representation of syntax tree (if it was saved, NULL oterwise). */
+/* Text representation of syntax tree (if it was saved, NULL otherwise). */
 WS_DLL_PUBLIC
 const char *
 dfilter_syntax_tree(dfilter_t *df);
+
+WS_DLL_PUBLIC
+ftenum_t
+dfilter_get_return_type(dfilter_t *df);
 
 /* Print bytecode of dfilter to log */
 WS_DLL_PUBLIC

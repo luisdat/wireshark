@@ -100,11 +100,16 @@ Not compiling idl
 As of September 26, 2014, the following idl have issues when generating
 and compiling:
 
-pidl complains that inline arrays aren't supported for these:
+pidl complains about a syntax error due to a line commented out with a
+// comment for these:
 
-	dnsserver.idl
-	eventlog.idl
+	nspi/nspi.idl
 
 pidl generates possibly-incorrect code for these - this needs checking:
 
 	rfr/rfr.idl
+
+pidl complains about not being able to open include files for these:
+
+	samr/samr.idl
+	winspool/winspool.idl

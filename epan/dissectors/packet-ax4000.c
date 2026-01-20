@@ -12,7 +12,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/ipproto.h>
 
 void proto_register_ax4000(void);
 void proto_reg_handoff_ax4000(void);
@@ -30,7 +29,7 @@ static int hf_ax4000_seq;
 static int hf_ax4000_crc;
 
 /* Initialize the subtree pointers */
-static gint ett_ax4000;
+static int ett_ax4000;
 
 /* Code to actually dissect the packets */
 static int
@@ -39,7 +38,7 @@ dissect_ax4000(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 	proto_item *ti;
 	proto_tree *ax4000_tree;
 
-	guint32 ax_port, ax_chassis, ax_index, ax_seq, ax_timestamp;
+	uint32_t ax_port, ax_chassis, ax_index, ax_seq, ax_timestamp;
 
 	/* Make entries in Protocol column and Info column on summary display */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "AX4000");
@@ -113,7 +112,7 @@ proto_register_ax4000(void)
 	};
 
 	/* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_ax4000
 	};
 
@@ -134,6 +133,8 @@ proto_register_ax4000(void)
 void
 proto_reg_handoff_ax4000(void)
 {
+#define IP_PROTO_AX4000         173     /* AX/4000 Testblock - non IANA */
+
 	dissector_add_uint("ip.proto", IP_PROTO_AX4000, ax4000_handle);
 	dissector_add_uint_with_preference("tcp.port", AX4000_TCP_PORT, ax4000_handle);
 	dissector_add_uint_with_preference("udp.port", AX4000_UDP_PORT, ax4000_handle);

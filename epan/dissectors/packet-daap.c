@@ -383,8 +383,8 @@ static int hf_daap_playlist_id;
 static int hf_daap_track_id;
 
 /* Initialize the subtree pointers */
-static gint ett_daap;
-static gint ett_daap_sub;
+static int ett_daap;
+static int ett_daap_sub;
 
 static expert_field ei_daap_max_recursion_depth_reached;
 
@@ -396,7 +396,7 @@ dissect_daap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 {
    proto_item *ti;
    proto_tree *daap_tree;
-   guint first_tag;
+   unsigned first_tag;
 
    first_tag = tvb_get_ntohl(tvb, 0);
    col_set_str(pinfo->cinfo, COL_PROTOCOL, "DAAP");
@@ -432,8 +432,8 @@ static void
 // NOLINTNEXTLINE(misc-no-recursion)
 dissect_daap_one_tag(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
 {
-   guint       offset = 0;
-   guint32     tagname, tagsize;
+   unsigned    offset = 0;
+   uint32_t    tagname, tagsize;
    proto_item *tag_ti;
    proto_tree *tag_tree;
    tvbuff_t   *new_tvb;
@@ -447,25 +447,23 @@ dissect_daap_one_tag(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
    p_set_proto_depth(pinfo, proto_daap, recursion_depth);
 
    while (offset < tvb_reported_length(tvb)) {
-      tagname = tvb_get_ntohl(tvb, offset);
-      tagsize = tvb_get_ntohl(tvb, offset+4);
-
       tag_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
-            ett_daap_sub, &tag_ti, "Tag: ");
+            ett_daap_sub, &tag_ti, "Tag:");
 
       proto_tree_add_item_ret_uint(tag_tree, hf_daap_name,
-            tvb, offset, 4, ENC_ASCII|ENC_NA, &tagname);
+            tvb, offset, 4, ENC_BIG_ENDIAN, &tagname);
+      proto_item_append_text(tag_ti, " %s",
+            val_to_str_ext(pinfo->pool, tagname, &vals_tag_code_ext, "Unknown tag (0x%0x)"));
       offset += 4;
+
       proto_tree_add_item_ret_uint(tag_tree, hf_daap_size,
             tvb, offset, 4, ENC_BIG_ENDIAN, &tagsize);
-      offset += 4;
-
-      proto_item_append_text(tag_ti, "%s, %u byte%c",
-            val_to_str_ext(tagname, &vals_tag_code_ext, "Unknown tag (0x%0x)"),
+      proto_item_append_text(tag_ti, ", %u byte%c",
             tagsize, plurality(tagsize, ' ', 's'));
+      offset += 4;
       proto_item_set_len(tag_ti, 8+tagsize);
 
-      if (tagsize > G_MAXINT)
+      if (tagsize > INT_MAX)
          break;
 
       switch (tagname) {
@@ -495,7 +493,7 @@ dissect_daap_one_tag(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
          case dacp_cmgt:
          case dacp_cmst:
             /* Container tags */
-            new_tvb  = tvb_new_subset_length(tvb, offset, (gint)tagsize);
+            new_tvb  = tvb_new_subset_length(tvb, offset, (int)tagsize);
             dissect_daap_one_tag(tag_tree, pinfo, new_tvb);
             break;
 
@@ -678,10 +676,10 @@ dissect_daap_one_tag(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
          case daap_apro:
             /* Tags contain version (uint32) */
             proto_item_append_text(tag_ti, "; Version: %d.%d.%d.%d",
-                  tvb_get_guint8(tvb, offset),
-                  tvb_get_guint8(tvb, offset+1),
-                  tvb_get_guint8(tvb, offset+2),
-                  tvb_get_guint8(tvb, offset+3));
+                  tvb_get_uint8(tvb, offset),
+                  tvb_get_uint8(tvb, offset+1),
+                  tvb_get_uint8(tvb, offset+2),
+                  tvb_get_uint8(tvb, offset+3));
             break;
 
          case dacp_canp:
@@ -762,7 +760,7 @@ proto_register_daap(void)
       }
    };
 
-   static gint *ett[] = {
+   static int *ett[] = {
       &ett_daap,
       &ett_daap_sub,
    };

@@ -14,6 +14,8 @@
 #include <epan/packet.h>
 #include <epan/aftypes.h>
 #include <epan/to_str.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 #include "packet-arp.h"
 #include "packet-netlink.h"
@@ -65,7 +67,7 @@ void proto_reg_handoff_netlink_route(void);
  */
 struct netlink_route_info {
 	packet_info *pinfo;
-	gboolean legacy;
+	bool legacy;
 };
 
 enum {
@@ -466,15 +468,15 @@ static int hf_netlink_route_rta_attr_type;
 static int hf_netlink_route_rta_iif;
 static int hf_netlink_route_rta_oif;
 
-static gint ett_netlink_route;
-static gint ett_netlink_route_attr;
-static gint ett_netlink_route_if_flags;
-static gint ett_netlink_route_attr_linkstats;
-static gint ett_netlink_route_attr_linkstats_rxerrs;
-static gint ett_netlink_route_attr_linkstats_txerrs;
+static int ett_netlink_route;
+static int ett_netlink_route_attr;
+static int ett_netlink_route_if_flags;
+static int ett_netlink_route_attr_linkstats;
+static int ett_netlink_route_attr_linkstats_rxerrs;
+static int ett_netlink_route_attr_linkstats_txerrs;
 
 static void
-_fill_label_value_string_bitmask(char *label, guint32 value, const value_string *vals)
+_fill_label_value_string_bitmask(char *label, uint32_t value, const value_string *vals)
 {
 	char tmp[16];
 
@@ -513,7 +515,7 @@ dissect_netlink_route_attributes(tvbuff_t *tvb, int hf_type, struct netlink_rout
 }
 
 static void
-hf_netlink_route_ifi_flags_label(char *label, guint32 value)
+hf_netlink_route_ifi_flags_label(char *label, uint32_t value)
 {
 	static const value_string iff_vals[] = {
 		{ WS_IFF_UP,          "UP" },
@@ -703,23 +705,23 @@ static int
 dissect_netlink_route_ifla_linkstats(tvbuff_t *tvb, struct netlink_route_info *info _U_, struct packet_netlink_data *nl_data, proto_tree *tree, int offset, int byte_size)
 {
 	proto_tree* rxerr_subtree;
-	const gint rxerr_hfs_len = (sizeof(linkstat_rxerr_hfs) / sizeof(int *));
+	const int rxerr_hfs_len = array_length(linkstat_rxerr_hfs);
 	proto_tree* txerr_subtree;
-	const gint txerr_hfs_len = (sizeof(linkstat_txerr_hfs) / sizeof(int *));
+	const int txerr_hfs_len = array_length(linkstat_txerr_hfs);
 
-	for (size_t i = 0; i < (sizeof(linkstat_root_hfs) / sizeof(int *)); i++) {
+	for (size_t i = 0; i < array_length(linkstat_root_hfs); i++) {
 		proto_tree_add_item(tree, *linkstat_root_hfs[i], tvb, offset, byte_size, nl_data->encoding);
 		offset += byte_size;
 	}
 
 	rxerr_subtree = proto_tree_add_subtree(tree, tvb, offset, byte_size * rxerr_hfs_len, ett_netlink_route_attr_linkstats_rxerrs, NULL, "Rx errors");
-	for (gint i = 0; i < rxerr_hfs_len; i++) {
+	for (int i = 0; i < rxerr_hfs_len; i++) {
 		proto_tree_add_item(rxerr_subtree, *linkstat_rxerr_hfs[i], tvb, offset, byte_size, nl_data->encoding);
 		offset += byte_size;
 	}
 
 	txerr_subtree = proto_tree_add_subtree(tree, tvb, offset, byte_size * txerr_hfs_len, ett_netlink_route_attr_linkstats_txerrs, NULL, "Tx errors");
-	for (gint i = 0; i < txerr_hfs_len; i++) {
+	for (int i = 0; i < txerr_hfs_len; i++) {
 		proto_tree_add_item(txerr_subtree, *linkstat_txerr_hfs[i], tvb, offset, byte_size, nl_data->encoding);
 		offset += byte_size;
 	}
@@ -733,13 +735,13 @@ dissect_netlink_route_ifla_attrs(tvbuff_t *tvb, void *data, struct packet_netlin
 {
 	struct netlink_route_info *info = (struct netlink_route_info *)data;
 	enum ws_ifla_attr_type type = (enum ws_ifla_attr_type) rta_type;
-	const guint8* str;
-	guint32 value;
-	gboolean flag;
+	const uint8_t* str;
+	uint32_t value;
+	bool flag;
 	proto_tree* subtree;
 	switch (type) {
 		case WS_IFLA_IFNAME:
-			proto_tree_add_item_ret_string(tree, hf_netlink_route_ifla_ifname, tvb, offset, len, ENC_ASCII | ENC_NA, wmem_packet_scope(), &str);
+			proto_tree_add_item_ret_string(tree, hf_netlink_route_ifla_ifname, tvb, offset, len, ENC_ASCII | ENC_NA, info->pinfo->pool, &str);
 			proto_item_append_text(tree, ": %s", str);
 			return 1;
 		case WS_IFLA_MTU:
@@ -786,11 +788,11 @@ dissect_netlink_route_ifla_attrs(tvbuff_t *tvb, void *data, struct packet_netlin
 			proto_item_append_text(tree, ": %u", value);
 			return 1;
 		case WS_IFLA_ADDRESS:
-			proto_item_append_text(tree, ": %s", tvb_bytes_to_str_punct(wmem_packet_scope(), tvb, offset, len, ':'));
+			proto_item_append_text(tree, ": %s", tvb_bytes_to_str_punct(info->pinfo->pool, tvb, offset, len, ':'));
 			proto_tree_add_item(tree, hf_netlink_route_ifla_hwaddr, tvb, offset, len, nl_data->encoding);
 			return 1;
 		case WS_IFLA_BROADCAST:
-			proto_item_append_text(tree, ": %s", tvb_bytes_to_str_punct(wmem_packet_scope(), tvb, offset, len, ':'));
+			proto_item_append_text(tree, ": %s", tvb_bytes_to_str_punct(info->pinfo->pool, tvb, offset, len, ':'));
 			proto_tree_add_item(tree, hf_netlink_route_ifla_broadcast, tvb, offset, len, nl_data->encoding);
 			return 1;
 		case WS_IFLA_STATS:
@@ -800,7 +802,7 @@ dissect_netlink_route_ifla_attrs(tvbuff_t *tvb, void *data, struct packet_netlin
 			subtree = proto_tree_add_subtree(tree, tvb, offset, len, ett_netlink_route_attr_linkstats, NULL, "Statistics");
 			return dissect_netlink_route_ifla_linkstats(tvb, info, nl_data, subtree, offset, 8);
 		case WS_IFLA_QDISC:
-			proto_tree_add_item_ret_string(tree, hf_netlink_route_ifla_qdisc, tvb, offset, len, ENC_ASCII | ENC_NA, wmem_packet_scope(), &str);
+			proto_tree_add_item_ret_string(tree, hf_netlink_route_ifla_qdisc, tvb, offset, len, ENC_ASCII | ENC_NA, info->pinfo->pool, &str);
 			proto_item_append_text(tree, ": %s", str);
 			return 1;
 		case WS_IFLA_MAP:
@@ -836,7 +838,7 @@ dissect_netlink_route_ifla_attrs(tvbuff_t *tvb, void *data, struct packet_netlin
 /* IP address */
 
 static void
-netlink_route_ifa_flags_label(char *label, guint32 value)
+netlink_route_ifa_flags_label(char *label, uint32_t value)
 {
 	static const value_string iff_vals[] = {
 		{ WS_IFA_F_SECONDARY,       "secondary/temporary" },
@@ -913,12 +915,13 @@ static const value_string netlink_route_ifa_attr_vals[] = {
 static int
 dissect_netlink_route_ifa_attrs(tvbuff_t *tvb, void *data _U_, struct packet_netlink_data *nl_data, proto_tree *tree, int rta_type, int offset, int len)
 {
+	struct netlink_route_info* info = (struct netlink_route_info*)data;
 	enum ws_ifa_attr_type type = (enum ws_ifa_attr_type) rta_type;
-	const guint8* str;
+	const uint8_t* str;
 
 	switch (type) {
 		case WS_IFA_LABEL:
-			proto_tree_add_item_ret_string(tree, hf_netlink_route_ifa_label, tvb, offset, len, ENC_ASCII | ENC_NA, wmem_packet_scope(), &str);
+			proto_tree_add_item_ret_string(tree, hf_netlink_route_ifa_label, tvb, offset, len, ENC_ASCII | ENC_NA, info->pinfo->pool, &str);
 			proto_item_append_text(tree, ": %s", str);
 			return 1;
 
@@ -929,10 +932,10 @@ dissect_netlink_route_ifa_attrs(tvbuff_t *tvb, void *data _U_, struct packet_net
 		case WS_IFA_LOCAL:
 		case WS_IFA_BROADCAST:
 			if (len == 4) {
-				proto_item_append_text(tree, ": %s", tvb_ip_to_str(wmem_packet_scope(), tvb, offset));
+				proto_item_append_text(tree, ": %s", tvb_ip_to_str(info->pinfo->pool, tvb, offset));
 				proto_tree_add_item(tree, hf_netlink_route_ifa_addr4, tvb, offset, len, ENC_BIG_ENDIAN);
 			} else {
-				proto_item_append_text(tree, ": %s", tvb_ip6_to_str(wmem_packet_scope(), tvb, offset));
+				proto_item_append_text(tree, ": %s", tvb_ip6_to_str(info->pinfo->pool, tvb, offset));
 				proto_tree_add_item(tree, hf_netlink_route_ifa_addr6, tvb, offset, len, ENC_NA);
 			}
 			return 1;
@@ -1079,7 +1082,7 @@ static int
 dissect_netlink_route_route_attrs(tvbuff_t *tvb, void *data _U_, struct packet_netlink_data *nl_data, proto_tree *tree, int rta_type, int offset, int len)
 {
 	enum ws_rta_attr_type type = (enum ws_rta_attr_type) rta_type;
-	guint32 value;
+	uint32_t value;
 
 	switch (type) {
 		case WS_RTA_IIF:
@@ -1104,7 +1107,7 @@ dissect_netlink_route_route_attrs(tvbuff_t *tvb, void *data _U_, struct packet_n
 }
 
 static void
-netlink_route_nd_states_label(char *label, guint32 value)
+netlink_route_nd_states_label(char *label, uint32_t value)
 {
 	static const value_string flags_vals[] = {
 		{ WS_NUD_NONE,       "NONE" },
@@ -1252,7 +1255,7 @@ dissect_netlink_route(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void 
 	nlmsg_tree = proto_item_add_subtree(pi, ett_netlink_route);
 
 	/* Netlink message header (nlmsghdr) */
-	offset = dissect_netlink_header(tvb, nlmsg_tree, offset, nl_data->encoding, hf_netlink_route_nltype, NULL);
+	offset = dissect_netlink_header(tvb, pinfo, nlmsg_tree, offset, nl_data->encoding, hf_netlink_route_nltype, NULL);
 
 	info.pinfo = pinfo;
 
@@ -1763,7 +1766,7 @@ proto_register_netlink_route(void)
 		},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_netlink_route,
 		&ett_netlink_route_attr,
 		&ett_netlink_route_if_flags,

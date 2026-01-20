@@ -25,7 +25,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/ax25_pids.h>
+#include "packet-ax25.h"
 
 void proto_register_flexnet(void);
 void proto_reg_handoff_flexnet(void);
@@ -41,8 +41,8 @@ static int hf_flexnet_dst;
 static int hf_flexnet_src;
 static int hf_flexnet_ctl;
 
-static gint ett_flexnet;
-static gint ett_flexnet_ctl;
+static int ett_flexnet;
+static int ett_flexnet_ctl;
 
 static int
 dissect_flexnet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
@@ -106,7 +106,7 @@ proto_register_flexnet(void)
 	};
 
 	/* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_flexnet,
 		&ett_flexnet_ctl,
 	};

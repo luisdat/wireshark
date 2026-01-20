@@ -24,7 +24,7 @@
 #include <epan/packet.h>
 #include <epan/to_str.h>
 #include <epan/expert.h>
-#include <epan/cisco_pid.h>
+#include "packet-cisco-pid.h"
 
 /*
  * It's incomplete, and it appears to be inaccurate in a number of places,
@@ -47,10 +47,10 @@ static int hf_dtp_tos;
 static int hf_dtp_tas;
 static int hf_dtp_data;
 
-static gint ett_dtp;
-static gint ett_dtp_tlv;
-static gint ett_dtp_status;
-static gint ett_dtp_type;
+static int ett_dtp;
+static int ett_dtp_tlv;
+static int ett_dtp_status;
+static int ett_dtp_type;
 
 static expert_field ei_dtp_tlv_length_too_short;
 static expert_field ei_dtp_tlv_length_invalid;
@@ -58,7 +58,7 @@ static expert_field ei_dtp_truncated;
 
 static void
 dissect_dtp_tlv(packet_info *pinfo, tvbuff_t *tvb, int offset, int length,
-		proto_tree *tree, proto_item *ti, proto_item *tlv_length_item, guint8 type);
+		proto_tree *tree, proto_item *ti, proto_item *tlv_length_item, uint8_t type);
 
 
 #define	DTP_TLV_DOMAIN		0x01 /* VTP Domain Name */
@@ -177,7 +177,7 @@ dissect_dtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 		length = tvb_get_ntohs(tvb, offset + 2);
 
 		tlv_tree = proto_tree_add_subtree(dtp_tree, tvb, offset, length, ett_dtp_tlv, NULL,
-					 val_to_str(type, dtp_tlv_type_vals, "Unknown TLV type: 0x%02x"));
+					 val_to_str(pinfo->pool, type, dtp_tlv_type_vals, "Unknown TLV type: 0x%02x"));
 
 		proto_tree_add_uint(tlv_tree, hf_dtp_tlvtype, tvb, offset, 2, type);
 		offset+=2;
@@ -193,7 +193,7 @@ dissect_dtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 			break;
 		}
 		valuelength = (length-4);
-		dissect_dtp_tlv(pinfo, tvb, offset, valuelength, tlv_tree, ti, tlv_length_item, (guint8) type);
+		dissect_dtp_tlv(pinfo, tvb, offset, valuelength, tlv_tree, ti, tlv_length_item, (uint8_t) type);
 		offset += valuelength;
 	}
 	return tvb_captured_length(tvb);
@@ -201,7 +201,7 @@ dissect_dtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
 static void
 dissect_dtp_tlv(packet_info *pinfo, tvbuff_t *tvb, int offset, int length,
-		proto_tree *tree, proto_item *ti, proto_item *tlv_length_item, guint8 type)
+		proto_tree *tree, proto_item *ti, proto_item *tlv_length_item, uint8_t type)
 {
 	switch (type) {
 
@@ -218,7 +218,7 @@ dissect_dtp_tlv(packet_info *pinfo, tvbuff_t *tvb, int offset, int length,
 	case DTP_TLV_TRSTATUS:
 		if (length == 1) { /* Value field length must be 1 byte */
 			proto_tree * field_tree = NULL;
-			guint8 trunk_status = tvb_get_guint8(tvb, offset);
+			uint8_t trunk_status = tvb_get_uint8(tvb, offset);
 
 			proto_item_append_text(ti,
 				" (Operating/Administrative): %s/%s (0x%02x)",
@@ -240,7 +240,7 @@ dissect_dtp_tlv(packet_info *pinfo, tvbuff_t *tvb, int offset, int length,
 	case DTP_TLV_TRTYPE:
 		if (length == 1) { /* Value field length must be 1 byte */
 			proto_tree * field_tree;
-			guint8 trunk_type = tvb_get_guint8(tvb, offset);
+			uint8_t trunk_type = tvb_get_uint8(tvb, offset);
 			proto_item_append_text(ti,
 				" (Operating/Administrative): %s/%s (0x%02x)",
 				val_to_str_const(DTP_TOTVALUE(trunk_type), dtp_tot_vals, "Unknown operating type"),
@@ -320,7 +320,7 @@ proto_register_dtp(void)
 		NULL, 0x0, NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_dtp,
 		&ett_dtp_tlv,
 		&ett_dtp_status,

@@ -23,8 +23,8 @@ static int hf_spray_clock;
 static int hf_spray_sec;
 static int hf_spray_usec;
 
-static gint ett_spray;
-static gint ett_spray_clock;
+static int ett_spray;
+static int ett_spray_clock;
 
 #define PACKET_SPRAY_H
 
@@ -60,9 +60,9 @@ dissect_get_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void*
 }
 
 static int
-dissect_spray_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_spray_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	return dissect_rpc_data(tvb, tree, hf_spray_sprayarr, 0);
+	return dissect_rpc_data(tvb, pinfo, tree, hf_spray_sprayarr, 0);
 }
 
 /* proc number, "proc name", dissect_request, dissect_reply */
@@ -118,7 +118,7 @@ proto_register_spray(void)
 
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_spray,
 		&ett_spray_clock,
 	};

@@ -21,6 +21,7 @@
 #include <epan/oids.h>
 #include <epan/asn1.h>
 #include <epan/expert.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-acse.h"
@@ -46,7 +47,7 @@ void proto_reg_handoff_dop(void);
 /* Initialize the protocol and registered fields */
 static int proto_dop;
 
-static const char *binding_type = NULL; /* binding_type */
+static const char *binding_type; /* binding_type */
 
 static int call_dop_oid_callback(const char *base_string, tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, const char *col_info, void* data);
 
@@ -244,75 +245,75 @@ static int hf_dop_GrantsAndDenials_grantInvoke;
 static int hf_dop_GrantsAndDenials_denyInvoke;
 
 /* Initialize the subtree pointers */
-static gint ett_dop;
-static gint ett_dop_unknown;
-static gint ett_dop_DSEType;
-static gint ett_dop_SupplierOrConsumer;
-static gint ett_dop_SET_OF_ProtocolInformation;
-static gint ett_dop_SupplierInformation;
-static gint ett_dop_SupplierAndConsumers;
-static gint ett_dop_SET_OF_AccessPoint;
-static gint ett_dop_EstablishOperationalBindingArgumentData;
-static gint ett_dop_EstablishArgumentInitiator;
-static gint ett_dop_EstablishOperationalBindingArgument;
-static gint ett_dop_T_signedEstablishOperationalBindingArgument;
-static gint ett_dop_OperationalBindingID;
-static gint ett_dop_Validity;
-static gint ett_dop_T_validFrom;
-static gint ett_dop_T_validUntil;
-static gint ett_dop_Time;
-static gint ett_dop_EstablishOperationalBindingResult;
-static gint ett_dop_T_initiator;
-static gint ett_dop_SEQUENCE_SIZE_1_MAX_OF_Attribute;
-static gint ett_dop_ModifyOperationalBindingArgumentData;
-static gint ett_dop_ModifyArgumentInitiator;
-static gint ett_dop_ModifyOperationalBindingArgument;
-static gint ett_dop_T_signedModifyOperationalBindingArgument;
-static gint ett_dop_ModifyOperationalBindingResult;
-static gint ett_dop_ProtectedModifyResult;
-static gint ett_dop_ModifyOperationalBindingResultData;
-static gint ett_dop_TerminateOperationalBindingArgumentData;
-static gint ett_dop_TerminateArgumentInitiator;
-static gint ett_dop_TerminateOperationalBindingArgument;
-static gint ett_dop_T_signedTerminateOperationalBindingArgument;
-static gint ett_dop_TerminateOperationalBindingResult;
-static gint ett_dop_ProtectedTerminateResult;
-static gint ett_dop_TerminateOperationalBindingResultData;
-static gint ett_dop_OpBindingErrorParam;
-static gint ett_dop_HierarchicalAgreement;
-static gint ett_dop_SuperiorToSubordinate;
-static gint ett_dop_SET_OF_Attribute;
-static gint ett_dop_DITcontext;
-static gint ett_dop_Vertex;
-static gint ett_dop_SET_OF_SubentryInfo;
-static gint ett_dop_SubentryInfo;
-static gint ett_dop_SubordinateToSuperior;
-static gint ett_dop_SuperiorToSubordinateModification;
-static gint ett_dop_NonSpecificHierarchicalAgreement;
-static gint ett_dop_NHOBSuperiorToSubordinate;
-static gint ett_dop_NHOBSubordinateToSuperior;
-static gint ett_dop_ACIItem;
-static gint ett_dop_T_itemOrUserFirst;
-static gint ett_dop_T_itemFirst;
-static gint ett_dop_SET_OF_ItemPermission;
-static gint ett_dop_T_userFirst;
-static gint ett_dop_SET_OF_UserPermission;
-static gint ett_dop_ProtectedItems;
-static gint ett_dop_SET_OF_AttributeType;
-static gint ett_dop_SET_OF_AttributeTypeAndValue;
-static gint ett_dop_SET_OF_MaxValueCount;
-static gint ett_dop_SET_OF_RestrictedValue;
-static gint ett_dop_SET_OF_ContextAssertion;
-static gint ett_dop_MaxValueCount;
-static gint ett_dop_RestrictedValue;
-static gint ett_dop_UserClasses;
-static gint ett_dop_SET_OF_NameAndOptionalUID;
-static gint ett_dop_SET_OF_SubtreeSpecification;
-static gint ett_dop_ItemPermission;
-static gint ett_dop_UserPermission;
-static gint ett_dop_AuthenticationLevel;
-static gint ett_dop_T_basicLevels;
-static gint ett_dop_GrantsAndDenials;
+static int ett_dop;
+static int ett_dop_unknown;
+static int ett_dop_DSEType;
+static int ett_dop_SupplierOrConsumer;
+static int ett_dop_SET_OF_ProtocolInformation;
+static int ett_dop_SupplierInformation;
+static int ett_dop_SupplierAndConsumers;
+static int ett_dop_SET_OF_AccessPoint;
+static int ett_dop_EstablishOperationalBindingArgumentData;
+static int ett_dop_EstablishArgumentInitiator;
+static int ett_dop_EstablishOperationalBindingArgument;
+static int ett_dop_T_signedEstablishOperationalBindingArgument;
+static int ett_dop_OperationalBindingID;
+static int ett_dop_Validity;
+static int ett_dop_T_validFrom;
+static int ett_dop_T_validUntil;
+static int ett_dop_Time;
+static int ett_dop_EstablishOperationalBindingResult;
+static int ett_dop_T_initiator;
+static int ett_dop_SEQUENCE_SIZE_1_MAX_OF_Attribute;
+static int ett_dop_ModifyOperationalBindingArgumentData;
+static int ett_dop_ModifyArgumentInitiator;
+static int ett_dop_ModifyOperationalBindingArgument;
+static int ett_dop_T_signedModifyOperationalBindingArgument;
+static int ett_dop_ModifyOperationalBindingResult;
+static int ett_dop_ProtectedModifyResult;
+static int ett_dop_ModifyOperationalBindingResultData;
+static int ett_dop_TerminateOperationalBindingArgumentData;
+static int ett_dop_TerminateArgumentInitiator;
+static int ett_dop_TerminateOperationalBindingArgument;
+static int ett_dop_T_signedTerminateOperationalBindingArgument;
+static int ett_dop_TerminateOperationalBindingResult;
+static int ett_dop_ProtectedTerminateResult;
+static int ett_dop_TerminateOperationalBindingResultData;
+static int ett_dop_OpBindingErrorParam;
+static int ett_dop_HierarchicalAgreement;
+static int ett_dop_SuperiorToSubordinate;
+static int ett_dop_SET_OF_Attribute;
+static int ett_dop_DITcontext;
+static int ett_dop_Vertex;
+static int ett_dop_SET_OF_SubentryInfo;
+static int ett_dop_SubentryInfo;
+static int ett_dop_SubordinateToSuperior;
+static int ett_dop_SuperiorToSubordinateModification;
+static int ett_dop_NonSpecificHierarchicalAgreement;
+static int ett_dop_NHOBSuperiorToSubordinate;
+static int ett_dop_NHOBSubordinateToSuperior;
+static int ett_dop_ACIItem;
+static int ett_dop_T_itemOrUserFirst;
+static int ett_dop_T_itemFirst;
+static int ett_dop_SET_OF_ItemPermission;
+static int ett_dop_T_userFirst;
+static int ett_dop_SET_OF_UserPermission;
+static int ett_dop_ProtectedItems;
+static int ett_dop_SET_OF_AttributeType;
+static int ett_dop_SET_OF_AttributeTypeAndValue;
+static int ett_dop_SET_OF_MaxValueCount;
+static int ett_dop_SET_OF_RestrictedValue;
+static int ett_dop_SET_OF_ContextAssertion;
+static int ett_dop_MaxValueCount;
+static int ett_dop_RestrictedValue;
+static int ett_dop_UserClasses;
+static int ett_dop_SET_OF_NameAndOptionalUID;
+static int ett_dop_SET_OF_SubtreeSpecification;
+static int ett_dop_ItemPermission;
+static int ett_dop_UserPermission;
+static int ett_dop_AuthenticationLevel;
+static int ett_dop_T_basicLevels;
+static int ett_dop_GrantsAndDenials;
 
 static expert_field ei_dop_unknown_binding_parameter;
 static expert_field ei_dop_unsupported_opcode;
@@ -320,7 +321,7 @@ static expert_field ei_dop_unsupported_errcode;
 static expert_field ei_dop_unsupported_pdu;
 static expert_field ei_dop_zero_pdu;
 
-static dissector_handle_t dop_handle = NULL;
+static dissector_handle_t dop_handle;
 
 /* Dissector table */
 static dissector_table_t dop_dissector_table;
@@ -358,8 +359,8 @@ static int * const DSEType_bits[] = {
   NULL
 };
 
-int
-dissect_dop_DSEType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+unsigned
+dissect_dop_DSEType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     DSEType_bits, 20, hf_index, ett_dop_DSEType,
                                     NULL);
@@ -372,8 +373,8 @@ static const ber_sequence_t SET_OF_ProtocolInformation_set_of[1] = {
   { &hf_dop_protocolInformation_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509sat_ProtocolInformation },
 };
 
-static int
-dissect_dop_SET_OF_ProtocolInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_ProtocolInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_ProtocolInformation_set_of, hf_index, ett_dop_SET_OF_ProtocolInformation);
 
@@ -382,9 +383,9 @@ dissect_dop_SET_OF_ProtocolInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 
 
 
-static int
-dissect_dop_T_identifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint32	value;
+static unsigned
+dissect_dop_T_identifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	uint32_t	value;
 
 	  offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &value);
@@ -400,9 +401,9 @@ dissect_dop_T_identifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 
 
 
-static int
-dissect_dop_T_version(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint32	value;
+static unsigned
+dissect_dop_T_version(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+	uint32_t	value;
 
 	  offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &value);
@@ -421,8 +422,8 @@ static const ber_sequence_t OperationalBindingID_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-int
-dissect_dop_OperationalBindingID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+unsigned
+dissect_dop_OperationalBindingID(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    OperationalBindingID_sequence, hf_index, ett_dop_OperationalBindingID);
 
@@ -438,8 +439,8 @@ static const ber_sequence_t SupplierOrConsumer_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_SupplierOrConsumer(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SupplierOrConsumer(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               SupplierOrConsumer_set, hf_index, ett_dop_SupplierOrConsumer);
 
@@ -448,8 +449,8 @@ dissect_dop_SupplierOrConsumer(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 
 
 
-static int
-dissect_dop_BOOLEAN(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_BOOLEAN(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_boolean(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 
   return offset;
@@ -466,8 +467,8 @@ static const ber_sequence_t SupplierInformation_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_SupplierInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SupplierInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               SupplierInformation_set, hf_index, ett_dop_SupplierInformation);
 
@@ -476,8 +477,8 @@ dissect_dop_SupplierInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
 
 
 
-static int
-dissect_dop_ConsumerInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ConsumerInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dop_SupplierOrConsumer(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -488,8 +489,8 @@ static const ber_sequence_t SET_OF_AccessPoint_set_of[1] = {
   { &hf_dop_consumers_item  , BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_dsp_AccessPoint },
 };
 
-static int
-dissect_dop_SET_OF_AccessPoint(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_AccessPoint(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_AccessPoint_set_of, hf_index, ett_dop_SET_OF_AccessPoint);
 
@@ -505,8 +506,8 @@ static const ber_sequence_t SupplierAndConsumers_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-int
-dissect_dop_SupplierAndConsumers(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+unsigned
+dissect_dop_SupplierAndConsumers(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               SupplierAndConsumers_set, hf_index, ett_dop_SupplierAndConsumers);
 
@@ -515,8 +516,8 @@ dissect_dop_SupplierAndConsumers(bool implicit_tag _U_, tvbuff_t *tvb _U_, int o
 
 
 
-static int
-dissect_dop_DSAOperationalManagementBindArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_DSAOperationalManagementBindArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dap_DirectoryBindArgument(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -524,8 +525,8 @@ dissect_dop_DSAOperationalManagementBindArgument(bool implicit_tag _U_, tvbuff_t
 
 
 
-static int
-dissect_dop_DSAOperationalManagementBindResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_DSAOperationalManagementBindResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dap_DirectoryBindArgument(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -533,8 +534,8 @@ dissect_dop_DSAOperationalManagementBindResult(bool implicit_tag _U_, tvbuff_t *
 
 
 
-static int
-dissect_dop_DSAOperationalManagementBindError(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_DSAOperationalManagementBindError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dap_DirectoryBindError(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -542,8 +543,8 @@ dissect_dop_DSAOperationalManagementBindError(bool implicit_tag _U_, tvbuff_t *t
 
 
 
-static int
-dissect_dop_BindingType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_BindingType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier_str(implicit_tag, actx, tree, tvb, offset, hf_index, &binding_type);
 
   append_oid(actx->pinfo, binding_type);
@@ -552,8 +553,8 @@ dissect_dop_BindingType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_
 
 
 
-static int
-dissect_dop_EstablishSymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EstablishSymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("establish.symmetric", tvb, offset, actx->pinfo, tree, "symmetric", actx->private_data);
 
@@ -563,8 +564,8 @@ dissect_dop_EstablishSymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 
 
 
-static int
-dissect_dop_EstablishRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EstablishRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("establish.rolea", tvb, offset, actx->pinfo, tree, "roleA", actx->private_data);
 
@@ -574,8 +575,8 @@ dissect_dop_EstablishRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, in
 
 
 
-static int
-dissect_dop_EstablishRoleBInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EstablishRoleBInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("establish.roleb", tvb, offset, actx->pinfo, tree, "roleB", actx->private_data);
 
@@ -598,8 +599,8 @@ static const ber_choice_t EstablishArgumentInitiator_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_EstablishArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EstablishArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  EstablishArgumentInitiator_choice, hf_index, ett_dop_EstablishArgumentInitiator,
                                  NULL);
@@ -609,8 +610,8 @@ dissect_dop_EstablishArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 
 
 
-static int
-dissect_dop_T_agreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_agreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("agreement", tvb, offset, actx->pinfo, tree, NULL, actx->private_data);
 
@@ -620,8 +621,8 @@ dissect_dop_T_agreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_
 
 
 
-static int
-dissect_dop_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_null(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -629,8 +630,8 @@ dissect_dop_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_
 
 
 
-static int
-dissect_dop_UTCTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_UTCTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_UTCTime(implicit_tag, actx, tree, tvb, offset, hf_index, NULL, NULL);
 
   return offset;
@@ -638,8 +639,8 @@ dissect_dop_UTCTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, as
 
 
 
-static int
-dissect_dop_GeneralizedTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_GeneralizedTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_GeneralizedTime(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -658,8 +659,8 @@ static const ber_choice_t Time_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_Time(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_Time(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  Time_choice, hf_index, ett_dop_Time,
                                  NULL);
@@ -680,8 +681,8 @@ static const ber_choice_t T_validFrom_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_validFrom(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_validFrom(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_validFrom_choice, hf_index, ett_dop_T_validFrom,
                                  NULL);
@@ -702,8 +703,8 @@ static const ber_choice_t T_validUntil_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_validUntil(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_validUntil(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_validUntil_choice, hf_index, ett_dop_T_validUntil,
                                  NULL);
@@ -718,8 +719,8 @@ static const ber_sequence_t Validity_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_Validity(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_Validity(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    Validity_sequence, hf_index, ett_dop_Validity);
 
@@ -738,8 +739,8 @@ static const ber_sequence_t EstablishOperationalBindingArgumentData_sequence[] =
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_EstablishOperationalBindingArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EstablishOperationalBindingArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EstablishOperationalBindingArgumentData_sequence, hf_index, ett_dop_EstablishOperationalBindingArgumentData);
 
@@ -748,8 +749,8 @@ dissect_dop_EstablishOperationalBindingArgumentData(bool implicit_tag _U_, tvbuf
 
 
 
-static int
-dissect_dop_BIT_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_BIT_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     NULL, 0, hf_index, -1,
                                     NULL);
@@ -765,8 +766,8 @@ static const ber_sequence_t T_signedEstablishOperationalBindingArgument_sequence
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_signedEstablishOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_signedEstablishOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedEstablishOperationalBindingArgument_sequence, hf_index, ett_dop_T_signedEstablishOperationalBindingArgument);
 
@@ -780,8 +781,8 @@ static const ber_choice_t EstablishOperationalBindingArgument_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_EstablishOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EstablishOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  EstablishOperationalBindingArgument_choice, hf_index, ett_dop_EstablishOperationalBindingArgument,
                                  NULL);
@@ -791,8 +792,8 @@ dissect_dop_EstablishOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t 
 
 
 
-static int
-dissect_dop_T_symmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_symmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("establish.symmetric", tvb, offset, actx->pinfo, tree, "symmetric", actx->private_data);
 
@@ -802,8 +803,8 @@ dissect_dop_T_symmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_
 
 
 
-static int
-dissect_dop_T_roleA_replies(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_roleA_replies(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("establish.rolea", tvb, offset, actx->pinfo, tree, "roleA", actx->private_data);
 
@@ -813,8 +814,8 @@ dissect_dop_T_roleA_replies(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset
 
 
 
-static int
-dissect_dop_T_roleB_replies(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_roleB_replies(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("establish.roleb", tvb, offset, actx->pinfo, tree, "roleB", actx->private_data);
 
@@ -837,8 +838,8 @@ static const ber_choice_t T_initiator_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_initiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_initiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_initiator_choice, hf_index, ett_dop_T_initiator,
                                  NULL);
@@ -851,10 +852,10 @@ static const ber_sequence_t SEQUENCE_SIZE_1_MAX_OF_Attribute_sequence_of[1] = {
   { &hf_dop_notification_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509if_Attribute },
 };
 
-static int
-dissect_dop_SEQUENCE_SIZE_1_MAX_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
-                                      SEQUENCE_SIZE_1_MAX_OF_Attribute_sequence_of, hf_index, ett_dop_SEQUENCE_SIZE_1_MAX_OF_Attribute);
+static unsigned
+dissect_dop_SEQUENCE_SIZE_1_MAX_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_constrained_sequence_of(implicit_tag, actx, tree, tvb, offset,
+                                                  1, NO_BOUND, SEQUENCE_SIZE_1_MAX_OF_Attribute_sequence_of, hf_index, ett_dop_SEQUENCE_SIZE_1_MAX_OF_Attribute);
 
   return offset;
 }
@@ -872,8 +873,8 @@ static const ber_sequence_t EstablishOperationalBindingResult_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_EstablishOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EstablishOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EstablishOperationalBindingResult_sequence, hf_index, ett_dop_EstablishOperationalBindingResult);
 
@@ -882,8 +883,8 @@ dissect_dop_EstablishOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *t
 
 
 
-static int
-dissect_dop_ModifySymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifySymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("modify.symmetric", tvb, offset, actx->pinfo, tree, "symmetric", actx->private_data);
 
@@ -893,8 +894,8 @@ dissect_dop_ModifySymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset
 
 
 
-static int
-dissect_dop_ModifyRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifyRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("modify.rolea", tvb, offset, actx->pinfo, tree, "roleA", actx->private_data);
 
@@ -904,8 +905,8 @@ dissect_dop_ModifyRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, int o
 
 
 
-static int
-dissect_dop_ModifyRoleBInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifyRoleBInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("modify.roleb", tvb, offset, actx->pinfo, tree, "roleB", actx->private_data);
 
@@ -928,8 +929,8 @@ static const ber_choice_t ModifyArgumentInitiator_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ModifyArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifyArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ModifyArgumentInitiator_choice, hf_index, ett_dop_ModifyArgumentInitiator,
                                  NULL);
@@ -939,8 +940,8 @@ dissect_dop_ModifyArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, in
 
 
 
-static int
-dissect_dop_ArgumentNewAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ArgumentNewAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("agreement", tvb, offset, actx->pinfo, tree, NULL, actx->private_data);
 
@@ -962,8 +963,8 @@ static const ber_sequence_t ModifyOperationalBindingArgumentData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ModifyOperationalBindingArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifyOperationalBindingArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ModifyOperationalBindingArgumentData_sequence, hf_index, ett_dop_ModifyOperationalBindingArgumentData);
 
@@ -978,8 +979,8 @@ static const ber_sequence_t T_signedModifyOperationalBindingArgument_sequence[] 
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_signedModifyOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_signedModifyOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedModifyOperationalBindingArgument_sequence, hf_index, ett_dop_T_signedModifyOperationalBindingArgument);
 
@@ -993,8 +994,8 @@ static const ber_choice_t ModifyOperationalBindingArgument_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ModifyOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifyOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ModifyOperationalBindingArgument_choice, hf_index, ett_dop_ModifyOperationalBindingArgument,
                                  NULL);
@@ -1004,8 +1005,8 @@ dissect_dop_ModifyOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tv
 
 
 
-static int
-dissect_dop_ResultNewAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ResultNewAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("agreement", tvb, offset, actx->pinfo, tree, NULL, actx->private_data);
 
@@ -1026,8 +1027,8 @@ static const ber_sequence_t ModifyOperationalBindingResultData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ModifyOperationalBindingResultData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifyOperationalBindingResultData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ModifyOperationalBindingResultData_sequence, hf_index, ett_dop_ModifyOperationalBindingResultData);
 
@@ -1042,8 +1043,8 @@ static const ber_sequence_t ProtectedModifyResult_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ProtectedModifyResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ProtectedModifyResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ProtectedModifyResult_sequence, hf_index, ett_dop_ProtectedModifyResult);
 
@@ -1057,8 +1058,8 @@ static const ber_choice_t ModifyOperationalBindingResult_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ModifyOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ModifyOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ModifyOperationalBindingResult_choice, hf_index, ett_dop_ModifyOperationalBindingResult,
                                  NULL);
@@ -1068,8 +1069,8 @@ dissect_dop_ModifyOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *tvb 
 
 
 
-static int
-dissect_dop_TerminateSymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateSymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("terminate.symmetric", tvb, offset, actx->pinfo, tree, "symmetric", actx->private_data);
 
@@ -1079,8 +1080,8 @@ dissect_dop_TerminateSymmetric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 
 
 
-static int
-dissect_dop_TerminateRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("terminate.rolea", tvb, offset, actx->pinfo, tree, "roleA", actx->private_data);
 
@@ -1090,8 +1091,8 @@ dissect_dop_TerminateRoleAInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, in
 
 
 
-static int
-dissect_dop_TerminateRoleBInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateRoleBInitiates(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("terminate.roleb", tvb, offset, actx->pinfo, tree, "roleB", actx->private_data);
 
@@ -1114,8 +1115,8 @@ static const ber_choice_t TerminateArgumentInitiator_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_TerminateArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateArgumentInitiator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  TerminateArgumentInitiator_choice, hf_index, ett_dop_TerminateArgumentInitiator,
                                  NULL);
@@ -1133,8 +1134,8 @@ static const ber_sequence_t TerminateOperationalBindingArgumentData_sequence[] =
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_TerminateOperationalBindingArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateOperationalBindingArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    TerminateOperationalBindingArgumentData_sequence, hf_index, ett_dop_TerminateOperationalBindingArgumentData);
 
@@ -1149,8 +1150,8 @@ static const ber_sequence_t T_signedTerminateOperationalBindingArgument_sequence
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_signedTerminateOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_signedTerminateOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedTerminateOperationalBindingArgument_sequence, hf_index, ett_dop_T_signedTerminateOperationalBindingArgument);
 
@@ -1164,8 +1165,8 @@ static const ber_choice_t TerminateOperationalBindingArgument_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_TerminateOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateOperationalBindingArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  TerminateOperationalBindingArgument_choice, hf_index, ett_dop_TerminateOperationalBindingArgument,
                                  NULL);
@@ -1185,8 +1186,8 @@ static const ber_sequence_t TerminateOperationalBindingResultData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_TerminateOperationalBindingResultData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateOperationalBindingResultData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    TerminateOperationalBindingResultData_sequence, hf_index, ett_dop_TerminateOperationalBindingResultData);
 
@@ -1201,8 +1202,8 @@ static const ber_sequence_t ProtectedTerminateResult_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ProtectedTerminateResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ProtectedTerminateResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ProtectedTerminateResult_sequence, hf_index, ett_dop_ProtectedTerminateResult);
 
@@ -1216,8 +1217,8 @@ static const ber_choice_t TerminateOperationalBindingResult_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_TerminateOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_TerminateOperationalBindingResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  TerminateOperationalBindingResult_choice, hf_index, ett_dop_TerminateOperationalBindingResult,
                                  NULL);
@@ -1242,8 +1243,8 @@ static const value_string dop_T_problem_vals[] = {
 };
 
 
-static int
-dissect_dop_T_problem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_problem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                   NULL);
 
@@ -1252,8 +1253,8 @@ dissect_dop_T_problem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, 
 
 
 
-static int
-dissect_dop_T_agreementProposal(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_agreementProposal(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   offset = call_dop_oid_callback("agreement", tvb, offset, actx->pinfo, tree, NULL, actx->private_data);
 
@@ -1274,8 +1275,8 @@ static const ber_sequence_t OpBindingErrorParam_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_OpBindingErrorParam(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_OpBindingErrorParam(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    OpBindingErrorParam_sequence, hf_index, ett_dop_OpBindingErrorParam);
 
@@ -1289,8 +1290,8 @@ static const ber_sequence_t HierarchicalAgreement_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_HierarchicalAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_HierarchicalAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    HierarchicalAgreement_sequence, hf_index, ett_dop_HierarchicalAgreement);
 
@@ -1302,8 +1303,8 @@ static const ber_sequence_t SET_OF_Attribute_set_of[1] = {
   { &hf_dop_entryInfo_item  , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509if_Attribute },
 };
 
-static int
-dissect_dop_SET_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_Attribute_set_of, hf_index, ett_dop_SET_OF_Attribute);
 
@@ -1317,8 +1318,8 @@ static const ber_sequence_t SubentryInfo_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_SubentryInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SubentryInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SubentryInfo_sequence, hf_index, ett_dop_SubentryInfo);
 
@@ -1330,8 +1331,8 @@ static const ber_sequence_t SET_OF_SubentryInfo_set_of[1] = {
   { &hf_dop_subentries_item , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_dop_SubentryInfo },
 };
 
-static int
-dissect_dop_SET_OF_SubentryInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_SubentryInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_SubentryInfo_set_of, hf_index, ett_dop_SET_OF_SubentryInfo);
 
@@ -1347,8 +1348,8 @@ static const ber_sequence_t Vertex_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_Vertex(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_Vertex(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    Vertex_sequence, hf_index, ett_dop_Vertex);
 
@@ -1360,8 +1361,8 @@ static const ber_sequence_t DITcontext_sequence_of[1] = {
   { &hf_dop_DITcontext_item , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_dop_Vertex },
 };
 
-static int
-dissect_dop_DITcontext(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_DITcontext(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       DITcontext_sequence_of, hf_index, ett_dop_DITcontext);
 
@@ -1376,8 +1377,8 @@ static const ber_sequence_t SuperiorToSubordinate_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_SuperiorToSubordinate(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SuperiorToSubordinate(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SuperiorToSubordinate_sequence, hf_index, ett_dop_SuperiorToSubordinate);
 
@@ -1393,8 +1394,8 @@ static const ber_sequence_t SubordinateToSuperior_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_SubordinateToSuperior(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SubordinateToSuperior(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SubordinateToSuperior_sequence, hf_index, ett_dop_SubordinateToSuperior);
 
@@ -1408,8 +1409,8 @@ static const ber_sequence_t SuperiorToSubordinateModification_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_SuperiorToSubordinateModification(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SuperiorToSubordinateModification(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SuperiorToSubordinateModification_sequence, hf_index, ett_dop_SuperiorToSubordinateModification);
 
@@ -1422,8 +1423,8 @@ static const ber_sequence_t NonSpecificHierarchicalAgreement_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_NonSpecificHierarchicalAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_NonSpecificHierarchicalAgreement(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    NonSpecificHierarchicalAgreement_sequence, hf_index, ett_dop_NonSpecificHierarchicalAgreement);
 
@@ -1437,8 +1438,8 @@ static const ber_sequence_t NHOBSuperiorToSubordinate_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_NHOBSuperiorToSubordinate(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_NHOBSuperiorToSubordinate(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    NHOBSuperiorToSubordinate_sequence, hf_index, ett_dop_NHOBSuperiorToSubordinate);
 
@@ -1452,8 +1453,8 @@ static const ber_sequence_t NHOBSubordinateToSuperior_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_NHOBSubordinateToSuperior(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_NHOBSubordinateToSuperior(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    NHOBSubordinateToSuperior_sequence, hf_index, ett_dop_NHOBSubordinateToSuperior);
 
@@ -1462,9 +1463,9 @@ dissect_dop_NHOBSubordinateToSuperior(bool implicit_tag _U_, tvbuff_t *tvb _U_, 
 
 
 
-static int
-dissect_dop_Precedence(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 precedence = 0;
+static unsigned
+dissect_dop_Precedence(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  uint32_t precedence = 0;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &precedence);
@@ -1485,8 +1486,8 @@ static const value_string dop_T_level_vals[] = {
 };
 
 
-static int
-dissect_dop_T_level(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_level(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                   NULL);
 
@@ -1495,8 +1496,8 @@ dissect_dop_T_level(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, as
 
 
 
-static int
-dissect_dop_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -1511,8 +1512,8 @@ static const ber_sequence_t T_basicLevels_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_basicLevels(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_basicLevels(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_basicLevels_sequence, hf_index, ett_dop_T_basicLevels);
 
@@ -1521,8 +1522,8 @@ dissect_dop_T_basicLevels(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _
 
 
 
-static int
-dissect_dop_EXTERNAL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_EXTERNAL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_external_type(implicit_tag, tree, tvb, offset, actx, hf_index, NULL);
 
   return offset;
@@ -1541,8 +1542,8 @@ static const ber_choice_t AuthenticationLevel_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_AuthenticationLevel(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_AuthenticationLevel(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  AuthenticationLevel_choice, hf_index, ett_dop_AuthenticationLevel,
                                  NULL);
@@ -1555,8 +1556,8 @@ static const ber_sequence_t SET_OF_AttributeType_set_of[1] = {
   { &hf_dop_attributeType_item, BER_CLASS_UNI, BER_UNI_TAG_OID, BER_FLAGS_NOOWNTAG, dissect_x509if_AttributeType },
 };
 
-static int
-dissect_dop_SET_OF_AttributeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_AttributeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_AttributeType_set_of, hf_index, ett_dop_SET_OF_AttributeType);
 
@@ -1568,8 +1569,8 @@ static const ber_sequence_t SET_OF_AttributeTypeAndValue_set_of[1] = {
   { &hf_dop_attributeValue_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_crmf_AttributeTypeAndValue },
 };
 
-static int
-dissect_dop_SET_OF_AttributeTypeAndValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_AttributeTypeAndValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_AttributeTypeAndValue_set_of, hf_index, ett_dop_SET_OF_AttributeTypeAndValue);
 
@@ -1583,8 +1584,8 @@ static const ber_sequence_t MaxValueCount_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_MaxValueCount(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_MaxValueCount(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    MaxValueCount_sequence, hf_index, ett_dop_MaxValueCount);
 
@@ -1596,8 +1597,8 @@ static const ber_sequence_t SET_OF_MaxValueCount_set_of[1] = {
   { &hf_dop_maxValueCount_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_dop_MaxValueCount },
 };
 
-static int
-dissect_dop_SET_OF_MaxValueCount(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_MaxValueCount(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_MaxValueCount_set_of, hf_index, ett_dop_SET_OF_MaxValueCount);
 
@@ -1611,8 +1612,8 @@ static const ber_sequence_t RestrictedValue_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_RestrictedValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_RestrictedValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    RestrictedValue_sequence, hf_index, ett_dop_RestrictedValue);
 
@@ -1624,8 +1625,8 @@ static const ber_sequence_t SET_OF_RestrictedValue_set_of[1] = {
   { &hf_dop_restrictedBy_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_dop_RestrictedValue },
 };
 
-static int
-dissect_dop_SET_OF_RestrictedValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_RestrictedValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_RestrictedValue_set_of, hf_index, ett_dop_SET_OF_RestrictedValue);
 
@@ -1637,8 +1638,8 @@ static const ber_sequence_t SET_OF_ContextAssertion_set_of[1] = {
   { &hf_dop_contexts_item   , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509if_ContextAssertion },
 };
 
-static int
-dissect_dop_SET_OF_ContextAssertion(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_ContextAssertion(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_ContextAssertion_set_of, hf_index, ett_dop_SET_OF_ContextAssertion);
 
@@ -1663,8 +1664,8 @@ static const ber_sequence_t ProtectedItems_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ProtectedItems(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ProtectedItems(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ProtectedItems_sequence, hf_index, ett_dop_ProtectedItems);
 
@@ -1676,8 +1677,8 @@ static const ber_sequence_t SET_OF_NameAndOptionalUID_set_of[1] = {
   { &hf_dop_name_item       , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509sat_NameAndOptionalUID },
 };
 
-static int
-dissect_dop_SET_OF_NameAndOptionalUID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_NameAndOptionalUID(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_NameAndOptionalUID_set_of, hf_index, ett_dop_SET_OF_NameAndOptionalUID);
 
@@ -1689,8 +1690,8 @@ static const ber_sequence_t SET_OF_SubtreeSpecification_set_of[1] = {
   { &hf_dop_subtree_item    , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509if_SubtreeSpecification },
 };
 
-static int
-dissect_dop_SET_OF_SubtreeSpecification(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_SubtreeSpecification(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_SubtreeSpecification_set_of, hf_index, ett_dop_SET_OF_SubtreeSpecification);
 
@@ -1707,8 +1708,8 @@ static const ber_sequence_t UserClasses_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_UserClasses(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_UserClasses(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    UserClasses_sequence, hf_index, ett_dop_UserClasses);
 
@@ -1746,8 +1747,8 @@ static int * const GrantsAndDenials_bits[] = {
   NULL
 };
 
-static int
-dissect_dop_GrantsAndDenials(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_GrantsAndDenials(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     GrantsAndDenials_bits, 26, hf_index, ett_dop_GrantsAndDenials,
                                     NULL);
@@ -1763,8 +1764,8 @@ static const ber_sequence_t ItemPermission_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ItemPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ItemPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ItemPermission_sequence, hf_index, ett_dop_ItemPermission);
 
@@ -1776,8 +1777,8 @@ static const ber_sequence_t SET_OF_ItemPermission_set_of[1] = {
   { &hf_dop_itemPermissions_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_dop_ItemPermission },
 };
 
-static int
-dissect_dop_SET_OF_ItemPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_ItemPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_ItemPermission_set_of, hf_index, ett_dop_SET_OF_ItemPermission);
 
@@ -1791,8 +1792,8 @@ static const ber_sequence_t T_itemFirst_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_itemFirst(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_itemFirst(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_itemFirst_sequence, hf_index, ett_dop_T_itemFirst);
 
@@ -1807,8 +1808,8 @@ static const ber_sequence_t UserPermission_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_UserPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_UserPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    UserPermission_sequence, hf_index, ett_dop_UserPermission);
 
@@ -1820,8 +1821,8 @@ static const ber_sequence_t SET_OF_UserPermission_set_of[1] = {
   { &hf_dop_userPermissions_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_dop_UserPermission },
 };
 
-static int
-dissect_dop_SET_OF_UserPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_SET_OF_UserPermission(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_UserPermission_set_of, hf_index, ett_dop_SET_OF_UserPermission);
 
@@ -1835,8 +1836,8 @@ static const ber_sequence_t T_userFirst_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_userFirst(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_userFirst(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_userFirst_sequence, hf_index, ett_dop_T_userFirst);
 
@@ -1856,8 +1857,8 @@ static const ber_choice_t T_itemOrUserFirst_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_T_itemOrUserFirst(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_T_itemOrUserFirst(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_itemOrUserFirst_choice, hf_index, ett_dop_T_itemOrUserFirst,
                                  NULL);
@@ -1874,8 +1875,8 @@ static const ber_sequence_t ACIItem_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_dop_ACIItem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_dop_ACIItem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ACIItem_sequence, hf_index, ett_dop_ACIItem);
 
@@ -1885,87 +1886,87 @@ dissect_dop_ACIItem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, as
 /*--- PDUs ---*/
 
 static int dissect_DSEType_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_DSEType(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_DSEType_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_DSEType(false, tvb, offset, &asn1_ctx, tree, hf_dop_DSEType_PDU);
   return offset;
 }
 static int dissect_SupplierInformation_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_SupplierInformation(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_SupplierInformation_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_SupplierInformation(false, tvb, offset, &asn1_ctx, tree, hf_dop_SupplierInformation_PDU);
   return offset;
 }
 static int dissect_ConsumerInformation_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_ConsumerInformation(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_ConsumerInformation_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_ConsumerInformation(false, tvb, offset, &asn1_ctx, tree, hf_dop_ConsumerInformation_PDU);
   return offset;
 }
 static int dissect_SupplierAndConsumers_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_SupplierAndConsumers(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_SupplierAndConsumers_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_SupplierAndConsumers(false, tvb, offset, &asn1_ctx, tree, hf_dop_SupplierAndConsumers_PDU);
   return offset;
 }
 static int dissect_HierarchicalAgreement_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_HierarchicalAgreement(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_HierarchicalAgreement_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_HierarchicalAgreement(false, tvb, offset, &asn1_ctx, tree, hf_dop_HierarchicalAgreement_PDU);
   return offset;
 }
 static int dissect_SuperiorToSubordinate_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_SuperiorToSubordinate(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_SuperiorToSubordinate_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_SuperiorToSubordinate(false, tvb, offset, &asn1_ctx, tree, hf_dop_SuperiorToSubordinate_PDU);
   return offset;
 }
 static int dissect_SubordinateToSuperior_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_SubordinateToSuperior(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_SubordinateToSuperior_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_SubordinateToSuperior(false, tvb, offset, &asn1_ctx, tree, hf_dop_SubordinateToSuperior_PDU);
   return offset;
 }
 static int dissect_SuperiorToSubordinateModification_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_SuperiorToSubordinateModification(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_SuperiorToSubordinateModification_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_SuperiorToSubordinateModification(false, tvb, offset, &asn1_ctx, tree, hf_dop_SuperiorToSubordinateModification_PDU);
   return offset;
 }
 static int dissect_NonSpecificHierarchicalAgreement_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_NonSpecificHierarchicalAgreement(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_NonSpecificHierarchicalAgreement_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_NonSpecificHierarchicalAgreement(false, tvb, offset, &asn1_ctx, tree, hf_dop_NonSpecificHierarchicalAgreement_PDU);
   return offset;
 }
 static int dissect_NHOBSuperiorToSubordinate_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_NHOBSuperiorToSubordinate(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_NHOBSuperiorToSubordinate_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_NHOBSuperiorToSubordinate(false, tvb, offset, &asn1_ctx, tree, hf_dop_NHOBSuperiorToSubordinate_PDU);
   return offset;
 }
 static int dissect_NHOBSubordinateToSuperior_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_NHOBSubordinateToSuperior(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_NHOBSubordinateToSuperior_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_NHOBSubordinateToSuperior(false, tvb, offset, &asn1_ctx, tree, hf_dop_NHOBSubordinateToSuperior_PDU);
   return offset;
 }
 static int dissect_ACIItem_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dop_ACIItem(FALSE, tvb, offset, &asn1_ctx, tree, hf_dop_ACIItem_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dop_ACIItem(false, tvb, offset, &asn1_ctx, tree, hf_dop_ACIItem_PDU);
   return offset;
 }
 
@@ -1979,7 +1980,7 @@ call_dop_oid_callback(const char *base_string, tvbuff_t *tvb, int offset, packet
 
   col_append_fstr(pinfo->cinfo, COL_INFO, " %s", col_info);
 
-  if (dissector_try_string(dop_dissector_table, binding_param, tvb, pinfo, tree, data)) {
+  if (dissector_try_string_with_data(dop_dissector_table, binding_param, tvb, pinfo, tree, true, data)) {
      offset = tvb_reported_length (tvb);
   } else {
      proto_item *item;
@@ -2002,12 +2003,12 @@ call_dop_oid_callback(const char *base_string, tvbuff_t *tvb, int offset, packet
 static int
 dissect_dop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-	int offset = 0;
-	int old_offset;
+	unsigned offset = 0;
+	unsigned old_offset;
 	proto_item *item;
 	proto_tree *tree;
 	struct SESSION_DATA_STRUCTURE* session;
-	int (*dop_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) = NULL;
+	unsigned (*dop_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) = NULL;
 	const char *dop_op_name;
 	asn1_ctx_t asn1_ctx;
 
@@ -2016,7 +2017,7 @@ dissect_dop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 		return 0;
 	session = (struct SESSION_DATA_STRUCTURE*)data;
 
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 	item = proto_tree_add_item(parent_tree, proto_dop, tvb, 0, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_dop);
@@ -2054,7 +2055,7 @@ dissect_dop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 	    dop_op_name = "Modify-Operational-Binding-Argument";
 	    break;
 	  default:
-	    proto_tree_add_expert_format(tree, pinfo, &ei_dop_unsupported_opcode, tvb, offset, -1,
+	    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_dop_unsupported_opcode, tvb, offset,
 	        "Unsupported DOP Argument opcode (%d)", session->ros_op & ROS_OP_OPCODE_MASK);
 	    break;
 	  }
@@ -2074,7 +2075,7 @@ dissect_dop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 	    dop_op_name = "Modify-Operational-Binding-Result";
 	    break;
 	  default:
-	    proto_tree_add_expert_format(tree, pinfo, &ei_dop_unsupported_opcode, tvb, offset, -1,
+	    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_dop_unsupported_opcode, tvb, offset,
 	            "Unsupported DOP Result opcode (%d)", session->ros_op & ROS_OP_OPCODE_MASK);
 	    break;
 	  }
@@ -2086,24 +2087,24 @@ dissect_dop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 	    dop_op_name = "Operational-Binding-Error";
 	    break;
 	  default:
-	    proto_tree_add_expert_format(tree, pinfo, &ei_dop_unsupported_errcode, tvb, offset, -1,
+	    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_dop_unsupported_errcode, tvb, offset,
 	        "Unsupported DOP Error opcode (%d)", session->ros_op & ROS_OP_OPCODE_MASK);
 	    break;
 	  }
 	  break;
 	default:
-	  proto_tree_add_expert(tree, pinfo, &ei_dop_unsupported_pdu, tvb, offset, -1);
+	  proto_tree_add_expert_remaining(tree, pinfo, &ei_dop_unsupported_pdu, tvb, offset);
 	  return tvb_captured_length(tvb);
 	}
 
 	if(dop_dissector) {
-      col_set_str(pinfo->cinfo, COL_INFO, dop_op_name);
+          col_set_str(pinfo->cinfo, COL_INFO, dop_op_name);
 
 	  while (tvb_reported_length_remaining(tvb, offset) > 0){
 	    old_offset=offset;
-	    offset=(*dop_dissector)(FALSE, tvb, offset, &asn1_ctx, tree, -1);
+	    offset=(*dop_dissector)(false, tvb, offset, &asn1_ctx, tree, -1);
 	    if(offset == old_offset){
-	      proto_tree_add_expert(tree, pinfo, &ei_dop_zero_pdu, tvb, offset, -1);
+                proto_tree_add_expert_remaining(tree, pinfo, &ei_dop_zero_pdu, tvb, offset);
 	      break;
 	    }
 	  }
@@ -2217,19 +2218,19 @@ void proto_register_dop(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_dop_establishInitiator,
-      { "initiator", "dop.initiator",
+      { "initiator", "dop.establishInitiator",
         FT_UINT32, BASE_DEC, VALS(dop_EstablishArgumentInitiator_vals), 0,
         "EstablishArgumentInitiator", HFILL }},
     { &hf_dop_establishSymmetric,
-      { "symmetric", "dop.symmetric_element",
+      { "symmetric", "dop.establishSymmetric_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "EstablishSymmetric", HFILL }},
     { &hf_dop_establishRoleAInitiates,
-      { "roleA-initiates", "dop.roleA_initiates_element",
+      { "roleA-initiates", "dop.establishRoleAInitiates_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "EstablishRoleAInitiates", HFILL }},
     { &hf_dop_establishRoleBInitiates,
-      { "roleB-initiates", "dop.roleB_initiates_element",
+      { "roleB-initiates", "dop.establishRoleBInitiates_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "EstablishRoleBInitiates", HFILL }},
     { &hf_dop_agreement,
@@ -2333,19 +2334,19 @@ void proto_register_dop(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_dop_modifyInitiator,
-      { "initiator", "dop.initiator",
+      { "initiator", "dop.modifyInitiator",
         FT_UINT32, BASE_DEC, VALS(dop_ModifyArgumentInitiator_vals), 0,
         "ModifyArgumentInitiator", HFILL }},
     { &hf_dop_modifySymmetric,
-      { "symmetric", "dop.symmetric_element",
+      { "symmetric", "dop.modifySymmetric_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ModifySymmetric", HFILL }},
     { &hf_dop_modifyRoleAInitiates,
-      { "roleA-initiates", "dop.roleA_initiates_element",
+      { "roleA-initiates", "dop.modifyRoleAInitiates_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ModifyRoleAInitiates", HFILL }},
     { &hf_dop_modifyRoleBInitiates,
-      { "roleB-initiates", "dop.roleB_initiates_element",
+      { "roleB-initiates", "dop.modifyRoleBInitiates_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ModifyRoleBInitiates", HFILL }},
     { &hf_dop_newBindingID,
@@ -2353,7 +2354,7 @@ void proto_register_dop(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         "OperationalBindingID", HFILL }},
     { &hf_dop_argumentNewAgreement,
-      { "newAgreement", "dop.newAgreement_element",
+      { "newAgreement", "dop.argumentNewAgreement_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ArgumentNewAgreement", HFILL }},
     { &hf_dop_unsignedModifyOperationalBindingArgument,
@@ -2373,7 +2374,7 @@ void proto_register_dop(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_dop_protectedModifyResult,
-      { "protected", "dop.protected_element",
+      { "protected", "dop.protectedModifyResult_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ProtectedModifyResult", HFILL }},
     { &hf_dop_modifyOperationalBindingResultData,
@@ -2381,23 +2382,23 @@ void proto_register_dop(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_dop_resultNewAgreement,
-      { "newAgreement", "dop.newAgreement_element",
+      { "newAgreement", "dop.resultNewAgreement_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ResultNewAgreement", HFILL }},
     { &hf_dop_terminateInitiator,
-      { "initiator", "dop.initiator",
+      { "initiator", "dop.terminateInitiator",
         FT_UINT32, BASE_DEC, VALS(dop_TerminateArgumentInitiator_vals), 0,
         "TerminateArgumentInitiator", HFILL }},
     { &hf_dop_terminateSymmetric,
-      { "symmetric", "dop.symmetric_element",
+      { "symmetric", "dop.terminateSymmetric_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "TerminateSymmetric", HFILL }},
     { &hf_dop_terminateRoleAInitiates,
-      { "roleA-initiates", "dop.roleA_initiates_element",
+      { "roleA-initiates", "dop.terminateRoleAInitiates_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "TerminateRoleAInitiates", HFILL }},
     { &hf_dop_terminateRoleBInitiates,
-      { "roleB-initiates", "dop.roleB_initiates_element",
+      { "roleB-initiates", "dop.terminateRoleBInitiates_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "TerminateRoleBInitiates", HFILL }},
     { &hf_dop_terminateAtTime,
@@ -2417,7 +2418,7 @@ void proto_register_dop(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         "TerminateOperationalBindingArgumentData", HFILL }},
     { &hf_dop_protectedTerminateResult,
-      { "protected", "dop.protected_element",
+      { "protected", "dop.protectedTerminateResult_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ProtectedTerminateResult", HFILL }},
     { &hf_dop_terminateOperationalBindingResultData,
@@ -2887,7 +2888,7 @@ void proto_register_dop(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_dop,
     &ett_dop_unknown,
     &ett_dop_DSEType,
@@ -3024,7 +3025,7 @@ void proto_reg_handoff_dop(void) {
   /* ABSTRACT SYNTAXES */
 
   /* Register DOP with ROS (with no use of RTSE) */
-  register_ros_oid_dissector_handle("2.5.9.4", dop_handle, 0, "id-as-directory-operational-binding-management", FALSE);
+  register_ros_oid_dissector_handle("2.5.9.4", dop_handle, 0, "id-as-directory-operational-binding-management", false);
 
   /* BINDING TYPES */
 

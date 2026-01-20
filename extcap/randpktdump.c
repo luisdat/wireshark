@@ -22,6 +22,7 @@
 #include <wsutil/socket.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
+#include <app/application_flavor.h>
 
 #include <cli_main.h>
 #include <wsutil/cmdarg_err.h>
@@ -43,7 +44,7 @@ enum {
 	OPT_TYPE
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
 	EXTCAP_BASE_OPTIONS,
 	{ "help",					ws_no_argument,		NULL, OPT_HELP},
 	{ "version",				ws_no_argument,		NULL, OPT_VERSION},
@@ -127,11 +128,6 @@ static int list_config(char *interface)
 	return EXIT_SUCCESS;
 }
 
-static void randpktdump_cmdarg_err(const char *msg_format, va_list ap)
-{
-	ws_logv(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_WARNING, msg_format, ap);
-}
-
 int main(int argc, char *argv[])
 {
 	char* err_msg;
@@ -140,8 +136,8 @@ int main(int argc, char *argv[])
 	uint16_t maxbytes = 5000;
 	uint64_t count = 1000;
 	uint64_t packet_delay_ms = 0;
-	int random_type = false;
-	int all_random = false;
+	bool random_type = false;
+	bool all_random = false;
 	char* type = NULL;
 	int produce_type = -1;
 	int file_type_subtype = WTAP_FILE_TYPE_SUBTYPE_UNKNOWN;
@@ -153,10 +149,13 @@ int main(int argc, char *argv[])
 	char* help_url;
 	char* help_header = NULL;
 
-	cmdarg_err_init(randpktdump_cmdarg_err, randpktdump_cmdarg_err);
+	/* Set the program name. */
+	g_set_prgname("randpktdump");
+
+	cmdarg_err_init(extcap_log_cmdarg_err, extcap_log_cmdarg_err);
 
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init("randpktdump");
+	extcap_log_init();
 
 	/*
 	 * Get credential information for later use.
@@ -167,14 +166,14 @@ int main(int argc, char *argv[])
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	err_msg = configuration_init(argv[0], NULL);
+	err_msg = configuration_init(argv[0], "wireshark");
 	if (err_msg != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			err_msg);
 		g_free(err_msg);
 	}
 
-	help_url = data_file_url("randpktdump.html");
+	help_url = data_file_url("randpktdump.html", application_configuration_environment_prefix());
 	extcap_base_set_util_info(extcap_conf, argv[0], RANDPKTDUMP_VERSION_MAJOR, RANDPKTDUMP_VERSION_MINOR,
 		RANDPKTDUMP_VERSION_RELEASE, help_url);
 	g_free(help_url);
@@ -300,12 +299,16 @@ int main(int argc, char *argv[])
 
 	if (extcap_conf->capture) {
 
+		const struct file_extension_info* file_extensions;
+		unsigned num_extensions;
+
 		if (g_strcmp0(extcap_conf->interface, RANDPKT_EXTCAP_INTERFACE)) {
 			ws_warning("ERROR: invalid interface");
 			goto end;
 		}
 
-		wtap_init(false);
+		application_file_extensions(&file_extensions, &num_extensions);
+		wtap_init(false, application_configuration_environment_prefix(), file_extensions, num_extensions);
 
 		if (file_type_subtype == WTAP_FILE_TYPE_SUBTYPE_UNKNOWN) {
 			file_type_subtype = wtap_pcapng_file_type_subtype();

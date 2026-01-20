@@ -13,7 +13,7 @@
 uint32_t
 ws_ipv4_get_subnet_mask(const uint32_t mask_length)
 {
-	static const guint32 masks[33] = {
+	static const uint32_t masks[33] = {
 		0x00000000,
 		0x80000000, 0xc0000000, 0xe0000000, 0xf0000000,
 		0xf8000000, 0xfc000000, 0xfe000000, 0xff000000,
@@ -46,7 +46,7 @@ compare_ipv4(const ipv4_addr_and_mask *a, const ipv4_addr_and_mask *b)
 }
 
 void
-ws_ipv4_addr_and_mask_init(ipv4_addr_and_mask *dst, ws_in4_addr src_addr, int src_bits)
+ws_ipv4_addr_and_mask_init(ipv4_addr_and_mask *dst, ws_in4_addr src_addr, unsigned src_bits)
 {
     dst->addr = g_ntohl(src_addr);
     dst->nmask = ws_ipv4_get_subnet_mask(src_bits);

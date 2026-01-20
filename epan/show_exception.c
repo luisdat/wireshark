@@ -12,7 +12,6 @@
 #include "config.h"
 #define WS_LOG_DOMAIN LOG_DOMAIN_EPAN
 
-#include <glib.h>
 #include <epan/packet.h>
 #include <epan/exceptions.h>
 #include <epan/expert.h>
@@ -20,6 +19,7 @@
 #include <epan/prefs-int.h>
 #include <epan/show_exception.h>
 #include <wsutil/ws_assert.h>
+#include <wsutil/array.h>
 
 #include <wsutil/wslog.h>
 
@@ -37,7 +37,7 @@ void
 register_show_exception(void)
 {
 	static ei_register_info ei_dissector_bug_set[] = {
-		{ &ei_dissector_bug, { "_ws.dissector_bug", PI_DISSECTOR_BUG, PI_ERROR, "Dissector bug", EXPFILL }},
+		{ &ei_dissector_bug, { "_ws.dissector_bug.expert", PI_DISSECTOR_BUG, PI_ERROR, "Dissector bug", EXPFILL }},
 	};
 	static ei_register_info ei_malformed_set[] = {
 		{ &ei_malformed_reassembly, { "_ws.malformed.reassembly", PI_MALFORMED, PI_ERROR, "Reassembly error", EXPFILL }},
@@ -52,13 +52,9 @@ register_show_exception(void)
 	expert_module_t* expert_unreassembled;
 
 	proto_short = proto_register_protocol("Short Frame", "Short frame", "_ws.short");
-	proto_dissector_bug = proto_register_protocol("Dissector Bug",
-	    "Dissector bug", "_ws.dissector_bug");
-	proto_malformed = proto_register_protocol("Malformed Packet",
-	    "Malformed packet", "_ws.malformed");
-	proto_unreassembled = proto_register_protocol(
-	    "Unreassembled Fragmented Packet",
-	    "Unreassembled fragmented packet", "_ws.unreassembled");
+	proto_dissector_bug = proto_register_protocol("Dissector Bug", "Dissector bug", "_ws.dissector_bug");
+	proto_malformed = proto_register_protocol("Malformed Packet", "Malformed packet", "_ws.malformed");
+	proto_unreassembled = proto_register_protocol("Unreassembled Fragmented Packet", "Unreassembled fragmented packet", "_ws.unreassembled");
 
 	expert_dissector_bug = expert_register_protocol(proto_dissector_bug);
 	expert_register_field_array(expert_dissector_bug, ei_dissector_bug_set, array_length(ei_dissector_bug_set));
@@ -100,7 +96,7 @@ show_exception(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 	case BoundsError:
 		{
-		gboolean display_info = TRUE;
+		bool display_info = true;
 		module_t * frame_module = prefs_find_module("frame");
 		if (frame_module != NULL)
 		{
@@ -108,7 +104,7 @@ show_exception(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 			if (display_pref)
 			{
 				if (prefs_get_bool_value(display_pref, pref_current))
-					display_info = FALSE;
+					display_info = false;
 			}
 		}
 

@@ -30,14 +30,14 @@ static int hf_at_rl_padding;
 static int hf_at_rl_vcsid;
 static int hf_at_rl_role_change;
 
-static gint ett_at_rl;
+static int ett_at_rl;
 
 static int
 dissect_at_rl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 
     /* Check if packet is destined to the Allied Telesis address (01:00:CD:FA:1B:AC) */
-    guint8 dst_mac[6] = {0x01, 0x00, 0xCD, 0xFA, 0x1B, 0xAC};
+    uint8_t dst_mac[6] = {0x01, 0x00, 0xCD, 0xFA, 0x1B, 0xAC};
     address dst_addr = ADDRESS_INIT_NONE;
     set_address(&dst_addr, AT_ETHER, sizeof(dst_mac), &dst_mac);
 
@@ -47,8 +47,8 @@ dissect_at_rl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "AT RL");
     col_clear(pinfo->cinfo,COL_INFO);
     col_add_fstr(pinfo->cinfo, COL_INFO, "Seq: %u, VCS-ID: %u",
-                    tvb_get_guint32(tvb, 0, ENC_BIG_ENDIAN),
-                    tvb_get_guint16(tvb, 12, ENC_BIG_ENDIAN));
+                    tvb_get_uint32(tvb, 0, ENC_BIG_ENDIAN),
+                    tvb_get_uint16(tvb, 12, ENC_BIG_ENDIAN));
 
     /* Frame has fixed length, so we can directly set tree and reported length (padding will most likely be added) */
     tvb_set_reported_length(tvb, AT_RL_FRAME_LEN);
@@ -56,7 +56,7 @@ dissect_at_rl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     proto_item *ti = proto_tree_add_item(tree, proto_at_rl, tvb, 0, AT_RL_FRAME_LEN, ENC_NA);
     proto_tree *at_rl_tree = proto_item_add_subtree(ti, ett_at_rl);
 
-    gint offset = 0;
+    int offset = 0;
     proto_tree_add_item(at_rl_tree, hf_at_rl_sequence, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
@@ -69,7 +69,7 @@ dissect_at_rl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     proto_tree_add_item(at_rl_tree, hf_at_rl_vcsid, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item(at_rl_tree, hf_at_rl_role_change, tvb, offset, 4, ENC_TIME_SECS);
+    proto_tree_add_item(at_rl_tree, hf_at_rl_role_change, tvb, offset, 4, ENC_TIME_SECS|ENC_BIG_ENDIAN);
 
     return AT_RL_FRAME_LEN;
 }
@@ -100,7 +100,7 @@ proto_register_at_rl(void)
         }
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_at_rl
     };
 

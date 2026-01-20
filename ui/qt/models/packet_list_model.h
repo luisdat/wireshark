@@ -34,7 +34,8 @@ class PacketListModel : public QAbstractItemModel
 public:
 
     enum {
-        HEADER_CAN_RESOLVE = Qt::UserRole,
+        HEADER_CAN_DISPLAY_STRINGS = Qt::UserRole,
+        HEADER_CAN_DISPLAY_DETAILS,
     };
 
     explicit PacketListModel(QObject *parent = 0, capture_file *cf = NULL);
@@ -45,6 +46,7 @@ public:
     QModelIndex parent(const QModelIndex &) const;
     int packetNumberToRow(int packet_num) const;
     unsigned recreateVisibleRows();
+    inline void needRecreateVisibleRows() { need_recreate_visible_rows_ = !physical_rows_.isEmpty(); }
     void clear();
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
@@ -56,7 +58,7 @@ public:
     frame_data *getRowFdata(QModelIndex idx) const;
     frame_data *getRowFdata(int row) const;
     void ensureRowColorized(int row);
-    int visibleIndexOf(frame_data *fdata) const;
+    int visibleIndexOf(const frame_data *fdata) const;
     /**
      * @brief Invalidate any cached column strings.
      */
@@ -77,12 +79,9 @@ public:
     void deleteFrameComments(const QModelIndexList &indices);
     void deleteAllFrameComments();
 
-    void setMaximumRowHeight(int height);
-
 signals:
+    void packetAppended(capture_file *cap_file, frame_data *fdata, qsizetype row);
     void goToPacket(int);
-    void maxLineCountChanged(const QModelIndex &ih_index) const;
-    void itemHeightChanged(const QModelIndex &ih_index);
 
     void bgColorizationProgress(int first, int last);
 
@@ -99,9 +98,7 @@ private:
     QVector<PacketListRecord *> visible_rows_;
     QVector<PacketListRecord *> new_visible_rows_;
     QVector<int> number_to_row_;
-
-    int max_row_height_; // px
-    int max_line_count_;
+    bool need_recreate_visible_rows_;
 
     static int sort_column_;
     static int sort_column_is_numeric_;
@@ -120,9 +117,7 @@ private:
     int idle_dissection_row_;
 
     bool isNumericColumn(int column);
-
-private slots:
-    void emitItemHeightChanged(const QModelIndex &ih_index);
+    void updateVisibleRows(PacketListRecord*);
 };
 
 #endif // PACKET_LIST_MODEL_H

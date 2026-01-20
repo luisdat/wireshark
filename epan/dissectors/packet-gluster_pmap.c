@@ -32,26 +32,26 @@ void proto_register_gluster_dump(void);
 void proto_reg_handoff_gluster_dump(void);
 
 /* Initialize the protocol and registered fields */
-static gint proto_gluster_pmap;
-static gint proto_gluster_dump;
+static int proto_gluster_pmap;
+static int proto_gluster_dump;
 
 /* programs and procedures */
-static gint hf_gluster_pmap_proc;
-static gint hf_gluster_dump_proc;
+static int hf_gluster_pmap_proc;
+static int hf_gluster_dump_proc;
 
 /* fields used by multiple programs/procedures */
-static gint hf_gluster_brick;
-static gint hf_gluster_brick_status;
-static gint hf_gluster_brick_port;
-static gint hf_gluster_gfsid;
-static gint hf_gluster_progname;
-static gint hf_gluster_prognum;
-static gint hf_gluster_progver;
+static int hf_gluster_brick;
+static int hf_gluster_brick_status;
+static int hf_gluster_brick_port;
+static int hf_gluster_gfsid;
+static int hf_gluster_progname;
+static int hf_gluster_prognum;
+static int hf_gluster_progver;
 
 /* Initialize the subtree pointers */
-static gint ett_gluster_pmap;
-static gint ett_gluster_dump;
-static gint ett_gluster_dump_detail;
+static int ett_gluster_pmap;
+static int ett_gluster_dump;
+static int ett_gluster_dump_detail;
 
 /* PMAP PORTBYBRICK */
 static int
@@ -68,9 +68,9 @@ gluster_pmap_portbybrick_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 gluster_pmap_portbybrick_call(tvbuff_t *tvb,
-				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	return dissect_rpc_string(tvb, tree, hf_gluster_brick, 0, NULL);
+	return dissect_rpc_string(tvb, pinfo, tree, hf_gluster_brick, 0, NULL);
 }
 
 /* Based on rpc/rpc-lib/src/rpc-common.c, but xdr encoding/decoding is broken.
@@ -78,18 +78,18 @@ gluster_pmap_portbybrick_call(tvbuff_t *tvb,
  * encode/decode, xdr_u_quad_t() is used (which is uint32_t).
  */
 static int
-gluster_dump_reply_detail(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+gluster_dump_reply_detail(tvbuff_t *tvb, int offset, packet_info *pinfo,
 							proto_tree *tree, void* data _U_)
 {
 	proto_item *detail_item;
 	proto_tree *detail_tree;
-	const gchar *progname = NULL;
+	const char *progname = NULL;
 
 	detail_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
 							ett_gluster_dump_detail, &detail_item, "Available Program: ");
 
 	/* progname */
-	offset = dissect_rpc_string(tvb, detail_tree, hf_gluster_progname,
+	offset = dissect_rpc_string(tvb, pinfo, detail_tree, hf_gluster_progname,
 							offset, &progname);
 	proto_item_append_text(detail_item, "%s", progname);
 
@@ -196,7 +196,7 @@ proto_register_gluster_pmap(void)
 	};
 
 	/* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_gluster_pmap
 	};
 
@@ -243,7 +243,7 @@ proto_register_gluster_dump(void)
 	};
 
 	/* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_gluster_dump,
 		&ett_gluster_dump_detail
 	};

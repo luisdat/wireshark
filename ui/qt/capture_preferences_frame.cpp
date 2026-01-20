@@ -27,6 +27,7 @@
 #include "ui/ws_ui_util.h"
 
 #include <epan/prefs-int.h>
+#include <uat_dialog.h>
 
 CapturePreferencesFrame::CapturePreferencesFrame(QWidget *parent) :
     QFrame(parent),
@@ -42,6 +43,7 @@ CapturePreferencesFrame::CapturePreferencesFrame(QWidget *parent) :
     pref_update_interval_ = prefFromPrefPtr(&prefs.capture_update_interval);
     pref_no_interface_load_ = prefFromPrefPtr(&prefs.capture_no_interface_load);
     pref_no_extcap_ = prefFromPrefPtr(&prefs.capture_no_extcap);
+    pref_enable_aggregation_ = prefFromPrefPtr(&prefs.enable_aggregation);
 
     // Setting the left margin via a style sheet clobbers its
     // appearance.
@@ -54,6 +56,11 @@ CapturePreferencesFrame::CapturePreferencesFrame(QWidget *parent) :
 CapturePreferencesFrame::~CapturePreferencesFrame()
 {
     delete ui;
+}
+
+void CapturePreferencesFrame::enableAggregationOptions(bool enable)
+{
+    ui->aggregationSetVisibilityCheckBox->setEnabled(enable);
 }
 
 void CapturePreferencesFrame::showEvent(QShowEvent *)
@@ -72,7 +79,7 @@ void CapturePreferencesFrame::updateWidgets()
     }
     ui->defaultInterfaceComboBox->clear();
     if ((global_capture_opts.all_ifaces->len == 0) &&
-        (prefs_get_bool_value(pref_no_interface_load_, pref_stashed) == FALSE)) {
+        (prefs_get_bool_value(pref_no_interface_load_, pref_stashed) == false)) {
         /*
          * No interfaces - try refreshing the local interfaces, to
          * see whether any have showed up (or privileges have changed
@@ -80,7 +87,7 @@ void CapturePreferencesFrame::updateWidgets()
          */
         mainApp->refreshLocalInterfaces();
     }
-    for (guint i = 0; i < global_capture_opts.all_ifaces->len; i++) {
+    for (unsigned i = 0; i < global_capture_opts.all_ifaces->len; i++) {
         device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
 
         /* Continue if capture device is hidden */
@@ -111,7 +118,7 @@ void CapturePreferencesFrame::updateWidgets()
         // This also means that the capture.device
         QString item_text = device->display_name;
         if (!item_text.contains(device->name)) {
-            item_text.append(QString(" (%1)").arg(device->name));
+            item_text.append(QStringLiteral(" (%1)").arg(device->name));
         }
         ui->defaultInterfaceComboBox->addItem(item_text);
     }
@@ -126,9 +133,10 @@ void CapturePreferencesFrame::updateWidgets()
     ui->captureMonitorModeCheckBox->setChecked(prefs_get_bool_value(pref_monitor_mode_, pref_stashed));
     ui->capturePcapNgCheckBox->setChecked(prefs_get_bool_value(pref_pcap_ng_, pref_stashed));
     ui->captureRealTimeCheckBox->setChecked(prefs_get_bool_value(pref_real_time_, pref_stashed));
-    ui->captureUpdateIntervalLineEdit->setText(QString::number(prefs_get_uint_value_real(pref_update_interval_, pref_stashed)));
-    ui->captureUpdateIntervalLineEdit->setPlaceholderText(QString::number(prefs_get_uint_value_real(pref_update_interval_, pref_default)));
+    ui->captureUpdateIntervalLineEdit->setText(QString::number(prefs_get_uint_value(pref_update_interval_, pref_stashed)));
+    ui->captureUpdateIntervalLineEdit->setPlaceholderText(QString::number(prefs_get_uint_value(pref_update_interval_, pref_default)));
     ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
+    ui->aggregationSetVisibilityCheckBox->setChecked(prefs_get_bool_value(pref_enable_aggregation_, pref_stashed));
 #endif // HAVE_LIBPCAP
     ui->captureNoInterfaceLoad->setChecked(prefs_get_bool_value(pref_no_interface_load_, pref_stashed));
     ui->captureNoExtcapCheckBox->setChecked(prefs_get_bool_value(pref_no_extcap_, pref_stashed));
@@ -159,11 +167,16 @@ void CapturePreferencesFrame::on_captureRealTimeCheckBox_toggled(bool checked)
     prefs_set_bool_value(pref_real_time_, checked, pref_stashed);
 }
 
+void CapturePreferencesFrame::on_aggregationSetVisibilityCheckBox_toggled(bool checked)
+{
+    prefs_set_bool_value(pref_enable_aggregation_, checked, pref_stashed);
+}
+
 void CapturePreferencesFrame::on_captureUpdateIntervalLineEdit_textChanged(const QString &new_str)
 {
     uint new_uint;
     if (new_str.isEmpty()) {
-        new_uint = prefs_get_uint_value_real(pref_update_interval_, pref_default);
+        new_uint = prefs_get_uint_value(pref_update_interval_, pref_default);
         prefs_set_uint_value(pref_update_interval_, new_uint, pref_stashed);
         ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
         return;
@@ -174,7 +187,7 @@ void CapturePreferencesFrame::on_captureUpdateIntervalLineEdit_textChanged(const
     if (ok) {
         ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Valid);
     } else {
-        new_uint = prefs_get_uint_value_real(pref_update_interval_, pref_current);
+        new_uint = prefs_get_uint_value(pref_update_interval_, pref_current);
         ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Invalid);
     }
     prefs_set_uint_value(pref_update_interval_, new_uint, pref_stashed);
@@ -188,4 +201,21 @@ void CapturePreferencesFrame::on_captureNoInterfaceLoad_toggled(bool checked)
 void CapturePreferencesFrame::on_captureNoExtcapCheckBox_toggled(bool checked)
 {
     prefs_set_bool_value(pref_no_extcap_, checked, pref_stashed);
+}
+
+void CapturePreferencesFrame::on_aggreagationEditButton_clicked()
+{
+    QPushButton* uat_pb = qobject_cast<QPushButton*>(sender());
+    if (!uat_pb) return;
+    module_t* module = prefs_find_module("capture");
+    pref_t* pref = prefs_find_preference(module, "aggregation_fields");
+    if (!pref) {
+        ws_log(LOG_DOMAIN_QTUI, LOG_LEVEL_WARNING, "Can't find capture.aggregation_fields preference");
+        return;
+    }
+
+    UatDialog* uat_dlg = new UatDialog(this, prefs_get_uat_value(pref));
+    uat_dlg->setWindowModality(Qt::ApplicationModal);
+    uat_dlg->setAttribute(Qt::WA_DeleteOnClose);
+    uat_dlg->show();
 }

@@ -14,6 +14,14 @@ endif
 
 include /usr/share/dpkg/pkg-info.mk
 
+# Fetch our Stratoshark version. This is pretty janky, but will have to do for now.
+PROJECT_MAJOR_VERSION = $(shell grep '^set(PROJECT_MAJOR_VERSION' CMakeLists.txt | sed -e 's/set.* //' -e 's/)//')
+PROJECT_MINOR_VERSION = $(shell grep '^set(PROJECT_MINOR_VERSION' CMakeLists.txt | sed -e 's/set.* //' -e 's/)//')
+PROJECT_PATCH_VERSION = $(shell grep '^set(PROJECT_PATCH_VERSION' CMakeLists.txt | sed -e 's/set.* //' -e 's/)//')
+STRATOSHARK_MAJOR_VERSION = $(shell grep '^set(STRATOSHARK_MAJOR_VERSION' CMakeLists.txt | sed -e 's/set.* //' -e 's/)//')
+STRATOSHARK_MINOR_VERSION = $(shell grep '^set(STRATOSHARK_MINOR_VERSION' CMakeLists.txt | sed -e 's/set.* //' -e 's/)//')
+STRATOSHARK_VERSION = $(shell echo $(DEB_VERSION) | sed -e "s/$(PROJECT_MAJOR_VERSION)\.$(PROJECT_MINOR_VERSION)\.$(PROJECT_PATCH_VERSION)/$(STRATOSHARK_MAJOR_VERSION)\.$(STRATOSHARK_MINOR_VERSION)\.$(PROJECT_PATCH_VERSION)/")
+
 # This has to be exported to make some magic below work.
 export DH_OPTIONS
 
@@ -29,8 +37,12 @@ else
 	DH_BUILDSYSTEM = cmake
 endif
 
-ifneq ($(filter pkg.wireshark.logray,$(DEB_BUILD_PROFILES)),)
-    CONFIGURE_SWITCHES += -DBUILD_logray=ON -DBUILD_falcodump=ON
+ifneq ($(filter pkg.wireshark.stratoshark,$(DEB_BUILD_PROFILES)),)
+    CONFIGURE_SWITCHES += -DBUILD_stratoshark=ON -DBUILD_falcodump=ON -DBUILD_dumpcalls=ON
+endif
+
+ifeq ($(wildcard .git),)
+    CONFIGURE_SWITCHES += -DVCSVERSION_OVERRIDE="$(DEB_VERSION)"
 endif
 
 %:
@@ -49,7 +61,7 @@ override_dh_auto_build:
 	dh_auto_build
 	$(MAKE) -C $(CURDIR)/obj-* user_guide_html developer_guide_html
 	# fix links in documentation
-	sed -i "s|$(CURDIR)/docbook|..|" obj-*/docbook/ws*g_html_chunked/*.html
+	sed -i "s|$(CURDIR)/doc|..|" obj-*/doc/ws*g_html_chunked/*.html
 ifeq (,$(filter $(DEB_BUILD_OPTIONS),nocheck))
 	# Required for the "unittests" suite.
 	$(MAKE) -C $(CURDIR)/obj-* test-programs
@@ -68,10 +80,22 @@ else
 endif
 	rm -rf $(CURDIR)/debian/tmp/usr/share/wireshark/COPYING
 
+HEADER_CHECK_FLAGS = $(shell pkg-config --cflags glib-2.0) \
+	$(shell dpkg-buildflags --get CPPFLAGS) \
+	$(shell dpkg-buildflags --get CFLAGS) \
+	-Idebian/libwireshark-dev/usr/include \
+	-Idebian/libwireshark-dev/usr/include/wireshark \
+	-Idebian/libwireshark-dev/usr/include/libwireshark-dev/epan/dissectors \
+	-Idebian/libwiretap-dev/usr/include/wireshark \
+	-Idebian/libwsutil-dev/usr/include/wireshark \
+
 override_dh_install:
 	dh_install
-	# check all necessary headers are included
-	$(CC) -c debian/headers-check.c $(shell pkg-config --cflags glib-2.0) $(shell dpkg-buildflags --get CPPFLAGS) $(shell dpkg-buildflags --get CFLAGS) -Idebian/libwireshark-dev/usr/include -Idebian/libwireshark-dev/usr/include/wireshark -Idebian/libwiretap-dev/usr/include/wireshark -Idebian/libwsutil-dev/usr/include/wireshark -o /dev/null
+	# check that all headers can be compiled
+	find debian/*-dev/usr/include -type f | sed 's|.*/include/wireshark/|#include <|;s|$$|>|' | $(CC) -x c -S - $(HEADER_CHECK_FLAGS) -o /dev/null
+	find debian/*-dev/usr/include -type f | sed 's|.*/include/wireshark/|#include <|;s|$$|>|' | $(CC) -x c++ -S - $(HEADER_CHECK_FLAGS) -o /dev/null
+	# check than #include-ing the most widely used headers compiles
+	$(CC) -c debian/headers-check.c $(HEADER_CHECK_FLAGS) -o /dev/null
 
 override_dh_fixperms:
 	dh_fixperms
@@ -94,3 +118,7 @@ override_dh_makeshlibs:
 		echo "$$lib $$major $$package (= $(DEB_VERSION))"  > debian/$$package.shlibs; \
 	done
 	dh_makeshlibs
+
+override_dh_gencontrol:
+	dh_gencontrol
+	dh_gencontrol -pstratoshark -- -v$(STRATOSHARK_VERSION)

@@ -80,8 +80,8 @@ static int hf_hazelcast_flags_client;
 static int hf_hazelcast_flags_lockAddrNull;
 
 
-static gint ett_hazelcast;
-static gint ett_hazelcast_flags;
+static int ett_hazelcast;
+static int ett_hazelcast_flags;
 
 /* prefs */
 static bool hazelcast_desegment = true;
@@ -226,13 +226,13 @@ static value_string_ext responseTypes_ext = VALUE_STRING_EXT_INIT(responseTypes)
 
 
 /* Get the length of a single HAZELCAST message */
-static guint get_hazelcast_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
+static unsigned get_hazelcast_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
                                        int offset, void *data _U_)
 {
 
-    guint messageLength;
-    guint headerKeyLength;
-    guint headerValueLength;
+    unsigned messageLength;
+    unsigned headerKeyLength;
+    unsigned headerValueLength;
 
     messageLength = tvb_get_ntohl(tvb, offset);
 
@@ -249,23 +249,23 @@ static guint get_hazelcast_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
 
 static int dissect_hazelcast_message(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_) {
 
-    guint8  version;
+    uint8_t version;
 
-    guint8  flags;
-    guint8  operation;
+    uint8_t flags;
+    uint8_t operation;
 
-    guint8  lockCountFlag;
-    guint8  timeoutFlag;
-    guint8  ttlFlag;
-    guint8  txnFlag;
-    guint8  longValueFlag;
-    guint8  versionFlag;
-    guint8  lockAddrNullFlag;
+    uint8_t lockCountFlag;
+    uint8_t timeoutFlag;
+    uint8_t ttlFlag;
+    uint8_t txnFlag;
+    uint8_t longValueFlag;
+    uint8_t versionFlag;
+    uint8_t lockAddrNullFlag;
 
-    guint32 nameLength;
-    guint32 keyLength;
-    guint32 valueLength;
-    gint    offset = 0;
+    uint32_t nameLength;
+    uint32_t keyLength;
+    uint32_t valueLength;
+    int     offset = 0;
 
     proto_tree *hcast_tree = NULL;
     proto_tree *flag_tree = NULL;
@@ -288,7 +288,7 @@ static int dissect_hazelcast_message(tvbuff_t *tvb, packet_info *pinfo _U_, prot
         return 0;
     }
 
-    version = tvb_get_guint8(tvb, 12);
+    version = tvb_get_uint8(tvb, 12);
     if ( version != 6 ) {
         col_set_str(pinfo->cinfo, COL_INFO, "Hazelcast unsupported version");
         return 12;
@@ -305,10 +305,8 @@ static int dissect_hazelcast_message(tvbuff_t *tvb, packet_info *pinfo _U_, prot
     proto_tree_add_item(hcast_tree, hf_hazelcast_headerVersion, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-
-    proto_tree_add_item(hcast_tree, hf_hazelcast_operation, tvb, offset, 1, ENC_BIG_ENDIAN);
-    operation = tvb_get_guint8(tvb, offset);
-    col_add_str(pinfo->cinfo, COL_INFO, val_to_str(operation, operationTypes, "Unknown (0x%02x)"));
+    proto_tree_add_item_ret_uint8(hcast_tree, hf_hazelcast_operation, tvb, offset, 1, ENC_BIG_ENDIAN, &operation);
+    col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, operation, operationTypes, "Unknown (0x%02x)"));
     offset += 1;
 
     proto_tree_add_item(hcast_tree, hf_hazelcast_blockID, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -316,9 +314,7 @@ static int dissect_hazelcast_message(tvbuff_t *tvb, packet_info *pinfo _U_, prot
     proto_tree_add_item(hcast_tree, hf_hazelcast_threadID, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
-    flags = tvb_get_guint8(tvb, offset);
-
-    tf = proto_tree_add_item(hcast_tree, hf_hazelcast_flags, tvb, offset, 1, ENC_BIG_ENDIAN);
+    tf = proto_tree_add_item_ret_uint8(hcast_tree, hf_hazelcast_flags, tvb, offset, 1, ENC_BIG_ENDIAN, &flags);
 
     flag_tree = proto_item_add_subtree(tf, ett_hazelcast_flags);
 
@@ -386,8 +382,7 @@ static int dissect_hazelcast_message(tvbuff_t *tvb, packet_info *pinfo _U_, prot
     proto_tree_add_item(hcast_tree, hf_hazelcast_responseType, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-    proto_tree_add_item(hcast_tree, hf_hazelcast_nameLength, tvb, offset, 4, ENC_BIG_ENDIAN);
-    nameLength = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item_ret_uint(hcast_tree, hf_hazelcast_nameLength, tvb, offset, 4, ENC_BIG_ENDIAN, &nameLength);
     offset += 4;
 
     if ( nameLength > 0 ) {
@@ -434,28 +429,28 @@ void proto_register_hazelcast(void) {
     static hf_register_info hf[] = {
 
         { &hf_hazelcast_headerLength,
-          { "Hazelcast hdr length", "hazelcast.hdr.length", FT_UINT32, BASE_DEC, NULL, 0x0, "header length", HFILL }
+          { "Hazelcast hdr length", "hazelcast.hdr.length", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_headerKeyLength,
-          { "Hazelcast hdr key length", "hazelcast.hdr.keylength", FT_UINT32, BASE_DEC, NULL, 0x0, "header key length", HFILL }
+          { "Hazelcast hdr key length", "hazelcast.hdr.keylength", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_headerValueLength,
-          { "Hazelcast hdr value length", "hazelcast.hdr.valuelength", FT_UINT32, BASE_DEC, NULL, 0x0, "header value length", HFILL }
+          { "Hazelcast hdr value length", "hazelcast.hdr.valuelength", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_headerVersion,
-          { "Hazelcast hdr version", "hazelcast.hdr.version", FT_UINT8, BASE_DEC, NULL, 0x0, "header version", HFILL }
+          { "Hazelcast hdr version", "hazelcast.hdr.version", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_operation,
-          { "Hazelcast operation", "hazelcast.operation", FT_UINT8, BASE_DEC|BASE_EXT_STRING, &operationTypes_ext, 0x0, "operation", HFILL }
+          { "Hazelcast operation", "hazelcast.operation", FT_UINT8, BASE_DEC|BASE_EXT_STRING, &operationTypes_ext, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_blockID,
-          { "Hazelcast blockID", "hazelcast.blockID", FT_UINT32, BASE_HEX, NULL, 0x0, "blockID", HFILL }
+          { "Hazelcast blockID", "hazelcast.blockID", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_threadID,
-          { "Hazelcast threadID", "hazelcast.threadID", FT_UINT32, BASE_DEC, NULL, 0x0, "threadID", HFILL }
+          { "Hazelcast threadID", "hazelcast.threadID", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_flags,
-          { "hazelcast flags", "hazelcast.flags", FT_UINT32, BASE_HEX, NULL, 0x0, "flags", HFILL }
+          { "hazelcast flags", "hazelcast.flags", FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_flags_lockCount,
           { "hazelcast lockCount flag", "hazelcast.flags.lockCount", FT_BOOLEAN, 8, NULL, HAZELCAST_LOCKCOUNT_FLAG, NULL, HFILL }
@@ -482,22 +477,22 @@ void proto_register_hazelcast(void) {
           { "hazelcast lockAddrNull flag", "hazelcast.flags.lockAddrNull", FT_BOOLEAN, 8, NULL, HAZELCAST_LOCKADDRNULL_FLAG, NULL, HFILL }
         },
         { &hf_hazelcast_timeout,
-          { "hazelcast timeout", "hazelcast.timeout", FT_UINT64, BASE_DEC, NULL, 0x0, "timeout", HFILL }
+          { "hazelcast timeout", "hazelcast.timeout", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_ttl,
-          { "hazelcast ttl", "hazelcast.ttl", FT_UINT64, BASE_DEC, NULL, 0x0, "ttl", HFILL }
+          { "hazelcast ttl", "hazelcast.ttl", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_longValue,
-          { "hazelcast longValue", "hazelcast.longValue", FT_UINT64, BASE_DEC, NULL, 0x0, "longValue", HFILL }
+          { "hazelcast longValue", "hazelcast.longValue", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_txnID,
-          { "hazelcast txnID", "hazelcast.txnID", FT_UINT64, BASE_DEC, NULL, 0x0, "txnID", HFILL }
+          { "hazelcast txnID", "hazelcast.txnID", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_version,
-          { "hazelcast version", "hazelcast.version", FT_UINT64, BASE_DEC, NULL, 0x0, "version", HFILL }
+          { "hazelcast version", "hazelcast.version", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_lockCount,
-          { "hazelcast lockCount", "hazelcast.lockCount", FT_UINT32, BASE_DEC, NULL, 0x0, "lockCount", HFILL }
+          { "hazelcast lockCount", "hazelcast.lockCount", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_lockAddrIP,
           { "hazelcast lock address IP", "hazelcast.lockaddr.ip", FT_IPv4, BASE_NONE, NULL, 0x0, "lockAddrIP", HFILL }
@@ -506,37 +501,37 @@ void proto_register_hazelcast(void) {
           { "hazelcast lock address Port", "hazelcast.lockaddr.port", FT_UINT32, BASE_DEC, NULL, 0x0, "lockAddrPort", HFILL }
         },
         { &hf_hazelcast_callID,
-          { "hazelcast callID", "hazelcast.callID", FT_INT64, BASE_DEC, NULL, 0x0, "callID", HFILL }
+          { "hazelcast callID", "hazelcast.callID", FT_INT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_responseType,
-          { "hazelcast response type", "hazelcast.responseType", FT_UINT8, BASE_DEC|BASE_EXT_STRING, &responseTypes_ext, 0x0, "responseType", HFILL }
+          { "hazelcast response type", "hazelcast.responseType", FT_UINT8, BASE_DEC|BASE_EXT_STRING, &responseTypes_ext, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_nameLength,
           { "hazelcast name length", "hazelcast.nameLength", FT_UINT32, BASE_DEC, NULL, 0x0, "nameLength", HFILL }
         },
         { &hf_hazelcast_name,
-          { "hazelcast name", "hazelcast.name", FT_STRING, BASE_NONE, NULL, 0x0, "name", HFILL }
+          { "hazelcast name", "hazelcast.name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_indexCount,
-          { "hazelcast indexCount", "hazelcast.indexCount", FT_UINT8, BASE_DEC, NULL, 0x0, "indexCount", HFILL }
+          { "hazelcast indexCount", "hazelcast.indexCount", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_keyPartitionHash,
-          { "hazelcast keyPartitionHash", "hazelcast.keyPartitionHash", FT_UINT32, BASE_HEX, NULL, 0x0, "keyPartitionHash", HFILL }
+          { "hazelcast keyPartitionHash", "hazelcast.keyPartitionHash", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_valuePartitionHash,
-          { "hazelcast valuePartitionHash", "hazelcast.valuePartitionHash", FT_UINT32, BASE_HEX, NULL, 0x0, "valuePartitionHash", HFILL }
+          { "hazelcast valuePartitionHash", "hazelcast.valuePartitionHash", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_keys,
-          { "hazelcast keys", "hazelcast.keys", FT_BYTES, BASE_NONE, NULL, 0x0, "keys", HFILL }
+          { "hazelcast keys", "hazelcast.keys", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
         },
         { &hf_hazelcast_values,
-          { "hazelcast values", "hazelcast.values", FT_BYTES, BASE_NONE, NULL, 0x0, "values", HFILL }
+          { "hazelcast values", "hazelcast.values", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
         }
 
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_hazelcast,
         &ett_hazelcast_flags
     };
@@ -544,11 +539,7 @@ void proto_register_hazelcast(void) {
     module_t *hazelcast_module;
 
 
-    proto_hazelcast = proto_register_protocol (
-        "Hazelcast Wire Protocol", /* name */
-        "HAZELCAST",      /* short name */
-        "hzlcst"       /* abbrev     */
-        );
+    proto_hazelcast = proto_register_protocol ("Hazelcast Wire Protocol", "HAZELCAST", "hzlcst");
 
     proto_register_field_array(proto_hazelcast, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));

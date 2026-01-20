@@ -13,6 +13,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 
 #include "wslua_file_common.h"
 #include <lua.h>
@@ -37,14 +38,11 @@ WSLUA_CLASS_DEFINE(FrameInfo,FAIL_ON_NULL_OR_EXPIRED("FrameInfo"));
     whereas when the Lua plugin's `FileHandler.write()` function is invoked, the
     `FrameInfo` object passed in should have its fields read-from/get, to write that
     frame information to the file.
-
-    @since 1.11.3
  */
 
-FrameInfo* push_FrameInfo(lua_State* L, wtap_rec *rec, Buffer* buf) {
-    FrameInfo f = (FrameInfo) g_malloc0(sizeof(struct _wslua_phdr));
+FrameInfo* push_FrameInfo(lua_State* L, wtap_rec *rec) {
+    FrameInfo f = (FrameInfo) g_malloc0(sizeof(struct _wslua_rec));
     f->rec = rec;
-    f->buf = buf;
     f->expired = false;
     return pushFrameInfo(L,f);
 }
@@ -66,6 +64,24 @@ WSLUA_METAMETHOD FrameInfo__tostring(lua_State* L) {
     WSLUA_RETURN(1); /* String of debug information. */
 }
 
+WSLUA_METHOD FrameInfo_setup_packet_rec(lua_State* L) {
+    /* calls wtap_setup_packet_rec() */
+#define WSLUA_ARG_FrameInfo_setup_packet_rec_ENCAP 2 /* The encapsulation type to use. */
+    FrameInfo fi = checkFrameInfo(L,1);
+    int encap = wslua_checkuint32(L, WSLUA_ARG_FrameInfo_setup_packet_rec_ENCAP);
+
+    wtap_setup_packet_rec(fi->rec, encap);
+
+    /*
+     * Always succeeds.
+     *
+     * XXX - can a method return nothing?
+     */
+    lua_pushboolean(L, true);
+
+    WSLUA_RETURN(1);
+}
+
 /* XXX: should this function be a method of File instead? */
 WSLUA_METHOD FrameInfo_read_data(lua_State* L) {
     /* Tells Wireshark to read directly from given file into frame data buffer, for length bytes. Returns true if succeeded, else false. */
@@ -73,16 +89,16 @@ WSLUA_METHOD FrameInfo_read_data(lua_State* L) {
 #define WSLUA_ARG_FrameInfo_read_data_LENGTH 3 /* The number of bytes to read from the file at the current cursor position. */
     FrameInfo fi = checkFrameInfo(L,1);
     File fh = checkFile(L,WSLUA_ARG_FrameInfo_read_data_FILE);
-    uint32_t len = wslua_checkguint32(L, WSLUA_ARG_FrameInfo_read_data_LENGTH);
+    uint32_t len = wslua_checkuint32(L, WSLUA_ARG_FrameInfo_read_data_LENGTH);
     int err = 0;
     char *err_info = NULL;
 
-    if (!fi->buf || !fh->file) {
-        luaL_error(L, "FrameInfo read_data() got null buffer or file pointer internally");
+    if (!fh->file) {
+        luaL_error(L, "FrameInfo read_data() got null file pointer internally");
         return 0;
     }
 
-    if (!wtap_read_packet_bytes(fh->file, fi->buf, len, &err, &err_info)) {
+    if (!wtap_read_bytes_buffer(fh->file, &fi->rec->data, len, &err, &err_info)) {
         lua_pushboolean(L, false);
         if (err_info) {
             lua_pushstring(L, err_info);
@@ -226,18 +242,12 @@ static int FrameInfo_set_data (lua_State* L) {
         return 0;
     }
 
-    if (!fi->buf) {
-        ws_warning("Error in FrameInfo set data: NULL frame_buffer pointer");
-        return 0;
-    }
-
    if (lua_isstring(L,2)) {
         size_t len = 0;
         const char* s = luaL_checklstring(L,2,&len);
 
         /* Make sure we have enough room for the packet */
-        ws_buffer_assure_space(fi->buf, len);
-        memcpy(ws_buffer_start_ptr(fi->buf), s, len);
+        ws_buffer_append(&fi->rec->data, (const uint8_t*)s, len);
         fi->rec->rec_header.packet_header.caplen = (uint32_t) len;
         fi->rec->rec_header.packet_header.len = (uint32_t) len;
     }
@@ -250,40 +260,38 @@ static int FrameInfo_set_data (lua_State* L) {
 static int FrameInfo_get_data (lua_State* L) {
     FrameInfo fi = checkFrameInfo(L,1);
 
-    if (!fi->buf) return 0;
+    lua_pushlstring(L, (const char*)ws_buffer_start_ptr(&fi->rec->data), ws_buffer_length(&fi->rec->data));
 
-    lua_pushlstring(L, ws_buffer_start_ptr(fi->buf), ws_buffer_length(fi->buf));
-
-    WSLUA_RETURN(1); /* A Lua string of the frame buffer's data. */
+    WSLUA_RETURN(1); /* A Lua string of the frame record's data. */
 }
 
 /* WSLUA_ATTRIBUTE FrameInfo_rec_type RW The record type of the packet frame
 
     See `wtap_rec_types` for values. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfo,rec_type,rec->rec_type);
-WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(FrameInfo,rec_type,rec->rec_type,unsigned);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfo,rec_type,rec->rec_type);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(FrameInfo,rec_type,rec->rec_type,unsigned);
 
 /* WSLUA_ATTRIBUTE FrameInfo_flags RW The presence flags of the packet frame.
 
     See `wtap_presence_flags` for bit values. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfo,flags,rec->presence_flags);
-WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(FrameInfo,flags,rec->presence_flags,uint32_t);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfo,flags,rec->presence_flags);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(FrameInfo,flags,rec->presence_flags,uint32_t);
 
 /* WSLUA_ATTRIBUTE FrameInfo_captured_length RW The captured packet length,
     and thus the length of the buffer passed to the `FrameInfo.data` field. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfo,captured_length,rec->rec_header.packet_header.caplen);
-WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(FrameInfo,captured_length,rec->rec_header.packet_header.caplen,uint32_t);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfo,captured_length,rec->rec_header.packet_header.caplen);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(FrameInfo,captured_length,rec->rec_header.packet_header.caplen,uint32_t);
 
 /* WSLUA_ATTRIBUTE FrameInfo_original_length RW The on-the-wire packet length,
     which may be longer than the `captured_length`. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfo,original_length,rec->rec_header.packet_header.len);
-WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(FrameInfo,original_length,rec->rec_header.packet_header.len,uint32_t);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfo,original_length,rec->rec_header.packet_header.len);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(FrameInfo,original_length,rec->rec_header.packet_header.len,uint32_t);
 
 /* WSLUA_ATTRIBUTE FrameInfo_encap RW The packet encapsulation type for the frame/packet,
     if the file supports per-packet types. See `wtap_encaps` for possible
     packet encapsulation types to use as the value for this field. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfo,encap,rec->rec_header.packet_header.pkt_encap);
-WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(FrameInfo,encap,rec->rec_header.packet_header.pkt_encap,int);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfo,encap,rec->rec_header.packet_header.pkt_encap);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(FrameInfo,encap,rec->rec_header.packet_header.pkt_encap,int);
 
 /* This table is ultimately registered as a sub-table of the class' metatable,
  * and if __index/__newindex is invoked then it calls the appropriate function
@@ -302,6 +310,7 @@ WSLUA_ATTRIBUTES FrameInfo_attributes[] = {
 };
 
 WSLUA_METHODS FrameInfo_methods[] = {
+    WSLUA_CLASS_FNREG(FrameInfo,setup_packet_rec),
     WSLUA_CLASS_FNREG(FrameInfo,read_data),
     { NULL, NULL }
 };
@@ -321,12 +330,10 @@ WSLUA_CLASS_DEFINE(FrameInfoConst,FAIL_ON_NULL_OR_EXPIRED("FrameInfo"));
     A constant FrameInfo object, passed into Lua as an argument by the FileHandler write
     callback function.  This has similar attributes/properties as FrameInfo, but the fields can
     only be read from, not written to.
-
-    @since 1.11.3
  */
 
 FrameInfoConst* push_FrameInfoConst(lua_State* L, const wtap_rec *rec, const uint8_t *pd) {
-    FrameInfoConst f = (FrameInfoConst) g_malloc(sizeof(struct _wslua_const_phdr));
+    FrameInfoConst f = (FrameInfoConst) g_malloc(sizeof(struct _wslua_const_rec));
     f->rec = rec;
     f->pd = pd;
     f->expired = false;
@@ -357,7 +364,7 @@ WSLUA_METHOD FrameInfoConst_write_data(lua_State* L) {
 #define WSLUA_OPTARG_FrameInfoConst_write_data_LENGTH 3 /* The number of bytes to write to the file at the current cursor position, or all if not supplied. */
     FrameInfoConst fi = checkFrameInfoConst(L,1);
     File fh = checkFile(L,WSLUA_ARG_FrameInfoConst_write_data_FILE);
-    uint32_t len = wslua_optguint32(L, WSLUA_OPTARG_FrameInfoConst_write_data_LENGTH, fi->rec ? fi->rec->rec_header.packet_header.caplen:0);
+    uint32_t len = wslua_optuint32(L, WSLUA_OPTARG_FrameInfoConst_write_data_LENGTH, fi->rec ? fi->rec->rec_header.packet_header.caplen:0);
     int err = 0;
 
     if (!fi->pd || !fi->rec || !fh->wdh) {
@@ -438,27 +445,27 @@ static int FrameInfoConst_get_data (lua_State* L) {
 
     if (!fi->pd || !fi->rec) return 0;
 
-    lua_pushlstring(L, fi->pd, fi->rec->rec_header.packet_header.caplen);
+    lua_pushlstring(L, (const char*)fi->pd, fi->rec->rec_header.packet_header.caplen);
 
     return 1;
 }
 
 /* WSLUA_ATTRIBUTE FrameInfoConst_rec_type RO The record type of the packet frame - see `wtap_presence_flags` for values. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfoConst,rec_type,rec->rec_type);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfoConst,rec_type,rec->rec_type);
 
 /* WSLUA_ATTRIBUTE FrameInfoConst_flags RO The presence flags of the packet frame - see `wtap_presence_flags` for bits. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfoConst,flags,rec->presence_flags);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfoConst,flags,rec->presence_flags);
 
 /* WSLUA_ATTRIBUTE FrameInfoConst_captured_length RO The captured packet length, and thus the length of the buffer in the FrameInfoConst.data field. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfoConst,captured_length,rec->rec_header.packet_header.caplen);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfoConst,captured_length,rec->rec_header.packet_header.caplen);
 
 /* WSLUA_ATTRIBUTE FrameInfoConst_original_length RO The on-the-wire packet length, which may be longer than the `captured_length`. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfoConst,original_length,rec->rec_header.packet_header.len);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfoConst,original_length,rec->rec_header.packet_header.len);
 
 /* WSLUA_ATTRIBUTE FrameInfoConst_encap RO The packet encapsulation type, if the file supports per-packet types.
 
       See `wtap_encaps` for possible packet encapsulation types to use as the value for this field. */
-WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(FrameInfoConst,encap,rec->rec_header.packet_header.pkt_encap);
+WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(FrameInfoConst,encap,rec->rec_header.packet_header.pkt_encap);
 
 WSLUA_ATTRIBUTES FrameInfoConst_attributes[] = {
     WSLUA_ATTRIBUTE_ROREG(FrameInfoConst,rec_type),

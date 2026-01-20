@@ -9,15 +9,12 @@
 
 #include "config.h"
 
-#include <glib.h>
-
 #include <epan/prefs.h>
 
 #include "ui/capture_globals.h"
 #include "ui/urls.h"
 
-#include "wsutil/filesystem.h"
-#include "wsutil/version_info.h"
+#include <app/application_flavor.h>
 
 #include "welcome_page.h"
 #include <ui_welcome_page.h>
@@ -73,29 +70,28 @@ WelcomePage::WelcomePage(QWidget *parent) :
     recent_files_->setTextElideMode(Qt::ElideLeft);
 
     welcome_ui_->recentList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(recent_files_, SIGNAL(customContextMenuRequested(QPoint)),
-            this, SLOT(showRecentContextMenu(QPoint)));
+    connect(recent_files_, &QListWidget::customContextMenuRequested, this, &WelcomePage::showRecentContextMenu);
 
-    connect(mainApp, SIGNAL(updateRecentCaptureStatus(const QString &, qint64, bool)), this, SLOT(updateRecentCaptures()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updateRecentCaptures()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(appInitialized()));
-    connect(mainApp, SIGNAL(localInterfaceListChanged()), this, SLOT(interfaceListChanged()));
+    connect(mainApp, &MainApplication::updateRecentCaptureStatus, this, &WelcomePage::updateRecentCaptures);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &WelcomePage::updateRecentCaptures);
+    connect(mainApp, &MainApplication::appInitialized, this, &WelcomePage::appInitialized);
+    connect(mainApp, &MainApplication::localInterfaceListChanged, this, &WelcomePage::interfaceListChanged);
 #ifdef HAVE_LIBPCAP
     connect(mainApp, &MainApplication::scanLocalInterfaces,
             welcome_ui_->interfaceFrame, &InterfaceFrame::scanLocalInterfaces);
 #endif
-    connect(welcome_ui_->interfaceFrame, SIGNAL(itemSelectionChanged()),
-            welcome_ui_->captureFilterComboBox, SIGNAL(interfacesChanged()));
-    connect(welcome_ui_->interfaceFrame, SIGNAL(typeSelectionChanged()),
-                    this, SLOT(interfaceListChanged()));
-    connect(welcome_ui_->interfaceFrame, SIGNAL(itemSelectionChanged()), this, SLOT(interfaceSelected()));
-    connect(welcome_ui_->captureFilterComboBox->lineEdit(), SIGNAL(textEdited(QString)),
-            this, SLOT(captureFilterTextEdited(QString)));
-    connect(welcome_ui_->captureFilterComboBox, SIGNAL(captureFilterSyntaxChanged(bool)),
-            this, SIGNAL(captureFilterSyntaxChanged(bool)));
-    connect(welcome_ui_->captureFilterComboBox, SIGNAL(startCapture()),
-            this, SLOT(captureStarting()));
-    connect(recent_files_, SIGNAL(itemActivated(QListWidgetItem *)), this, SLOT(openRecentItem(QListWidgetItem *)));
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::itemSelectionChanged,
+            welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::interfacesChanged);
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::typeSelectionChanged,
+                    this, &WelcomePage::interfaceListChanged);
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::itemSelectionChanged, this, &WelcomePage::interfaceSelected);
+    connect(welcome_ui_->captureFilterComboBox->lineEdit(), &QLineEdit::textEdited,
+            this, &WelcomePage::captureFilterTextEdited);
+    connect(welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::captureFilterSyntaxChanged,
+            this, &WelcomePage::captureFilterSyntaxChanged);
+    connect(welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::startCapture,
+            this, &WelcomePage::captureStarting);
+    connect(recent_files_, &QListWidget::itemActivated, this, &WelcomePage::openRecentItem);
     updateRecentCaptures();
 
     splash_overlay_ = new SplashOverlay(this);
@@ -136,25 +132,27 @@ void WelcomePage::interfaceListChanged()
     welcome_ui_->btnInterfaceType->setMenu(welcome_ui_->interfaceFrame->getSelectionMenu());
 }
 
+QString WelcomePage::getReleaseLabel()
+{
+    return tr("You are running Wireshark ");
+}
+
+QString WelcomePage::getReleaseLabelGlue()
+{
+    return tr("You are sniffing the glue that holds the Internet together using Wireshark ");
+}
+
 void WelcomePage::setReleaseLabel()
 {
     // XXX Add a "check for updates" link?
     QString full_release;
     QDate today = QDate::currentDate();
     if ((today.month() == 4 && today.day() == 1) || (today.month() == 7 && today.day() == 14)) {
-        if (is_packet_configuration_namespace()) {
-            full_release = tr("You are sniffing the glue that holds the Internet together using Wireshark ");
-        } else {
-            full_release = tr("You are sniffing the glue that holds your system together using Logray ");
-        }
+        full_release = getReleaseLabelGlue();
     } else {
-        if (is_packet_configuration_namespace()) {
-            full_release = tr("You are running Wireshark ");
-        } else {
-            full_release = tr("You are running Logray ");
-        }
+        full_release = getReleaseLabel();
     }
-    full_release += is_packet_configuration_namespace() ? get_ws_vcs_version_info() : get_lr_vcs_version_info();
+    full_release += application_get_vcs_version_info();
     full_release += ".";
 #ifdef HAVE_SOFTWARE_UPDATE
     if (prefs.gui_update_enabled) {
@@ -198,7 +196,7 @@ void WelcomePage::captureFilterTextEdited(const QString capture_filter)
     if (global_capture_opts.num_selected > 0) {
         interface_t *device;
 
-        for (guint i = 0; i < global_capture_opts.all_ifaces->len; i++) {
+        for (unsigned i = 0; i < global_capture_opts.all_ifaces->len; i++) {
             device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
             if (!device->selected) {
                 continue;
@@ -305,13 +303,13 @@ void WelcomePage::updateRecentCaptures() {
             itemLabel.append(" (");
             if (ri->accessible) {
                 if (ri->size/1024/1024/1024 > 10) {
-                    itemLabel.append(QString("%1 GB").arg(ri->size/1024/1024/1024));
+                    itemLabel.append(QStringLiteral("%1 GB").arg(ri->size/1024/1024/1024));
                 } else if (ri->size/1024/1024 > 10) {
-                    itemLabel.append(QString("%1 MB").arg(ri->size/1024/1024));
+                    itemLabel.append(QStringLiteral("%1 MB").arg(ri->size/1024/1024));
                 } else if (ri->size/1024 > 10) {
-                    itemLabel.append(QString("%1 KB").arg(ri->size/1024));
+                    itemLabel.append(QStringLiteral("%1 KB").arg(ri->size/1024));
                 } else {
-                    itemLabel.append(QString("%1 Bytes").arg(ri->size));
+                    itemLabel.append(QStringLiteral("%1 Bytes").arg(ri->size));
                 }
             } else {
                 itemLabel.append(tr("not found"));
@@ -394,17 +392,17 @@ void WelcomePage::showRecentContextMenu(QPoint pos)
 
     QAction *show_action = recent_ctx_menu->addAction(show_in_str_);
     show_action->setData(cf_path);
-    connect(show_action, SIGNAL(triggered(bool)), this, SLOT(showRecentFolder()));
+    connect(show_action, &QAction::triggered, this, &WelcomePage::showRecentFolder);
 
     QAction *copy_action = recent_ctx_menu->addAction(tr("Copy file path"));
     copy_action->setData(cf_path);
-    connect(copy_action, SIGNAL(triggered(bool)), this, SLOT(copyRecentPath()));
+    connect(copy_action, &QAction::triggered, this, &WelcomePage::copyRecentPath);
 
     recent_ctx_menu->addSeparator();
 
     QAction *remove_action = recent_ctx_menu->addAction(tr("Remove from list"));
     remove_action->setData(cf_path);
-    connect(remove_action, SIGNAL(triggered(bool)), this, SLOT(removeRecentPath()));
+    connect(remove_action, &QAction::triggered, this, &WelcomePage::removeRecentPath);
 
     recent_ctx_menu->popup(recent_files_->mapToGlobal(pos));
 }
@@ -454,7 +452,7 @@ void WelcomePage::on_helpLabel_clicked()
 
 void WelcomePage::updateStyleSheets()
 {
-    QString welcome_ss = QString(
+    QString welcome_ss = QStringLiteral(
                 "WelcomePage {"
                 "  padding: 1em;"
                 " }"
@@ -467,7 +465,7 @@ void WelcomePage::updateStyleSheets()
                 "}"
                 );
 #if !defined(Q_OS_WIN)
-    welcome_ss += QString(
+    welcome_ss += QStringLiteral(
                 "QAbstractItemView:item:hover {"
                 "  background-color: %1;"
                 "  color: palette(text);"
@@ -477,7 +475,7 @@ void WelcomePage::updateStyleSheets()
 #endif
     setStyleSheet(welcome_ss);
 
-    QString banner_ss = QString(
+    QString banner_ss = QStringLiteral(
                 "QLabel {"
                 "  border-radius: 0.33em;"
                 "  color: %1;"
@@ -489,7 +487,7 @@ void WelcomePage::updateStyleSheets()
             .arg(QColor(tango_sky_blue_2).name());   // Background color
     welcome_ui_->mainWelcomeBanner->setStyleSheet(banner_ss);
 
-    QString title_button_ss = QString(
+    QString title_button_ss = QStringLiteral(
             "QLabel {"
             "  color: %1;"
             "}"
@@ -511,7 +509,7 @@ void WelcomePage::updateStyleSheets()
         // - Add one or more classes, e.g. "note" or "warning" similar to
         //   SyntaxLineEdit, which we can then expose vi #defines.
         // - Just expose direct color values via #defines.
-        QString flavor_ss = QString(
+        QString flavor_ss = QStringLiteral(
                     "QLabel {"
                     "  border-radius: 0.25em;"
                     "  color: %1;"

@@ -18,6 +18,10 @@
 #include <epan/show_exception.h>
 #include <epan/to_str.h>
 #include <epan/charsets.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
+
+#include <wsutil/array.h>
 #include <wsutil/str_util.h>
 
 #include "packet-dns.h"
@@ -84,14 +88,14 @@ static int hf_nbns_netbios_name;
 static int hf_nbns_ttl;
 static int hf_nbns_data_length;
 
-static gint ett_nbns;
-static gint ett_nbns_qd;
-static gint ett_nbns_flags;
-static gint ett_nbns_nb_flags;
-static gint ett_nbns_name_flags;
-static gint ett_nbns_rr;
-static gint ett_nbns_qry;
-static gint ett_nbns_ans;
+static int ett_nbns;
+static int ett_nbns_qd;
+static int ett_nbns_flags;
+static int ett_nbns_nb_flags;
+static int ett_nbns_name_flags;
+static int ett_nbns_rr;
+static int ett_nbns_qry;
+static int ett_nbns_ans;
 
 static expert_field ei_nbns_incomplete_entry;
 
@@ -110,8 +114,8 @@ static int hf_nbdgm_error_code;
 static int hf_nbdgm_source_name;
 static int hf_nbdgm_destination_name;
 
-static gint ett_nbdgm;
-static gint ett_nbdgm_flags;
+static int ett_nbdgm;
+static int ett_nbdgm_flags;
 
 static int proto_nbss;
 static int hf_nbss_type;
@@ -126,8 +130,8 @@ static int hf_nbss_continuation_data;
 static int hf_nbss_called_name;
 static int hf_nbss_calling_name;
 
-static gint ett_nbss;
-static gint ett_nbss_flags;
+static int ett_nbss;
+static int ett_nbss_flags;
 
 /* desegmentation of NBSS over TCP */
 static bool nbss_desegment = true;
@@ -312,7 +316,7 @@ static void
 add_rr_to_tree(proto_tree *rr_tree, packet_info *pinfo, tvbuff_t *tvb, int offset,
                const char *name, int namelen,
                int type, int class_val,
-               guint ttl, gushort data_len)
+               unsigned ttl, uint16_t data_len)
 {
     proto_tree_add_string(rr_tree, hf_nbns_name, tvb, offset+1, namelen-1, name);
     offset += namelen;
@@ -327,23 +331,23 @@ add_rr_to_tree(proto_tree *rr_tree, packet_info *pinfo, tvbuff_t *tvb, int offse
 }
 
 static int
-get_nbns_name(tvbuff_t *tvb, int offset, int nbns_data_offset,
+get_nbns_name(tvbuff_t *tvb, wmem_allocator_t* allocator, int offset, int nbns_data_offset,
               char *name_ret, int name_ret_len, int *name_type_ret)
 {
     int           name_len;
-    const gchar  *name;
-    const gchar  *nbname;
+    const char   *name;
+    const char   *nbname;
     char         *nbname_buf;
-    const gchar  *pname;
+    const char   *pname;
     char          cname, cnbname;
     int           name_type;
     char         *pname_ret;
     size_t        idx = 0;
-    guint         used_bytes;
+    unsigned      used_bytes;
 
-    nbname_buf = (char *)wmem_alloc(wmem_packet_scope(), NBNAME_BUF_LEN);
+    nbname_buf = (char *)wmem_alloc(allocator, NBNAME_BUF_LEN);
     nbname = nbname_buf;
-    used_bytes = get_dns_name(tvb, offset, 0, nbns_data_offset, &name, &name_len);
+    used_bytes = get_dns_name(allocator, tvb, offset, 0, nbns_data_offset, &name, &name_len);
 
     /* OK, now undo the first-level encoding. */
     pname = &name[0];
@@ -398,7 +402,7 @@ get_nbns_name(tvbuff_t *tvb, int offset, int nbns_data_offset,
     }
 
     /* This one is; make its name printable. */
-    name_type = process_netbios_name(nbname, name_ret, name_ret_len);
+    name_type = process_netbios_name((const uint8_t*)nbname, name_ret, name_ret_len);
     pname_ret += MIN(strlen(name_ret), (size_t) name_ret_len);
     snprintf(pname_ret, name_ret_len-(pname_ret-name_ret), "<%02x>", name_type);
     if (cname == '.') {
@@ -409,7 +413,7 @@ get_nbns_name(tvbuff_t *tvb, int offset, int nbns_data_offset,
          * ASCII before appending it to our NBName, so we have a valid
          * UTF-8 string.
          */
-        const char* scope_id = get_ascii_string(wmem_packet_scope(), pname, (int)strlen(pname));
+        const char* scope_id = (char*)get_ascii_string(allocator, (const uint8_t*)pname, strlen(pname));
         int bytes_attempted = (int)g_strlcat(name_ret, scope_id, name_ret_len);
         if (bytes_attempted >= name_ret_len) {
             ws_utf8_truncate(name_ret, name_ret_len - 1);
@@ -430,7 +434,7 @@ bad:
 
 
 static int
-get_nbns_name_type_class(tvbuff_t *tvb, int offset, int nbns_data_offset,
+get_nbns_name_type_class(tvbuff_t *tvb, wmem_allocator_t* allocator, int offset, int nbns_data_offset,
                          char *name_ret, int *name_len_ret, int *name_type_ret,
                          int *type_ret, int *class_ret)
 {
@@ -438,7 +442,7 @@ get_nbns_name_type_class(tvbuff_t *tvb, int offset, int nbns_data_offset,
     int type;
     int rr_class;
 
-    name_len = get_nbns_name(tvb, offset, nbns_data_offset, name_ret,
+    name_len = get_nbns_name(tvb, allocator, offset, nbns_data_offset, name_ret,
                              *name_len_ret, name_type_ret);
     offset += name_len;
 
@@ -469,8 +473,8 @@ add_name_and_type(proto_tree *tree, tvbuff_t *tvb, int offset, int len,
 #define MAX_NAME_LEN (NETBIOS_NAME_LEN - 1)*4 + MAX_DNAME_LEN + 64
 
 static int
-dissect_nbns_query(tvbuff_t *tvb, int offset, int nbns_data_offset,
-                   column_info *cinfo, proto_tree *nbns_tree)
+dissect_nbns_query(tvbuff_t *tvb, packet_info* pinfo, int offset, int nbns_data_offset,
+                   proto_tree *nbns_tree, bool add_column_data)
 {
     int         len;
     char       *name;
@@ -483,18 +487,18 @@ dissect_nbns_query(tvbuff_t *tvb, int offset, int nbns_data_offset,
     int         data_start;
     proto_tree *q_tree;
 
-    name = (char *)wmem_alloc(wmem_packet_scope(), MAX_NAME_LEN);
+    name = (char *)wmem_alloc(pinfo->pool, MAX_NAME_LEN);
     data_start = data_offset = offset;
 
     name_len = MAX_NAME_LEN;
-    len = get_nbns_name_type_class(tvb, offset, nbns_data_offset, name,
+    len = get_nbns_name_type_class(tvb, pinfo->pool, offset, nbns_data_offset, name,
                                    &name_len, &name_type, &type, &dns_class);
     data_offset += len;
 
     type_name = val_to_str_const(type, nb_type_name_vals, "Unknown");
 
-    if (cinfo != NULL)
-        col_append_fstr(cinfo, COL_INFO, " %s %s", type_name, name);
+    if (add_column_data)
+        col_append_fstr(pinfo->cinfo, COL_INFO, " %s %s", type_name, name);
 
     if (nbns_tree != NULL) {
         q_tree = proto_tree_add_subtree_format(nbns_tree, tvb, offset, len,
@@ -518,7 +522,7 @@ dissect_nbns_query(tvbuff_t *tvb, int offset, int nbns_data_offset,
 static void
 nbns_add_nbns_flags(column_info *cinfo, proto_tree *nbns_tree, tvbuff_t *tvb, int offset, int is_wack)
 {
-    guint16     flag;
+    uint16_t    flag;
     static int * const req_flags[] = {
         &hf_nbns_flags_response,
         &hf_nbns_flags_opcode,
@@ -579,7 +583,7 @@ static void
 nbns_add_nb_flags(proto_tree *rr_tree, tvbuff_t *tvb, int offset)
 {
     proto_item *tf;
-    gushort flag;
+    uint16_t flag;
     static int * const flags[] = {
         &hf_nbns_nb_flags_group,
         &hf_nbns_nb_flags_ont,
@@ -623,21 +627,21 @@ dissect_nbns_answer(tvbuff_t *tvb, packet_info *pinfo, int offset, int nbns_data
     const char *class_name;
     const char *type_name;
     int         cur_offset;
-    guint       ttl;
-    gushort     data_len;
+    unsigned    ttl;
+    uint16_t    data_len;
     proto_tree *rr_tree = NULL;
     char       *name_str;
-    guint       num_names;
-    char       *nbname;
+    unsigned    num_names;
+    uint8_t    *nbname;
 
     cur_offset = offset;
 
     name     = (char *)wmem_alloc(pinfo->pool, MAX_NAME_LEN);
     name_str = (char *)wmem_alloc(pinfo->pool, MAX_NAME_LEN);
-    nbname   = (char *)wmem_alloc(pinfo->pool, 16+4+1); /* 4 for [<last char>] */
+    nbname   = (uint8_t *)wmem_alloc(pinfo->pool, 16+4+1); /* 4 for [<last char>] */
 
     name_len = MAX_NAME_LEN;
-    len      = get_nbns_name_type_class(tvb, offset, nbns_data_offset, name,
+    len      = get_nbns_name_type_class(tvb, pinfo->pool, offset, nbns_data_offset, name,
                                         &name_len, &name_type, &type, &dns_class);
     cur_offset  += len;
 
@@ -722,7 +726,7 @@ dissect_nbns_answer(tvbuff_t *tvb, packet_info *pinfo, int offset, int nbns_data
             break;
         }
 
-        num_names = tvb_get_guint8(tvb, cur_offset);
+        num_names = tvb_get_uint8(tvb, cur_offset);
         proto_tree_add_item(rr_tree, hf_nbns_number_of_names, tvb, cur_offset, 1, ENC_BIG_ENDIAN);
         cur_offset += 1;
 
@@ -732,7 +736,7 @@ dissect_nbns_answer(tvbuff_t *tvb, packet_info *pinfo, int offset, int nbns_data
                 goto out;
             }
             if (rr_tree) {
-                tvb_memcpy(tvb, (guint8 *)nbname, cur_offset,
+                tvb_memcpy(tvb, nbname, cur_offset,
                            NETBIOS_NAME_LEN);
                 name_type = process_netbios_name(nbname,
                                                  name_str, name_len);
@@ -942,8 +946,8 @@ dissect_nbns_answer(tvbuff_t *tvb, packet_info *pinfo, int offset, int nbns_data
 }
 
 static int
-dissect_query_records(tvbuff_t *tvb, int cur_off, int nbns_data_offset,
-                      int count, column_info *cinfo, proto_tree *nbns_tree)
+dissect_query_records(tvbuff_t *tvb, packet_info* pinfo, int cur_off, int nbns_data_offset,
+                      int count, proto_tree *nbns_tree, bool add_column_data)
 {
     int         start_off, add_off;
     proto_tree *qatree;
@@ -953,8 +957,7 @@ dissect_query_records(tvbuff_t *tvb, int cur_off, int nbns_data_offset,
     qatree = proto_tree_add_subtree(nbns_tree, tvb, start_off, -1, ett_nbns_qry, &ti, "Queries");
 
     while (count-- > 0) {
-        add_off = dissect_nbns_query(tvb, cur_off, nbns_data_offset,
-                                     cinfo, qatree);
+        add_off = dissect_nbns_query(tvb, pinfo, cur_off, nbns_data_offset, qatree, add_column_data);
         cur_off += add_off;
     }
 
@@ -992,7 +995,7 @@ dissect_nbns(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     int          nbns_data_offset;
     proto_tree  *nbns_tree = NULL;
     proto_item  *ti;
-    guint32      id, flags, opcode, quest, ans, auth, add;
+    uint32_t     id, flags, opcode, quest, ans, auth, add;
     int          cur_off;
 
     nbns_data_offset = offset;
@@ -1003,10 +1006,10 @@ dissect_nbns(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     /* To do: check for runts, errs, etc. */
     id     = tvb_get_ntohs(tvb, offset + NBNS_ID);
     flags  = tvb_get_ntohs(tvb, offset + NBNS_FLAGS);
-    opcode = (guint16) ((flags & F_OPCODE) >> OPCODE_SHIFT);
+    opcode = (uint16_t) ((flags & F_OPCODE) >> OPCODE_SHIFT);
 
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s%s",
-                    val_to_str(opcode, opcode_vals, "Unknown operation (%u)"),
+                    val_to_str(pinfo->pool, opcode, opcode_vals, "Unknown operation (%u)"),
                     (flags & F_RESPONSE) ? " response" : "");
 
     ti = proto_tree_add_item(tree, proto_nbns, tvb, offset, -1, ENC_NA);
@@ -1032,9 +1035,9 @@ dissect_nbns(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         /* If this is a response, don't add information about the
            queries to the summary, just add information about the
            answers. */
-        cur_off += dissect_query_records(tvb, cur_off,
+        cur_off += dissect_query_records(tvb, pinfo, cur_off,
                                          nbns_data_offset, quest,
-                                         (!(flags & F_RESPONSE) ? pinfo->cinfo : NULL), nbns_tree);
+                                         nbns_tree, !(flags & F_RESPONSE));
     }
 
     if (ans > 0) {
@@ -1124,7 +1127,7 @@ dissect_nbdgm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
     proto_tree          *nbdgm_tree;
     proto_item          *ti;
     tvbuff_t            *next_tvb;
-    guint32              msg_type;
+    uint32_t             msg_type;
 
     char *name;
     int name_type;
@@ -1147,7 +1150,7 @@ dissect_nbdgm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
                             offset, 1, ENC_NA, &msg_type);
 
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str(msg_type, nbds_msgtype_vals,
+                val_to_str(pinfo->pool, msg_type, nbds_msgtype_vals,
                            "Unknown message type (0x%02X)"));
 
     proto_tree_add_bitmask(nbdgm_tree, tvb, offset+1, hf_nbdgm_flags, ett_nbdgm_flags, flags, ENC_BIG_ENDIAN);
@@ -1176,13 +1179,13 @@ dissect_nbdgm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
         name = (char *)wmem_alloc(pinfo->pool, MAX_NAME_LEN);
 
         /* Source name */
-        len = get_nbns_name(tvb, offset, offset, name, MAX_NAME_LEN, &name_type);
+        len = get_nbns_name(tvb, pinfo->pool, offset, offset, name, MAX_NAME_LEN, &name_type);
 
         add_name_and_type(nbdgm_tree, tvb, offset, len, hf_nbdgm_source_name, name, name_type);
         offset += len;
 
         /* Destination name */
-        len = get_nbns_name(tvb, offset, offset, name, MAX_NAME_LEN, &name_type);
+        len = get_nbns_name(tvb, pinfo->pool, offset, offset, name, MAX_NAME_LEN, &name_type);
 
         add_name_and_type(nbdgm_tree, tvb, offset, len, hf_nbdgm_destination_name, name, name_type);
         offset += len;
@@ -1213,7 +1216,7 @@ dissect_nbdgm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
         name = (char *)wmem_alloc(pinfo->pool, MAX_NAME_LEN);
 
         /* Destination name */
-        len = get_nbns_name(tvb, offset, offset, name, MAX_NAME_LEN, &name_type);
+        len = get_nbns_name(tvb, pinfo->pool, offset, offset, name, MAX_NAME_LEN, &name_type);
 
         add_name_and_type(nbdgm_tree, tvb, offset, len,
                               hf_nbdgm_destination_name, name, name_type);
@@ -1279,13 +1282,13 @@ dissect_nbss_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     int          offset = 0;
     proto_tree   *nbss_tree = NULL;
     proto_item   *ti        = NULL;
-    guint8        msg_type;
-    guint8        flags;
-    guint32       length;
+    uint8_t       msg_type;
+    uint8_t       flags;
+    uint32_t      length;
     int           len;
     char         *name;
     int           name_type;
-    guint8        error_code;
+    uint8_t       error_code;
     tvbuff_t     *next_tvb;
     const char   *saved_proto;
     static int * const nbss_flags[] = {
@@ -1295,7 +1298,7 @@ dissect_nbss_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     name = (char *)wmem_alloc(pinfo->pool, MAX_NAME_LEN);
 
-    msg_type = tvb_get_guint8(tvb, offset);
+    msg_type = tvb_get_uint8(tvb, offset);
 
     ti = proto_tree_add_item(tree, proto_nbss, tvb, offset, -1, ENC_NA);
     nbss_tree = proto_item_add_subtree(ti, ett_nbss);
@@ -1308,7 +1311,7 @@ dissect_nbss_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_item(nbss_tree, hf_nbss_cifs_length, tvb, offset, 3, ENC_BIG_ENDIAN);
         offset += 3;
     } else {
-        flags = tvb_get_guint8(tvb, offset);
+        flags = tvb_get_uint8(tvb, offset);
         proto_tree_add_bitmask(nbss_tree, tvb, offset, hf_nbss_flags, ett_nbss_flags, nbss_flags, ENC_BIG_ENDIAN);
 
         length = tvb_get_ntohs(tvb, offset + 1);
@@ -1322,7 +1325,7 @@ dissect_nbss_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     switch (msg_type) {
 
     case SESSION_REQUEST:
-        len = get_nbns_name(tvb, offset, offset, name, MAX_NAME_LEN, &name_type);
+        len = get_nbns_name(tvb, pinfo->pool, offset, offset, name, MAX_NAME_LEN, &name_type);
         if (tree)
             add_name_and_type(nbss_tree, tvb, offset, len,
                               hf_nbss_called_name, name, name_type);
@@ -1330,7 +1333,7 @@ dissect_nbss_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
         col_append_fstr(pinfo->cinfo, COL_INFO, ", to %s ", name);
 
-        len = get_nbns_name(tvb, offset, offset, name, MAX_NAME_LEN, &name_type);
+        len = get_nbns_name(tvb, pinfo->pool, offset, offset, name, MAX_NAME_LEN, &name_type);
 
         if (tree)
             add_name_and_type(nbss_tree, tvb, offset, len,
@@ -1341,12 +1344,12 @@ dissect_nbss_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         break;
 
     case NEGATIVE_SESSION_RESPONSE:
-        error_code = tvb_get_guint8(tvb, offset);
+        error_code = tvb_get_uint8(tvb, offset);
         proto_tree_add_uint(nbss_tree, hf_nbss_error_code, tvb, offset, 1,
                                 error_code);
 
         col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-                        val_to_str(error_code, nbss_error_codes, "Unknown (%x)"));
+                        val_to_str(pinfo->pool, error_code, nbss_error_codes, "Unknown (%x)"));
 
         break;
 
@@ -1420,13 +1423,13 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
     struct tcpinfo *tcpinfo;
     int             offset  = 0;
-    guint           length_remaining;
-    guint           plen;
+    unsigned        length_remaining;
+    unsigned        plen;
     int             max_data;
-    guint8          msg_type;
-    guint8          flags;
-    guint32         length;
-    gboolean        is_cifs;
+    uint8_t         msg_type;
+    uint8_t         flags;
+    uint32_t        length;
+    bool            is_cifs;
     tvbuff_t       *next_tvb;
 
     /* Reject the packet if data is NULL */
@@ -1439,7 +1442,7 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
     max_data = tvb_captured_length(tvb);
 
-    msg_type = tvb_get_guint8(tvb, offset);
+    msg_type = tvb_get_uint8(tvb, offset);
 
     if (pinfo->match_uint == TCP_PORT_CIFS) {
         /*
@@ -1450,9 +1453,9 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
          * of 17. The only message types used are
          * SESSION_MESSAGE and SESSION_KEEP_ALIVE.
          */
-        is_cifs = TRUE;
+        is_cifs = true;
     } else {
-        is_cifs = FALSE;
+        is_cifs = false;
     }
 
     /*
@@ -1517,13 +1520,13 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
          * mark it as is_cifs.
          */
         if (tvb_captured_length_remaining(tvb, offset) >= 8
-            && tvb_get_guint8(tvb,offset+0) == SESSION_MESSAGE
-            && tvb_get_guint8(tvb,offset+5) == 'S'
-            && tvb_get_guint8(tvb,offset+6) == 'M'
-            && tvb_get_guint8(tvb,offset+7) == 'B') {
-            is_cifs = TRUE;
+            && tvb_get_uint8(tvb,offset+0) == SESSION_MESSAGE
+            && tvb_get_uint8(tvb,offset+5) == 'S'
+            && tvb_get_uint8(tvb,offset+6) == 'M'
+            && tvb_get_uint8(tvb,offset+7) == 'B') {
+            is_cifs = true;
         } else {
-            is_cifs = FALSE;
+            is_cifs = false;
         }
 
         /*
@@ -1535,7 +1538,7 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
             flags = 0;
             length = tvb_get_ntoh24(tvb, offset + 1);
         } else {
-            flags  = tvb_get_guint8(tvb, offset + 1);
+            flags  = tvb_get_uint8(tvb, offset + 1);
             length = tvb_get_ntohs(tvb, offset + 2);
             if (flags & NBSS_FLAGS_E)
                 length += 0x10000;
@@ -1626,7 +1629,7 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     }
 
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str(msg_type, message_types, "Unknown (%02x)"));
+                val_to_str(pinfo->pool, msg_type, message_types, "Unknown (%02x)"));
 
     while ((length_remaining = tvb_reported_length_remaining(tvb, offset)) > 0) {
         /*
@@ -1656,7 +1659,7 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
         if (is_cifs) {
             length = tvb_get_ntoh24(tvb, offset + 1);
         } else {
-            flags  = tvb_get_guint8(tvb, offset + 1);
+            flags  = tvb_get_uint8(tvb, offset + 1);
             length = tvb_get_ntohs(tvb, offset + 2);
             if (flags & NBSS_FLAGS_E)
                 length += 65536;
@@ -1668,14 +1671,14 @@ dissect_nbss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
          * somewhere in the middle of a segment.
          */
         if(!pinfo->fd->visited){
-            /* 'Only' SMB is transported ontop of this  so make sure
+            /* 'Only' SMB is transported on top of this, so make sure
              * there is an SMB header there ...
              */
-            if( ((int)plen>tvb_reported_length_remaining(tvb, offset))
+            if( (plen>tvb_reported_length_remaining(tvb, offset))
                 &&(tvb_captured_length_remaining(tvb, offset) >= 8)
-                &&(tvb_get_guint8(tvb,offset+5) == 'S')
-                &&(tvb_get_guint8(tvb,offset+6) == 'M')
-                &&(tvb_get_guint8(tvb,offset+7) == 'B') ){
+                &&(tvb_get_uint8(tvb,offset+5) == 'S')
+                &&(tvb_get_uint8(tvb,offset+6) == 'M')
+                &&(tvb_get_uint8(tvb,offset+7) == 'B') ){
                 pinfo->want_pdu_tracking = 2;
                 pinfo->bytes_until_next_pdu = (length+4)-tvb_reported_length_remaining(tvb, offset);
             }
@@ -1867,11 +1870,11 @@ proto_register_nbt(void)
         { &hf_nbdgm_fragment,
           { "More fragments follow",    "nbdgm.next",
             FT_BOOLEAN, 8, TFS(&tfs_yes_no), 0x01,
-            "TRUE if more fragments follow", HFILL }},
+            "true if more fragments follow", HFILL }},
         { &hf_nbdgm_first,
           { "This is first fragment",   "nbdgm.first",
             FT_BOOLEAN, 8, TFS(&tfs_yes_no), 0x02,
-            "TRUE if first fragment", HFILL }},
+            "true if first fragment", HFILL }},
         { &hf_nbdgm_node_type,
           { "Node Type",                "nbdgm.node_type",
             FT_UINT8, BASE_DEC, VALS(node_type_vals), 0x0C,
@@ -1890,11 +1893,11 @@ proto_register_nbt(void)
             NULL, HFILL }},
         { &hf_nbdgm_datagram_length,
           { "Datagram length",          "nbdgm.dgram_len",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
             NULL, HFILL }},
         { &hf_nbdgm_packet_offset,
           { "Packet offset",            "nbdgm.pkt_offset",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
             NULL, HFILL }},
         { &hf_nbdgm_error_code,
           { "Error code",               "nbdgm.error_code",
@@ -1956,7 +1959,7 @@ proto_register_nbt(void)
              FT_STRING, BASE_NONE, NULL, 0x0,
              NULL, HFILL }},
     };
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_nbns,
         &ett_nbns_qd,
         &ett_nbns_flags,

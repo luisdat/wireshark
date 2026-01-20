@@ -10,8 +10,10 @@
  */
 #include "config.h"
 #include <epan/packet.h>
-#include <epan/ipproto.h>
+#include <epan/unit_strings.h>
+#include "packet-e212.h"
 #include "packet-tls.h"
+#include "packet-iana-data.h"
 
 void proto_reg_handoff_li5g(void);
 void proto_register_li5g(void);
@@ -34,8 +36,8 @@ static int hf_li5g_pld;
 /* the min header length */
 #define LI_5G_HEADER_LEN_MIN 40
 
-static gint ett_li5g;
-static gint ett_attrContents[LI_5G_ATTR_TYPE_MAX];
+static int ett_li5g;
+static int ett_attrContents[LI_5G_ATTR_TYPE_MAX];
 static int hf_li5g_attrContents[LI_5G_ATTR_TYPE_MAX];
 static dissector_handle_t li5g_handle;
 
@@ -114,14 +116,14 @@ dissect_li5g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     proto_item  *ti, *attr_ti;
     tvbuff_t    *payload_tvb;
     int offset = LI_5G_HEADER_LEN_MIN, hf_attr = -1;
-    guint32 headerLen, payloadLen, pduType;
-    guint16 payloadFormat, attrType, attrLen;
+    uint32_t headerLen, payloadLen, pduType;
+    uint16_t payloadFormat, attrType, attrLen;
     const char* info;
 
     address src_addr;
     address dst_addr;
-    guint32 src_port;
-    guint32 dst_port;
+    uint32_t src_port;
+    uint32_t dst_port;
 
     headerLen = tvb_get_ntohl(tvb, 4);
     payloadLen = tvb_get_ntohl(tvb, 8);
@@ -139,6 +141,7 @@ dissect_li5g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     proto_tree_add_item(li5g_tree, hf_li5g_cid, tvb, 32, 8, ENC_NA);
 
     /* Get the Conditional Attribute */
+    GRegex *regex_imsi = NULL;
     while(headerLen - offset > 0){
         attrType = tvb_get_ntohs(tvb, offset);
         attrLen = tvb_get_ntohs(tvb, offset+2);
@@ -150,13 +153,44 @@ dissect_li5g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
             proto_tree_add_item(attr_tree, hf_li5g_attrType, tvb, offset, 2, ENC_BIG_ENDIAN);
             proto_tree_add_item(attr_tree, hf_li5g_attrLen, tvb, offset+2, 2, ENC_BIG_ENDIAN);
             if (attrType == 17 || attrType == 18) {
-                proto_tree_add_item(attr_tree, hf_attr, tvb, offset+4, attrLen, ENC_UTF_8 | ENC_NA);
+                const char* supi_str;
+                proto_tree_add_item_ret_string(attr_tree, hf_attr, tvb, offset+4, attrLen, ENC_UTF_8 | ENC_NA, pinfo->pool, (const uint8_t**)&supi_str);
+
+                /* 3GPP Supi look up */
+                GMatchInfo *match_info_imsi;
+                char *matched_imsi = NULL;
+
+                /*
+                * String identifying a Supi that shall contain either an IMSI, a network specific identifier,
+                * a Global Cable Identifier (GCI) or a Global Line Identifier (GLI) as specified in clause 2.2A of 3GPP TS 23.003.
+                *
+                * We are interested in IMSI and will be formatted as follows:
+                *   Pattern: '<supiimsi>[0-9]{5,15}</supiimsi>'
+                */
+                if (regex_imsi == NULL) {
+                    regex_imsi = g_regex_new (
+                        ".*<supiimsi>([0-9]{5,15})</supiimsi>",
+                        G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
+                }
+
+                g_regex_match(regex_imsi, supi_str, 0, &match_info_imsi);
+
+                if (g_match_info_matches(match_info_imsi)) {
+                    matched_imsi = g_match_info_fetch(match_info_imsi, 1); //will be empty string if imsi is not in supi
+                    if (matched_imsi && (strcmp(matched_imsi, "") != 0)) {
+                        add_assoc_imsi_item(tvb, attr_tree, matched_imsi);
+                    }
+                    g_free(matched_imsi);
+                }
+                g_match_info_free(match_info_imsi);
             } else {
                 proto_tree_add_item(attr_tree, hf_attr, tvb, offset+4, attrLen, ENC_BIG_ENDIAN);
             }
         }
-
         offset = offset + 4 + attrLen;
+    }
+    if (regex_imsi != NULL) {
+        g_regex_unref(regex_imsi);
     }
 
     proto_tree_add_item(li5g_tree, hf_li5g_pld, tvb, headerLen, payloadLen, ENC_NA);
@@ -206,24 +240,24 @@ dissect_li5g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     return tvb_captured_length(tvb);
 }
 
-static gboolean
+static bool
 dissect_li5g_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
     struct tlsinfo* tlsinfo = (struct tlsinfo*)data;
     if (tvb_captured_length(tvb) < LI_5G_HEADER_LEN_MIN)
-        return FALSE;
+        return false;
     /* the version should be 1 */
     if (tvb_get_ntohs(tvb, 0) != 1)
-        return FALSE;
+        return false;
     /* only 4 types supported*/
     if(tvb_get_ntohs(tvb, 2) < 1 || tvb_get_ntohs(tvb, 2) > 4)
-        return FALSE;
+        return false;
 
-    /* TLS can hold it, no need to find the disect every time */
+    /* TLS can hold it, no need to find the dissector every time */
     *(tlsinfo->app_handle) = li5g_handle;
     dissect_li5g(tvb, pinfo, tree, data);
 
-    return TRUE;
+    return true;
 }
 
 void
@@ -232,15 +266,15 @@ proto_register_li5g(void)
     static hf_register_info hf[] = {
         { &hf_li5g_version, { "Version", "li5g.ver", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_li5g_pduType, { "PDU Type", "li5g.type", FT_UINT16, BASE_DEC, VALS(pdu_type_vals), 0x0, NULL, HFILL }},
-        { &hf_li5g_headerLen, { "Header Length", "li5g.hl", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_octet_octets, 0x0, NULL, HFILL }},
-        { &hf_li5g_payloadLen, { "Payload Length", "li5g.pl", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_octet_octets, 0x0, NULL, HFILL }},
+        { &hf_li5g_headerLen, { "Header Length", "li5g.hl", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_octet_octets), 0x0, NULL, HFILL }},
+        { &hf_li5g_payloadLen, { "Payload Length", "li5g.pl", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_octet_octets), 0x0, NULL, HFILL }},
         { &hf_li5g_payloadFormat, { "Payload Format", "li5g.pf", FT_UINT16, BASE_DEC, VALS(payload_format_vals), 0x0, NULL, HFILL }},
         { &hf_li5g_payloadDirection, { "Payload Direction", "li5g.pd", FT_UINT16, BASE_DEC, VALS(payload_dir_vals), 0x0, NULL, HFILL }},
         { &hf_li5g_xid, { "XID", "li5g.xid", FT_GUID, BASE_NONE, NULL, 0x0, NULL, HFILL }},
-        { &hf_li5g_cid, { "Correlation ID", "li5g.cid", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+        { &hf_li5g_cid, { "Correlation ID", "li5g.cid", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
         { &hf_li5g_attrType, { "Attribute Type", "li5g.attrType", FT_UINT16, BASE_DEC, VALS(attribute_type_vals), 0x0, NULL, HFILL }},
-        { &hf_li5g_attrLen, { "Attribute Length", "li5g.attrLen", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_octet_octets, 0x0, NULL, HFILL }},
+        { &hf_li5g_attrLen, { "Attribute Length", "li5g.attrLen", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_octet_octets), 0x0, NULL, HFILL }},
         { &hf_li5g_attrContents[1], { "ETSI TS 102 232-1 Defined Attribute", "li5g.102_232_1_attr", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_li5g_attrContents[2], { "3GPP TS 33.128 Defined Attribute", "li5g.33_128_attr", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_li5g_attrContents[3], { "3GPP TS 33.108 Defined Attribute", "li5g.33_108_attr", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
@@ -267,7 +301,7 @@ proto_register_li5g(void)
         { &hf_li5g_pld, { "Payload", "li5g.pld", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_li5g,
         &ett_attrContents[1],
         &ett_attrContents[2],

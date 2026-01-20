@@ -16,6 +16,7 @@
 #include <epan/reassemble.h>
 #include "packet-socketcan.h"
 #include <epan/wmem_scopes.h>
+#include <epan/expert.h>
 #include "packet-isobus.h"
 #include "packet-isobus-parameters.h"
 
@@ -39,6 +40,23 @@ static int hf_isobus_src_addr;
 static int hf_isobus_dst_addr;
 static int hf_isobus_pgn;
 static int hf_isobus_payload;
+
+static int hf_isobus_datetime_response;
+static int hf_isobus_datetime_seconds;
+static int hf_isobus_datetime_minute;
+static int hf_isobus_datetime_hour;
+static int hf_isobus_datetime_day;
+static int hf_isobus_datetime_month;
+static int hf_isobus_datetime_year;
+static int hf_isobus_datetime_utc_offset;
+
+static int hf_isobus_ack_response;
+static int hf_isobus_ack_control_byte;
+static int hf_isobus_ack_reserved;
+static int hf_isobus_ack_address;
+static int hf_isobus_ack_group_function_value;
+static int hf_isobus_ack_exended_identifier;
+static int hf_isobus_ack_pgn;
 
 static int hf_isobus_req_requested_pgn;
 static int hf_isobus_ac_name;
@@ -83,6 +101,8 @@ static int hf_msg_reassembled_in;
 static int hf_msg_reassembled_length;
 static int hf_msg_reassembled_data;
 
+static expert_field ei_isobus_ack_msg_reserved;
+
 /* Desegmentation of isobus transport protocol streams */
 static reassembly_table isobus_reassembly_table;
 static unsigned int reassembly_total_size;
@@ -96,6 +116,7 @@ static unsigned int reassembly_current_size;
 #define ETP_DATA_MANAGEMENT 200
 #define TP_DATA_TRANSFER 235
 #define TP_DATA_MANAGEMENT 236
+
 
 static const value_string pdu_format_dp0[] = {
     { 7  , "General-purpose valve load sense pressure" },
@@ -195,12 +216,63 @@ static const value_string transport_protocol_control_byte[] = {
     { 0, NULL }
 };
 
+typedef enum {
+  ACK = 0,
+  NACK = 1,
+  AccessDenied = 2,
+  CannotRespond = 3,
 
-static gint ett_isobus;
-static gint ett_isobus_can_id;
-static gint ett_isobus_name;
-static gint ett_isobus_fragment;
-static gint ett_isobus_fragments;
+  ACK_OneByte = 128,
+  NACK_OneByte = 129,
+  AccessDenied_OneByte = 130,
+  CannotRespond_OneByte = 131,
+
+  ACK_TwoByte = 144,
+  NACK_TwoByte = 145,
+  AccessDenied_TwoByte = 146,
+  CannotRespond_TwoByte = 147,
+
+  ACK_ThreeByte = 160,
+  NACK_ThreeByte = 161,
+  AccessDenied_ThreeByte = 162,
+  CannotRespond_ThreeByte = 163,
+
+} AckMessageControlByte_t;
+
+static const value_string acknowledgement_control_byte[] = {
+  { ACK, "ACK" },
+  { NACK, "NACK" },
+  { AccessDenied, "Access denied" },
+  { CannotRespond, "Cannot respond" },
+
+  // One Byte extended identifier
+  { ACK_OneByte, "ACK" },
+  { NACK_OneByte, "NACK" },
+  { AccessDenied_OneByte, "Access denied" },
+  { CannotRespond_OneByte, "Cannot respond" },
+
+  // Two Byte extended identifier
+  { ACK_TwoByte, "ACK" },
+  { NACK_TwoByte, "NACK" },
+  { AccessDenied_TwoByte, "Access denied" },
+  { CannotRespond_TwoByte, "Cannot respond" },
+
+  // Three Byte extended identifier
+  { ACK_ThreeByte, "ACK" },
+  { NACK_ThreeByte, "NACK" },
+  { AccessDenied_ThreeByte, "Access denied" },
+  { CannotRespond_ThreeByte, "Cannot respond" },
+
+  { 0, NULL }
+};
+
+static int ett_isobus;
+static int ett_isobus_can_id;
+static int ett_isobus_name;
+static int ett_isobus_fragment;
+static int ett_isobus_fragments;
+static int ett_isobus_datetime_response;
+static int ett_isobus_ack_response;
 
 static const fragment_items isobus_frag_items = {
     &ett_isobus_fragment,
@@ -224,24 +296,24 @@ static const fragment_items isobus_frag_items = {
 };
 
 struct address_combination {
-    guint8 src_address;
-    guint8 dst_address;
+    uint8_t src_address;
+    uint8_t dst_address;
 };
 
 struct reassemble_identifier {
-    guint32 startFrameId;
-    guint32 endFrameId;
-    guint32 identifier;
+    uint32_t startFrameId;
+    uint32_t endFrameId;
+    uint32_t identifier;
 };
 
 struct address_reassemble_table {
     wmem_list_t *reassembleIdentifierTable;
-    guint32 identifierCounter;
+    uint32_t identifierCounter;
 };
 
-static wmem_map_t *addressIdentifierTable = NULL;
+static wmem_map_t *addressIdentifierTable;
 
-static struct reassemble_identifier * findIdentifierFor(wmem_list_t *reassembleIdentifierTable, guint32 frameIndex) {
+static struct reassemble_identifier * findIdentifierFor(wmem_list_t *reassembleIdentifierTable, uint32_t frameIndex) {
     wmem_list_frame_t *currentItem = wmem_list_head(reassembleIdentifierTable);
 
     while (currentItem != NULL) {
@@ -257,7 +329,7 @@ static struct reassemble_identifier * findIdentifierFor(wmem_list_t *reassembleI
 }
 
 static gboolean
-address_combination_equal(gconstpointer p1, gconstpointer p2) {
+address_combination_equal(const void *p1, const void *p2) {
     const struct address_combination *addr_combi1 = (const struct address_combination *)p1;
     const struct address_combination *addr_combi2 = (const struct address_combination *)p2;
 
@@ -268,13 +340,13 @@ address_combination_equal(gconstpointer p1, gconstpointer p2) {
     }
 }
 
-static guint
-address_combination_hash(gconstpointer p) {
+static unsigned
+address_combination_hash(const void *p) {
     const struct address_combination *addr_combi = (const struct address_combination *)p;
     return (addr_combi->src_address * 256) + (addr_combi->dst_address);
 }
 
-static struct address_reassemble_table * findAddressIdentifierFor(guint8 src_address, guint8 dst_address) {
+static struct address_reassemble_table * findAddressIdentifierFor(uint8_t src_address, uint8_t dst_address) {
     struct address_combination *addrCombi = wmem_new(wmem_file_scope(), struct address_combination);
     struct address_reassemble_table *foundItem;
 
@@ -296,33 +368,33 @@ static struct address_reassemble_table * findAddressIdentifierFor(guint8 src_add
     }
 }
 
-static const gchar *
-isobus_lookup_function(guint32 industry_group, guint32 vehicle_system, guint32 function) {
+static const char *
+isobus_lookup_function(uint32_t industry_group, uint32_t vehicle_system, uint32_t function) {
     if (function < 128) {
-        return try_val_to_str_ext((guint32)function, &isobus_global_name_functions_ext);
+        return try_val_to_str_ext((uint32_t)function, &isobus_global_name_functions_ext);
     }
 
-    guint32 new_id = industry_group << 16 | vehicle_system << 8 | function;
-    return try_val_to_str_ext((guint32)new_id, &isobus_ig_specific_name_functions_ext);
+    uint32_t new_id = industry_group << 16 | vehicle_system << 8 | function;
+    return try_val_to_str_ext((uint32_t)new_id, &isobus_ig_specific_name_functions_ext);
 }
 
-static const gchar *
-isobus_lookup_pgn(guint32 pgn) {
+static const char *
+isobus_lookup_pgn(uint32_t pgn) {
     /* TODO: add configuration option via UAT? */
 
     return try_val_to_str_ext(pgn, &isobus_pgn_names_ext);
 }
 
 static void
-proto_item_append_conditional(proto_item *ti, const gchar *str) {
+proto_item_append_conditional(proto_item *ti, const char *str) {
     if (str != NULL && ti != NULL) {
         proto_item_append_text(ti, " (%s)", str);
     }
 }
 
 static int
-call_isobus_subdissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const gboolean add_proto_name,
-                         guint8 priority, guint8 pdu_format, guint pgn, guint8 source_addr, void *data) {
+call_isobus_subdissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name,
+                         uint8_t priority, uint8_t pdu_format, unsigned pgn, uint8_t source_addr, void *data) {
     can_info_t *can_info = (can_info_t *)data;
 
     isobus_info_t isobus_info;
@@ -334,30 +406,30 @@ call_isobus_subdissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, co
     isobus_info.source_addr = source_addr;
 
     /* try PGN */
-    int ret = dissector_try_uint_new(subdissector_table_pgn, pgn, tvb, pinfo, tree, add_proto_name, &isobus_info);
+    int ret = dissector_try_uint_with_data(subdissector_table_pgn, pgn, tvb, pinfo, tree, add_proto_name, &isobus_info);
     if (ret > 0) {
         return ret;
     }
 
     /* try PDU Format */
-    return dissector_try_uint_new(subdissector_table_pdu_format, pdu_format, tvb, pinfo, tree, add_proto_name, &isobus_info);
+    return dissector_try_uint_with_data(subdissector_table_pdu_format, pdu_format, tvb, pinfo, tree, add_proto_name, &isobus_info);
 }
 
 /* Code to actually dissect the packets */
 static int
 dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) {
-    guint8       priority;
-    /* guint        ext_data_page; */
-    guint        src_addr;
-    guint        data_page;
-    guint8       pdu_format;
-    guint8       pdu_specific;
-    guint        pgn;
+    uint8_t      priority;
+    /* unsigned     ext_data_page; */
+    unsigned     src_addr;
+    unsigned     data_page;
+    uint8_t      pdu_format;
+    uint8_t      pdu_specific;
+    unsigned     pgn;
     struct can_info can_info;
     char str_dst[10];
     char str_src[4];
 
-    static guint seqnr = 0;
+    static unsigned seqnr = 0;
 
     int data_offset = 0;
 
@@ -462,18 +534,18 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
     }
 
     if (pdu_format == TP_DATA_MANAGEMENT  || pdu_format == TP_DATA_TRANSFER || pdu_format == ETP_DATA_MANAGEMENT || pdu_format == ETP_DATA_TRANSFER) {
-        gboolean isReply = FALSE;
+        bool isReply = false;
 
         if (pdu_format == TP_DATA_MANAGEMENT) {
-            guint8 control_byte = tvb_get_guint8(tvb, data_offset);
+            uint8_t control_byte = tvb_get_uint8(tvb, data_offset);
             switch(control_byte) {
                 case 17:
                 case 19:
-                    isReply = TRUE;
+                    isReply = true;
                     break;
                 case 16:
                 default:
-                    isReply = FALSE;
+                    isReply = false;
                     break;
             }
         }
@@ -488,12 +560,12 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
     }
 
     if (pdu_format == TP_DATA_MANAGEMENT) {
-        guint32 control_byte;
+        uint32_t control_byte;
         proto_tree_add_item_ret_uint(tree, hf_isobus_transportprotocol_controlbyte, tvb, data_offset, 1, ENC_LITTLE_ENDIAN, &control_byte);
         data_offset += 1;
 
         if (control_byte == 16) {
-            guint32 total_size, number_of_packets;
+            uint32_t total_size, number_of_packets;
 
             proto_tree_add_item_ret_uint(tree, hf_isobus_transportprotocol_requesttosend_totalsize, tvb, data_offset, 2, ENC_LITTLE_ENDIAN, &total_size);
             data_offset += 2;
@@ -518,14 +590,14 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
                 wmem_list_append(address_reassemble_table_item->reassembleIdentifierTable, reassembleIdentifierTableEntry);
             }
 
-            fragment_add_seq(&isobus_reassembly_table, tvb, 5, pinfo, seqnr, NULL, 0, 3, TRUE, 0);
+            fragment_add_seq(&isobus_reassembly_table, tvb, 5, pinfo, seqnr, NULL, 0, 3, true, 0);
             fragment_set_tot_len(&isobus_reassembly_table, pinfo, seqnr, NULL, number_of_packets);
             reassembly_current_size = 3;
             reassembly_total_size = total_size + 3;
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Request to send message of %u bytes in %u fragments", total_size, number_of_packets);
         } else if (control_byte == 17) {
-            guint32 number_of_packets_can_be_sent, next_packet_number;
+            uint32_t number_of_packets_can_be_sent, next_packet_number;
 
             proto_tree_add_item_ret_uint(tree, hf_isobus_transportprotocol_cleartosend_numberofpacketscanbesent, tvb, data_offset, 1, ENC_LITTLE_ENDIAN, &number_of_packets_can_be_sent);
             data_offset += 1;
@@ -540,7 +612,7 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Clear to send, can receive %u packets, next packet is %u", number_of_packets_can_be_sent, next_packet_number);
         } else if (control_byte == 19) {
-            guint32 total_size, number_of_packets;
+            uint32_t total_size, number_of_packets;
 
             proto_tree_add_item_ret_uint(tree, hf_isobus_transportprotocol_endofmsgack_totalsize, tvb, data_offset, 2, ENC_LITTLE_ENDIAN, &total_size);
             data_offset += 2;
@@ -555,7 +627,7 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "End of Message Acknowledgment, %u bytes sent in %u packets", total_size, number_of_packets);
         } else if (control_byte == 255) {
-            guint32 connection_abort_reason;
+            uint32_t connection_abort_reason;
 
             proto_tree_add_item_ret_uint(tree, hf_isobus_transportprotocol_connabort_abortreason, tvb, data_offset, 1, ENC_LITTLE_ENDIAN, &connection_abort_reason);
             data_offset += 1;
@@ -567,7 +639,7 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Connection Abort, %s", rval_to_str_const(connection_abort_reason, connection_abort_reasons, "unknown reason"));
         } else if (control_byte == 32) {
-            guint32 total_size, number_of_packets;
+            uint32_t total_size, number_of_packets;
 
             proto_tree_add_item_ret_uint(tree, hf_isobus_transportprotocol_broadcastannouncemessage_totalsize, tvb, data_offset, 2, ENC_LITTLE_ENDIAN, &total_size);
             data_offset += 2;
@@ -588,9 +660,9 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
     else if (pdu_format == TP_DATA_TRANSFER && address_reassemble_table_item->reassembleIdentifierTable != NULL)
     {
         tvbuff_t *reassembled_data;
-        guint16 fragment_size = 0;
-        gboolean lastPacket;
-        guint8 sequenceId = tvb_get_guint8(tvb, 0);
+        uint16_t fragment_size = 0;
+        bool lastPacket;
+        uint8_t sequenceId = tvb_get_uint8(tvb, 0);
         fragment_head *fg_head;
 
         if (identifier == NULL) {
@@ -606,10 +678,10 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
         if (identifier != NULL) {
             if (reassembly_total_size > reassembly_current_size + 7) {
                 fragment_size = 7;
-                lastPacket = FALSE;
+                lastPacket = false;
             } else {
                 fragment_size = reassembly_total_size - reassembly_current_size;
-                lastPacket = TRUE;
+                lastPacket = true;
             }
 
             fg_head = fragment_add_seq(&isobus_reassembly_table, tvb, 1, pinfo, identifier->identifier, NULL, sequenceId, fragment_size, !lastPacket, 0);
@@ -618,10 +690,10 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
             reassembled_data = process_reassembled_data(tvb, 0, pinfo, "Reassembled data", fg_head, &isobus_frag_items, NULL, isobus_tree);
 
             if (reassembled_data) {
-                guint32 id_reassembled = tvb_get_guint24(reassembled_data, 0, ENC_BIG_ENDIAN);
-                guint8 pdu_format_reassembled = (guint8)((id_reassembled >> 8) & 0xff);
+                uint32_t id_reassembled = tvb_get_uint24(reassembled_data, 0, ENC_BIG_ENDIAN);
+                uint8_t pdu_format_reassembled = (uint8_t)((id_reassembled >> 8) & 0xff);
 
-                guint32 pgn_reassembled;
+                uint32_t pgn_reassembled;
                 if (pdu_format < 240) {
                     pgn_reassembled = id_reassembled & 0x03ff00;
                 } else {
@@ -630,21 +702,21 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
 
                 proto_tree_add_uint(isobus_tree, hf_isobus_pgn, reassembled_data, 0, 3, pgn_reassembled);
 
-                if (call_isobus_subdissector(tvb_new_subset_remaining(reassembled_data, 3), pinfo, isobus_tree, FALSE, 0, pdu_format_reassembled,
+                if (call_isobus_subdissector(tvb_new_subset_remaining(reassembled_data, 3), pinfo, isobus_tree, false, 0, pdu_format_reassembled,
                     pgn_reassembled, src_addr, data) == 0) {
-                    col_append_fstr(pinfo->cinfo, COL_INFO, "Protocol not yet supported");
+                    col_append_str(pinfo->cinfo, COL_INFO, "Protocol not yet supported");
                 }
             } else {
                 col_append_fstr(pinfo->cinfo, COL_INFO, "Fragment number %u", sequenceId);
             }
         } else {
-            col_append_fstr(pinfo->cinfo, COL_INFO, "ERROR: Transport protocol was not initialized");
+            col_append_str(pinfo->cinfo, COL_INFO, "ERROR: Transport protocol was not initialized");
         }
     } else if (pdu_format == REQUEST) {
-        guint32 req_pgn;
+        uint32_t req_pgn;
         proto_tree_add_item_ret_uint(isobus_tree, hf_isobus_req_requested_pgn, tvb, 0, 3, ENC_LITTLE_ENDIAN, &req_pgn);
         col_append_fstr(pinfo->cinfo, COL_INFO, "Requesting PGN: %u", req_pgn);
-        const gchar *tmp = isobus_lookup_pgn(req_pgn);
+        const char *tmp = isobus_lookup_pgn(req_pgn);
 
         if (tmp != NULL) {
             col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)", tmp);
@@ -655,45 +727,137 @@ dissect_isobus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) 
         name_tree = proto_item_add_subtree(ti, ett_isobus_name);
 
         /* we cannot directly use the value strings as they depend on other parameters */
-        guint64 industry_group, vehicle_system, function, manufacturer;
+        uint64_t industry_group, vehicle_system, function, manufacturer;
         proto_tree_add_item(name_tree, hf_isobus_ac_name_arbitrary_address_capable, tvb, 0, 8, ENC_LITTLE_ENDIAN);
         ti = proto_tree_add_item_ret_uint64(name_tree, hf_isobus_ac_name_industry_group, tvb, 0, 8, ENC_LITTLE_ENDIAN, &industry_group);
-        proto_item_append_conditional(ti, try_val_to_str_ext((guint32)industry_group, &isobus_industry_groups_ext));
+        proto_item_append_conditional(ti, try_val_to_str_ext((uint32_t)industry_group, &isobus_industry_groups_ext));
 
         proto_tree_add_item(name_tree, hf_isobus_ac_name_vehicle_system_instance, tvb, 0, 8, ENC_LITTLE_ENDIAN);
         ti = proto_tree_add_item_ret_uint64(name_tree, hf_isobus_ac_name_vehicle_system, tvb, 0, 8, ENC_LITTLE_ENDIAN, &vehicle_system);
-        proto_item_append_conditional(ti, try_val_to_str_ext((guint16)industry_group * 256 + (guint8)vehicle_system, &isobus_vehicle_systems_ext));
+        proto_item_append_conditional(ti, try_val_to_str_ext((uint16_t)industry_group * 256 + (uint8_t)vehicle_system, &isobus_vehicle_systems_ext));
 
         proto_tree_add_item(name_tree, hf_isobus_ac_name_reserved, tvb, 0, 8, ENC_LITTLE_ENDIAN);
         ti = proto_tree_add_item_ret_uint64(name_tree, hf_isobus_ac_name_function, tvb, 0, 8, ENC_LITTLE_ENDIAN, &function);
-        proto_item_append_conditional(ti, isobus_lookup_function((guint32)industry_group, (guint32)vehicle_system, (guint32)function));
+        proto_item_append_conditional(ti, isobus_lookup_function((uint32_t)industry_group, (uint32_t)vehicle_system, (uint32_t)function));
 
         proto_tree_add_item(name_tree, hf_isobus_ac_name_function_instance, tvb, 0, 8, ENC_LITTLE_ENDIAN);
 
         proto_tree_add_item(name_tree, hf_isobus_ac_name_ecu_instance, tvb, 0, 8, ENC_LITTLE_ENDIAN);
         ti = proto_tree_add_item_ret_uint64(name_tree, hf_isobus_ac_name_manufacturer, tvb, 0, 8, ENC_LITTLE_ENDIAN, &manufacturer);
-        proto_item_append_conditional(ti, try_val_to_str_ext((guint32)manufacturer, &isobus_manufacturers_ext));
+        proto_item_append_conditional(ti, try_val_to_str_ext((uint32_t)manufacturer, &isobus_manufacturers_ext));
 
         proto_tree_add_item(name_tree, hf_isobus_ac_name_id_number, tvb, 0, 8, ENC_LITTLE_ENDIAN);
 
-        guint address_claimed = can_info.id & 0xff;
+        unsigned address_claimed = can_info.id & 0xff;
         switch (address_claimed) {
         case 255:
             /* This seems to be not allowed. Create ticket, if this is not correct. */
-            col_append_fstr(pinfo->cinfo, COL_INFO, "Trying to claim global destination address!? This seems wrong!");
+            col_append_str(pinfo->cinfo, COL_INFO, "Trying to claim global destination address!? This seems wrong!");
             break;
         case 254:
-            col_append_fstr(pinfo->cinfo, COL_INFO, "Cannot claim address");
+            col_append_str(pinfo->cinfo, COL_INFO, "Cannot claim address");
             break;
         default:
             col_append_fstr(pinfo->cinfo, COL_INFO, "Address claimed %u", address_claimed);
         }
-    } else if (call_isobus_subdissector(tvb, pinfo, isobus_tree, FALSE, priority, pdu_format, pgn, src_addr, data) == 0) {
-        col_append_fstr(pinfo->cinfo, COL_INFO, "Protocol not yet supported");
-        proto_tree_add_item(isobus_tree, hf_isobus_payload, tvb, 0, tvb_captured_length(tvb), ENC_NA);
+    } else if (call_isobus_subdissector(tvb, pinfo, isobus_tree, false, priority, pdu_format, pgn, src_addr, data) == 0) {
+        if (pgn == 65254) {
+            // Time/Date response
+            uint16_t year = tvb_get_uint8(tvb, 5) + 1985;
+            uint8_t day = (uint8_t)(tvb_get_uint8(tvb, 4) * 0.25f);
+            uint8_t sec = (uint8_t)(tvb_get_uint8(tvb, 0) * 0.25f);
+            int8_t utc_hour_offset = tvb_get_int8(tvb, 7) - 125;
+            int8_t utc_min_offset = tvb_get_int8(tvb, 6) - 125;
+
+            wmem_strbuf_t *utc_min_offset_strbuf = wmem_strbuf_create(pinfo->pool);
+            if (utc_min_offset)
+            {
+                wmem_strbuf_append_printf(utc_min_offset_strbuf, " %d min", utc_min_offset);
+            }
+
+            col_append_fstr(pinfo->cinfo, COL_INFO, "Date/time:  %u.%u.%u %u:%u:%u (UTC+%d hour%s)",
+                year,
+                tvb_get_uint8(tvb, 3),
+                day,
+                tvb_get_uint8(tvb, 2),
+                tvb_get_uint8(tvb, 1),
+                sec,
+                utc_hour_offset,
+                wmem_strbuf_finalize(utc_min_offset_strbuf)
+            );
+            proto_tree *datetime_tree;
+            ti = proto_tree_add_item(isobus_tree, hf_isobus_datetime_response, tvb, 0, 8, ENC_NA);
+            datetime_tree = proto_item_add_subtree(ti, ett_isobus_datetime_response);
+
+            proto_tree_add_item(datetime_tree, hf_isobus_datetime_year, tvb, 5, 1, ENC_NA);
+            proto_tree_add_item(datetime_tree, hf_isobus_datetime_month, tvb, 3, 1, ENC_NA);
+            proto_tree_add_item(datetime_tree, hf_isobus_datetime_day, tvb, 4, 1, ENC_NA);
+
+            proto_tree_add_item(datetime_tree, hf_isobus_datetime_hour, tvb, 2, 1, ENC_NA);
+            proto_tree_add_item(datetime_tree, hf_isobus_datetime_minute, tvb, 1, 1, ENC_NA);
+            proto_tree_add_item(datetime_tree, hf_isobus_datetime_seconds, tvb, 0, 1, ENC_NA);
+
+            proto_tree_add_item(datetime_tree, hf_isobus_datetime_utc_offset, tvb, 6, 2, ENC_LITTLE_ENDIAN);
+        } else if (pgn == 59392) {
+          // Acknowledgement message
+          uint32_t reserved = 0xFFFFFF;
+          col_append_str(pinfo->cinfo, COL_INFO, val_to_str_const(tvb_get_uint8(tvb, 0), acknowledgement_control_byte, "Unknown"));
+
+          proto_tree *ack_tree;
+          ti = proto_tree_add_item(isobus_tree, hf_isobus_ack_response, tvb, 0, 8, ENC_NA);
+          ack_tree = proto_item_add_subtree(ti, ett_isobus_ack_response);
+
+          proto_tree_add_item(ack_tree, hf_isobus_ack_control_byte, tvb, 0, 1, ENC_NA);
+          uint8_t controlByte = tvb_get_uint8(tvb, 0);
+
+          if ((controlByte <= CannotRespond) || (ACK_OneByte <= controlByte && controlByte <= CannotRespond_OneByte)) {
+            if (controlByte <= CannotRespond)
+              proto_tree_add_item(ack_tree, hf_isobus_ack_group_function_value, tvb, 1, 1, ENC_NA);
+            else
+              proto_tree_add_item(ack_tree, hf_isobus_ack_exended_identifier, tvb, 1, 1, ENC_NA);
+            proto_tree_add_item_ret_uint(ack_tree, hf_isobus_ack_reserved, tvb, 2, 2, ENC_LITTLE_ENDIAN, &reserved);
+            if (reserved != 0xFFFF) {
+              expert_add_info(pinfo, ti, &ei_isobus_ack_msg_reserved);
+            }
+          } else if (ACK_TwoByte <= controlByte && controlByte <= CannotRespond_TwoByte) {
+            proto_tree_add_item(ack_tree, hf_isobus_ack_exended_identifier, tvb, 1, 2, ENC_LITTLE_ENDIAN);
+            proto_tree_add_item_ret_uint(ack_tree, hf_isobus_ack_reserved, tvb, 2, 1, ENC_LITTLE_ENDIAN, &reserved);
+            if (reserved != 0xFF) {
+              expert_add_info(pinfo, ti, &ei_isobus_ack_msg_reserved);
+            }
+          } else if (ACK_ThreeByte <= controlByte && controlByte <= CannotRespond_ThreeByte) {
+            proto_tree_add_item(ack_tree, hf_isobus_ack_exended_identifier, tvb, 1, 3, ENC_LITTLE_ENDIAN);
+          }
+          proto_tree_add_item_ret_uint(ack_tree, hf_isobus_ack_address, tvb, 4, 1, ENC_LITTLE_ENDIAN, &reserved);
+          proto_tree_add_item(ack_tree, hf_isobus_ack_pgn, tvb, 5, 3, ENC_LITTLE_ENDIAN);
+        } else {
+            col_append_str(pinfo->cinfo, COL_INFO, "Protocol not yet supported");
+            proto_tree_add_item(isobus_tree, hf_isobus_payload, tvb, 0, tvb_captured_length(tvb), ENC_NA);
+        }
     }
 
     return tvb_reported_length(tvb);
+}
+
+static void isobus_print_datetime_year(char* s, uint32_t v)
+{
+    snprintf(s, ITEM_LABEL_LENGTH, "%u", v + 1985);
+}
+
+static void isobus_print_datetime_day_or_sec(char* s, uint32_t v)
+{
+    snprintf(s, ITEM_LABEL_LENGTH, "%u", (uint8_t)(v * 0.25f));
+}
+
+static void isobus_print_datetime_utc_offset(char* s, uint32_t v)
+{
+    snprintf(s, ITEM_LABEL_LENGTH, "%d hour", (int8_t)(((v >> 8) & 0xFF) - 125));
+    int8_t minutes = ((v & 0xFF) - 125);
+    if (minutes != 0)
+    {
+        size_t current_len = strlen(s);
+        snprintf(&s[current_len], ITEM_LABEL_LENGTH - current_len, " %d minute(s)", minutes);
+    }
 }
 
 static void
@@ -733,6 +897,34 @@ proto_register_isobus(void) {
         { &hf_isobus_payload, {
             "Payload", "isobus.payload", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL } },
 
+        { &hf_isobus_datetime_response, {
+            "Date/Time", "isobus.datetime_response", FT_PROTOCOL, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_datetime_year, {
+            "Year", "isobus.datetime.year", FT_UINT8, BASE_CUSTOM, CF_FUNC(isobus_print_datetime_year), 0x0, NULL, HFILL } },
+        { &hf_isobus_datetime_month, {
+            "Month", "isobus.datetime.month", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_datetime_day, {
+            "Day", "isobus.datetime.day", FT_UINT8, BASE_CUSTOM, CF_FUNC(isobus_print_datetime_day_or_sec), 0x0, NULL, HFILL } },
+        { &hf_isobus_datetime_hour, {
+            "Hour", "isobus.datetime.hour", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_datetime_minute, {
+            "Minute", "isobus.datetime.minute", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_datetime_seconds, {
+            "Second", "isobus.datetime.second", FT_UINT8, BASE_CUSTOM, CF_FUNC(isobus_print_datetime_day_or_sec), 0x0, NULL, HFILL } },
+        { &hf_isobus_datetime_utc_offset, {
+            "Local time - UTC offset", "isobus.datetime.utc_offset", FT_UINT16, BASE_CUSTOM, CF_FUNC(isobus_print_datetime_utc_offset), 0x0, NULL, HFILL } },
+
+        { &hf_isobus_ack_response, {"ACK", "isobus.ack_response", FT_PROTOCOL, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_ack_control_byte, {"Control byte", "isobus.ack_response.control_byte", FT_UINT8, BASE_DEC, VALS(acknowledgement_control_byte), 0x0, NULL, HFILL } },
+        { &hf_isobus_ack_reserved, {"Reserved", "isobus.ack_response.reserved", FT_UINT24, BASE_DEC, VALS(acknowledgement_control_byte), 0x0, NULL, HFILL } },
+        { &hf_isobus_ack_address, {"Address", "isobus.ack_response.address", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_ack_group_function_value, {
+            "Group function value", "isobus.ack_response.group_function_value", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_ack_exended_identifier, {
+            "Extended identifier", "isobus.ack_response.extended_identifier", FT_UINT24, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_isobus_ack_pgn, {
+            "PGN", "isobus.pgn", FT_UINT24, BASE_DEC_HEX | BASE_EXT_STRING, VALS_EXT_PTR(&isobus_pgn_names_ext), 0x0, NULL, HFILL } },
+
         { &hf_isobus_req_requested_pgn, {
             "Requested PGN", "isobus.req.requested_pgn", FT_UINT24, BASE_HEX | BASE_EXT_STRING, VALS_EXT_PTR(&isobus_pgn_names_ext), 0x0, NULL, HFILL } },
 
@@ -743,9 +935,9 @@ proto_register_isobus(void) {
         { &hf_isobus_ac_name_manufacturer, {
             "Manufacturer", "isobus.ac.name.manufacturer", FT_UINT64, BASE_DEC, NULL, 0x00000000ffe00000, NULL, HFILL } },
         { &hf_isobus_ac_name_function_instance, {
-            "Function Instance", "isobus.ac.name.function_instance", FT_UINT64, BASE_DEC, NULL, 0x000000f000000000, NULL, HFILL } },
+            "Function Instance", "isobus.ac.name.function_instance", FT_UINT64, BASE_DEC, NULL, 0x000000f800000000, NULL, HFILL } },
         { &hf_isobus_ac_name_ecu_instance, {
-            "ECU Instance", "isobus.ac.name.ecu_instance", FT_UINT64, BASE_DEC, NULL, 0x0000000f00000000, NULL, HFILL } },
+            "ECU Instance", "isobus.ac.name.ecu_instance", FT_UINT64, BASE_DEC, NULL, 0x0000000700000000, NULL, HFILL } },
         { &hf_isobus_ac_name_function, {
             "Function", "isobus.ac.name.function", FT_UINT64, BASE_DEC, NULL, 0x0000ff0000000000, NULL, HFILL } },
         { &hf_isobus_ac_name_reserved, {
@@ -818,12 +1010,14 @@ proto_register_isobus(void) {
                 "Reassembled data", "isobus.reassembled.data", FT_BYTES, BASE_NONE, NULL, 0x00, NULL, HFILL } }
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_isobus,
         &ett_isobus_can_id,
         &ett_isobus_name,
         &ett_isobus_fragment,
-        &ett_isobus_fragments
+        &ett_isobus_fragments,
+        &ett_isobus_datetime_response,
+        &ett_isobus_ack_response
     };
 
     /* Register protocol init routine */
@@ -834,6 +1028,14 @@ proto_register_isobus(void) {
 
     proto_register_field_array(proto_isobus, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
+
+    /* Register expert info fields */
+    expert_module_t *expert_isobus = expert_register_protocol(proto_isobus);
+    static ei_register_info ei[] = {
+        { &ei_isobus_ack_msg_reserved, { "isobus.ack_msg_reserved", PI_UNDECODED, PI_WARN, "Reserved field not zero", EXPFILL }}
+    };
+    expert_register_field_array(expert_isobus, ei, array_length(ei));
+
 
     addressIdentifierTable = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), address_combination_hash, address_combination_equal);
 

@@ -21,6 +21,9 @@
 #include <wsutil/strtoi.h>
 #include <wsutil/wslog.h>
 #include <wsutil/inet_addr.h>
+#include <libxml/tree.h>
+#include <libxml/parser.h>
+#include <libxml/xpath.h>
 
 #define TEXT_BUFFER_SIZE  128
 
@@ -35,17 +38,33 @@ struct knx_keyring_ia_keys* knx_keyring_ia_keys;
 struct knx_keyring_ia_seqs* knx_keyring_ia_seqs;
 
 // Encrypt 16-byte block via AES
-static void encrypt_block( const guint8 key[ KNX_KEY_LENGTH ], const guint8 plain[ KNX_KEY_LENGTH ], guint8 p_crypt[ KNX_KEY_LENGTH ] )
+static bool encrypt_block( const uint8_t key[ KNX_KEY_LENGTH ], const uint8_t plain[ KNX_KEY_LENGTH ], uint8_t p_crypt[ KNX_KEY_LENGTH ] )
 {
   gcry_cipher_hd_t cryptor = NULL;
-  gcry_cipher_open( &cryptor, GCRY_CIPHER_AES128, GCRY_CIPHER_MODE_CBC, 0 );
-  gcry_cipher_setkey( cryptor, key, KNX_KEY_LENGTH );
-  gcry_cipher_encrypt( cryptor, p_crypt, KNX_KEY_LENGTH, plain, KNX_KEY_LENGTH );
+  gcry_error_t err;
+  err = gcry_cipher_open( &cryptor, GCRY_CIPHER_AES128, GCRY_CIPHER_MODE_CBC, 0 );
+  if (err != 0) {
+    ws_debug("failed to open AES128 cipher handle: %s/%s", gcry_strsource(err), gcry_strerror(err));
+    return false;
+  }
+  err = gcry_cipher_setkey( cryptor, key, KNX_KEY_LENGTH );
+  if (err != 0) {
+    ws_debug("failed to set AES128 cipher key: %s/%s", gcry_strsource(err), gcry_strerror(err));
+    gcry_cipher_close( cryptor );
+    return false;
+  }
+  err = gcry_cipher_encrypt( cryptor, p_crypt, KNX_KEY_LENGTH, plain, KNX_KEY_LENGTH );
+  if (err != 0) {
+    ws_debug("failed to encrypt AES128: %s/%s", gcry_strsource(err), gcry_strerror(err));
+    gcry_cipher_close( cryptor );
+    return false;
+  }
   gcry_cipher_close( cryptor );
+  return true;
 }
 
 // Create B_0 for CBC-MAC
-static void build_b0( guint8 p_result[ KNX_KEY_LENGTH ], const guint8* nonce, guint8 nonce_length )
+static void build_b0( uint8_t p_result[ KNX_KEY_LENGTH ], const uint8_t* nonce, uint8_t nonce_length )
 {
   DISSECTOR_ASSERT( nonce_length <= KNX_KEY_LENGTH );
   if( nonce_length ) memcpy( p_result, nonce, nonce_length );
@@ -53,27 +72,30 @@ static void build_b0( guint8 p_result[ KNX_KEY_LENGTH ], const guint8* nonce, gu
 }
 
 // Create Ctr_0 for CCM encryption/decryption
-static void build_ctr0( guint8 p_result[ KNX_KEY_LENGTH ], const guint8* nonce, guint8 nonce_length )
+static void build_ctr0( uint8_t p_result[ KNX_KEY_LENGTH ], const uint8_t* nonce, uint8_t nonce_length )
 {
   build_b0( p_result, nonce, nonce_length );
   p_result[ KNX_KEY_LENGTH - 2 ] = 0xFF;
 }
 
 // Calculate MAC for KNX IP Security or KNX Data Security
-void knx_ccm_calc_cbc_mac(guint8 p_mac[ KNX_KEY_LENGTH ], const guint8 key[ KNX_KEY_LENGTH ],
-  const guint8* a_bytes, gint a_length, const guint8* p_bytes, gint p_length,
-  const guint8 b_0[ KNX_KEY_LENGTH ] )
+void knx_ccm_calc_cbc_mac(uint8_t p_mac[ KNX_KEY_LENGTH ], const uint8_t key[ KNX_KEY_LENGTH ],
+  const uint8_t* a_bytes, int a_length, const uint8_t* p_bytes, int p_length,
+  const uint8_t b_0[ KNX_KEY_LENGTH ] )
 {
-  guint8 plain[ KNX_KEY_LENGTH ];
-  guint8 b_pos;
+  uint8_t plain[ KNX_KEY_LENGTH ];
+  uint8_t b_pos;
 
   // Add B_0
   memcpy( plain, b_0, KNX_KEY_LENGTH );
-  encrypt_block( key, plain, p_mac );
+  if (!encrypt_block( key, plain, p_mac )) {
+    memset(p_mac, 0, KNX_KEY_LENGTH);
+    return;
+  }
 
   // Add a_length
-  plain[ 0 ] = (guint8) ((a_length >> 8) ^ p_mac[ 0 ]);
-  plain[ 1 ] = (guint8) ((a_length & 0xFF) ^ p_mac[ 1 ]);
+  plain[ 0 ] = (uint8_t) ((a_length >> 8) ^ p_mac[ 0 ]);
+  plain[ 1 ] = (uint8_t) ((a_length & 0xFF) ^ p_mac[ 1 ]);
   b_pos = 2;
 
   // Add a_bytes directly followed by p_bytes
@@ -99,44 +121,50 @@ void knx_ccm_calc_cbc_mac(guint8 p_mac[ KNX_KEY_LENGTH ], const guint8 key[ KNX_
       ++b_pos;
     }
 
-    encrypt_block( key, plain, p_mac );
+    if (!encrypt_block( key, plain, p_mac )) {
+      memset(p_mac, 0, KNX_KEY_LENGTH);
+      return;
+    }
 
     b_pos = 0;
   }
 }
 
 // Calculate MAC for KNX IP Security, using 6-byte Sequence ID
-void knxip_ccm_calc_cbc_mac( guint8 p_mac[ KNX_KEY_LENGTH ], const guint8 key[ KNX_KEY_LENGTH ],
-  const guint8* a_bytes, gint a_length, const guint8* p_bytes, gint p_length,
-  const guint8* nonce, guint8 nonce_length )
+void knxip_ccm_calc_cbc_mac( uint8_t p_mac[ KNX_KEY_LENGTH ], const uint8_t key[ KNX_KEY_LENGTH ],
+  const uint8_t* a_bytes, int a_length, const uint8_t* p_bytes, int p_length,
+  const uint8_t* nonce, uint8_t nonce_length )
 {
-  guint8 b_0[ KNX_KEY_LENGTH ];
+  uint8_t b_0[ KNX_KEY_LENGTH ];
   build_b0( b_0, nonce, nonce_length );
-  b_0[ KNX_KEY_LENGTH - 2 ] = (guint8) (p_length >> 8);
-  b_0[ KNX_KEY_LENGTH - 1 ] = (guint8) (p_length & 0xFF);
+  b_0[ KNX_KEY_LENGTH - 2 ] = (uint8_t) (p_length >> 8);
+  b_0[ KNX_KEY_LENGTH - 1 ] = (uint8_t) (p_length & 0xFF);
   knx_ccm_calc_cbc_mac( p_mac, key, a_bytes, a_length, p_bytes, p_length, b_0 );
 }
 
 // Encrypt for KNX IP Security or KNX Data Security
-guint8* knx_ccm_encrypt( guint8* p_result, const guint8 key[ KNX_KEY_LENGTH ], const guint8* p_bytes, gint p_length,
-  const guint8* mac, guint8 mac_length, const guint8 ctr_0[ KNX_KEY_LENGTH ], guint8 s0_bytes_used_for_mac )
+uint8_t* knx_ccm_encrypt(wmem_allocator_t* scope, uint8_t* p_result, const uint8_t key[ KNX_KEY_LENGTH ], const uint8_t* p_bytes, int p_length,
+  const uint8_t* mac, uint8_t mac_length, const uint8_t ctr_0[ KNX_KEY_LENGTH ], uint8_t s0_bytes_used_for_mac )
 {
   if( p_length >= 0 && !(p_length && !p_bytes) )
   {
     // NB: mac_length = 16 (for IP Security), or 4 (for Data Security)
 
-    guint8* result = p_result ? p_result : (guint8*) wmem_alloc( wmem_packet_scope(), p_length + mac_length );
+    uint8_t* result = p_result ? p_result : (uint8_t*) wmem_alloc(scope, p_length + mac_length );
 
-    guint8* dest = result;
+    uint8_t* dest = result;
 
-    guint8 ctr[ KNX_KEY_LENGTH ];
-    guint8 mask[ KNX_KEY_LENGTH ];
-    guint8 mask_0[ KNX_KEY_LENGTH ];
-    guint8 b_pos;
+    uint8_t ctr[ KNX_KEY_LENGTH ];
+    uint8_t mask[ KNX_KEY_LENGTH ];
+    uint8_t mask_0[ KNX_KEY_LENGTH ];
+    uint8_t b_pos;
 
     // Encrypt ctr_0 for mac
     memcpy( ctr, ctr_0, KNX_KEY_LENGTH );
-    encrypt_block( key, ctr, mask_0 );
+    if (!encrypt_block( key, ctr, mask_0 )) {
+      if (!p_result) wmem_free(scope, result);
+      return NULL;
+    }
 
     // Encrypt p_bytes with rest of S_0, only if mac_length < 16.
     b_pos = s0_bytes_used_for_mac;
@@ -151,7 +179,10 @@ guint8* knx_ccm_encrypt( guint8* p_result, const guint8 key[ KNX_KEY_LENGTH ], c
     {
       // Increment and encrypt ctr
       ++ctr[ KNX_KEY_LENGTH - 1 ];
-      encrypt_block( key, ctr, mask );
+      if (!encrypt_block( key, ctr, mask )) {
+        if (!p_result) wmem_free(scope, result);
+        return NULL;
+      }
 
       // Encrypt input block via encrypted ctr
       b_pos = 0;
@@ -185,25 +216,25 @@ guint8* knx_ccm_encrypt( guint8* p_result, const guint8 key[ KNX_KEY_LENGTH ], c
 }
 
 // Encrypt for KNX IP Security (with 16-byte MAC and Nonce based on 6-byte Sequence ID)
-guint8* knxip_ccm_encrypt( guint8* p_result, const guint8 key[ KNX_KEY_LENGTH ], const guint8* p_bytes, gint p_length,
-  const guint8 mac[KNX_KEY_LENGTH], const guint8* nonce, guint8 nonce_length )
+uint8_t* knxip_ccm_encrypt(wmem_allocator_t* scope, uint8_t* p_result, const uint8_t key[ KNX_KEY_LENGTH ], const uint8_t* p_bytes, int p_length,
+  const uint8_t mac[KNX_KEY_LENGTH], const uint8_t* nonce, uint8_t nonce_length )
 {
-  guint8 ctr_0[ KNX_KEY_LENGTH ];
+  uint8_t ctr_0[ KNX_KEY_LENGTH ];
   build_ctr0( ctr_0, nonce, nonce_length );
-  return knx_ccm_encrypt( p_result, key, p_bytes, p_length, mac, KNX_KEY_LENGTH, ctr_0, KNX_KEY_LENGTH );
+  return knx_ccm_encrypt(scope, p_result, key, p_bytes, p_length, mac, KNX_KEY_LENGTH, ctr_0, KNX_KEY_LENGTH );
 }
 
 // Decrypt for KNX-IP Security (with 16-byte MAC and Nonce based on 6-byte Sequence ID)
-guint8* knxip_ccm_decrypt( guint8* p_result, const guint8 key[ KNX_KEY_LENGTH ], const guint8* crypt, gint crypt_length,
-  const guint8* nonce, guint8 nonce_length )
+uint8_t* knxip_ccm_decrypt(wmem_allocator_t* scope, uint8_t* p_result, const uint8_t key[ KNX_KEY_LENGTH ], const uint8_t* crypt, int crypt_length,
+  const uint8_t* nonce, uint8_t nonce_length )
 {
-  gint p_length = crypt_length - KNX_KEY_LENGTH;
-  guint8 ctr_0[ KNX_KEY_LENGTH ];
+  int p_length = crypt_length - KNX_KEY_LENGTH;
+  uint8_t ctr_0[ KNX_KEY_LENGTH ];
   build_ctr0( ctr_0, nonce, nonce_length );
-  return knx_ccm_encrypt( p_result, key, crypt, p_length, crypt + p_length, KNX_KEY_LENGTH, ctr_0, KNX_KEY_LENGTH );
+  return knx_ccm_encrypt(scope, p_result, key, crypt, p_length, crypt + p_length, KNX_KEY_LENGTH, ctr_0, KNX_KEY_LENGTH );
 }
 
-static void fprintf_hex( FILE* f, const guint8* data, guint8 length )
+static void fprintf_hex( FILE* f, const uint8_t* data, uint8_t length )
 {
   for( ; length; --length ) fprintf( f, " %02X", *data++ );
   fputc( '\n', f );
@@ -248,7 +279,7 @@ static void clear_keyring_data( void )
 }
 
 // Read IP address
-static void read_ip_addr( guint8 result[ 4 ], const gchar* text )
+static void read_ip_addr( uint8_t result[ 4 ], const char* text )
 {
   ws_in4_addr value = 0;
   if( ws_inet_pton4( text, &value ) )
@@ -258,59 +289,59 @@ static void read_ip_addr( guint8 result[ 4 ], const gchar* text )
 }
 
 // Read KNX group address
-static guint16 read_ga( const gchar* text )
+static uint16_t read_ga( const char* text )
 {
-  guint a[ 3 ];
-  gint n = sscanf( text, "%u/%u/%u", a, a + 1, a + 2 );
+  unsigned a[ 3 ];
+  int n = sscanf( text, "%u/%u/%u", a, a + 1, a + 2 );
   return
-    (n == 1) ? (guint16) a[ 0 ] :
-    (n == 2) ? (guint16) ((a[ 0 ] << 11) | a[ 1 ]) :
-    (n == 3) ? (guint16) ((a[ 0 ] << 11) | (a[ 1 ] << 8) | a[ 2 ]) :
+    (n == 1) ? (uint16_t) a[ 0 ] :
+    (n == 2) ? (uint16_t) ((a[ 0 ] << 11) | a[ 1 ]) :
+    (n == 3) ? (uint16_t) ((a[ 0 ] << 11) | (a[ 1 ] << 8) | a[ 2 ]) :
     0;
 }
 
 // Read KNX individual address
-static guint16 read_ia( const gchar* text )
+static uint16_t read_ia( const char* text )
 {
-  guint a[ 3 ];
-  gint n = sscanf( text, "%u.%u.%u", a, a + 1, a + 2 );
+  unsigned a[ 3 ];
+  int n = sscanf( text, "%u.%u.%u", a, a + 1, a + 2 );
   return
-    (n == 1) ? (guint16) a[ 0 ] :
-    (n == 2) ? (guint16) ((a[ 0 ] << 8) | a[ 1 ]) :
-    (n == 3) ? (guint16) ((a[ 0 ] << 12) | (a[ 1 ] << 8) | a[ 2 ]) :
+    (n == 1) ? (uint16_t) a[ 0 ] :
+    (n == 2) ? (uint16_t) ((a[ 0 ] << 8) | a[ 1 ]) :
+    (n == 3) ? (uint16_t) ((a[ 0 ] << 12) | (a[ 1 ] << 8) | a[ 2 ]) :
     0;
 }
 
 // Read 6-byte sequence number from decimal representation
-static guint64 read_seq( const gchar* text )
+static uint64_t read_seq( const char* text )
 {
-  guint64 result;
+  uint64_t result;
   return ws_strtou64( text, NULL, &result ) ? result : 0;
 }
 
 // Decrypt key
-static void decrypt_key( guint8 key[] _U_, guint8 password_hash[] _U_, guint8 created_hash[] _U_ )
+static void decrypt_key( uint8_t key[] _U_, uint8_t password_hash[] _U_, uint8_t created_hash[] _U_ )
 {
   // TODO: decrypt as AES128-CBC(key, password_hash, created_hash)
 }
 
 // Decode and decrypt key
-static void decode_and_decrypt_key( guint8 key[ BASE64_KNX_KEY_LENGTH + 1 ], const gchar* text, guint8 password_hash[], guint8 created_hash[] )
+static void decode_and_decrypt_key( uint8_t key[ BASE64_KNX_KEY_LENGTH + 1 ], const char* text, uint8_t password_hash[], uint8_t created_hash[] )
 {
-  gsize out_len;
-  snprintf( (gchar*) key, BASE64_KNX_KEY_LENGTH + 1, "%s", text );
-  g_base64_decode_inplace( (gchar*) key, &out_len );
+  size_t out_len;
+  snprintf( (char*) key, BASE64_KNX_KEY_LENGTH + 1, "%s", text );
+  g_base64_decode_inplace( (char*) key, &out_len );
   decrypt_key( key, password_hash, created_hash );
 }
 
 // Add MCA <-> key association
-static void add_mca_key( const guint8 mca[ IPA_SIZE ], const gchar* text, guint8 password_hash[], guint8 created_hash[], FILE* f2 )
+static void add_mca_key( const uint8_t mca[ IPA_SIZE ], const char* text, uint8_t password_hash[], uint8_t created_hash[], FILE* f2 )
 {
-  gint text_length = (gint) strlen( text );
+  int text_length = (int) strlen( text );
 
   if( text_length == BASE64_KNX_KEY_LENGTH )
   {
-    guint8 key[ BASE64_KNX_KEY_LENGTH + 1 ];
+    uint8_t key[ BASE64_KNX_KEY_LENGTH + 1 ];
     struct knx_keyring_mca_keys** mca_keys_next;
     struct knx_keyring_mca_keys* mca_key;
 
@@ -351,13 +382,13 @@ static void add_mca_key( const guint8 mca[ IPA_SIZE ], const gchar* text, guint8
 }
 
 // Add GA <-> key association
-static void add_ga_key( guint16 ga, const gchar* text, guint8 password_hash[], guint8 created_hash[], FILE* f2 )
+static void add_ga_key( uint16_t ga, const char* text, uint8_t password_hash[], uint8_t created_hash[], FILE* f2 )
 {
-  gint text_length = (gint) strlen( text );
+  int text_length = (int) strlen( text );
 
   if( text_length == BASE64_KNX_KEY_LENGTH )
   {
-    guint8 key[ BASE64_KNX_KEY_LENGTH + 1 ];
+    uint8_t key[ BASE64_KNX_KEY_LENGTH + 1 ];
     struct knx_keyring_ga_keys** ga_keys_next;
     struct knx_keyring_ga_keys* ga_key;
 
@@ -380,7 +411,7 @@ static void add_ga_key( guint16 ga, const gchar* text, guint8 password_hash[], g
 
     if( f2 )
     {
-      fprintf( f2, "GA %u/%u/%u key", (ga >> 11) & 0x1F, (ga >> 8) & 0x7, ga & 0xFF );
+      fprintf( f2, "GA %d/%d/%d key", (ga >> 11) & 0x1F, (ga >> 8) & 0x7, ga & 0xFF );
       fprintf_hex( f2, key, KNX_KEY_LENGTH );
     }
 
@@ -398,9 +429,9 @@ static void add_ga_key( guint16 ga, const gchar* text, guint8 password_hash[], g
 }
 
 // Add GA <-> sender association
-static void add_ga_sender( guint16 ga, const gchar* text, FILE* f2 )
+static void add_ga_sender( uint16_t ga, const char* text, FILE* f2 )
 {
-  guint16 ia = read_ia( text );
+  uint16_t ia = read_ia( text );
   struct knx_keyring_ga_senders** ga_senders_next = &knx_keyring_ga_senders;
   struct knx_keyring_ga_senders* ga_sender;
 
@@ -419,7 +450,7 @@ static void add_ga_sender( guint16 ga, const gchar* text, FILE* f2 )
 
   if( f2 )
   {
-    fprintf( f2, "GA %u/%u/%u sender %u.%u.%u\n", (ga >> 11) & 0x1F, (ga >> 8) & 0x7, ga & 0xFF, (ia >> 12) & 0xF, (ia >> 8) & 0xF, ia & 0xFF );
+    fprintf( f2, "GA %d/%d/%d sender %d.%d.%d\n", (ga >> 11) & 0x1F, (ga >> 8) & 0x7, ga & 0xFF, (ia >> 12) & 0xF, (ia >> 8) & 0xF, ia & 0xFF );
   }
 
   ga_sender = wmem_new(wmem_epan_scope(), struct knx_keyring_ga_senders);
@@ -435,13 +466,13 @@ static void add_ga_sender( guint16 ga, const gchar* text, FILE* f2 )
 }
 
 // Add IA <-> key association
-static void add_ia_key( guint16 ia, const gchar* text, guint8 password_hash[], guint8 created_hash[], FILE* f2 )
+static void add_ia_key( uint16_t ia, const char* text, uint8_t password_hash[], uint8_t created_hash[], FILE* f2 )
 {
-  gint text_length = (gint) strlen( text );
+  int text_length = (int) strlen( text );
 
   if( text_length == BASE64_KNX_KEY_LENGTH )
   {
-    guint8 key[ BASE64_KNX_KEY_LENGTH + 1 ];
+    uint8_t key[ BASE64_KNX_KEY_LENGTH + 1 ];
     struct knx_keyring_ia_keys** ia_keys_next;
     struct knx_keyring_ia_keys* ia_key;
 
@@ -464,7 +495,7 @@ static void add_ia_key( guint16 ia, const gchar* text, guint8 password_hash[], g
 
     if( f2 )
     {
-      fprintf( f2, "IA %u.%u.%u key", (ia >> 12) & 0xF, (ia >> 8) & 0xF, ia & 0xFF );
+      fprintf( f2, "IA %d.%d.%d key", (ia >> 12) & 0xF, (ia >> 8) & 0xF, ia & 0xFF );
       fprintf_hex( f2, key, KNX_KEY_LENGTH );
     }
 
@@ -482,9 +513,9 @@ static void add_ia_key( guint16 ia, const gchar* text, guint8 password_hash[], g
 }
 
 // Add IA <-> sequence number association
-static void add_ia_seq( guint16 ia, const gchar* text, FILE* f2 )
+static void add_ia_seq( uint16_t ia, const char* text, FILE* f2 )
 {
-  guint64 seq = read_seq( text );
+  uint64_t seq = read_seq( text );
 
   struct knx_keyring_ia_seqs** ia_seqs_next = &knx_keyring_ia_seqs;
   struct knx_keyring_ia_seqs* ia_seq;
@@ -520,15 +551,144 @@ static void add_ia_seq( guint16 ia, const gchar* text, FILE* f2 )
 }
 
 // Calculate PBKDF2(HMAC-SHA256, password, "1.keyring.ets.knx.org", 65536, 128)
-static void make_password_hash( guint8 password_hash[] _U_, const gchar* password _U_ )
+static void make_password_hash( uint8_t password_hash[] _U_, const char* password _U_ )
 {
   // TODO: password_hash = PBKDF2(HMAC-SHA256, password, "1.keyring.ets.knx.org", 65536, 128)
 }
 
 // Calculate MSB128(SHA256(created))
-static void make_created_hash( guint8 created_hash[] _U_, const gchar* created _U_ )
+static void make_created_hash( uint8_t created_hash[] _U_, const char* created _U_ )
 {
   // TODO: created_hash = MSB128(SHA256(created))
+}
+
+static void read_knx_keyring_xml_backbone_element(xmlNodePtr backbone, uint8_t password_hash[], uint8_t created_hash[], FILE* f2)
+{
+  bool address_valid = false;
+  uint8_t multicast_address[IPA_SIZE] = { 0 };
+
+  /* Parse out the attributes of the Backbone element */
+  for (xmlAttrPtr attr = backbone->properties; attr; attr = attr->next)
+  {
+    if (xmlStrcmp(attr->name, (const xmlChar*)"MulticastAddress") == 0)
+    {
+      xmlChar* str_address = xmlNodeListGetString(backbone->doc, attr->children, 1);
+      if (str_address != NULL)
+      {
+        read_ip_addr(multicast_address, (const char*)str_address);
+        address_valid = true;
+        xmlFree(str_address);
+      }
+    }
+    else if (xmlStrcmp(attr->name, (const xmlChar*)"Key") == 0)
+    {
+      if (address_valid)
+      {
+        xmlChar* str_key = xmlNodeListGetString(backbone->doc, attr->children, 1);
+        if (str_key != NULL)
+        {
+          add_mca_key(multicast_address, (const char*)str_key, password_hash, created_hash, f2);
+          xmlFree(str_key);
+        }
+      }
+    }
+  }
+
+}
+
+static void read_knx_keyring_xml_group_element(xmlNodePtr group, uint8_t password_hash[], uint8_t created_hash[], FILE* f2)
+{
+  bool address_valid = false;
+  uint16_t addr = 0;
+
+  /* Parse out the attributes of the Group element */
+  for (xmlAttrPtr attr = group->properties; attr; attr = attr->next)
+  {
+      if (xmlStrcmp(attr->name, (const xmlChar*)"Address") == 0)
+      {
+        xmlChar* str_address = xmlNodeListGetString(group->doc, attr->children, 1);
+        if (str_address != NULL)
+        {
+          addr = read_ga((const char*)str_address);
+          address_valid = true;
+          xmlFree(str_address);
+        }
+      }
+      else if (xmlStrcmp(attr->name, (const xmlChar*)"Key") == 0)
+      {
+        if (address_valid)
+        {
+          xmlChar* str_key = xmlNodeListGetString(group->doc, attr->children, 1);
+          add_ga_key(addr, (const char*)str_key, password_hash, created_hash, f2);
+          xmlFree(str_key);
+          }
+        }
+        else if (xmlStrcmp(attr->name, (const xmlChar*)"Senders") == 0)
+        {
+          if (address_valid)
+          {
+            xmlChar* str_senders = xmlNodeListGetString(group->doc, attr->children, 1);
+            if (str_senders != NULL)
+            {
+              // Add senders given by space separated list of KNX IAs
+              static const char delim[] = " ,";
+              const char* token = strtok((char*)str_senders, delim);
+              while (token)
+              {
+                add_ga_sender(addr, token, f2);
+                token = strtok(NULL, delim);
+              }
+              xmlFree(str_senders);
+          }
+        }
+      }
+    }
+
+}
+
+static void read_knx_keyring_xml_device_element(xmlNodePtr device, uint8_t password_hash[], uint8_t created_hash[], FILE* f2)
+{
+  bool address_valid = false;
+  uint16_t addr = 0;
+
+  /* Parse out the attributes of the Device element */
+  for (xmlAttrPtr attr = device->properties; attr; attr = attr->next)
+  {
+    if (xmlStrcmp(attr->name, (const xmlChar*)"IndividualAddress") == 0)
+    {
+      xmlChar* str_address = xmlNodeListGetString(device->doc, attr->children, 1);
+      if (str_address != NULL)
+      {
+        addr = read_ia((const char*)str_address);
+        address_valid = true;
+        xmlFree(str_address);
+      }
+    }
+    else if (xmlStrcmp(attr->name, (const xmlChar*)"ToolKey") == 0)
+    {
+      if (address_valid)
+      {
+        xmlChar* str_key = xmlNodeListGetString(device->doc, attr->children, 1);
+        if (str_key != NULL)
+        {
+          add_ia_key(addr, (const char*)str_key, password_hash, created_hash, f2);
+          xmlFree(str_key);
+        }
+      }
+    }
+    else if (xmlStrcmp(attr->name, (const xmlChar*)"SequenceNumber") == 0)
+    {
+      if (address_valid)
+      {
+        xmlChar* str_seq = xmlNodeListGetString(device->doc, attr->children, 1);
+        if (str_seq != NULL)
+        {
+          add_ia_seq(addr, (const char*)str_seq, f2);
+          xmlFree(str_seq);
+        }
+      }
+    }
+  }
 }
 
 // Read KNX security key info from keyring XML file.
@@ -539,265 +699,115 @@ static void make_created_hash( guint8 created_hash[] _U_, const gchar* created _
 // Corresponding test is
 //   suite_decryption.case_decrypt_knxip.test_knxip_keyring_xml_import
 //
-// We do not use LibXml2 here, because
-// (1) we want to be platform independent,
-// (2) we just want to extract some data from the keyring XML file,
-// (3) we want to avoid the complicated recursive DOM processing implied by LibXml2.
-//
 // Resulting decoded and decrypted 16-byte keys with context info are optionally written to a "key info" text file.
 // This may be useful, as these keys are not directly available from the keyring XML file .
-void read_knx_keyring_xml_file( const gchar* key_file, const gchar* password, const gchar* key_info_file )
+void read_knx_keyring_xml_file(const char* key_file, const char* password, const char* key_info_file)
 {
+  xmlDocPtr doc;
+  xmlNodePtr root_element = NULL;
+  xmlNodePtr key_ring = NULL;
+  uint8_t password_hash[KNX_KEY_LENGTH] = { 0 };
+  uint8_t created_hash[KNX_KEY_LENGTH] = {0};
+
   // Clear old keyring data
   clear_keyring_data();
 
-  // Read new data from keyring XML file
-  FILE* f = ws_fopen( key_file, "r" );
+  doc = xmlReadFile(key_file, NULL, 0);
+  if (doc == NULL)
+    return;
+
+  root_element = xmlDocGetRootElement(doc);
+  if (root_element == NULL)
+  {
+    xmlFreeDoc(doc);
+    return;
+  }
+
+  /* Find the Keyring element */
+  if (xmlStrcmp(root_element->name, (const xmlChar*)"Keyring") == 0)
+  {
+    key_ring = root_element;
+  }
+  else
+  {
+    for (xmlNodePtr cur = root_element->children; cur != NULL; cur = cur->next)
+    {
+      if (cur->type == XML_ELEMENT_NODE && xmlStrcmp(cur->name, (const xmlChar*)"Keyring") == 0)
+      {
+        key_ring = cur;
+        break;
+      }
+    }
+  }
+
+  if (key_ring == NULL) {
+    xmlFreeDoc(doc);
+    return;
+  }
 
   // Optionally write extracted data to key info file
   FILE* f2 = (!key_info_file || !*key_info_file) ? NULL :
     (strcmp( key_info_file, "-" ) == 0) ? stdout :
     ws_fopen( key_info_file, "w" );
 
-  if( f )
+  make_password_hash(password_hash, password);
+
+  /* Parse out the attributes of the Keyring element */
+  for (xmlAttrPtr attr = key_ring->properties; attr; attr = attr->next)
   {
-    guint8 backbone_mca[ IPA_SIZE ];
-    guint8 backbone_mca_valid = 0;
-    guint16 group_ga = 0;
-    guint8 group_ga_valid = 0;
-    guint16 device_ia = 0;
-    guint8 device_ia_valid = 0;
-    gchar name[ TEXT_BUFFER_SIZE ];
-    gchar value[ TEXT_BUFFER_SIZE ];
-    guint8 password_hash[ KNX_KEY_LENGTH ];
-    guint8 created_hash[ KNX_KEY_LENGTH ];
-    gchar tag_name[ TEXT_BUFFER_SIZE ];
-    guint8 tag_name_done = 0;
-    guint8 tag_end = 0;
-    guint8 in_tag = 0;
-
-    memset( backbone_mca, 0, IPA_SIZE );
-    *name = '\0';
-    *value = '\0';
-    memset( password_hash, 0, KNX_KEY_LENGTH );
-    memset( created_hash, 0, KNX_KEY_LENGTH );
-    *tag_name = '\0';
-
-    make_password_hash( password_hash, password );
-
-    ws_debug( "%s:", key_file );
-
-    gint c = fgetc( f );
-
-    while( c >= 0 )
+    if (xmlStrcmp(attr->name, (const xmlChar*)"Created") == 0)
     {
-      if( c == '<' )  // tag start
-      {
-        in_tag = 1;
-        tag_end = 0;
-        *tag_name = 0;
-        tag_name_done = 0;
-        *name = '\0';
-        *value = '\0';
-      }
-      else if( c == '>' )  // tag end
-      {
-        in_tag = 0;
-      }
-      else if( c == '/' )
-      {
-        if( in_tag )  // "</" or "/>"
-        {
-          tag_end = 1;
-          *tag_name = 0;
-          tag_name_done = 0;
-          *name = '\0';
-          *value = '\0';
-        }
-      }
-      else if( g_ascii_isalpha( c ) || c == '_' )  // possibly tag name, or attribute name
-      {
-        size_t length = 0;
-        name[ length++ ] = (gchar) c;
-        while( (c = fgetc( f )) >= 0 )
-        {
-          if( g_ascii_isalnum( c ) || c == '_' )
-          {
-            if( length < sizeof name - 1 )
-            {
-              name[ length++ ] = (gchar) c;
-            }
-          }
-          else
-          {
-            break;
-          }
-        }
-        name[ length ] = '\0';
-        *value = '\0';
-
-        if( !tag_name_done )  // tag name
-        {
-          snprintf( tag_name, sizeof tag_name, "%s", name );
-          *name = '\0';
-          tag_name_done = 1;
-        }
-        else  // Check for name="value" construct
-        {
-          while( c >= 0 && g_ascii_isspace( c ) ) c = fgetc( f );
-
-          if( c == '=' )
-          {
-            while( (c = fgetc( f )) >= 0 && g_ascii_isspace( c ) );
-
-            if( c == '"' )
-            {
-              length = 0;
-
-              while( (c = fgetc( f )) >= 0 )
-              {
-                if( c == '"' )
-                {
-                  c = fgetc( f );
-                  if( c != '"' )
-                  {
-                    break;
-                  }
-                }
-                if( length < sizeof value - 1 )
-                {
-                  value[ length++ ] = (gchar) c;
-                }
-              }
-
-              value[ length ] = 0;
-
-              if( !tag_end )
-              {
-                // Found name="value" construct between < and >
-                ws_debug( "%s %s=%s", tag_name, name, value );
-
-                // Process name/value pair
-                if( strcmp( tag_name, "Keyring" ) == 0 )
-                {
-                  if( strcmp( name, "Created" ) == 0 )
-                  {
-                    make_created_hash( created_hash, value );
-                  }
-                }
-                else if( strcmp( tag_name, "Backbone" ) == 0 )
-                {
-                  group_ga_valid = 0;
-                  device_ia_valid = 0;
-
-                  if( strcmp( name, "MulticastAddress" ) == 0 )
-                  {
-                    read_ip_addr( backbone_mca, value );
-                    backbone_mca_valid = 1;
-                  }
-                  else if( strcmp( name, "Key" ) == 0 )
-                  {
-                    if( backbone_mca_valid )
-                    {
-                      add_mca_key( backbone_mca, value, password_hash, created_hash, f2 );
-                    }
-                  }
-                }
-                else if( strcmp( tag_name, "Group" ) == 0 )
-                {
-                  backbone_mca_valid = 0;
-                  device_ia_valid = 0;
-
-                  if( strcmp( name, "Address" ) == 0 )
-                  {
-                    group_ga = read_ga( value );
-                    group_ga_valid = 1;
-                  }
-                  else if( strcmp( name, "Key" ) == 0 )
-                  {
-                    if( group_ga_valid )
-                    {
-                      add_ga_key( group_ga, value, password_hash, created_hash, f2 );
-                    }
-                  }
-                  else if( strcmp( name, "Senders" ) == 0 )
-                  {
-                    if( group_ga_valid )
-                    {
-                      // Add senders given by space separated list of KNX IAs
-                      static const gchar delim[] = " ,";
-                      const gchar* token = strtok( value, delim );
-                      while( token )
-                      {
-                        add_ga_sender( group_ga, token, f2 );
-                        token = strtok( NULL, delim );
-                      }
-                    }
-                  }
-                }
-                else if( strcmp( tag_name, "Device" ) == 0 )
-                {
-                  backbone_mca_valid = 0;
-                  group_ga_valid = 0;
-
-                  if( strcmp( name, "IndividualAddress" ) == 0 )
-                  {
-                    device_ia = read_ia( value );
-                    device_ia_valid = 1;
-                  }
-                  else if( strcmp( name, "ToolKey" ) == 0 )
-                  {
-                    if( device_ia_valid )
-                    {
-                      add_ia_key( device_ia, value, password_hash, created_hash, f2 );
-                    }
-                  }
-                  else if( strcmp( name, "SequenceNumber" ) == 0 )
-                  {
-                    if( device_ia_valid )
-                    {
-                      add_ia_seq( device_ia, value, f2 );
-                    }
-                  }
-                }
-                else
-                {
-                  backbone_mca_valid = 0;
-                  group_ga_valid = 0;
-                  device_ia_valid = 0;
-                }
-              }
-            }
-          }
-        }
-
-        if( c < 0 )  // EOF
-        {
-          break;
-        }
-
-        continue;
-      }
-      else
-      {
-        if( !g_ascii_isspace( c ) )
-        {
-          tag_name_done = 1;
-          *name = '\0';
-          *value = '\0';
-        }
-      }
-
-      c = fgetc( f );
+      xmlChar* str_created = xmlNodeListGetString(key_ring->doc, attr->children, 1);
+      if (str_created != NULL)
+       {
+         make_created_hash(created_hash, (const char*)str_created);
+         xmlFree(str_created);
+       }
     }
-
-    fclose( f );
   }
 
-  if( f2 && f2 != stdout )
+  /* Parse out subelements of Keyring element */
+  for (xmlNodePtr cur = key_ring->children; cur != NULL; cur = cur->next)
   {
-    fclose( f2 );
+    if (cur->type == XML_ELEMENT_NODE && xmlStrcmp(cur->name, (const xmlChar*)"Backbone") == 0)
+    {
+      read_knx_keyring_xml_backbone_element(cur, password_hash, created_hash, f2);
+    }
+    else if (cur->type == XML_ELEMENT_NODE && xmlStrcmp(cur->name, (const xmlChar*)"Interface") == 0)
+    {
+      for (xmlNodePtr group = cur->children; group != NULL; group = group->next)
+      {
+        if (group->type == XML_ELEMENT_NODE && xmlStrcmp(group->name, (const xmlChar*)"Group") == 0)
+        {
+          read_knx_keyring_xml_group_element(group, password_hash, created_hash, f2);
+        }
+      }
+    }
+    else if (cur->type == XML_ELEMENT_NODE && xmlStrcmp(cur->name, (const xmlChar*)"GroupAddresses") == 0)
+    {
+      for (xmlNodePtr group = cur->children; group != NULL; group = group->next)
+      {
+        if (group->type == XML_ELEMENT_NODE && xmlStrcmp(group->name, (const xmlChar*)"Group") == 0)
+        {
+          read_knx_keyring_xml_group_element(group, password_hash, created_hash, f2);
+        }
+      }
+    }
+    else if (cur->type == XML_ELEMENT_NODE && xmlStrcmp(cur->name, (const xmlChar*)"Devices") == 0)
+    {
+      for (xmlNodePtr device = cur->children; device != NULL; device = device->next)
+      {
+        if (device->type == XML_ELEMENT_NODE && xmlStrcmp(device->name, (const xmlChar*)"Device") == 0)
+        {
+          read_knx_keyring_xml_device_element(device, password_hash, created_hash, f2);
+        }
+      }
+    }
   }
+
+  if (f2 && f2 != stdout)
+    fclose(f2);
+  xmlFreeDoc(doc);
 }
 
 /*

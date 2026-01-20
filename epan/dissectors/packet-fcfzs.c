@@ -9,11 +9,18 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/*
+ * Fibre Channel Generic Services (FC-GS) specification.
+ */
+
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/to_str.h>
+#include <epan/tfs.h>
 #include <epan/expert.h>
+
+#include <wsutil/ws_padding_to.h>
+
 #include "packet-fc.h"
 #include "packet-fcct.h"
 #include "packet-fcfzs.h"
@@ -56,28 +63,28 @@ static int hf_fcfzs_soft_zone_set_enforced;
 static int hf_fcfzs_hard_zone_set_enforced;
 
 /* Initialize the subtree pointers */
-static gint ett_fcfzs;
-static gint ett_fcfzs_gzc_flags;
-static gint ett_fcfzs_zone_state;
+static int ett_fcfzs;
+static int ett_fcfzs_gzc_flags;
+static int ett_fcfzs_zone_state;
 
 static expert_field ei_fcfzs_no_exchange;
 static expert_field ei_fcfzs_mbrid;
 
 typedef struct _fcfzs_conv_key {
-    guint32 conv_idx;
+    uint32_t conv_idx;
 } fcfzs_conv_key_t;
 
 typedef struct _fcfzs_conv_data {
-    guint32 opcode;
+    uint32_t opcode;
 } fcfzs_conv_data_t;
 
-static wmem_map_t *fcfzs_req_hash = NULL;
+static wmem_map_t *fcfzs_req_hash;
 
 /*
  * Hash Functions
  */
-static gint
-fcfzs_equal(gconstpointer v, gconstpointer w)
+static int
+fcfzs_equal(const void *v, const void *w)
 {
     const fcfzs_conv_key_t *v1 = (const fcfzs_conv_key_t *)v;
     const fcfzs_conv_key_t *v2 = (const fcfzs_conv_key_t *)w;
@@ -85,11 +92,11 @@ fcfzs_equal(gconstpointer v, gconstpointer w)
     return (v1->conv_idx == v2->conv_idx);
 }
 
-static guint
-fcfzs_hash(gconstpointer v)
+static unsigned
+fcfzs_hash(const void *v)
 {
     const fcfzs_conv_key_t *key = (const fcfzs_conv_key_t *)v;
-    guint val;
+    unsigned val;
 
     val = key->conv_idx;
 
@@ -98,9 +105,10 @@ fcfzs_hash(gconstpointer v)
 
 /* Code to actually dissect the packets */
 static void
-dissect_fcfzs_zoneset(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int offset)
+dissect_fcfzs_zoneset(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned offset)
 {
-    int numzones, nummbrs, i, j, len;
+    unsigned numzones, nummbrs, i, j;
+    uint32_t len;
     proto_item* ti;
 
     /* The zoneset structure has the following format */
@@ -113,37 +121,40 @@ dissect_fcfzs_zoneset(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int o
      */
 
         /* Zoneset Name */
-        len = tvb_get_guint8(tvb, offset);
-        proto_tree_add_item(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
-                            1, ENC_BIG_ENDIAN);
-        proto_tree_add_item(tree, hf_fcfzs_zonesetname, tvb, offset+4,
+        proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
+                            1, ENC_BIG_ENDIAN, &len);
+        offset += 4;
+        proto_tree_add_item(tree, hf_fcfzs_zonesetname, tvb, offset,
                             len, ENC_ASCII);
-        offset += 4 + len + (4-(len % 4));
+        offset += len;
+        /* Fill Bytes */
+        offset += WS_PADDING_TO_4(len);
 
 
         /* Number of zones */
-        numzones = tvb_get_ntohl(tvb, offset);
-        proto_tree_add_item(tree, hf_fcfzs_numzones, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(tree, hf_fcfzs_numzones, tvb, offset, 4, ENC_BIG_ENDIAN, &numzones);
         offset += 4;
 
         /* For each zone... */
         for (i = 0; i < numzones; i++) {
-            len = tvb_get_guint8(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_zonenmlen, tvb, offset,
-                                1, ENC_BIG_ENDIAN);
-            proto_tree_add_item(tree, hf_fcfzs_zonename, tvb, offset+4,
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonenmlen, tvb, offset,
+                1, ENC_BIG_ENDIAN, &len);
+            offset += 4;
+            proto_tree_add_item(tree, hf_fcfzs_zonename, tvb, offset,
                                 len, ENC_ASCII);
-            offset += 4 + len + (4-(len % 4));
+            offset += len;
+            /* Fill Bytes */
+            offset += WS_PADDING_TO_4(len);
 
-            nummbrs = tvb_get_ntohl(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_nummbrentries, tvb, offset,
-                                4, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_nummbrentries, tvb, offset,
+                                         4, ENC_BIG_ENDIAN, &nummbrs);
 
             offset += 4;
             for (j = 0; j < nummbrs; j++) {
-                ti = proto_tree_add_item(tree, hf_fcfzs_mbrtype, tvb, offset, 1, ENC_BIG_ENDIAN);
+                uint32_t mbrtype;
+                ti = proto_tree_add_item_ret_uint(tree, hf_fcfzs_mbrtype, tvb, offset, 1, ENC_BIG_ENDIAN, &mbrtype);
 
-                switch (tvb_get_guint8(tvb, offset)) {
+                switch (mbrtype) {
                 case FC_FZS_ZONEMBR_PWWN:
                 case FC_FZS_ZONEMBR_NWWN:
                     proto_tree_add_item(tree, hf_fcfzs_mbrid_fcwwn, tvb,
@@ -185,7 +196,7 @@ dissect_fcfzs_zoneset(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int o
 
 
 static void
-dissect_fcfzs_gzc(tvbuff_t *tvb, int offset, proto_tree *parent_tree, gboolean isreq)
+dissect_fcfzs_gzc(tvbuff_t *tvb, unsigned offset, proto_tree *parent_tree, bool isreq)
 {
     static int * const flags[] = {
         &hf_fcfzs_gzc_flags_hard_zones,
@@ -203,9 +214,9 @@ dissect_fcfzs_gzc(tvbuff_t *tvb, int offset, proto_tree *parent_tree, gboolean i
 }
 
 static void
-dissect_fcfzs_gest(tvbuff_t *tvb, proto_tree *parent_tree, gboolean isreq)
+dissect_fcfzs_gest(tvbuff_t *tvb, proto_tree *parent_tree, bool isreq)
 {
-    int offset = 16;            /* past the fc_ct header */
+    unsigned offset = 16;            /* past the fc_ct header */
     static int * const flags[] = {
         &hf_fcfzs_soft_zone_set_enforced,
         &hf_fcfzs_hard_zone_set_enforced,
@@ -221,23 +232,21 @@ dissect_fcfzs_gest(tvbuff_t *tvb, proto_tree *parent_tree, gboolean isreq)
 }
 
 static void
-dissect_fcfzs_gzsn(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_gzsn(tvbuff_t *tvb, proto_tree *tree, bool isreq)
 {
-    int numrec, i, len;
-    int offset = 16;            /* past the fc_ct header */
+    uint32_t numrec, i;
+    uint32_t len;
+    unsigned offset = 16;            /* past the fc_ct header */
 
     if (tree) {
         if (!isreq) {
-            numrec = tvb_get_ntohl(tvb, offset);
-
-            proto_tree_add_item(tree, hf_fcfzs_numzonesetattrs, tvb, offset,
-                                4, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_numzonesetattrs, tvb, offset,
+                                4, ENC_BIG_ENDIAN, &numrec);
 
             offset += 4;
             for (i = 0; i < numrec; i++) {
-                len = tvb_get_guint8(tvb, offset);
-                proto_tree_add_item(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
-                                    1, ENC_BIG_ENDIAN);
+                proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
+                    1, ENC_BIG_ENDIAN, &len);
                 proto_tree_add_item(tree, hf_fcfzs_zonesetname, tvb, offset+1,
                                     len, ENC_ASCII);
                 offset += len + 1 + (len % 4);
@@ -250,30 +259,26 @@ dissect_fcfzs_gzsn(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
 }
 
 static void
-dissect_fcfzs_gzd(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_gzd(tvbuff_t *tvb, proto_tree *tree, bool isreq)
 {
-    int numrec, i, len;
-    int offset = 16;            /* past the fc_ct header */
+    uint32_t numrec, i;
+    uint32_t len;
+    unsigned offset = 16;            /* past the fc_ct header */
 
     if (tree) {
         if (isreq) {
-            len = tvb_get_guint8(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
-                                1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
+                1, ENC_BIG_ENDIAN, &len);
             proto_tree_add_item(tree, hf_fcfzs_zonesetname, tvb, offset+1,
                                 len, ENC_ASCII);
         }
         else {
-            numrec = tvb_get_ntohl(tvb, offset);
-
-            proto_tree_add_item(tree, hf_fcfzs_numzoneattrs, tvb, offset,
-                                4, ENC_BIG_ENDIAN);
-
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_numzonesetattrs, tvb, offset,
+                4, ENC_BIG_ENDIAN, &numrec);
             offset += 4;
             for (i = 0; i < numrec; i++) {
-                len = tvb_get_guint8(tvb, offset);
-                proto_tree_add_item(tree, hf_fcfzs_zonenmlen, tvb, offset,
-                                    1, ENC_BIG_ENDIAN);
+                proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonenmlen, tvb, offset,
+                    1, ENC_BIG_ENDIAN, &len);
                 proto_tree_add_item(tree, hf_fcfzs_zonename, tvb, offset+1,
                                     len, ENC_ASCII);
                 offset += len + 1 + (len % 4);
@@ -286,28 +291,25 @@ dissect_fcfzs_gzd(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
 }
 
 static void
-dissect_fcfzs_gzm(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_gzm(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, bool isreq)
 {
-    int numrec, i, len;
-    int offset = 16;            /* past the fc_ct header */
+    uint32_t numrec, i, len, mbrtype;
+    unsigned offset = 16;            /* past the fc_ct header */
     proto_item* ti;
 
         if (isreq) {
-            len = tvb_get_guint8(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_zonenmlen, tvb, offset,
-                                1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonenmlen, tvb, offset,
+                1, ENC_BIG_ENDIAN, &len);
             proto_tree_add_item(tree, hf_fcfzs_zonename, tvb, offset+1,
                                 len, ENC_ASCII);
         }
         else {
-            numrec = tvb_get_ntohl(tvb, offset);
-
-            proto_tree_add_item(tree, hf_fcfzs_nummbrentries, tvb, offset,
-                                4, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_nummbrentries, tvb, offset,
+                                4, ENC_BIG_ENDIAN, &numrec);
             offset += 4;
             for (i = 0; i < numrec; i++) {
-                ti = proto_tree_add_item(tree, hf_fcfzs_mbrtype, tvb, offset, 1, ENC_BIG_ENDIAN);
-                switch (tvb_get_guint8(tvb, offset)) {
+                ti = proto_tree_add_item_ret_uint(tree, hf_fcfzs_mbrtype, tvb, offset, 1, ENC_BIG_ENDIAN, &mbrtype);
+                switch (mbrtype) {
                 case FC_FZS_ZONEMBR_PWWN:
                 case FC_FZS_ZONEMBR_NWWN:
                     proto_tree_add_item(tree, hf_fcfzs_mbrid_fcwwn, tvb,
@@ -330,9 +332,9 @@ dissect_fcfzs_gzm(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean 
 }
 
 static void
-dissect_fcfzs_gazs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_gazs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, bool isreq)
 {
-    int offset = 16;            /* past the fc_ct header */
+    unsigned offset = 16;            /* past the fc_ct header */
 
     if (!isreq) {
         dissect_fcfzs_zoneset(tvb, pinfo, tree, offset);
@@ -340,15 +342,14 @@ dissect_fcfzs_gazs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean
 }
 
 static void
-dissect_fcfzs_gzs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_gzs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, bool isreq)
 {
-    int offset = 16;            /* past the fc_ct header */
-    int len;
+    unsigned offset = 16;            /* past the fc_ct header */
+    uint32_t len;
 
     if (isreq) {
-        len = tvb_get_guint8(tvb, offset);
-        proto_tree_add_item(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
-                            1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
+            1, ENC_BIG_ENDIAN, &len);
         proto_tree_add_item(tree, hf_fcfzs_zonesetname, tvb, offset+4,
                             len, ENC_ASCII);
     }
@@ -358,9 +359,9 @@ dissect_fcfzs_gzs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean 
 }
 
 static void
-dissect_fcfzs_adzs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_adzs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, bool isreq)
 {
-    int offset = 16;            /* past the fc_ct header */
+    unsigned offset = 16;            /* past the fc_ct header */
 
     if (isreq) {
         dissect_fcfzs_zoneset(tvb, pinfo, tree, offset);
@@ -368,9 +369,9 @@ dissect_fcfzs_adzs(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean
 }
 
 static void
-dissect_fcfzs_azsd(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_azsd(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, bool isreq)
 {
-    int offset = 16;            /* past the fc_ct header */
+    unsigned offset = 16;            /* past the fc_ct header */
 
     if (isreq) {
         dissect_fcfzs_zoneset(tvb, pinfo, tree, offset);
@@ -378,16 +379,15 @@ dissect_fcfzs_azsd(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean
 }
 
 static void
-dissect_fcfzs_arzs(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_arzs(tvbuff_t *tvb, proto_tree *tree, bool isreq)
 {
-    int offset = 16;            /* past the fc_ct header */
-    int len;
+    unsigned offset = 16;            /* past the fc_ct header */
+    uint32_t len;
 
     if (tree) {
         if (isreq) {
-            len = tvb_get_guint8(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
-                                1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
+                1, ENC_BIG_ENDIAN, &len);
             proto_tree_add_item(tree, hf_fcfzs_zonesetname, tvb, offset+4,
                                 len, ENC_ASCII);
         }
@@ -395,23 +395,22 @@ dissect_fcfzs_arzs(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
 }
 
 static void
-dissect_fcfzs_dzs(tvbuff_t *tvb _U_, proto_tree *tree _U_, gboolean isreq _U_)
+dissect_fcfzs_dzs(tvbuff_t *tvb _U_, proto_tree *tree _U_, bool isreq _U_)
 {
     /* Both req & successful response contain just the FC_CT header */
     return;
 }
 
 static void
-dissect_fcfzs_arzm(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_arzm(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, bool isreq)
 {
-    int numrec, i, len, plen;
-    int offset = 16;            /* past the fc_ct header */
+    uint32_t numrec, i, len, plen, mbrtype;
+    unsigned offset = 16;            /* past the fc_ct header */
     proto_item* ti;
 
         if (isreq) {
-            len = tvb_get_guint8(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_zonenmlen, tvb, offset,
-                                1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonenmlen, tvb, offset,
+                1, ENC_BIG_ENDIAN, &len);
             proto_tree_add_item(tree, hf_fcfzs_zonename, tvb, offset+1,
                                 len, ENC_ASCII);
 
@@ -422,8 +421,8 @@ dissect_fcfzs_arzm(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean
 
             offset += len;
             for (i = 0; i < numrec; i++) {
-                ti = proto_tree_add_item(tree, hf_fcfzs_mbrtype, tvb, offset, 1, ENC_BIG_ENDIAN);
-                switch (tvb_get_guint8(tvb, offset)) {
+                ti = proto_tree_add_item_ret_uint(tree, hf_fcfzs_mbrtype, tvb, offset, 1, ENC_BIG_ENDIAN, &mbrtype);
+                switch (mbrtype) {
                 case FC_FZS_ZONEMBR_PWWN:
                 case FC_FZS_ZONEMBR_NWWN:
                     proto_tree_add_item(tree, hf_fcfzs_mbrid_fcwwn, tvb,
@@ -446,23 +445,22 @@ dissect_fcfzs_arzm(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gboolean
 }
 
 static void
-dissect_fcfzs_arzd(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
+dissect_fcfzs_arzd(tvbuff_t *tvb, proto_tree *tree, bool isreq)
 {
-    int offset = 16;            /* past the fc_ct header */
-    int len;
+    unsigned offset = 16;            /* past the fc_ct header */
+    uint32_t len;
 
     if (tree) {
         if (isreq) {
-            len = tvb_get_guint8(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
-                                1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonesetnmlen, tvb, offset,
+                1, ENC_BIG_ENDIAN, &len);
             proto_tree_add_item(tree, hf_fcfzs_zonesetname, tvb, offset+4,
                                 len, ENC_ASCII);
             len += (len % 4);
             offset += len;
 
-            len = tvb_get_guint8(tvb, offset);
-            proto_tree_add_item(tree, hf_fcfzs_zonenmlen, tvb, offset, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_fcfzs_zonenmlen, tvb, offset,
+                1, ENC_BIG_ENDIAN, &len);
             proto_tree_add_item(tree, hf_fcfzs_zonename, tvb, offset+4,
                                 len, ENC_ASCII);
         }
@@ -472,7 +470,7 @@ dissect_fcfzs_arzd(tvbuff_t *tvb, proto_tree *tree, gboolean isreq)
 static void
 dissect_fcfzs_rjt(tvbuff_t *tvb, proto_tree *tree)
 {
-    int offset = 0;
+    unsigned offset = 0;
 
     if (tree) {
         proto_tree_add_item(tree, hf_fcfzs_reason, tvb, offset+13, 1, ENC_BIG_ENDIAN);
@@ -495,7 +493,7 @@ dissect_fcfzs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     conversation_t    *conversation;
     fcfzs_conv_data_t *cdata;
     fcfzs_conv_key_t   ckey, *req_key;
-    gboolean           isreq         = TRUE;
+    bool               isreq         = true;
     fc_hdr *fchdr;
 
     /* Reject the packet if data is NULL */
@@ -507,8 +505,8 @@ dissect_fcfzs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Zone Server");
 
 
-    tvb_memcpy(tvb, (guint8 *)&cthdr, offset, FCCT_PRMBL_SIZE);
-    cthdr.revision = tvb_get_guint8(tvb, offset+1);
+    tvb_memcpy(tvb, (uint8_t *)&cthdr, offset, FCCT_PRMBL_SIZE);
+    cthdr.revision = tvb_get_uint8(tvb, offset+1);
     cthdr.in_id = tvb_get_ntoh24(tvb, offset);
     cthdr.opcode = g_ntohs(cthdr.opcode);
     opcode = cthdr.opcode;
@@ -555,7 +553,7 @@ dissect_fcfzs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
             wmem_map_insert(fcfzs_req_hash, req_key, cdata);
         }
 
-        col_add_str(pinfo->cinfo, COL_INFO, val_to_str(opcode, fc_fzs_opcode_val,
+        col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, opcode, fc_fzs_opcode_val,
                                                            "0x%x"));
     }
     else {
@@ -563,14 +561,14 @@ dissect_fcfzs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
         conversation = find_conversation(pinfo->num, &pinfo->src, &pinfo->dst,
                                          conversation_pt_to_conversation_type(pinfo->ptype), fchdr->oxid,
                                          fchdr->rxid, NO_PORT_B);
-        isreq = FALSE;
+        isreq = false;
         if (!conversation) {
             if (opcode == FCCT_MSG_ACC) {
                 col_add_str(pinfo->cinfo, COL_INFO,
-                                val_to_str(opcode, fc_fzs_opcode_val,
+                                val_to_str(pinfo->pool, opcode, fc_fzs_opcode_val,
                                            "0x%x"));
                 /* No record of what this accept is for. Can't decode */
-                proto_tree_add_expert_format(fcfzs_tree, pinfo, &ei_fcfzs_no_exchange, tvb, 0, -1,
+                proto_tree_add_expert_format_remaining(fcfzs_tree, pinfo, &ei_fcfzs_no_exchange, tvb, 0,
                                     "No record of Exchg. Unable to decode MSG_ACC");
                 return 0;
             }
@@ -589,18 +587,18 @@ dissect_fcfzs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
             if (opcode != FCCT_MSG_RJT) {
                 col_add_fstr(pinfo->cinfo, COL_INFO, "MSG_ACC (%s)",
-                                val_to_str(opcode,
+                                val_to_str(pinfo->pool, opcode,
                                         fc_fzs_opcode_val, "0x%x"));
             }
             else {
                 col_add_fstr(pinfo->cinfo, COL_INFO, "MSG_RJT (%s)",
-                                val_to_str(failed_opcode,
+                                val_to_str(pinfo->pool, failed_opcode,
                                         fc_fzs_opcode_val, "0x%x"));
             }
 
             if ((cdata == NULL) && (opcode != FCCT_MSG_RJT)) {
                 /* No record of what this accept is for. Can't decode */
-                proto_tree_add_expert_format(fcfzs_tree, pinfo, &ei_fcfzs_no_exchange, tvb, 0, -1,
+                proto_tree_add_expert_format_remaining(fcfzs_tree, pinfo, &ei_fcfzs_no_exchange, tvb, 0,
                                     "No record of Exchg. Unable to decode MSG_ACC/RJT");
                 return 0;
             }
@@ -823,7 +821,7 @@ proto_register_fcfzs(void)
 
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_fcfzs,
         &ett_fcfzs_gzc_flags,
         &ett_fcfzs_zone_state,

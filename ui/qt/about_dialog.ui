@@ -157,7 +157,7 @@
        <item>
         <widget class="QLineEdit" name="searchFolders">
          <property name="placeholderText">
-          <string>Filter by path</string>
+          <string>Search Folders</string>
          </property>
         </widget>
        </item>
@@ -219,39 +219,6 @@
          </property>
          <property name="selectionBehavior">
           <enum>QAbstractItemView::SelectRows</enum>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="tab_shortcuts">
-      <attribute name="title">
-       <string>Keyboard Shortcuts</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_shortcuts">
-       <item>
-        <widget class="QLineEdit" name="searchShortcuts">
-         <property name="placeholderText">
-          <string>Search Shortcuts</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QTreeView" name="tblShortcuts">
-         <property name="editTriggers">
-          <set>QAbstractItemView::NoEditTriggers</set>
-         </property>
-         <property name="selectionMode">
-          <enum>QAbstractItemView::ContiguousSelection</enum>
-         </property>
-         <property name="selectionBehavior">
-          <enum>QAbstractItemView::SelectRows</enum>
-         </property>
-         <property name="textElideMode">
-          <enum>Qt::ElideRight</enum>
-         </property>
-         <property name="wordWrap">
-          <bool>true</bool>
          </property>
         </widget>
        </item>

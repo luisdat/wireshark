@@ -8,13 +8,12 @@
  */
 
 #include "config.h"
+#include "ruby_marshal.h"
 
 #include <string.h>
 
-#include "wtap-int.h"
+#include "wtap_module.h"
 #include "file_wrappers.h"
-
-#include "ruby_marshal.h"
 
 static int ruby_marshal_file_type_subtype = -1;
 
@@ -47,7 +46,6 @@ static bool is_ruby_marshal(const uint8_t* filebuf)
         case ';':
         case '@':
             return true;
-            break;
         default:
             return false;
     }

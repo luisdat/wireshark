@@ -13,8 +13,11 @@
 
 #include "ui/profile.h"
 #include "ui/recent.h"
-#include "wsutil/filesystem.h"
 #include "epan/prefs.h"
+
+#include "wsutil/filesystem.h"
+#include "wsutil/utf8_entities.h"
+#include "app/application_flavor.h"
 
 #include <ui/qt/models/profile_model.h>
 
@@ -71,14 +74,28 @@ bool ProfileSortModel::lessThan(const QModelIndex &source_left, const QModelInde
 
 void ProfileSortModel::setFilterType(FilterType ft)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     ft_ = ft;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 void ProfileSortModel::setFilterString(QString txt)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     ftext_ = ! txt.isEmpty() ? txt : "";
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 QStringList ProfileSortModel::filterTypes()
@@ -275,6 +292,11 @@ QVariant ProfileModel::dataDisplay(const QModelIndex &index) const
             return tr("Global");
         else
             return tr("Personal");
+    case COL_AUTO_SWITCH_FILTER:
+    {
+        return (QString(prof->auto_switch_filter));
+    }
+
     default:
         break;
     }
@@ -421,17 +443,34 @@ QVariant ProfileModel::dataBackgroundRole(const QModelIndex &index) const
         return QVariant();
 
     if (prof->status == PROF_STAT_DEFAULT && reset_default_)
-        return ColorUtils::fromColorT(&prefs.gui_text_deprecated);
+        return ColorUtils::fromColorT(&prefs.gui_filter_deprecated_bg);
 
     if (prof->status != PROF_STAT_DEFAULT && ! prof->is_global)
     {
-        /* Highlights errorneous line */
+        /* Highlights erroneous line */
         if (checkInvalid(index) || checkIfDeleted(index) || checkDuplicate(index) || ! checkNameValidity(prof->name))
-            return ColorUtils::fromColorT(&prefs.gui_text_invalid);
+            return ColorUtils::fromColorT(&prefs.gui_filter_invalid_bg);
 
         /* Highlights line, which has been duplicated by another index */
         if (checkDuplicate(index, true))
-            return ColorUtils::fromColorT(&prefs.gui_text_valid);
+            return ColorUtils::fromColorT(&prefs.gui_filter_valid_bg);
+    }
+
+    return QVariant();
+}
+
+QVariant ProfileModel::dataForegroundRole(const QModelIndex &index) const
+{
+    if (! index.isValid() || profiles_.count() <= index.row())
+        return QVariant();
+
+    profile_def * prof = guard(index.row());
+    if (! prof) {
+        return QVariant();
+    }
+
+    if (prof->is_global && index.column() == COL_AUTO_SWITCH_FILTER) {
+        return ColorUtils::disabledForeground();
     }
 
     return QVariant();
@@ -491,16 +530,16 @@ QVariant ProfileModel::dataPath(const QModelIndex &index) const
     {
     case PROF_STAT_DEFAULT:
         if (!reset_default_)
-            return gchar_free_to_qstring(get_persconffile_path("", false));
+            return gchar_free_to_qstring(get_persconffile_path("", false, application_configuration_environment_prefix()));
         else
             return tr("Resetting to default");
     case PROF_STAT_EXISTS:
         {
             QString profile_path;
             if (prof->is_global) {
-                profile_path = gchar_free_to_qstring(get_global_profiles_dir());
+                profile_path = gchar_free_to_qstring(get_global_profiles_dir(application_configuration_environment_prefix()));
             } else {
-                profile_path = gchar_free_to_qstring(get_profiles_dir());
+                profile_path = gchar_free_to_qstring(get_profiles_dir(application_configuration_environment_prefix()));
             }
             profile_path.append("/").append(prof->name);
             return QDir::toNativeSeparators(profile_path);
@@ -536,7 +575,7 @@ QVariant ProfileModel::dataPath(const QModelIndex &index) const
                 QString appendix;
 
                 /* A global profile is neither deleted or removed, only system provided is allowed as appendix */
-                if (profile_exists(prof->reference, true) && prof->from_global)
+                if (profile_exists(application_configuration_environment_prefix(), prof->reference, true) && prof->from_global)
                     appendix = tr("system provided");
                 /* A default model as reference can neither be deleted or renamed, so skip if the reference was one */
                 else  if (! index.data(ProfileModel::DATA_IS_DEFAULT).toBool())
@@ -563,7 +602,7 @@ QVariant ProfileModel::dataPath(const QModelIndex &index) const
                 }
 
                 if (appendix.length() > 0)
-                    msg.append(QString(" (%1)").arg(appendix));
+                    msg.append(QStringLiteral(" (%1)").arg(appendix));
             }
 
             return msg;
@@ -587,6 +626,8 @@ QVariant ProfileModel::data(const QModelIndex &index, int role) const
         return dataFontRole(index);
     case Qt::BackgroundRole:
         return dataBackgroundRole(index);
+    case Qt::ForegroundRole:
+        return dataForegroundRole(index);
     case Qt::ToolTipRole:
         return dataToolTipRole(index);
     case ProfileModel::DATA_STATUS:
@@ -611,10 +652,6 @@ QVariant ProfileModel::data(const QModelIndex &index, int role) const
         }
     case ProfileModel::DATA_PATH:
         return dataPath(index);
-    case ProfileModel::DATA_INDEX_VALUE_IS_URL:
-        if (index.column() <= ProfileModel::COL_TYPE)
-            return QVariant::fromValue(false);
-        return QVariant::fromValue(true);
     case ProfileModel::DATA_PATH_IS_NOT_DESCRIPTION:
         if (prof->status == PROF_STAT_NEW || prof->status == PROF_STAT_COPY
              || (prof->status == PROF_STAT_DEFAULT && reset_default_)
@@ -640,6 +677,8 @@ QVariant ProfileModel::headerData(int section, Qt::Orientation orientation, int 
             return tr("Profile");
         case COL_TYPE:
             return tr("Type");
+        case COL_AUTO_SWITCH_FILTER:
+            return tr("Auto Switch Filter");
         default:
             break;
         }
@@ -653,11 +692,18 @@ Qt::ItemFlags ProfileModel::flags(const QModelIndex &index) const
     Qt::ItemFlags fl = QAbstractTableModel::flags(index);
 
     profile_def * prof = guard(index);
-    if (! prof)
+    if (! prof) {
         return fl;
+    }
 
-    if (index.column() == ProfileModel::COL_NAME && prof->status != PROF_STAT_DEFAULT  && ! prof->is_global)
+    if (prof->is_global) {
+        return fl;
+    }
+
+    if ((index.column() == ProfileModel::COL_NAME && prof->status != PROF_STAT_DEFAULT)
+        || (index.column() == ProfileModel::COL_AUTO_SWITCH_FILTER)) {
         fl |= Qt::ItemIsEditable;
+    }
 
     return fl;
 }
@@ -717,7 +763,7 @@ QModelIndex ProfileModel::addNewProfile(QString name)
     QString newName = name;
     while (findByNameAndVisibility(newName) >= 0)
     {
-        newName = QString("%1 %2").arg(name).arg(QString::number(cnt));
+        newName = QStringLiteral("%1 %2").arg(name, QString::number(cnt));
         cnt++;
     }
 
@@ -727,13 +773,14 @@ QModelIndex ProfileModel::addNewProfile(QString name)
     return index(findByName(newName), COL_NAME);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 QModelIndex ProfileModel::duplicateEntry(QModelIndex idx, int new_status)
 {
     profile_def * prof = guard(idx);
     if (! prof)
         return QModelIndex();
 
-    /* only new and copied stati can be set */
+    /* only new and copied static can be set */
     if (new_status != PROF_STAT_NEW && new_status != PROF_STAT_COPY)
         new_status = PROF_STAT_COPY;
 
@@ -745,6 +792,7 @@ QModelIndex ProfileModel::duplicateEntry(QModelIndex idx, int new_status)
         int row = findByNameAndVisibility(prof->reference, false);
         profile_def * copyParent = guard(row);
         if (copyParent && copyParent->status == PROF_STAT_NEW)
+            // We recurse here, but our depth is limited
             return duplicateEntry(index(row, ProfileModel::COL_NAME), PROF_STAT_NEW);
     }
 
@@ -778,13 +826,13 @@ QModelIndex ProfileModel::duplicateEntry(QModelIndex idx, int new_status)
     if (prof->is_global && findByNameAndVisibility(parentName) < 0)
         new_name = QString(prof->name);
     else
-        new_name = QString("%1 (%2)").arg(parentName).arg(tr("copy", "noun"));
+        new_name = QStringLiteral("%1 (%2)").arg(parentName, tr("copy", "noun"));
 
     /* check if copy already exists and iterate, until an unused version is found */
     int cnt = 1;
     while (findByNameAndVisibility(new_name) >= 0)
     {
-        new_name = QString("%1 (%2 %3)").arg(parentName).arg(tr("copy", "noun")).arg(QString::number(cnt));
+        new_name = QStringLiteral("%1 (%2 %3)").arg(parentName, tr("copy", "noun"), QString::number(cnt));
         cnt++;
     }
 
@@ -900,27 +948,41 @@ bool ProfileModel::setData(const QModelIndex &idx, const QVariant &value, int ro
 {
     last_set_row_ = -1;
 
-    if (role != Qt::EditRole ||  ! value.isValid() || value.toString().isEmpty())
+    if (role != Qt::EditRole || !value.isValid()) {
         return false;
+    }
+
+    if (idx.column() == COL_NAME && value.toString().isEmpty()) {
+        return false;
+    }
 
     QString newValue = value.toString();
     profile_def * prof = guard(idx);
-    if (! prof || prof->status == PROF_STAT_DEFAULT)
+
+    if (!prof) {
         return false;
+    }
 
     last_set_row_ = idx.row();
 
-    QString current(prof->name);
-    if (current.compare(newValue) != 0)
-    {
-        g_free(prof->name);
-        prof->name = qstring_strdup(newValue);
+    if (idx.column() == COL_NAME && prof->status != PROF_STAT_DEFAULT) {
+        QString current(prof->name);
+        if (current.compare(newValue) != 0)
+        {
+            g_free(prof->name);
+            prof->name = qstring_strdup(newValue);
 
-        if (prof->reference && g_strcmp0(prof->name, prof->reference) == 0 && ! (prof->status == PROF_STAT_NEW || prof->status == PROF_STAT_COPY)) {
-            prof->status = PROF_STAT_EXISTS;
-        } else if (prof->status == PROF_STAT_EXISTS) {
-            prof->status = PROF_STAT_CHANGED;
+            if (prof->reference && g_strcmp0(prof->name, prof->reference) == 0 && ! (prof->status == PROF_STAT_NEW || prof->status == PROF_STAT_COPY)) {
+                prof->status = PROF_STAT_EXISTS;
+            } else if (prof->status == PROF_STAT_EXISTS) {
+                prof->status = PROF_STAT_CHANGED;
+            }
+            emit itemChanged(idx);
         }
+    } else if (idx.column() == COL_AUTO_SWITCH_FILTER) {
+        g_free(prof->auto_switch_filter);
+        prof->auto_switch_filter = qstring_strdup(newValue);
+        prof->prefs_changed = true;
         emit itemChanged(idx);
     }
 
@@ -952,7 +1014,7 @@ bool ProfileModel::copyTempToProfile(QString tempPath, QString profilePath, bool
     foreach (QFileInfo finfo, files)
     {
         QString tempFile = finfo.absoluteFilePath();
-        QString profileFile = profilePath + "/" + finfo.fileName();
+        QString profileFile = QStringLiteral("%1/%2").arg(profilePath, finfo.fileName());
 
         if (! profile_files_.contains(finfo.fileName()))
         {
@@ -996,6 +1058,7 @@ QFileInfoList ProfileModel::uniquePaths(QFileInfoList lst)
     return newLst;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 QFileInfoList ProfileModel::filterProfilePath(QString path, QFileInfoList ent, bool fromZip)
 {
     QFileInfoList result = ent;
@@ -1025,6 +1088,7 @@ QFileInfoList ProfileModel::filterProfilePath(QString path, QFileInfoList ent, b
         else
         {
             if (path.compare(entry.absoluteFilePath()) != 0)
+                // We recurse here, but our depth is limited
                 result.append(filterProfilePath(entry.absoluteFilePath(), result, fromZip));
         }
     }
@@ -1032,7 +1096,7 @@ QFileInfoList ProfileModel::filterProfilePath(QString path, QFileInfoList ent, b
     return result;
 }
 
-#ifdef HAVE_MINIZIP
+#if defined(HAVE_MINIZIP) || defined(HAVE_MINIZIPNG)
 QStringList ProfileModel::exportFileList(QModelIndexList items)
 {
     QStringList result;
@@ -1078,7 +1142,7 @@ bool ProfileModel::exportProfiles(QString filename, QModelIndexList items, QStri
         return false;
     }
 
-    if (WiresharkZipHelper::zip(filename, files, gchar_free_to_qstring(get_profiles_dir()) + "/") )
+    if (WiresharkZipHelper::zip(filename, files, gchar_free_to_qstring(get_profiles_dir(application_configuration_environment_prefix())) + "/") )
         return true;
 
     return false;
@@ -1100,7 +1164,8 @@ bool ProfileModel::acceptFile(QString fileName, int fileSize)
 QString ProfileModel::cleanName(QString fileName)
 {
     QStringList parts = fileName.split("/");
-    QString temp = parts[parts.count() - 1].replace(QRegularExpression("[" + QRegularExpression::escape(illegalCharacters()) + "]"), QString("_") );
+    QString temp = parts[parts.count() - 1]
+        .replace(QRegularExpression(QStringLiteral("[%1]").arg(QRegularExpression::escape(illegalCharacters()))), QStringLiteral("_") );
     temp = parts.join("/");
     return temp;
 }
@@ -1128,7 +1193,7 @@ int ProfileModel::importProfilesFromDir(QString dirname, int * skippedCnt, bool 
 {
     int count = 0;
     int skipped = 0;
-    QDir profileDir(gchar_free_to_qstring(get_profiles_dir()));
+    QDir profileDir(gchar_free_to_qstring(get_profiles_dir(application_configuration_environment_prefix())));
     QDir dir(dirname);
 
     if (skippedCnt)
@@ -1146,7 +1211,7 @@ int ProfileModel::importProfilesFromDir(QString dirname, int * skippedCnt, bool 
             bool wasEmpty = true;
             bool success = false;
 
-            QString profilePath = profileDir.absolutePath() + "/" + fentry.fileName();
+            QString profilePath = QStringLiteral("%1/%2").arg(profileDir.absolutePath(), fentry.fileName());
             QString tempPath = fentry.absoluteFilePath();
 
             if (fentry.fileName().compare(DEFAULT_PROFILE, Qt::CaseInsensitive) == 0 || QFile::exists(profilePath))
@@ -1220,11 +1285,11 @@ bool ProfileModel::clearImported(QString *msg)
     for (int cnt = 0; cnt < rows.count() && result; cnt++)
     {
         int row = rows.at(cnt);
-        if (delete_persconffile_profile (index(row, ProfileModel::COL_NAME).data().toString().toUtf8().constData(), &ret_path) != 0)
+        if (delete_persconffile_profile(application_configuration_environment_prefix(), index(row, ProfileModel::COL_NAME).data().toString().toUtf8().constData(), &ret_path) != 0)
         {
             if (msg)
             {
-                QString errmsg = QString("%1\n\"%2\":\n%3").arg(tr("Can't delete profile directory")).arg(ret_path).arg(g_strerror(errno));
+                QString errmsg = QStringLiteral("%1\n\"%2\":\n%3").arg(tr("Can't delete profile directory"), ret_path, g_strerror(errno));
                 msg->append(errmsg);
             }
 
@@ -1239,7 +1304,7 @@ QString ProfileModel::illegalCharacters()
 {
 #ifdef _WIN32
     /* According to https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions */
-    return QString("<>:\"/\\|?*");
+    return QStringLiteral("<>:\"/\\|?*");
 #else
     return QDir::separator();
 #endif

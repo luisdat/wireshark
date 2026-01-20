@@ -40,7 +40,7 @@ LayoutPreferencesFrame::LayoutPreferencesFrame(QWidget *parent) :
     ui->layout6ToolButton->setStyleSheet(image_pad_ss);
 
     QStyleOption style_opt;
-    QString indent_ss = QString(
+    QString indent_ss = QStringLiteral(
              "QCheckBox, QLabel {"
              "  margin-left: %1px;"
              "}"
@@ -86,7 +86,7 @@ void LayoutPreferencesFrame::showEvent(QShowEvent *)
 
 void LayoutPreferencesFrame::updateWidgets()
 {
-    switch (prefs_get_uint_value_real(pref_layout_type_, pref_stashed)) {
+    switch (prefs_get_uint_value(pref_layout_type_, pref_stashed)) {
     case layout_type_5:
         ui->layout5ToolButton->setChecked(true);
         break;
@@ -161,7 +161,7 @@ void LayoutPreferencesFrame::updateWidgets()
         break;
     }
 
-    ui->packetListCachedRowsLineEdit->setText(QString::number(prefs_get_uint_value_real(pref_packet_list_cached_rows_max_, pref_stashed)));
+    ui->packetListCachedRowsLineEdit->setText(QString::number(prefs_get_uint_value(pref_packet_list_cached_rows_max_, pref_stashed)));
 }
 
 void LayoutPreferencesFrame::on_layout5ToolButton_toggled(bool checked)
@@ -358,22 +358,22 @@ void LayoutPreferencesFrame::on_restoreButtonBox_clicked(QAbstractButton *)
 
 void LayoutPreferencesFrame::on_packetListSeparatorCheckBox_toggled(bool checked)
 {
-    prefs_set_bool_value(pref_packet_list_separator_, (gboolean) checked, pref_stashed);
+    prefs_set_bool_value(pref_packet_list_separator_, (bool) checked, pref_stashed);
 }
 
 void LayoutPreferencesFrame::on_packetListHeaderShowColumnDefinition_toggled(bool checked)
 {
-    prefs_set_bool_value(pref_packet_header_column_definition_, (gboolean) checked, pref_stashed);
+    prefs_set_bool_value(pref_packet_header_column_definition_, (bool) checked, pref_stashed);
 }
 
 void LayoutPreferencesFrame::on_packetListHoverStyleCheckbox_toggled(bool checked)
 {
-    prefs_set_bool_value(pref_packet_list_hover_style_, (gboolean) checked, pref_stashed);
+    prefs_set_bool_value(pref_packet_list_hover_style_, (bool) checked, pref_stashed);
 }
 
 void LayoutPreferencesFrame::on_packetListAllowSorting_toggled(bool checked)
 {
-    prefs_set_bool_value(pref_packet_list_sorting_, (gboolean) checked, pref_stashed);
+    prefs_set_bool_value(pref_packet_list_sorting_, (bool) checked, pref_stashed);
 }
 
 void LayoutPreferencesFrame::on_packetListCachedRowsLineEdit_textEdited(const QString &new_str)
@@ -387,10 +387,10 @@ void LayoutPreferencesFrame::on_packetListCachedRowsLineEdit_textEdited(const QS
 
 void LayoutPreferencesFrame::on_statusBarShowSelectedPacketCheckBox_toggled(bool checked)
 {
-    prefs_set_bool_value(pref_show_selected_packet_, (gboolean) checked, pref_stashed);
+    prefs_set_bool_value(pref_show_selected_packet_, (bool) checked, pref_stashed);
 }
 
 void LayoutPreferencesFrame::on_statusBarShowFileLoadTimeCheckBox_toggled(bool checked)
 {
-    prefs_set_bool_value(pref_show_file_load_time_, (gboolean) checked, pref_stashed);
+    prefs_set_bool_value(pref_show_file_load_time_, (bool) checked, pref_stashed);
 }

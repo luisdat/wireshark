@@ -36,11 +36,11 @@ static int dissect_sipfrag(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 {
     proto_tree  *sipfrag_tree;
     proto_item  *ti;
-    gint        offset = 0;
-    gint        next_offset;
-    int         linelen;
+    unsigned    offset = 0;
+    unsigned    next_offset;
+    unsigned    linelen;
     char        *string;
-    gint        lines = 0;
+    int         lines = 0;
 
     /* Append this protocol name rather than replace. */
     col_append_str(pinfo->cinfo, COL_PROTOCOL, "/sipfrag");
@@ -56,7 +56,7 @@ static int dissect_sipfrag(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     while (tvb_offset_exists(tvb, offset))
     {
         /* Find the end of the line. */
-        linelen = tvb_find_line_end_unquoted(tvb, offset, -1, &next_offset);
+        tvb_find_line_end_unquoted_remaining(tvb, offset, &linelen, &next_offset);
 
         /* For now, add all lines as unparsed strings */
 
@@ -93,7 +93,7 @@ void proto_register_sipfrag(void)
         },
     };
 
-    static gint *ett[] =
+    static int *ett[] =
     {
         &ett_sipfrag
     };

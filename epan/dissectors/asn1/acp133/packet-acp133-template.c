@@ -14,6 +14,7 @@
 #include <epan/packet.h>
 #include <epan/asn1.h>
 #include <epan/oids.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 
@@ -22,8 +23,6 @@
 #include "packet-x509ce.h"
 #include "packet-x509if.h"
 #include "packet-x509sat.h"
-
-#include "packet-acp133.h"
 
 #define PNAME  "ACP133 Attribute Syntaxes"
 #define PSNAME "ACP133"
@@ -39,7 +38,7 @@ static int proto_acp133;
 #include "packet-acp133-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_acp133;
+static int ett_acp133;
 #include "packet-acp133-ett.c"
 
 #include "packet-acp133-fn.c"
@@ -55,7 +54,7 @@ void proto_register_acp133(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_acp133,
 #include "packet-acp133-ettarr.c"
   };

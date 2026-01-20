@@ -1,6 +1,8 @@
 /* packet-mqtt-sn.c
  *
  * Routines for MQTT-SN v1.2 <http://mqtt.org>
+ * https://mqtt.org/mqtt-specification/
+ * https://groups.oasis-open.org/higherlogic/ws/public/download/66091/MQTT-SN_spec_v1.2.pdf
  *
  * Copyright (c) 2015, Jan-Hendrik Bolte <jabolte@uni-osnabrueck.de>
  * Copyright (c) 2015, University of Osnabrueck
@@ -14,6 +16,8 @@
 
 #include "config.h"
 #include <epan/packet.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 /* MQTT-SN message types. */
 #define MQTTSN_ADVERTISE              0x00
@@ -153,6 +157,7 @@ static int proto_mqttsn;
 static int hf_mqttsn_msg;
 static int hf_mqttsn_msg_len;
 static int hf_mqttsn_msg_type;
+static int hf_mqttsn_flags;
 static int hf_mqttsn_dup;
 static int hf_mqttsn_qos;
 static int hf_mqttsn_retain;
@@ -168,7 +173,6 @@ static int hf_mqttsn_protocol_id;
 static int hf_mqttsn_topic_id;
 static int hf_mqttsn_msg_id;
 static int hf_mqttsn_topic;
-static int hf_mqttsn_topic_name_or_id;
 static int hf_mqttsn_sleep_timer;
 static int hf_mqttsn_will_topic;
 static int hf_mqttsn_will_msg;
@@ -179,9 +183,9 @@ static int hf_mqttsn_control_info;
 static int hf_mqttsn_wireless_node_id;
 
 /* Initialize subtree pointers. */
-static gint ett_mqttsn_hdr;
-static gint ett_mqttsn_msg;
-static gint ett_mqttsn_flags;
+static int ett_mqttsn_hdr;
+static int ett_mqttsn_msg;
+static int ett_mqttsn_flags;
 
 /* Dissect a single MQTT-SN packet. */
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -189,11 +193,12 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 {
     /* Various variables. */
     int long_hdr_len = 0;
-    guint8 mqttsn_msg_type_id;
-    guint16 mqttsn_msg_len;
+    uint8_t mqttsn_msg_type_id;
+    uint16_t mqttsn_msg_len;
+    int8_t mqttsn_topic_id_type = MQTTSN_TOPIC_NORMAL_ID;
 
     /* Get the message length. */
-    mqttsn_msg_len = tvb_get_guint8(tvb, offset);
+    mqttsn_msg_len = tvb_get_uint8(tvb, offset);
 
     /* If the message length is equal to 1 then the next two bytes define the real message length. */
     if (mqttsn_msg_len == 1)
@@ -206,7 +211,7 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
     mqttsn_msg_len += offset;
 
     /* Get the message type id (in byte 1 or 3 - depending on the message length). */
-    mqttsn_msg_type_id = tvb_get_guint8(tvb, offset + (long_hdr_len ? 3 : 1));
+    mqttsn_msg_type_id = tvb_get_uint8(tvb, offset + (long_hdr_len ? 3 : 1));
 
     if (tree)
     {
@@ -215,7 +220,6 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
         proto_item *ti_mqttsn = NULL;
         proto_tree *mqttsn_tree = NULL;
         proto_tree *mqttsn_msg_tree = NULL;
-        proto_tree *mqttsn_flag_tree = NULL;
 
         /* Add MQTT-SN subtree to the main tree. */
         if (offset == 0)
@@ -249,39 +253,86 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
          * |   DUP   |    QoS    |   Retain   |   Will   |   CleanSession   |    TopicIdType    |
          * |_________|___________|____________|__________|__________________|___________________|
          */
+
+        static int * const connect_flags[] = {
+            &hf_mqttsn_will,
+            &hf_mqttsn_clean_session,
+            NULL
+        };
+
+        static int * const willtopic_flags[] = {
+            &hf_mqttsn_qos,
+            &hf_mqttsn_retain,
+            NULL
+        };
+
+        static int * const publish_flags[] = {
+            &hf_mqttsn_dup,
+            &hf_mqttsn_qos,
+            &hf_mqttsn_retain,
+            &hf_mqttsn_topic_id_type,
+            NULL
+        };
+
+        static int * const subscribe_flags[] = {
+            &hf_mqttsn_dup,
+            &hf_mqttsn_qos,
+            &hf_mqttsn_topic_id_type,
+            NULL
+        };
+
+        static int * const suback_flags[] = {
+            &hf_mqttsn_qos,
+            NULL
+        };
+
+        static int * const unsubscribe_flags[] = {
+            &hf_mqttsn_topic_id_type,
+            NULL
+        };
+
         switch (mqttsn_msg_type_id)
         {
             /* Connect */
             case MQTTSN_CONNECT:
-                /* Add Will, CleanSession and Topic ID Type flags. */
-                mqttsn_flag_tree = proto_item_add_subtree(ti_mqttsn, ett_mqttsn_flags);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_will, tvb, offset, 1, ENC_BIG_ENDIAN);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_clean_session, tvb, offset, 1, ENC_BIG_ENDIAN);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_topic_id_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+                /* Add Will and CleanSession Type flags. */
+                proto_tree_add_bitmask(mqttsn_msg_tree, tvb, offset, hf_mqttsn_flags, ett_mqttsn_flags, connect_flags, ENC_BIG_ENDIAN);
                 offset += 1;
                 break;
 
             /* Publish */
             case MQTTSN_PUBLISH:
                 /* Add DUP, QoS, Retain and Topic ID Type flags. */
-                mqttsn_flag_tree = proto_item_add_subtree(ti_mqttsn, ett_mqttsn_flags);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_dup, tvb, offset, 1, ENC_BIG_ENDIAN);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_qos, tvb, offset, 1, ENC_BIG_ENDIAN);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_retain, tvb, offset, 1, ENC_BIG_ENDIAN);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_topic_id_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+                mqttsn_topic_id_type = tvb_get_uint8(tvb, offset) & MQTTSN_MASK_TOPIC_ID_TYPE;
+                proto_tree_add_bitmask(mqttsn_msg_tree, tvb, offset, hf_mqttsn_flags, ett_mqttsn_flags, publish_flags, ENC_BIG_ENDIAN);
                 offset += 1;
                 break;
 
-            /* Will Topic + Subscribe + Subscribe Acknowledgement + Unsubscribe + Will Topic Update */
-            case MQTTSN_WILLTOPIC:
             case MQTTSN_SUBSCRIBE:
-            case MQTTSN_SUBACK:
-            case MQTTSN_UNSUBSCRIBE:
-            case MQTTSN_WILLTOPICUPD:
-                /* Add Topic ID Type flag. */
-                mqttsn_flag_tree = proto_item_add_subtree(ti_mqttsn, ett_mqttsn_flags);
-                proto_tree_add_item(mqttsn_flag_tree, hf_mqttsn_topic_id_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+                mqttsn_topic_id_type = tvb_get_uint8(tvb, offset) & MQTTSN_MASK_TOPIC_ID_TYPE;
+                proto_tree_add_bitmask(mqttsn_msg_tree, tvb, offset, hf_mqttsn_flags, ett_mqttsn_flags, subscribe_flags, ENC_BIG_ENDIAN);
                 offset += 1;
+                break;
+
+            case MQTTSN_SUBACK:
+                proto_tree_add_bitmask(mqttsn_msg_tree, tvb, offset, hf_mqttsn_flags, ett_mqttsn_flags, suback_flags, ENC_BIG_ENDIAN);
+                offset += 1;
+                break;
+
+            case MQTTSN_UNSUBSCRIBE:
+                mqttsn_topic_id_type = tvb_get_uint8(tvb, offset) & MQTTSN_MASK_TOPIC_ID_TYPE;
+                proto_tree_add_bitmask(mqttsn_msg_tree, tvb, offset, hf_mqttsn_flags, ett_mqttsn_flags, unsubscribe_flags, ENC_BIG_ENDIAN);
+                offset += 1;
+                break;
+
+            case MQTTSN_WILLTOPIC:
+            case MQTTSN_WILLTOPICUPD:
+                /* "An empty WILLTOPIC[UPD] message is a message without Flags
+                 * and WillTopic field (i.e. it is exactly 2 octets long)." */
+                if (mqttsn_msg_len > 2) {
+                    proto_tree_add_bitmask(mqttsn_msg_tree, tvb, offset, hf_mqttsn_flags, ett_mqttsn_flags, willtopic_flags, ENC_BIG_ENDIAN);
+                    offset += 1;
+                }
                 break;
 
             /* Default Case */
@@ -344,7 +395,9 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
             /* Will Topic */
             case MQTTSN_WILLTOPIC:
                 /* | 1:n - Will topic | */
-                proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_will_topic, tvb, offset, (mqttsn_msg_len - offset), ENC_ASCII);
+                if (mqttsn_msg_len > 2) {
+                    proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_will_topic, tvb, offset, (mqttsn_msg_len - offset), ENC_ASCII);
+                }
                 break;
 
             /* Will Message */
@@ -376,7 +429,11 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
             /* Publish */
             case MQTTSN_PUBLISH:
                 /* | 1,2 - Topic ID | 3,4 - Message ID | 5:n - Publish data | */
-                proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_topic_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                if (mqttsn_topic_id_type == MQTTSN_TOPIC_SHORT_NAME) {
+                    proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_topic, tvb, offset, 2, ENC_ASCII);
+                } else {
+                    proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_topic_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                }
                 offset += 2;
                 proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_msg_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
@@ -407,7 +464,13 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
                 /* | 1,2 - Message ID | 5:n - Topic name _OR_ 5,6 - Topic ID | */
                 proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_msg_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
-                proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_topic_name_or_id, tvb, offset, (mqttsn_msg_len - offset), ENC_ASCII);
+                if (mqttsn_topic_id_type == MQTTSN_TOPIC_PREDEF_ID) {
+                    proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_topic_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                } else if (mqttsn_topic_id_type == MQTTSN_TOPIC_SHORT_NAME) {
+                    proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_topic, tvb, offset, 2, ENC_ASCII);
+                } else {
+                    proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_topic, tvb, offset, (mqttsn_msg_len - offset), ENC_ASCII);
+                }
                 break;
 
             /* Subscribe Acknowledgment */
@@ -452,7 +515,9 @@ static void dissect_mqttsn_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
             /* Will Topic Update */
             case MQTTSN_WILLTOPICUPD:
                 /* | 1:n - Will topic | */
-                proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_will_topic, tvb, offset, (mqttsn_msg_len - offset), ENC_ASCII);
+                if (mqttsn_msg_len > 2) {
+                    proto_tree_add_item(mqttsn_msg_tree, hf_mqttsn_will_topic, tvb, offset, (mqttsn_msg_len - offset), ENC_ASCII);
+                }
                 break;
 
             /* Will Message Update */
@@ -495,15 +560,15 @@ static int dissect_mqttsn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 {
     /* Various variables. */
     int offset = 0;
-    guint8 mqttsn_msg_type_id;
+    uint8_t mqttsn_msg_type_id;
 
     /*
      * If the value in byte 0 is unequal to 1 then the value defines the
      * message length and the message type id is contained in byte 1.
      */
-    if (tvb_get_guint8(tvb, 0) != 1)
+    if (tvb_get_uint8(tvb, 0) != 1)
     {
-        mqttsn_msg_type_id = tvb_get_guint8(tvb, 1);
+        mqttsn_msg_type_id = tvb_get_uint8(tvb, 1);
     }
     /*
      * If the value in byte 0 is equal to 1 then the next two bytes define
@@ -511,15 +576,15 @@ static int dissect_mqttsn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
      */
     else
     {
-        mqttsn_msg_type_id = tvb_get_guint8(tvb, 3);
+        mqttsn_msg_type_id = tvb_get_uint8(tvb, 3);
     }
 
-    /* Add the protcol name to the protocol column. */
+    /* Add the protocol name to the protocol column. */
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "MQTT-SN");
 
     /* Add the message type to the info column. */
     col_clear(pinfo->cinfo, COL_INFO);
-    col_add_str(pinfo->cinfo, COL_INFO, val_to_str_ext(mqttsn_msg_type_id, &mqttsn_msgtype_vals_ext, "Unknown (0x%02x)"));
+    col_add_str(pinfo->cinfo, COL_INFO, val_to_str_ext(pinfo->pool, mqttsn_msg_type_id, &mqttsn_msgtype_vals_ext, "Unknown (0x%02x)"));
 
     /* Dissect a MQTT-SN packet. */
     dissect_mqttsn_packet(tvb, pinfo, tree, offset);
@@ -543,6 +608,11 @@ void proto_register_mqttsn(void)
         { &hf_mqttsn_msg_type,
             { "Message Type", "mqttsn.msg.type",
                 FT_UINT8, BASE_HEX | BASE_EXT_STRING, &mqttsn_msgtype_vals_ext, 0,
+                NULL, HFILL }
+        },
+        { &hf_mqttsn_flags,
+            { "Flags", "mqttsn.flags",
+                FT_UINT8, BASE_HEX, NULL, 0,
                 NULL, HFILL }
         },
         { &hf_mqttsn_dup,
@@ -620,11 +690,6 @@ void proto_register_mqttsn(void)
                 FT_STRING, BASE_NONE, NULL, 0x0,
                 NULL, HFILL }
         },
-        { &hf_mqttsn_topic_name_or_id,
-            { "Topic Name/ID", "mqttsn.topic.name.or.id",
-                FT_STRING, BASE_NONE, NULL, 0x0,
-                NULL, HFILL }
-        },
         { &hf_mqttsn_sleep_timer,
             { "Sleep Timer", "mqttsn.sleep.timer",
                 FT_UINT16, BASE_DEC, NULL, 0x0,
@@ -668,7 +733,7 @@ void proto_register_mqttsn(void)
     };
 
     /* Setup protocol subtree arrays. */
-    static gint* ett_mqttsn[] = {
+    static int* ett_mqttsn[] = {
         &ett_mqttsn_hdr,
         &ett_mqttsn_msg,
         &ett_mqttsn_flags

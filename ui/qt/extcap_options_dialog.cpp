@@ -9,8 +9,6 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include <extcap_options_dialog.h>
 #include <ui_extcap_options_dialog.h>
 
@@ -25,7 +23,6 @@
 #include <QDesktopServices>
 #include <QTabWidget>
 
-#include "ringbuffer.h"
 #include "ui/capture_ui_utils.h"
 #include "ui/capture_globals.h"
 #include "ui/iface_lists.h"
@@ -75,12 +72,13 @@ ExtcapOptionsDialog::ExtcapOptionsDialog(bool startCaptureOnClose, QWidget *pare
     }
 }
 
-ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bool startCaptureOnClose, QWidget *parent)
+ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bool startCaptureOnClose, QWidget *parent,
+    QString *option_name, QString *option_value)
 {
     interface_t *device;
     ExtcapOptionsDialog * resultDialog = NULL;
     bool dev_found = false;
-    guint if_idx;
+    unsigned if_idx;
 
     if (dev_name.length() == 0)
         return NULL;
@@ -102,7 +100,24 @@ ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bo
     resultDialog->device_name = QString(dev_name);
     resultDialog->device_idx = if_idx;
 
-    resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Options") + ": " + device->display_name));
+    if (option_name != NULL && option_value != NULL)
+    {
+        // Sub argument is specified: this is an extcap popup created from a parent extcap popup,
+        // to configure a specific argument.
+        resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Sub-options") + ": " + (*option_name)));
+        resultDialog->option_name = *option_name;
+        resultDialog->option_value = *option_value;
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("Ok"));
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::Save)->hide();
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::Help)->hide();
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::RestoreDefaults)->hide();
+        resultDialog->ui->checkSaveOnStart->setCheckState(Qt::Checked);
+        resultDialog->ui->checkSaveOnStart->hide();
+    }
+    else
+    {
+        resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Options") + ": " + device->display_name));
+    }
 
     resultDialog->updateWidgets();
 
@@ -189,8 +204,15 @@ void ExtcapOptionsDialog::loadArguments()
 
     extcapArguments.clear();
 
-    arguments = g_list_first(extcap_get_if_configuration(device_name.toUtf8().constData()));
-
+    if (!option_name.isEmpty())
+    {
+        arguments = g_list_first(extcap_get_if_configuration_option(device_name.toUtf8().constData(),
+            option_name.toUtf8().constData(), option_value.toUtf8().constData()));
+    }
+    else
+    {
+        arguments = g_list_first(extcap_get_if_configuration(device_name.toUtf8().constData()));
+    }
     ExtcapArgumentList required;
     ExtcapArgumentList optional;
 
@@ -221,7 +243,7 @@ void ExtcapOptionsDialog::loadArguments()
         extcapArguments << optional;
 
     /* argument items are now owned by ExtcapArgument. Only free the lists */
-    extcap_free_if_configuration(arguments, FALSE);
+    extcap_free_if_configuration(arguments, false);
 }
 
 void ExtcapOptionsDialog::updateWidgets()
@@ -229,6 +251,7 @@ void ExtcapOptionsDialog::updateWidgets()
     QWidget * lblWidget = NULL, *editWidget = NULL;
     ExtcapArgument * argument = NULL;
     bool allowStart = true;
+    extcap_argument_sufficient sufficient = EXTCAP_ARGUMENT_SUFFICIENT_NOTSET;
 
     unsigned int counter = 0;
 
@@ -259,7 +282,6 @@ void ExtcapOptionsDialog::updateWidgets()
         ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
         return;
     }
-    ui->checkSaveOnStart->setText(tr("Save parameter(s) on capture start", "", static_cast<int>(extcapArguments.count())));
 
     QStringList groupKeys;
     QString defaultKeyName(tr("Default"));
@@ -332,12 +354,19 @@ void ExtcapOptionsDialog::updateWidgets()
                     QPushButton *button = new QPushButton(defaultValueIcon_,"");
                     button->setToolTip(tr("Restore default value of the item"));
                     layout->addWidget(button, counter, 2, Qt::AlignVCenter);
-                    connect(button, SIGNAL(clicked()), argument, SLOT(setDefaultValue()));
+                    connect(button, &QPushButton::clicked, argument, &ExtcapArgument::setDefaultValue);
                 }
             }
 
             if (argument->isRequired() && ! argument->isValid())
                 allowStart = false;
+
+            if (argument->isSufficient() && sufficient != EXTCAP_ARGUMENT_SUFFICIENT_OK)
+            {
+                sufficient = EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED;
+                if (argument->isValid())
+                    sufficient = EXTCAP_ARGUMENT_SUFFICIENT_OK;
+            }
 
             connect(argument, &ExtcapArgument::valueChanged, this, &ExtcapOptionsDialog::anyValueChanged);
 
@@ -345,6 +374,9 @@ void ExtcapOptionsDialog::updateWidgets()
         }
         ++iter;
     }
+
+    if (sufficient == EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED)
+        allowStart = false;
 
     if (counter > 0)
     {
@@ -404,7 +436,7 @@ void ExtcapOptionsDialog::on_buttonBox_helpRequested()
         QFileInfo help_file(local_path);
         if (!help_file.exists()) {
             QMessageBox::warning(this, tr("Extcap Help cannot be found"),
-                QString(tr("The help for the extcap interface %1 cannot be found. Given file: %2"))
+                tr("The help for the extcap interface %1 cannot be found. Given file: %2")
                     .arg(device->name).arg(QDir::toNativeSeparators(local_path)),
                 QMessageBox::Ok);
             return;
@@ -448,8 +480,8 @@ bool ExtcapOptionsDialog::saveOptionToCaptureInfo()
                 continue;
         }
 
-        gchar * call_string = qstring_strdup(call);
-        gchar * value_string = NULL;
+        char * call_string = qstring_strdup(call);
+        char * value_string = NULL;
         if (value.length() > 0)
             value_string = qstring_strdup(value);
 
@@ -616,13 +648,13 @@ GHashTable *ExtcapOptionsDialog::getArgumentSettings(bool useCallsAsKey, bool in
         else
             value = (*iter)->prefValue();
 
-        QString key = argument->prefKey(device_name);
+        QString key = argument->prefKey(device_name, option_name, option_value);
         if (useCallsAsKey)
             key = argument->call();
 
         if ((key.length() > 0) && (includeEmptyValues || isBoolflag || value.length() > 0) )
         {
-            gchar * val = qstring_strdup(value);
+            char * val = qstring_strdup(value);
 
             g_hash_table_insert(entries, qstring_strdup(key), val);
         }
@@ -682,7 +714,7 @@ ExtcapValueList ExtcapOptionsDialog::loadValuesFor(int argNum, QString argumentN
             QString call = QString().fromUtf8(v->call);
 
             ExtcapValue element = ExtcapValue(display, call,
-                            v->enabled == (gboolean)TRUE, v->is_default == (gboolean)TRUE);
+                            v->enabled == true, v->is_default == true);
 
 #if 0
             /* TODO: Disabled due to wrong parent handling. It leads to an infinite loop for now. To implement this properly, other things

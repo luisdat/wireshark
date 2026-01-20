@@ -18,7 +18,7 @@
 
 #include <ui/qt/utils/field_information.h>
 
-class ByteViewTab;
+class DataSourceTab;
 class ProtoTree;
 
 namespace Ui {
@@ -38,11 +38,15 @@ protected:
 
 signals:
     void showProtocolPreferences(const QString module_name);
-    void editProtocolPreference(struct preference *pref, struct pref_module *module);
+    void editProtocolPreference(pref_t *pref, module_t *module);
 
 private slots:
     void on_buttonBox_helpRequested();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    void viewVisibilityStateChanged(Qt::CheckState);
+#else
     void viewVisibilityStateChanged(int);
+#endif
     void layoutChanged(int);
 
     void setHintText(FieldInformation *);
@@ -54,9 +58,8 @@ private:
     pref_t *pref_packet_dialog_layout_;
     QString col_info_;
     ProtoTree *proto_tree_;
-    ByteViewTab *byte_view_tab_;
+    DataSourceTab *data_source_tab_;
     wtap_rec rec_;
-    Buffer buf_;
     epan_dissect_t edt_;
 };
 

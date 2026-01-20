@@ -47,13 +47,15 @@
  */
 
 #include "config.h"
-#include <wtap-int.h>
+#include "rtpdump.h"
+
+#include <wtap_module.h>
 #include <file_wrappers.h>
 #include <wsutil/exported_pdu_tlvs.h>
 #include <wsutil/inet_addr.h>
 #include <wsutil/nstime.h>
 #include <wsutil/strtoi.h>
-#include "rtpdump.h"
+#include <wsutil/wslog.h>
 #include <string.h>
 
 /* NB. I've included the version string in the magic for stronger identification.
@@ -63,7 +65,7 @@
  *  - epan/dissectors/file-rtpdump.c
  */
 #define RTP_MAGIC "#!rtpplay1.0 "
-#define RTP_MAGIC_LEN 13
+#define RTP_MAGIC_LEN (sizeof RTP_MAGIC - 1)
 
 /* Reasonable maximum length for the RTP header (after the magic):
  * - WS_INET6_ADDRSTRLEN characters for a IPv6 address
@@ -85,13 +87,13 @@
 #define RTP_BUFFER_INIT_LEN 20+EXP_PDU_TAG_IPV6_LEN
 
 static bool
-rtpdump_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+rtpdump_read(wtap *wth, wtap_rec *rec,
                int *err, char **err_info,
                int64_t *data_offset);
 
 static bool
 rtpdump_seek_read(wtap *wth, int64_t seek_off,
-                    wtap_rec *rec, Buffer *buf,
+                    wtap_rec *rec,
                     int *err, char **err_info);
 
 static void
@@ -132,7 +134,7 @@ rtpdump_open(wtap *wth, int *err, char **err_info)
             ? WTAP_OPEN_NOT_MINE
             : WTAP_OPEN_ERROR;
     }
-    if (strncmp(buf_magic, RTP_MAGIC, RTP_MAGIC_LEN) != 0) {
+    if (memcmp(buf_magic, RTP_MAGIC, RTP_MAGIC_LEN) != 0) {
         return WTAP_OPEN_NOT_MINE;
     }
 
@@ -140,7 +142,7 @@ rtpdump_open(wtap *wth, int *err, char **err_info)
     header_str = g_string_sized_new(RTP_HEADER_MAX_LEN);
     do {
         if (!wtap_read_bytes(wth->fh, &ch, 1, err, err_info)) {
-            g_string_free(header_str, true);
+            g_string_free(header_str, TRUE);
             return (*err == WTAP_ERR_SHORT_READ)
                 ? WTAP_OPEN_NOT_MINE
                 : WTAP_OPEN_ERROR;
@@ -157,7 +159,7 @@ rtpdump_open(wtap *wth, int *err, char **err_info)
             else {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup("rtpdump: bad IP in header text");
-                g_string_free(header_str, true);
+                g_string_free(header_str, TRUE);
                 return WTAP_OPEN_ERROR;
             }
 
@@ -168,13 +170,13 @@ rtpdump_open(wtap *wth, int *err, char **err_info)
             if (!got_ip) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup("rtpdump: no IP in header text");
-                g_string_free(header_str, true);
+                g_string_free(header_str, TRUE);
                 return WTAP_OPEN_ERROR;
             }
             if (!ws_strtou16(header_str->str, NULL, &txt_port)) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup("rtpdump: bad port in header text");
-                g_string_free(header_str, true);
+                g_string_free(header_str, TRUE);
                 return WTAP_OPEN_ERROR;
             }
             break;
@@ -183,12 +185,12 @@ rtpdump_open(wtap *wth, int *err, char **err_info)
             g_string_append_c(header_str, ch);
         }
         else {
-            g_string_free(header_str, true);
+            g_string_free(header_str, TRUE);
             return WTAP_OPEN_NOT_MINE;
         }
     } while (ch != '\n');
 
-    g_string_free(header_str, true);
+    g_string_free(header_str, TRUE);
 
     if (!got_ip || txt_port == 0) {
         *err = WTAP_ERR_BAD_FILE;
@@ -208,11 +210,13 @@ rtpdump_open(wtap *wth, int *err, char **err_info)
         : WTAP_OPEN_ERROR;               \
 } G_STMT_END
 
-    if (!wtap_read_bytes(wth->fh, &start_time.secs, 4, err, err_info)) FAIL;
-    start_time.secs = g_ntohl(start_time.secs);
+    uint32_t u32;
 
-    if (!wtap_read_bytes(wth->fh, &start_time.nsecs, 4, err, err_info)) FAIL;
-    start_time.nsecs = g_ntohl(start_time.nsecs) * 1000;
+    if (!wtap_read_bytes(wth->fh, &u32, 4, err, err_info)) FAIL;
+    start_time.secs = (time_t)g_ntohl(u32);
+
+    if (!wtap_read_bytes(wth->fh, &u32, 4, err, err_info)) FAIL;
+    start_time.nsecs = (int)g_ntohl(u32) * 1000;
 
     if (!wtap_read_bytes(wth->fh, &bin_addr, 4, err, err_info)) FAIL;
     if (!wtap_read_bytes(wth->fh, &bin_port, 2, err, err_info)) FAIL;
@@ -268,7 +272,7 @@ rtpdump_open(wtap *wth, int *err, char **err_info)
 }
 
 static bool
-rtpdump_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf,
+rtpdump_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
                       int *err, char **err_info)
 {
     rtpdump_priv_t *priv = (rtpdump_priv_t *)wth->priv;
@@ -290,17 +294,19 @@ rtpdump_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf,
     /* Set length to remaining length of packet data */
     length -= hdr_len;
 
-    ws_buffer_append_buffer(buf, &priv->epdu_headers);
+    ws_buffer_append_buffer(&rec->data, &priv->epdu_headers);
     if (plen == 0) {
         /* RTCP sample */
         plen = length;
-        wtap_buffer_append_epdu_string(buf, EXP_PDU_TAG_DISSECTOR_NAME, "rtcp");
+        wtap_buffer_append_epdu_string(&rec->data, EXP_PDU_TAG_DISSECTOR_NAME, "rtcp");
     }
     else {
         /* RTP sample */
-        wtap_buffer_append_epdu_string(buf, EXP_PDU_TAG_DISSECTOR_NAME, "rtp");
+        wtap_buffer_append_epdu_string(&rec->data, EXP_PDU_TAG_DISSECTOR_NAME, "rtp");
     }
-    epdu_len = wtap_buffer_append_epdu_end(buf);
+    epdu_len = wtap_buffer_append_epdu_end(&rec->data);
+
+    wtap_setup_packet_rec(rec, wth->file_encap);
 
     /* Offset is milliseconds since the start of recording */
     ts.secs = offset / 1000;
@@ -309,26 +315,25 @@ rtpdump_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf,
     rec->presence_flags |= WTAP_HAS_TS | WTAP_HAS_CAP_LEN;
     rec->rec_header.packet_header.caplen = epdu_len + plen;
     rec->rec_header.packet_header.len = epdu_len + length;
-    rec->rec_type = REC_TYPE_PACKET;
 
-    return wtap_read_packet_bytes(fh, buf, length, err, err_info);
+    return wtap_read_bytes_buffer(fh, &rec->data, length, err, err_info);
 }
 
 static bool
-rtpdump_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err, char **err_info,
+rtpdump_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
                int64_t *data_offset)
 {
     *data_offset = file_tell(wth->fh);
-    return rtpdump_read_packet(wth, wth->fh, rec, buf, err, err_info);
+    return rtpdump_read_packet(wth, wth->fh, rec, err, err_info);
 }
 
 static bool
 rtpdump_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-                    Buffer *buf, int *err, char **err_info)
+                    int *err, char **err_info)
 {
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
-    return rtpdump_read_packet(wth, wth->random_fh, rec, buf, err, err_info);
+    return rtpdump_read_packet(wth, wth->random_fh, rec, err, err_info);
 }
 
 static void

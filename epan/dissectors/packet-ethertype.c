@@ -17,12 +17,12 @@
 #include <epan/packet.h>
 #include <epan/exceptions.h>
 #include <epan/etypes.h>
-#include <epan/ppptypes.h>
 #include <epan/show_exception.h>
 #include <epan/decode_as.h>
 #include <epan/capture_dissectors.h>
 #include <epan/proto_data.h>
 #include "packet-eth.h"
+#include "packet-ppp.h"
 
 void proto_register_ethertype(void);
 
@@ -190,30 +190,31 @@ const value_string etype_vals[] = {
 	{ ETHERTYPE_ECPRI,                "eCPRI" },
 	{ ETHERTYPE_CABLELABS,            "CableLabs Layer-3 Protocol" },
 	{ ETHERTYPE_EXEH,                 "EXos internal Extra Header" },
+	{ ETHERTYPE_ATMF,                 "Allied Telesis Autonomous Management Framework" },
 	{ ETHERTYPE_ATRL,                 "Allied Telesis Resiliency Link" },
 	{ ETHERTYPE_ACIGLEAN,             "Cisco ACI ARP gleaning" },
 	{ ETHERTYPE_IEEE_802_1CB,         "802.1CB Frame Replication and Elimination for Reliability" },
 	{ 0, NULL }
 };
 
-static void eth_prompt(packet_info *pinfo, gchar* result)
+static void eth_prompt(packet_info *pinfo, char* result)
 {
 	snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "Ethertype 0x%04x as",
 		GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_ethertype, pinfo->curr_layer_num)));
 }
 
-static gpointer eth_value(packet_info *pinfo)
+static void *eth_value(packet_info *pinfo)
 {
 	return p_get_proto_data(pinfo->pool, pinfo, proto_ethertype, pinfo->curr_layer_num);
 }
 
 static void add_dix_trailer(packet_info *pinfo, proto_tree *tree, proto_tree *fh_tree,
 			    int trailer_id, tvbuff_t *tvb, tvbuff_t *next_tvb, int offset_after_etype,
-			    guint length_before, gint fcs_len);
+			    unsigned length_before, int fcs_len);
 
 /*
 void
-ethertype(guint16 etype, tvbuff_t *tvb, int offset_after_etype,
+ethertype(uint16_t etype, tvbuff_t *tvb, int offset_after_etype,
 	  packet_info *pinfo, proto_tree *tree, proto_tree *fh_tree,
 	  int etype_id, int trailer_id, int fcs_len)
 */
@@ -222,8 +223,8 @@ dissect_ethertype(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 {
 	const char	  *description;
 	tvbuff_t	  *volatile next_tvb;
-	guint		   length_before;
-	gint		   captured_length, reported_length;
+	unsigned		   length_before;
+	int		   captured_length, reported_length;
 	volatile int	   dissector_found = 0;
 	const char	  *volatile saved_proto;
 	ethertype_data_t  *ethertype_data;
@@ -242,25 +243,25 @@ dissect_ethertype(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 	/* With Cisco ACI gleaning, the rest of the packet is dissected for informational purposes only */
 	if (ethertype_data->etype == ETHERTYPE_ACIGLEAN) {
 
-		guint gleantype, payload_etype;
+		unsigned gleantype, payload_etype;
 
 		col_add_fstr(pinfo->cinfo, COL_PROTOCOL, "0x%04x", ethertype_data->etype);
-		col_set_writable(pinfo->cinfo, COL_PROTOCOL, FALSE);
+		col_set_writable(pinfo->cinfo, COL_PROTOCOL, false);
 
 		description = try_val_to_str(ethertype_data->etype, etype_vals);
 		col_add_str(pinfo->cinfo, COL_INFO, description);
-		col_set_writable(pinfo->cinfo, COL_INFO, FALSE);
+		col_set_writable(pinfo->cinfo, COL_INFO, false);
 		if (reported_length >= 1) {
-			gleantype = (tvb_get_guint8(tvb, ethertype_data->payload_offset) & 0xF0) >> 4;
+			gleantype = (tvb_get_uint8(tvb, ethertype_data->payload_offset) & 0xF0) >> 4;
 			switch (gleantype) {
 			case 4: /* IPv4 */
-				payload_etype = 0x0800;
+				payload_etype = ETHERTYPE_IP;
 				break;
 			case 6: /* IPv6 */
-				payload_etype = 0x86BB;
+				payload_etype = ETHERTYPE_IPv6;
 				break;
 			default: /* ARP */
-				payload_etype = 0x0806;
+				payload_etype = ETHERTYPE_ARP;
 			}
 			ethertype_data->etype = payload_etype;
 		// FIXME: Add glean to protocol-stack in frame-header
@@ -287,7 +288,7 @@ dissect_ethertype(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 	next_tvb = tvb_new_subset_length_caplen(tvb, ethertype_data->payload_offset, captured_length,
 				  reported_length);
 
-	p_add_proto_data(pinfo->pool, pinfo, proto_ethertype, pinfo->curr_layer_num, GUINT_TO_POINTER((guint)ethertype_data->etype));
+	p_add_proto_data(pinfo->pool, pinfo, proto_ethertype, pinfo->curr_layer_num, GUINT_TO_POINTER((unsigned)ethertype_data->etype));
 
 	/* Look for sub-dissector, and call it if found.
 	   Catch exceptions, so that if the reported length of "next_tvb"
@@ -339,9 +340,9 @@ dissect_ethertype(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 static void
 add_dix_trailer(packet_info *pinfo, proto_tree *tree, proto_tree *fh_tree, int trailer_id,
 		tvbuff_t *tvb, tvbuff_t *next_tvb, int offset_after_etype,
-		guint length_before, gint fcs_len)
+		unsigned length_before, int fcs_len)
 {
-	guint		 length;
+	unsigned		 length;
 	tvbuff_t	*trailer_tvb;
 
 	/* OK, how much is there in that tvbuff now? */
@@ -413,7 +414,7 @@ proto_register_ethertype(void)
 	static build_valid_func eth_da_build_value[1] = {eth_value};
 	static decode_as_value_t eth_da_values = {eth_prompt, 1, eth_da_build_value};
 	static decode_as_t ethertype_da = {"ethertype", "ethertype", 1, 0, &eth_da_values, NULL, NULL,
-										decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+										decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
 
 	proto_ethertype = proto_register_protocol("Ethertype", "Ethertype", "ethertype");

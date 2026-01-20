@@ -19,6 +19,7 @@
 #include "urls.h"
 #include "wsutil/filesystem.h"
 #include <wsutil/ws_assert.h>
+#include <app/application_flavor.h>
 
 // To do:
 // - Automatically generate part or all of this, e.g. by parsing
@@ -38,13 +39,13 @@ user_guide_url(const char *page) {
      */
 
     GString *ug_dir = g_string_new("");
-    g_string_printf(ug_dir, "%s\\Wireshark User's Guide", get_datafile_dir());
+    g_string_printf(ug_dir, "%s\\Wireshark User's Guide", get_datafile_dir(application_configuration_environment_prefix()));
     if (g_file_test(ug_dir->str, G_FILE_TEST_IS_DIR)) {
         g_string_printf(url, "file:///%s/%s", ug_dir->str, page);
     }
-    g_string_free(ug_dir, true);
+    g_string_free(ug_dir, TRUE);
 #else
-    char *path = g_build_filename(get_doc_dir(), "wsug_html_chunked", page, NULL);
+    char *path = g_build_filename(get_doc_dir(application_configuration_environment_prefix()), "wsug_html_chunked", page, NULL);
     if (g_file_test(path, G_FILE_TEST_IS_REGULAR)) {
         /* try to open the HTML page from the filesystem */
         g_string_printf(url, "file://%s", path);
@@ -58,7 +59,7 @@ user_guide_url(const char *page) {
     if (url->len == 0) {
         g_string_printf(url, WS_DOCS_URL "wsug_html_chunked/%s", page);
     }
-    return g_string_free(url, false);
+    return g_string_free(url, FALSE);
 }
 
 char *
@@ -68,13 +69,13 @@ topic_action_url(topic_action_e action)
 
     switch(action) {
     /* pages online at www.wireshark.org */
-    case(ONLINEPAGE_HOME):
+    case(ONLINEPAGE_WIRESHARK_HOME):
         url = g_strdup(WS_HOME_PAGE_URL);
         break;
-    case(ONLINEPAGE_WIKI):
+    case(ONLINEPAGE_WIRESHARK_WIKI):
         url = g_strdup(WS_WIKI_HOME_URL);
         break;
-    case(ONLINEPAGE_DOWNLOAD):
+    case(ONLINEPAGE_WIRESHARK_DOWNLOAD):
         url = g_strdup(WS_DOWNLOAD_URL);
         break;
     case(ONLINEPAGE_DOCS):
@@ -104,45 +105,62 @@ topic_action_url(topic_action_e action)
     case(ONLINEPAGE_SECURITY):
         url = g_strdup(WS_WIKI_URL("Security"));
         break;
-    case(ONLINEPAGE_CHIMNEY):
-        url = g_strdup(WS_WIKI_URL("CaptureSetup/Offloading#chimney"));
+    case(ONLINEPAGE_DFILTER_REF):
+        url = g_strdup(WS_DOCS_URL "dfref/");
+        break;
+
+    /* pages online at stratoshark.org */
+    case(ONLINEPAGE_STRATOSHARK_HOME):
+        url = g_strdup(SS_HOME_PAGE_URL);
+        break;
+    case(ONLINEPAGE_STRATOSHARK_WIKI):
+        url = g_strdup(SS_WIKI_HOME_URL);
+        break;
+    case(ONLINEPAGE_STRATOSHARK_DOWNLOAD):
+        url = g_strdup(SS_DOWNLOAD_URL);
         break;
 
     /* local manual pages */
     case(LOCALPAGE_MAN_WIRESHARK):
-        url = doc_file_url("wireshark.html");
+        url = doc_file_url("wireshark.html", application_configuration_environment_prefix());
+        break;
+    case(LOCALPAGE_MAN_STRATOSHARK):
+        url = doc_file_url("stratoshark.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_WIRESHARK_FILTER):
-        url = doc_file_url("wireshark-filter.html");
+        url = doc_file_url("wireshark-filter.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_CAPINFOS):
-        url = doc_file_url("capinfos.html");
+        url = doc_file_url("capinfos.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_DUMPCAP):
-        url = doc_file_url("dumpcap.html");
+        url = doc_file_url("dumpcap.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_EDITCAP):
-        url = doc_file_url("editcap.html");
+        url = doc_file_url("editcap.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_MERGECAP):
-        url = doc_file_url("mergecap.html");
+        url = doc_file_url("mergecap.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_RAWSHARK):
-        url = doc_file_url("rawshark.html");
+        url = doc_file_url("rawshark.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_REORDERCAP):
-        url = doc_file_url("reordercap.html");
+        url = doc_file_url("reordercap.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_TEXT2PCAP):
-        url = doc_file_url("text2pcap.html");
+        url = doc_file_url("text2pcap.html", application_configuration_environment_prefix());
         break;
     case(LOCALPAGE_MAN_TSHARK):
-        url = doc_file_url("tshark.html");
+        url = doc_file_url("tshark.html", application_configuration_environment_prefix());
         break;
 
     /* Release Notes */
-    case(LOCALPAGE_RELEASE_NOTES):
-        url = doc_file_url("release-notes.html");
+    case(LOCALPAGE_WIRESHARK_RELEASE_NOTES):
+        url = doc_file_url("Wireshark Release Notes.html", application_configuration_environment_prefix());
+        break;
+    case(LOCALPAGE_STRATOSHARK_RELEASE_NOTES):
+        url = doc_file_url("Stratoshark Release Notes.html", application_configuration_environment_prefix());
         break;
 
     /* local help pages (User's Guide) */
@@ -213,7 +231,7 @@ topic_action_url(topic_action_e action)
         url = user_guide_url("ChAdvExpert.html");
         break;
     case(HELP_EXTCAP_OPTIONS_DIALOG):
-        url = doc_file_url("extcap.html");
+        url = doc_file_url("extcap.html", application_configuration_environment_prefix());
         break;
     case(HELP_STATS_SUMMARY_DIALOG):
         url = user_guide_url("ChStatSummary.html");
@@ -258,6 +276,12 @@ topic_action_url(topic_action_e action)
     case(HELP_EXPORT_BYTES_DIALOG):
         url = user_guide_url("ChIOExportSection.html#ChIOExportSelectedDialog");
         break;
+    case(HELP_EXPORT_PDUS_DIALOG):
+        url = user_guide_url("ChIOExportSection.html#ChIOExportPDUSDialog");
+        break;
+    case(HELP_STRIP_HEADERS_DIALOG):
+        url = user_guide_url("ChIOExportSection.html#ChIOStripHeadersDialog");
+        break;
     case(HELP_EXPORT_OBJECT_LIST):
         url = user_guide_url("ChIOExportSection.html#ChIOExportObjectsDialog");
         break;
@@ -299,6 +323,9 @@ topic_action_url(topic_action_e action)
         break;
     case(HELP_STAT_FLOW_GRAPH):
         url = user_guide_url("ChStatFlowGraph.html");
+        break;
+    case(HELP_STATS_PLOT_DIALOG):
+        url = user_guide_url("ChStatPlots.html");
         break;
 
     case(TOPIC_ACTION_NONE):

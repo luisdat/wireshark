@@ -12,14 +12,13 @@
 
 #include "software_update.h"
 #include "language.h"
-#include "../epan/prefs.h"
-#include "../wsutil/filesystem.h"
+#include "epan/prefs.h"
 
 /*
  * Version 0 of the update URI path has the following elements:
  * - The update path prefix (fixed, "update")
  * - The schema version (fixed, 0)
- * - The application name (variable, "Wireshark" or "Logray")
+ * - The application name (variable, "Wireshark" or "Stratoshark")
  * - The application version ("<major>.<minor>.<micro>")
  * - The operating system (variable, one of "Windows" or "macOS")
  * - The architecture name (variable, one of "x86", "x86-64", or "arm64")
@@ -63,15 +62,9 @@
 #error HAVE_SOFTWARE_UPDATE can only be defined for x86-64 or x86 or arm64.
 #endif
 
-static char *get_appcast_update_url(software_update_channel_e chan) {
+static char *get_appcast_update_url(software_update_channel_e chan, const char* su_application, const char* su_version) {
     GString *update_url_str = g_string_new("");
     const char *chan_name;
-    const char *su_application = get_configuration_namespace();
-    const char *su_version = VERSION;
-
-    if (!is_packet_configuration_namespace()) {
-        su_version = LOG_VERSION;
-    }
 
     switch (chan) {
         case UPDATE_CHANNEL_DEVELOPMENT:
@@ -89,15 +82,15 @@ static char *get_appcast_update_url(software_update_channel_e chan) {
                     SU_OSNAME,
                     SU_ARCH,
                     chan_name);
-    return g_string_free(update_url_str, false);
+    return g_string_free(update_url_str, FALSE);
 }
 
 #ifdef _WIN32
 /** Initialize software updates.
  */
 void
-software_update_init(void) {
-    const char *update_url = get_appcast_update_url(prefs.gui_update_channel);
+software_update_init(const char* su_application, const char* su_version) {
+    const char *update_url = get_appcast_update_url(prefs.gui_update_channel, su_application, su_version);
 
     /*
      * According to the WinSparkle 0.5 documentation these must be called
@@ -110,8 +103,9 @@ software_update_init(void) {
     win_sparkle_set_update_check_interval(prefs.gui_update_interval);
     win_sparkle_set_can_shutdown_callback(software_update_can_shutdown_callback);
     win_sparkle_set_shutdown_request_callback(software_update_shutdown_request_callback);
-    if ((language != NULL) && (strcmp(language, "system") != 0)) {
-        win_sparkle_set_lang(language);
+    const char* ws_language = get_language_used();
+    if ((ws_language != NULL) && (strcmp(ws_language, USE_SYSTEM_LANGUAGE) != 0)) {
+        win_sparkle_set_lang(ws_language);
     }
     win_sparkle_init();
 }
@@ -139,8 +133,8 @@ const char *software_update_info(void) {
 /** Initialize software updates.
  */
 void
-software_update_init(void) {
-    char *update_url = get_appcast_update_url(prefs.gui_update_channel);
+software_update_init(const char* su_application, const char* su_version) {
+    char *update_url = get_appcast_update_url(prefs.gui_update_channel, su_application, su_version);
 
     sparkle_software_update_init(update_url, prefs.gui_update_enabled, prefs.gui_update_interval);
 
@@ -169,7 +163,7 @@ const char *software_update_info(void) {
 /** Initialize software updates.
  */
 void
-software_update_init(void) {
+software_update_init(const char* su_application _U_, const char* su_version _U_) {
 }
 
 /** Force a software update check.

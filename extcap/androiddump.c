@@ -23,12 +23,13 @@
 #include <wsutil/strtoi.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/privileges.h>
-#include <wsutil/report_message.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/inet_addr.h>
 #include <wsutil/exported_pdu_tlvs.h>
+#include <wsutil/report_message.h>
+#include <app/application_flavor.h>
 
 #include "ui/failure_message.h"
 
@@ -59,8 +60,8 @@
 #define PCAP_RECORD_HEADER_LENGTH              16
 
 #ifdef ANDROIDDUMP_USE_LIBPCAP
-    #include <pcap.h>
-    #include <pcap-bpf.h>
+    #include <pcap/pcap.h>
+    #include <pcap/bpf.h>
     #include <pcap/bluetooth.h>
 
     #ifndef DLT_BLUETOOTH_H4_WITH_PHDR
@@ -200,7 +201,7 @@ enum {
     OPT_CONFIG_BT_LOCAL_TCP_PORT
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
     EXTCAP_BASE_OPTIONS,
     { "help",                     ws_no_argument,       NULL, OPT_HELP},
     { "version",                  ws_no_argument,       NULL, OPT_VERSION},
@@ -354,18 +355,26 @@ static const char* interface_to_logbuf(char* interface)
     return logbuf;
 }
 
-/*
- * General errors and warnings are reported through ws_warning() in
- * androiddump.
- *
- * Unfortunately, ws_warning() may be a macro, so we do it by calling
- * g_logv() with the appropriate arguments.
- */
-static void
-androiddump_cmdarg_err(const char *msg_format, va_list ap)
-{
-    ws_logv(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_WARNING, msg_format, ap);
-}
+/* "Error codes set by Windows Sockets are not made available through the errno
+  * variable."
+  * https://learn.microsoft.com/en-us/windows/win32/winsock/error-codes-errno-h-errno-and-wsagetlasterror-2
+  */
+#ifdef _WIN32
+#define CONTINUE_ON_TIMEOUT(length) \
+    if (length == SOCKET_ERROR) { \
+        int last_err = WSAGetLastError(); \
+        if (last_err == WSAETIMEDOUT || last_err == WSAEWOULDBLOCK) \
+            continue; \
+    }
+#elif EWOULDBLOCK != EAGAIN
+#define CONTINUE_ON_TIMEOUT(length) \
+    if (errno == EAGAIN || errno == EWOULDBLOCK) \
+        continue;
+#else
+#define CONTINUE_ON_TIMEOUT(length) \
+    if (errno == EAGAIN) \
+        continue;
+#endif /* _WIN32 */
 
 static void useSndTimeout(socket_handle_t  sock) {
     int res;
@@ -387,10 +396,20 @@ static void useSndTimeout(socket_handle_t  sock) {
 
 static void useNonBlockingConnectTimeout(socket_handle_t  sock) {
 #ifdef _WIN32
+    int res_snd;
+    int res_rcv;
+    const DWORD socket_timeout = SOCKET_RW_TIMEOUT_MS;
     unsigned long non_blocking = 1;
 
+    /* set timeout when non-blocking to 2s on Windows */
+    res_snd = setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&socket_timeout, sizeof(socket_timeout));
+    res_rcv = setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&socket_timeout, sizeof(socket_timeout));
     /* set socket to non-blocking */
     ioctlsocket(sock, FIONBIO, &non_blocking);
+    if (res_snd != 0)
+        ws_debug("Can't set socket timeout, using default");
+    if (res_rcv != 0)
+        ws_debug("Can't set socket timeout, using default");
 #else
     int flags = fcntl(sock, F_GETFL);
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
@@ -446,20 +465,23 @@ static struct extcap_dumper extcap_dumper_open(char *fifo, int encap) {
     int file_type_subtype;
     int err = 0;
     char *err_info = NULL;
+    const struct file_extension_info* file_extensions;
+    unsigned num_extensions;
 
-    wtap_init(false);
+    application_file_extensions(&file_extensions, &num_extensions);
+    wtap_init(false, application_configuration_environment_prefix(), file_extensions, num_extensions);
 
     params.encap = encap;
     params.snaplen = PACKET_LENGTH;
     file_type_subtype = wtap_pcap_nsec_file_type_subtype();
-    extcap_dumper.dumper.wtap = wtap_dump_open(fifo, file_type_subtype, WTAP_UNCOMPRESSED, &params, &err, &err_info);
+    extcap_dumper.dumper.wtap = wtap_dump_open(fifo, file_type_subtype, WS_FILE_UNCOMPRESSED, &params, &err, &err_info);
     if (!extcap_dumper.dumper.wtap) {
-        cfile_dump_open_failure_message(fifo, err, err_info, file_type_subtype);
+        report_cfile_dump_open_failure(fifo, err, err_info, file_type_subtype);
         exit(EXIT_CODE_CANNOT_SAVE_WIRETAP_DUMP);
     }
     extcap_dumper.encap = encap;
     if (!wtap_dump_flush(extcap_dumper.dumper.wtap, &err)) {
-        cfile_dump_open_failure_message(fifo, err, NULL, file_type_subtype);
+        report_cfile_dump_open_failure(fifo, err, NULL, file_type_subtype);
         exit(EXIT_CODE_CANNOT_SAVE_WIRETAP_DUMP);
     }
 #endif
@@ -488,15 +510,12 @@ static bool extcap_dumper_dump(struct extcap_dumper extcap_dumper,
     char               *err_info;
     wtap_rec            rec;
 
-    rec.rec_type = REC_TYPE_PACKET;
-    rec.presence_flags = WTAP_HAS_TS;
-    rec.rec_header.packet_header.caplen = (uint32_t) captured_length;
-    rec.rec_header.packet_header.len = (uint32_t) reported_length;
+    wtap_rec_init(&rec, captured_length);
+    wtap_setup_packet_rec(&rec, extcap_dumper.encap);
 
+    rec.presence_flags = WTAP_HAS_TS;
     rec.ts.secs = seconds;
     rec.ts.nsecs = (int) nanoseconds;
-
-    rec.block = NULL;
 
 /*  NOTE: Try to handle pseudoheaders manually */
     if (extcap_dumper.encap == EXTCAP_ENCAP_BLUETOOTH_H4_WITH_PHDR) {
@@ -506,24 +525,30 @@ static bool extcap_dumper_dump(struct extcap_dumper extcap_dumper,
 
         rec.rec_header.packet_header.pseudo_header.bthci.sent = GINT32_FROM_BE(*direction) ? 0 : 1;
 
-        rec.rec_header.packet_header.len -= (uint32_t)sizeof(own_pcap_bluetooth_h4_header);
-        rec.rec_header.packet_header.caplen -= (uint32_t)sizeof(own_pcap_bluetooth_h4_header);
-
         buffer += sizeof(own_pcap_bluetooth_h4_header);
+        captured_length -= sizeof(own_pcap_bluetooth_h4_header);
     }
-    rec.rec_header.packet_header.pkt_encap = extcap_dumper.encap;
 
-    if (!wtap_dump(extcap_dumper.dumper.wtap, &rec, (const uint8_t *) buffer, &err, &err_info)) {
-        cfile_write_failure_message(NULL, fifo, err, err_info, 0,
-                                    wtap_dump_file_type_subtype(extcap_dumper.dumper.wtap));
+    rec.rec_header.packet_header.caplen = (uint32_t) captured_length;
+    rec.rec_header.packet_header.len = (uint32_t) reported_length;
+
+    ws_buffer_append(&rec.data, (const uint8_t*)buffer, captured_length);
+
+    if (!wtap_dump(extcap_dumper.dumper.wtap, &rec, &err, &err_info)) {
+        report_cfile_write_failure(NULL, fifo, err, err_info, 0,
+                                   wtap_dump_file_type_subtype(extcap_dumper.dumper.wtap));
+        wtap_rec_cleanup(&rec);
         return false;
     }
 
     if (!wtap_dump_flush(extcap_dumper.dumper.wtap, &err)) {
-        cfile_write_failure_message(NULL, fifo, err, NULL, 0,
-                                    wtap_dump_file_type_subtype(extcap_dumper.dumper.wtap));
+        report_cfile_write_failure(NULL, fifo, err, NULL, 0,
+                                   wtap_dump_file_type_subtype(extcap_dumper.dumper.wtap));
+        wtap_rec_cleanup(&rec);
         return false;
     }
+
+    wtap_rec_cleanup(&rec);
 #endif
 
     return true;
@@ -568,11 +593,12 @@ static socket_handle_t adb_connect(const char *server_ip, unsigned short *server
             fd_set fdset;
             FD_ZERO(&fdset);
             FD_SET(sock, &fdset);
-            if ((select(sock+1, NULL, &fdset, NULL, &timeout) != 0) && (FD_ISSET(sock, &fdset))) {
 #ifdef _WIN32
+            if ((select(0, NULL, &fdset, NULL, &timeout) != 0) && (FD_ISSET(sock, &fdset))) {
                 status = 0;
                 break;
 #else
+            if ((select(sock+1, NULL, &fdset, NULL, &timeout) != 0) && (FD_ISSET(sock, &fdset))) {
                 length = sizeof(result);
                 getsockopt(sock, SOL_SOCKET, SO_ERROR, &result, &length);
                 if (result == 0) {
@@ -819,7 +845,12 @@ static int adb_send(socket_handle_t sock, const char *adb_service) {
     size_t   adb_service_length;
 
     adb_service_length = strlen(adb_service);
-    snprintf(buffer, sizeof(buffer), ADB_HEX4_FORMAT, adb_service_length);
+    result = snprintf(buffer, sizeof(buffer), ADB_HEX4_FORMAT, adb_service_length);
+    if ((size_t)result >= sizeof(buffer)) {
+        /* Truncation (or failure somehow) */
+        ws_warning("Service name too long when sending <%s> to ADB daemon", adb_service);
+        return EXIT_CODE_ERROR_WHILE_SENDING_ADB_PACKET_1;
+    }
 
     result = send(sock, buffer, ADB_HEX4_LEN, 0);
     if (result < ADB_HEX4_LEN) {
@@ -1371,13 +1402,7 @@ static int capture_android_bluetooth_hcidump(char *interface, char *fifo,
 
         errno = 0;
         length = recv(sock, data + used_buffer_length, (int)(PACKET_LENGTH - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -1436,13 +1461,7 @@ static int capture_android_bluetooth_hcidump(char *interface, char *fifo,
 
             errno = 0;
             length = recv(sock, data + used_buffer_length, (int)(PACKET_LENGTH - used_buffer_length), 0);
-            if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-                || errno == EWOULDBLOCK
-#endif
-                ) {
-                continue;
-            }
+            CONTINUE_ON_TIMEOUT(length)
             else if (errno != 0) {
                 ws_warning("ERROR capture: %s", strerror(errno));
                 closesocket(sock);
@@ -1478,13 +1497,7 @@ static int capture_android_bluetooth_hcidump(char *interface, char *fifo,
     while (endless_loop) {
         errno = 0;
         length = recv(sock, data + used_buffer_length,  (int)(PACKET_LENGTH - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -1677,7 +1690,7 @@ static int capture_android_bluetooth_external_parser(char *interface,
     uint64_t                      *timestamp;
     char                          *packet = buffer + BLUEDROID_TIMESTAMP_SIZE - sizeof(own_pcap_bluetooth_h4_header); /* skip timestamp (8 bytes) and reuse its space for header */
     own_pcap_bluetooth_h4_header  *h4_header;
-    uint8_t                       *payload = packet + sizeof(own_pcap_bluetooth_h4_header);
+    uint8_t                       *payload = (uint8_t*)(packet + sizeof(own_pcap_bluetooth_h4_header));
     const char                    *adb_tcp_bluedroid_external_parser_template = "tcp:%05u";
     socklen_t                      slen;
     ssize_t                        length;
@@ -1765,13 +1778,7 @@ static int capture_android_bluetooth_external_parser(char *interface,
     while (endless_loop) {
         errno = 0;
         length = recv(sock, buffer + used_buffer_length,  (int)(PACKET_LENGTH - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -1954,13 +1961,7 @@ static int capture_android_bluetooth_btsnoop_net(char *interface, char *fifo,
         errno = 0;
         length = recv(sock, packet + used_buffer_length + sizeof(own_pcap_bluetooth_h4_header),
                 (int)(PACKET_LENGTH - sizeof(own_pcap_bluetooth_h4_header) - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -2101,13 +2102,7 @@ static int capture_android_logcat_text(char *interface, char *fifo,
     while (endless_loop) {
         errno = 0;
         length = recv(sock, packet + exported_pdu_headers_size + used_buffer_length,  (int)(PACKET_LENGTH - exported_pdu_headers_size - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -2243,13 +2238,7 @@ static int capture_android_logcat(char *interface, char *fifo,
     while (endless_loop) {
         errno = 0;
         length = recv(sock, packet + exported_pdu_headers_size + used_buffer_length, (int)(PACKET_LENGTH - exported_pdu_headers_size - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -2382,13 +2371,7 @@ static int capture_android_tcpdump(char *interface, char *fifo,
     while (used_buffer_length < PCAP_GLOBAL_HEADER_LENGTH) {
         errno = 0;
         length = recv(sock, data + used_buffer_length, (int)(PCAP_GLOBAL_HEADER_LENGTH - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -2439,13 +2422,7 @@ static int capture_android_tcpdump(char *interface, char *fifo,
 
         errno = 0;
         length = recv(sock, data + used_buffer_length, (int)(PACKET_LENGTH - used_buffer_length), 0);
-        if (errno == EAGAIN
-#if EWOULDBLOCK != EAGAIN
-            || errno == EWOULDBLOCK
-#endif
-            ) {
-            continue;
-        }
+        CONTINUE_ON_TIMEOUT(length)
         else if (errno != 0) {
             ws_warning("ERROR capture: %s", strerror(errno));
             closesocket(sock);
@@ -2501,18 +2478,6 @@ static int capture_android_tcpdump(char *interface, char *fifo,
 
 int main(int argc, char *argv[]) {
     char            *err_msg;
-    static const struct report_message_routines androiddummp_report_routines = {
-        failure_message,
-        failure_message,
-        open_failure_message,
-        read_failure_message,
-        write_failure_message,
-        cfile_open_failure_message,
-        cfile_dump_open_failure_message,
-        cfile_read_failure_message,
-        cfile_write_failure_message,
-        cfile_close_failure_message
-    };
     int              ret = EXIT_CODE_GENERIC;
     int              option_idx = 0;
     int              result;
@@ -2537,10 +2502,13 @@ int main(int argc, char *argv[]) {
     char            *help_url;
     char            *help_header = NULL;
 
-    cmdarg_err_init(androiddump_cmdarg_err, androiddump_cmdarg_err);
+    /* Set the program name. */
+    g_set_prgname("androiddump");
+
+    cmdarg_err_init(extcap_log_cmdarg_err, extcap_log_cmdarg_err);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    extcap_log_init("androiddump");
+    extcap_log_init();
 
     /*
      * Get credential information for later use.
@@ -2551,18 +2519,18 @@ int main(int argc, char *argv[]) {
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    err_msg = configuration_init(argv[0], NULL);
+    err_msg = configuration_init(argv[0], "wireshark");
     if (err_msg != NULL) {
         ws_warning("Can't get pathname of directory containing the extcap program: %s.",
                   err_msg);
         g_free(err_msg);
     }
 
-    init_report_message("androiddump", &androiddummp_report_routines);
+    init_report_failure_message("androiddump");
 
     extcap_conf = g_new0(extcap_parameters, 1);
 
-    help_url = data_file_url("androiddump.html");
+    help_url = data_file_url("androiddump.html", application_configuration_environment_prefix());
     extcap_base_set_util_info(extcap_conf, argv[0], ANDROIDDUMP_VERSION_MAJOR, ANDROIDDUMP_VERSION_MINOR,
         ANDROIDDUMP_VERSION_RELEASE, help_url);
     g_free(help_url);

@@ -9,10 +9,9 @@
 #include "config.h"
 
 #include <ftypes-int.h>
-#include <epan/strutil.h>
 #include <epan/to_str.h>
 #include <string.h>
-#include <wsutil/glib-compat.h>
+#include <wsutil/array.h>
 
 #include <epan/exceptions.h>
 #include <wsutil/ws_assert.h>
@@ -47,14 +46,12 @@ value_free(fvalue_t *fv)
 static void
 value_set(fvalue_t *fv, tvbuff_t *value, const char *name, int length)
 {
-	if (value != NULL) {
-		/* Free up the old value, if we have one */
-		value_free(fv);
+	/* Free up the old value, if we have one */
+	value_free(fv);
 
-		/* Set the protocol description and an (optional, nullable) tvbuff. */
-		fv->value.protocol.tvb = value;
-		fv->value.protocol.proto_string = g_strdup(name);
-	}
+	/* Set the protocol description and an (optional, nullable) tvbuff. */
+	fv->value.protocol.tvb = value;
+	fv->value.protocol.proto_string = g_strdup(name);
 	fv->value.protocol.length = length;
 }
 
@@ -74,7 +71,7 @@ val_from_string(fvalue_t *fv, const char *s, size_t len, char **err_msg _U_)
 	 * terminating NUL. */
 	private_data = (uint8_t *)g_memdup2(s, (unsigned)len);
 	new_tvb = tvb_new_real_data(private_data,
-			(unsigned)len, (int)len);
+			(unsigned)len, (unsigned)len);
 
 	/* Let the tvbuff know how to delete the data. */
 	tvb_set_free_cb(new_tvb, g_free);
@@ -200,6 +197,8 @@ val_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int fie
 static tvbuff_t *
 value_get(fvalue_t *fv)
 {
+	if (fv->value.protocol.tvb == NULL)
+		return NULL;
 	if (fv->value.protocol.length < 0)
 		return fv->value.protocol.tvb;
 	return tvb_new_subset_length_caplen(fv->value.protocol.tvb, 0, fv->value.protocol.length, fv->value.protocol.length);
@@ -302,7 +301,7 @@ cmp_contains(const fvalue_t *fv_a, const fvalue_t *fv_b, bool *contains)
 	TRY {
 		/* First see if tvb exists for both sides */
 		if ((fv_a->value.protocol.tvb != NULL) && (fv_b->value.protocol.tvb != NULL)) {
-			if (tvb_find_tvb(fv_a->value.protocol.tvb, fv_b->value.protocol.tvb, 0) > -1) {
+			if (tvb_find_tvb_remaining(fv_a->value.protocol.tvb, fv_b->value.protocol.tvb, 0, NULL)) {
 				yes = true;
 			}
 		} else {
@@ -369,7 +368,7 @@ void
 ftype_register_tvbuff(void)
 {
 
-	static ftype_t protocol_type = {
+	static const ftype_t protocol_type = {
 		FT_PROTOCOL,			/* ftype */
 		0,				/* wire_size */
 		value_new,			/* new_value */
@@ -396,6 +395,7 @@ ftype_register_tvbuff(void)
 
 		val_hash,
 		is_zero,
+		NULL,
 		NULL,
 		len,
 		(FvalueSlice)slice,

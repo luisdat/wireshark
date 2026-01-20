@@ -13,6 +13,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 
 #include "wslua_file_common.h"
 
@@ -25,8 +26,6 @@
 
    The classes/functions defined in this section allow you to create your own
    custom Lua-based "capture" file reader, or writer, or both.
-
-   @since 1.11.3
  */
 
 
@@ -77,8 +76,6 @@ WSLUA_CLASS_DEFINE(File,FAIL_ON_NULL_OR_EXPIRED("File"));
         return false
     end
     ----
-
-   @since 1.11.3
  */
 
 
@@ -152,7 +149,7 @@ static int File_read_number (lua_State *L, FILE_T ft) {
     buff[buff_end] = '\0';
 
     if (buff_end > 0 && num_digits > 0 && sscanf(buff, "%lf", &d) == 1) {
-        lua_pushinteger(L, d);
+        lua_pushnumber(L, d);
         return 1;
     }
     else {
@@ -202,11 +199,6 @@ static int File_read_line(lua_State *L, FILE_T ft) {
  * Lua string in the end.
  */
 #define WSLUA_BUFFERSIZE 1024
-
-/* Lua 5.1 used lua_objlen() instead of lua_rawlen() */
-#if LUA_VERSION_NUM == 501
-#define lua_rawlen lua_objlen
-#endif
 
 /**
  * Reads some data and returns the number of bytes read.
@@ -482,7 +474,7 @@ static int File_get_compressed(lua_State* L) {
     if (file_is_reader(f)) {
         lua_pushboolean(L, file_iscompressed(f->file));
     } else {
-        lua_pushboolean(L, f->wdh->compression_type != WTAP_UNCOMPRESSED);
+        lua_pushboolean(L, f->wdh->compression_type != WS_FILE_UNCOMPRESSED);
     }
     return 1;
 }

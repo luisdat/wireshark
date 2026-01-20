@@ -3,7 +3,7 @@
 # make-pci-ids - Creates a file containing PCI IDs.
 # It use the databases from
 # https://github.com/pciutils/pciids/raw/master/pci.ids
-# to create our file epan/dissectors/pci-ids.c
+# to create our file epan/dissectors/packet-ncsi-data.c
 #
 # Wireshark - Network traffic analyzer
 #
@@ -15,9 +15,11 @@
 
 import string
 import sys
-import urllib.request, urllib.error, urllib.parse
+import urllib.request
+import urllib.error
+import urllib.parse
 
-OUTPUT_FILE = "epan/pci-ids.c"
+OUTPUT_FILE = "epan/dissectors/packet-ncsi-data.c"
 
 MIN_VENDOR_COUNT = 2250 # 2261 on 2021-11-01
 MIN_DEVICE_COUNT = 33000 # 33724 on 2021-11-01
@@ -37,7 +39,9 @@ CODE_PREFIX = """\
 #include <stddef.h>
 #include <stdlib.h>
 
-#include "pci-ids.h"
+#include "wsutil/array.h"
+
+#include "packet-ncsi-data.h"
 
 typedef struct
 {
@@ -73,7 +77,7 @@ const char *pci_id_str(uint16_t vid, uint16_t did, uint16_t svid, uint16_t ssid)
     pci_vid_index_t const *index_ptr;
     pci_id_t const *ids_ptr;
 
-    index_ptr = bsearch(&vid, pci_vid_index, sizeof pci_vid_index / sizeof pci_vid_index[0], sizeof pci_vid_index[0], vid_search);
+    index_ptr = bsearch(&vid, pci_vid_index, array_length(pci_vid_index), sizeof pci_vid_index[0], vid_search);
 
     if(index_ptr == NULL)
         return not_found;

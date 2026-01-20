@@ -16,7 +16,8 @@
 
 #include <epan/packet.h>
 #include <epan/to_str.h>
-
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include "packet-smb-browse.h"
 #include "packet-dcerpc.h"
 
@@ -88,12 +89,12 @@ static int hf_browser_to_promote;
 static int hf_windows_version;
 static int hf_mysterious_field;
 
-static gint ett_browse;
-static gint ett_browse_flags;
-static gint ett_browse_election_criteria;
-static gint ett_browse_election_os;
-static gint ett_browse_election_desire;
-static gint ett_browse_reset_cmd_flags;
+static int ett_browse;
+static int ett_browse_flags;
+static int ett_browse_election_criteria;
+static int ett_browse_election_os;
+static int ett_browse_election_desire;
+static int ett_browse_reset_cmd_flags;
 
 #define SERVER_WORKSTATION		 0
 #define SERVER_SERVER			 1
@@ -400,7 +401,7 @@ dissect_election_criterion(tvbuff_t *tvb, proto_tree *parent_tree, int offset)
 {
 	proto_tree *tree = NULL;
 	proto_item *item = NULL;
-	guint32 criterion;
+	uint32_t criterion;
 
 	criterion = tvb_get_letohl(tvb, offset);
 
@@ -431,10 +432,10 @@ dissect_election_criterion(tvbuff_t *tvb, proto_tree *parent_tree, int offset)
  */
 int
 dissect_smb_server_type_flags(tvbuff_t *tvb, int offset, packet_info *pinfo,
-			      proto_tree *parent_tree, guint8 *drep,
-			      gboolean infoflag)
+			      proto_tree *parent_tree, uint8_t *drep,
+			      bool infoflag)
 {
-	guint32 flags;
+	uint32_t flags;
 	int i;
 
 	static int * const type_flags[] = {
@@ -494,7 +495,7 @@ dissect_smb_server_type_flags(tvbuff_t *tvb, int offset, packet_info *pinfo,
 		for (i = 0; i < 32; i++) {
 			if (flags & (1U<<i)) {
 				col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-					val_to_str(i, server_types,
+					val_to_str(pinfo->pool, i, server_types,
 					"Unknown server type:%d"));
 			}
 		}
@@ -512,25 +513,25 @@ static int
 dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
 	int offset = 0;
-	guint8 cmd;
+	uint8_t cmd;
 	proto_tree *tree = NULL;
 	proto_item *item = NULL;
-	guint32 periodicity;
-	guint8 *host_name;
-	gint namelen;
-	guint8 server_count;
-	guint8 os_major_ver, os_minor_ver;
-	const gchar *windows_version;
+	uint32_t periodicity;
+	char *host_name;
+	int namelen;
+	uint8_t server_count;
+	uint8_t os_major_ver, os_minor_ver;
+	const char *windows_version;
 	int i;
-	guint32 uptime;
+	uint32_t uptime;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BROWSER");
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	cmd = tvb_get_guint8(tvb, offset);
+	cmd = tvb_get_uint8(tvb, offset);
 
 	/* Put in something, and replace it later */
-	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(cmd, commands, "Unknown command:0x%02x"));
+	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, cmd, commands, "Unknown command:0x%02x"));
 
 
 	item = proto_tree_add_item(parent_tree, proto_smb_browse, tvb, offset, -1, ENC_NA);
@@ -557,7 +558,7 @@ dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 		offset += 4;
 
 		/* server name */
-		host_name = tvb_get_stringzpad(pinfo->pool, tvb, offset, HOST_NAME_LEN, ENC_CP437|ENC_NA);
+		host_name = (char*)tvb_get_stringzpad(pinfo->pool, tvb, offset, HOST_NAME_LEN, ENC_CP437|ENC_NA);
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", host_name);
 		proto_tree_add_string_format(tree, hf_server_name,
 			tvb, offset, HOST_NAME_LEN,
@@ -569,8 +570,8 @@ dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 		offset += HOST_NAME_LEN;
 
 		/* Windows version (See "OSVERSIONINFO Structure" on MSDN) */
-		os_major_ver = tvb_get_guint8(tvb, offset);
-		os_minor_ver = tvb_get_guint8(tvb, offset+1);
+		os_major_ver = tvb_get_uint8(tvb, offset);
+		os_minor_ver = tvb_get_uint8(tvb, offset+1);
 
 		SET_WINDOWS_VERSION_STRING(os_major_ver, os_minor_ver, windows_version);
 		proto_tree_add_string(tree, hf_windows_version, tvb, offset, 2, windows_version);
@@ -585,7 +586,7 @@ dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 
 		/* server type flags */
 		offset = dissect_smb_server_type_flags(
-			tvb, offset, pinfo, tree, NULL, TRUE);
+			tvb, offset, pinfo, tree, NULL, true);
 
 		if (cmd == BROWSE_DOMAIN_ANNOUNCEMENT && tvb_get_letohs (tvb, offset + 2) != 0xAA55) {
 			/*
@@ -621,7 +622,7 @@ dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 		break;
 	}
 	case BROWSE_REQUEST_ANNOUNCE: {
-		guint8 *computer_name;
+		char *computer_name;
 
 		/* unused/unknown flags */
 		proto_tree_add_item(tree, hf_unused_flags,
@@ -629,9 +630,8 @@ dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 		offset += 1;
 
 		/* name of computer to which to send reply */
-		computer_name = tvb_get_stringz_enc(pinfo->pool, tvb, offset, &namelen, ENC_ASCII);
-		proto_tree_add_string(tree, hf_response_computer_name,
-			tvb, offset, namelen, computer_name);
+		proto_tree_add_item_ret_string(tree, hf_response_computer_name,
+			tvb, offset, -1, ENC_ASCII, pinfo->pool, (const uint8_t**)&computer_name);
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", computer_name);
 		break;
 	}
@@ -673,7 +673,7 @@ dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 
 	case BROWSE_BACKUP_LIST_RESPONSE:
 		/* backup list requested count */
-		server_count = tvb_get_guint8(tvb, offset);
+		server_count = tvb_get_uint8(tvb, offset);
 		proto_tree_add_uint(tree, hf_backup_count, tvb, offset, 1,
 		    server_count);
 		offset += 1;
@@ -741,22 +741,22 @@ static int
 dissect_mailslot_lanman(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
 	int offset = 0;
-	guint8 cmd;
+	uint8_t cmd;
 	proto_tree *tree;
 	proto_item *item;
-	guint32 periodicity;
-	const guint8 *host_name;
-	guint8 os_major_ver, os_minor_ver;
-	const gchar *windows_version;
-	guint namelen;
+	uint32_t periodicity;
+	const uint8_t *host_name;
+	uint8_t os_major_ver, os_minor_ver;
+	const char *windows_version;
+	unsigned namelen;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BROWSER");
 	col_clear(pinfo->cinfo, COL_INFO);
 
-	cmd = tvb_get_guint8(tvb, offset);
+	cmd = tvb_get_uint8(tvb, offset);
 
 	/* Put in something, and replace it later */
-	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(cmd, commands, "Unknown command:0x%02x"));
+	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, cmd, commands, "Unknown command:0x%02x"));
 
 	item = proto_tree_add_item(parent_tree, proto_smb_browse, tvb, offset, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_browse);
@@ -775,11 +775,11 @@ dissect_mailslot_lanman(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 
 		/* server type flags */
 		offset = dissect_smb_server_type_flags(
-			tvb, offset, pinfo, tree, NULL, TRUE);
+			tvb, offset, pinfo, tree, NULL, true);
 
 		/* OS version string (See "OSVERSIONINFO Structure" on MSDN) */
-		os_major_ver = tvb_get_guint8(tvb, offset);
-		os_minor_ver = tvb_get_guint8(tvb, offset+1);
+		os_major_ver = tvb_get_uint8(tvb, offset);
+		os_minor_ver = tvb_get_uint8(tvb, offset+1);
 
 		SET_WINDOWS_VERSION_STRING(os_major_ver, os_minor_ver, windows_version);
 		proto_tree_add_string(tree, hf_windows_version, tvb, offset, 2, windows_version);
@@ -1079,7 +1079,7 @@ proto_register_smb_browse(void)
 			NULL, 0, NULL, HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_browse,
 		&ett_browse_flags,
 		&ett_browse_election_criteria,

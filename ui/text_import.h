@@ -65,7 +65,7 @@ typedef struct
 {
     /* Input info */
     // TODO: add const, as this way string constants can't be used
-    // BUT: the other way clang-check complaines when you free them
+    // BUT: the other way clang-check complains when you free them
     /* const */ char *import_text_filename;
     char *output_filename;
     enum text_import_mode mode;
@@ -75,6 +75,7 @@ typedef struct
         enum offset_type offset_type;
         bool has_direction;
         bool identify_ascii;
+        bool little_endian;
     } hexdump;
     struct {
         GMappedFile* import_text_GMappedFile;

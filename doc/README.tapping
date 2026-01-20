@@ -4,8 +4,7 @@ In order to use the tapping system, very little knowledge of Wireshark
 internals is required.
 
 As examples on how to use the tap system see the implementation of
-tap-rpcprogs.c (tshark version)
-ui/qt/rpc_service_response_time_dialog.cpp (wireshark version)
+ui/cli/tap-rpcprogs.c (tshark version)
 
 If all you need is to keep some counters, there's the stats_tree API,
 which offers a simple way to make a GUI and tshark tap-listener; see
@@ -22,6 +21,7 @@ So you want to hack together a tap application?
 
 TAP
 ===
+(see epan/dissectors/packet-dcerpc.c as an example)
 First you must decide which protocol you are interested in writing a tap
 application for and check if that protocol has already got a tap installed
 in it.
@@ -33,7 +33,7 @@ do and is done in four easy steps;
 1, We need tap.h so just add '#include <epan/tap.h>' (preceded by packet.h) to
 the includes.
 
-2, We need a tap handler so just add 'static int <protocol>_tap = -1;'
+2, We need a tap handler so just add 'static int <protocol>_tap;'
 
 3, Down in proto_register_<protocol>() you need to add
 '<protocol>_tap = register_tap("<protocol>");'
@@ -52,7 +52,7 @@ need.
 
 TAP LISTENER
 ============
-(see tap-rpcprogs.c as an example)
+(see ui/cli/tap-rpcprogs.c as an example)
 Interfacing your application is not that much harder either.
 Only 4 callbacks and two functions.
 
@@ -61,7 +61,7 @@ The two functions to start or stop tapping are
 register_tap_listener(const char *tapname, void *tapdata, const char *fstring,
 	unsigned flags,
 	void (*reset)(void *tapdata),
-        tap_packet_status (*packet)(void *tapdata, packet_info *pinfo, epan_dissect_t *edt, const void *data),
+        tap_packet_status (*packet)(void *tapdata, packet_info *pinfo, epan_dissect_t *edt, const void *data, tap_flags_t flags),
 	void (*draw)(void *tapdata),
 	void (*finish)(void *tapdata));
 
@@ -85,7 +85,7 @@ Just make sure that it is unique by letting it be the pointer to a struct
 holding all state variables. If you want to allow multiple concurrent
 instances, just put ALL state variables inside a struct allocated by
 g_new() and use that pointer.
-(tap-rpcstat.c use this technique to allow multiple simultaneous instances)
+(tap-rpcprogs.c uses this technique to allow multiple simultaneous instances)
 
 *fstring
 is a pointer to a filter string.
@@ -111,7 +111,15 @@ is a set of flags for the tap listener.  The flags that can be set are:
 	tree to be built.  It will require a protocol tree to be
 	built if either
 
-		1) it looks at the protocol tree in edt->tree
+		1) it looks at the protocol tree in edt->tree (N.B.: this
+		   flag does *NOT* guarantee that the tree contains all fields
+		   actually in the packet. Fields that are not referenced
+		   [by a filter, by custom columns, etc.] will be "faked" and
+		   not present. It is not necessary to include this flag if
+		   the tap has a filter string, though, as filtering implies
+		   needing the tree. So this case is rare. Actually making
+		   all fields present in the tree requires a visible tree,
+		   e.g. via epan_set_always_visible(), which hurts performance.)
 
 	or
 
@@ -126,7 +134,29 @@ is a set of flags for the tap listener.  The flags that can be set are:
     TL_REQUIRES_ERROR_PACKET
 
         set if your tap listener should be updated even when pinfo->flags.in_error_pkt is set
-        e.g. if it is inside an ICMP unreachable packet
+        e.g. if it is inside an ICMP unreachable packet.
+
+    TL_REQUIRES_PROTOCOLS
+
+        set if your tap listener requires that the protocol tree be built
+        and that all FT_PROTOCOL fields are actually present in the tree
+        and not faked. This is used by the protocol hierarchy statistics.
+        This implies needing a protocol tree, as the option doesn't make
+        sense otherwise.
+
+    TL_IGNORE_DISPLAY_FILTER
+
+        set if your tap listener wants to be updated with all packets, even ones
+        that do not pass the filter. Instead, packets that fail the filter will
+        have another flag set, TL_DISPLAY_FILTER_IGNORED, for the tap listener
+        to inspect.
+
+    TL_LIMIT_TO_DISPLAY_FILTER
+
+        set if your tap listener should only be updated with packets that pass
+        the main program display filter. (This can be in addition to setting a
+        per-tap filter.) This is useful if the tap should be automatically
+        updated when the main display filter changes.
 
     If no flags are needed, use TL_REQUIRES_NOTHING.
 

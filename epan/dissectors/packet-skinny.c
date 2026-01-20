@@ -38,10 +38,10 @@
 #include <epan/conversation.h>
 #include <epan/wmem_scopes.h>
 #include <epan/to_str.h>
-#include <epan/reassemble.h>
 #include <epan/tap.h>
 #include <epan/ptvcursor.h>
-
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include "packet-rtp.h"
 #include "packet-tcp.h"
 #include "packet-tls.h"
@@ -2216,7 +2216,7 @@ static int skinny_tap;
 /* skinny protocol tap info */
 #define MAX_SKINNY_MESSAGES_IN_PACKET 10
 static skinny_info_t pi_arr[MAX_SKINNY_MESSAGES_IN_PACKET];
-static int pi_current = 0;
+static int pi_current;
 static skinny_info_t *si;
 
 dissector_handle_t skinny_handle;
@@ -2255,7 +2255,7 @@ dissect_skinny_xml(ptvcursor_t *cursor, int hfindex, packet_info *pinfo, uint32_
 
   item = proto_tree_add_item(tree, hf_skinny_xmlData, tvb, offset, length, ENC_ASCII);
   subtree = proto_item_add_subtree(item, 0);
-  next_tvb = tvb_new_subset_length_caplen(tvb, offset, length, -1);
+  next_tvb = tvb_new_subset_length(tvb, offset, length);
   if (xml_handle != NULL) {
     call_dissector(xml_handle, next_tvb, pinfo, subtree);
   }
@@ -2703,7 +2703,7 @@ static void
 handle_CapabilitiesResMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, skinny_conv_info_t * skinny_conv _U_)
 {
   uint32_t capCount = 0;
-  guint32 payloadCapability = 0;
+  uint32_t payloadCapability = 0;
   capCount = tvb_get_letohl(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
   ptvcursor_add(cursor, hf_skinny_capCount, 4, ENC_LITTLE_ENDIAN);
   if (capCount <= 18) {
@@ -3127,7 +3127,7 @@ handle_UpdateCapabilitiesMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, s
   uint32_t customPictureFormatCount = 0;
   uint32_t serviceResourceCount = 0;
   uint32_t layoutCount = 0;
-  guint32 payloadCapability = 0;
+  uint32_t payloadCapability = 0;
   uint32_t levelPreferenceCount = 0;
   audioCapCount = tvb_get_letohl(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
   ptvcursor_add(cursor, hf_skinny_audioCapCount, 4, ENC_LITTLE_ENDIAN);
@@ -3733,7 +3733,7 @@ handle_CapabilitiesV2ResMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, sk
   uint32_t customPictureFormatCount = 0;
   uint32_t serviceResourceCount = 0;
   uint32_t layoutCount = 0;
-  guint32 payloadCapability = 0;
+  uint32_t payloadCapability = 0;
   uint32_t levelPreferenceCount = 0;
   audioCapCount = tvb_get_letohl(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
   ptvcursor_add(cursor, hf_skinny_audioCapCount, 4, ENC_LITTLE_ENDIAN);
@@ -4042,7 +4042,7 @@ handle_CapabilitiesV3ResMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, sk
   uint32_t customPictureFormatCount = 0;
   uint32_t serviceResourceCount = 0;
   uint32_t layoutCount = 0;
-  guint32 payloadCapability = 0;
+  uint32_t payloadCapability = 0;
   uint32_t hdr_version = tvb_get_letohl(ptvcursor_tvbuff(cursor), 4);
   uint32_t levelPreferenceCount = 0;
   audioCapCount = tvb_get_letohl(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
@@ -4672,7 +4672,7 @@ handle_StartMediaTransmissionMessage(ptvcursor_t *cursor, packet_info * pinfo _U
   address remoteIpAddr;
   char *remoteIpAddr_str = NULL;
   uint32_t remotePortNumber = 0;
-  guint32 compressionType = 0;
+  uint32_t compressionType = 0;
   uint16_t keylen = 0;
   uint16_t saltlen = 0;
 
@@ -5205,7 +5205,7 @@ handle_StartMulticastMediaReceptionMessage(ptvcursor_t *cursor, packet_info * pi
   address multicastIpAddr;
   char *multicastIpAddr_str = NULL;
   uint32_t multicastPortNumber = 0;
-  guint32 compressionType = 0;
+  uint32_t compressionType = 0;
   uint32_t hdr_version = tvb_get_letohl(ptvcursor_tvbuff(cursor), 4);
   ptvcursor_add(cursor, hf_skinny_conferenceId, 4, ENC_LITTLE_ENDIAN);
   passThroughPartyId = tvb_get_letohl(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
@@ -5268,7 +5268,7 @@ handle_StartMulticastMediaTransmissionMessage(ptvcursor_t *cursor, packet_info *
   address multicastIpAddr;
   char *multicastIpAddr_str = NULL;
   uint32_t multicastPortNumber = 0;
-  guint32 compressionType = 0;
+  uint32_t compressionType = 0;
   uint32_t hdr_version = tvb_get_letohl(ptvcursor_tvbuff(cursor), 4);
   ptvcursor_add(cursor, hf_skinny_conferenceId, 4, ENC_LITTLE_ENDIAN);
   passThroughPartyId = tvb_get_letohl(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
@@ -5368,7 +5368,7 @@ handle_OpenReceiveChannelMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, s
 {
   uint32_t hdr_data_length = tvb_get_letohl(ptvcursor_tvbuff(cursor), 0);
   uint32_t passThroughPartyId = 0;
-  guint32 compressionType = 0;
+  uint32_t compressionType = 0;
   uint32_t hdr_version = tvb_get_letohl(ptvcursor_tvbuff(cursor), 4);
   uint16_t keylen = 0;
   uint16_t saltlen = 0;
@@ -5855,7 +5855,7 @@ handle_RegisterTokenReject(ptvcursor_t *cursor, packet_info * pinfo _U_, skinny_
 static void
 handle_StartMediaFailureDetectionMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, skinny_conv_info_t * skinny_conv _U_)
 {
-  guint32 compressionType = 0;
+  uint32_t compressionType = 0;
   uint32_t hdr_version = tvb_get_letohl(ptvcursor_tvbuff(cursor), 4);
   ptvcursor_add(cursor, hf_skinny_conferenceId, 4, ENC_LITTLE_ENDIAN);
   si->passThroughPartyId = tvb_get_letohl(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
@@ -6272,7 +6272,7 @@ handle_OpenMultiMediaReceiveChannelMessage(ptvcursor_t *cursor, packet_info * pi
 {
   uint32_t hdr_version = tvb_get_letohl(ptvcursor_tvbuff(cursor), 4);
   uint32_t passThroughPartyId = 0;
-  guint32 compressionType = 0;
+  uint32_t compressionType = 0;
   uint32_t payloadType = 0;
   uint32_t pictureFormatCount = 0;
   uint16_t keylen = 0;
@@ -6522,7 +6522,7 @@ static void
 handle_StartMultiMediaTransmissionMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, skinny_conv_info_t * skinny_conv _U_)
 {
   uint32_t passthruPartyID = 0;
-  guint32 compressionType = 0;
+  uint32_t compressionType = 0;
   uint32_t payloadType = 0;
   uint32_t hdr_version = tvb_get_letohl(ptvcursor_tvbuff(cursor), 4);
   uint32_t pictureFormatCount = 0;
@@ -6773,7 +6773,7 @@ handle_StopMultiMediaTransmissionMessage(ptvcursor_t *cursor, packet_info * pinf
 static void
 handle_MiscellaneousCommandMessage(ptvcursor_t *cursor, packet_info * pinfo _U_, skinny_conv_info_t * skinny_conv _U_)
 {
-  guint32 command = 0;
+  uint32_t command = 0;
   uint32_t recoveryReferencePictureCount = 0;
   ptvcursor_add(cursor, hf_skinny_conferenceId, 4, ENC_LITTLE_ENDIAN);
   ptvcursor_add(cursor, hf_skinny_passthruPartyID, 4, ENC_LITTLE_ENDIAN);
@@ -8253,7 +8253,6 @@ static int dissect_skinny_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
   uint32_t hdr_data_length;
   uint32_t hdr_version;
   uint32_t hdr_opcode;
-  uint16_t i;
 
   /* Set up structures we will need to add the protocol subtree and manage it */
   proto_tree *skinny_tree = NULL;
@@ -8264,7 +8263,7 @@ static int dissect_skinny_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
   hdr_version     = tvb_get_letohl(tvb, 4);
   hdr_opcode      = tvb_get_letohl(tvb, 8);
 
-  for (i = 0; i < sizeof(skinny_opcode_map)/sizeof(skinny_opcode_map_t) ; i++) {
+  for (size_t i = 0; i < array_length(skinny_opcode_map); i++) {
     if (skinny_opcode_map[i].opcode == hdr_opcode) {
       opcode_entry = &skinny_opcode_map[i];
     }
@@ -8293,7 +8292,7 @@ static int dissect_skinny_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
   }
   si = &pi_arr[pi_current];
   si->messId = hdr_opcode;
-  si->messageName = val_to_str_ext(hdr_opcode, &message_id_ext, "0x%08X (Unknown)");
+  si->messageName = val_to_str_ext(pinfo->pool, hdr_opcode, &message_id_ext, "0x%08X (Unknown)");
   si->callId = 0;
   si->lineId = 0;
   si->passThroughPartyId = 0;

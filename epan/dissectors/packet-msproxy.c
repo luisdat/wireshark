@@ -157,10 +157,10 @@ static dissector_handle_t msproxy_sub_handle;
 /* from the same MSProxy conversation */
 
 typedef struct {
-	guint32	dst_addr;
-	guint32	clnt_port;
-	guint32	dst_port;
-	guint32	server_int_port;
+	uint32_t	dst_addr;
+	uint32_t	clnt_port;
+	uint32_t	dst_port;
+	uint32_t	server_int_port;
 	conversation_type ctype;
 }hash_entry_t;
 
@@ -168,10 +168,10 @@ typedef struct {
 /************** conversation hash stuff ***************/
 
 typedef struct {
-	guint32	remote_addr;
-	guint32	clnt_port;
-	guint32	server_int_port;
-	guint32	remote_port;
+	uint32_t	remote_addr;
+	uint32_t	clnt_port;
+	uint32_t	server_int_port;
+	uint32_t	remote_port;
 	conversation_type ctype;
 }redirect_entry_t;
 
@@ -186,7 +186,7 @@ static int msproxy_sub_dissector( tvbuff_t *tvb, packet_info *pinfo,
 /* display the msproxy header, the pass the rest of the data to the tcp	*/
 /* or udp port decode routine to  handle the payload.			*/
 
-	guint32 *ptr;
+	uint32_t *ptr;
 	redirect_entry_t *redirect_info;
 	conversation_t *conversation;
 	proto_tree      *msp_tree;
@@ -438,7 +438,7 @@ static int dissect_auth(tvbuff_t *tvb, int offset,
 
 	offset += 134;
 	if ( tree) {
-		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_NA|ENC_ASCII);
+		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_ASCII);
 	}
 	offset += 7;
 
@@ -557,7 +557,7 @@ static void dissect_request_resolve(tvbuff_t *tvb, int offset,
 
 	proto_tree      *name_tree;
 
-	int length = tvb_get_guint8( tvb, offset);
+	int length = tvb_get_uint8( tvb, offset);
 
 	if ( tree){
 		name_tree = proto_tree_add_subtree_format(tree, tvb, offset, length + 1,
@@ -655,7 +655,7 @@ static void dissect_msproxy_request(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree_add_item( tree, hf_msproxy_seq_num, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 	offset += 8;
 
-	proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_NA|ENC_ASCII);
+	proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_ASCII);
 	offset += 12;
 
 	cmd = tvb_get_ntohs( tvb, offset);
@@ -775,7 +775,7 @@ static void dissect_auth_1_ack(tvbuff_t *tvb, int offset,
 
 	offset += 134;
 	if ( tree) {
-		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_NA|ENC_ASCII);
+		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_ASCII);
 		offset += 48;
 
 		/* XXX - always 255? */
@@ -923,7 +923,7 @@ static void dissect_resolve(tvbuff_t *tvb, int offset, proto_tree *tree) {
 	if ( tree) {
 		int addr_offset;
 
-		addr_offset = tvb_get_guint8( tvb, offset);
+		addr_offset = tvb_get_uint8( tvb, offset);
 
 		proto_tree_add_item(tree, hf_msproxy_address_offset, tvb, offset, 1, ENC_NA);
 
@@ -963,7 +963,7 @@ static void dissect_msproxy_response(tvbuff_t *tvb, packet_info *pinfo,
 		proto_tree_add_item( tree, hf_msproxy_seq_num, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 		offset += 8;
 
-		proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_NA|ENC_ASCII);
+		proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_ASCII);
 		offset += 12;
 	}
 	else
@@ -1084,7 +1084,7 @@ proto_register_msproxy( void){
 
 /* Prep the msproxy protocol, for now, just register it	*/
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_msproxy,
 		&ett_msproxy_name
 	};

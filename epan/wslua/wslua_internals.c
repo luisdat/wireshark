@@ -15,6 +15,7 @@
  */
 
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 #include "wslua.h"
 #include <stdio.h>
 
@@ -22,16 +23,6 @@
  * to Lua code. These are normally not used by dissectors, just for debugging
  * (and the "wslua global" test). Enable by setting WSLUA_WITH_INTROSPECTION */
 #define WSLUA_WITH_INTROSPECTION
-
-#if LUA_VERSION_NUM == 501
-/* Compatibility with Lua 5.1, function was added in 5.2 */
-static
-int lua_absindex(lua_State *L, int idx) {
-  return (idx > 0 || idx <= LUA_REGISTRYINDEX)
-         ? idx
-         : lua_gettop(L) + 1 + idx;
-}
-#endif
 
 WSLUA_API int wslua__concat(lua_State* L) {
     /* Concatenate two objects to a string */
@@ -253,47 +244,64 @@ static int wslua_classmeta_index(lua_State *L) {
  */
 static int wslua_instancemeta_index_impl(lua_State *L, bool is_getter)
 {
-    const char *fieldname = luaL_checkstring(L, 2);
+    const char *fieldname = lua_tostring(L, 2); /* NULL if not a string */
     const int attr_idx = lua_upvalueindex(2);
     const int fallback_idx = lua_upvalueindex(3);
     const int methods_idx = lua_upvalueindex(4);
 
-    /* Check for getter/setter */
-    if (lua_istable(L, attr_idx)) {
-        lua_rawgetfield(L, attr_idx, fieldname);
-        if (lua_iscfunction(L, -1)) {
-            lua_CFunction cfunc = lua_tocfunction(L, -1);
-            lua_pop(L, 1);      /* Remove cfunction from stack */
-            lua_remove(L, 2);   /* Remove key from stack */
-            /*
-             * Note: This re-uses the current closure as optimization, exposing
-             * its upvalues via pseudo-indices. The alternative is to create a
-             * new C closure (via lua_call), but this is more expensive.
-             * Callees should not rely on the availability of the upvalues.
-             */
-            return (*cfunc)(L);
-        }
-    }
+    /* If index key is a string, it may be a class field/method */
+    if (lua_isstring(L, 2)) {
 
-    /* If this is a getter, and the getter has methods, try them. */
-    if (is_getter && lua_istable(L, methods_idx)) {
-        lua_rawgetfield(L, methods_idx, fieldname);
-        if (!lua_isnil(L, -1)) {
-            /* Return method from methods table. */
-            return 1;
+        /* Check for getter/setter */
+        if (lua_istable(L, attr_idx)) {
+            lua_rawgetfield(L, attr_idx, fieldname);
+            if (lua_iscfunction(L, -1)) {
+                lua_CFunction cfunc = lua_tocfunction(L, -1);
+                lua_pop(L, 1);      /* Remove cfunction from stack */
+                lua_remove(L, 2);   /* Remove key from stack */
+                /*
+                 * Note: This re-uses the current closure as optimization, exposing
+                 * its upvalues via pseudo-indices. The alternative is to create a
+                 * new C closure (via lua_call), but this is more expensive.
+                 * Callees should not rely on the availability of the upvalues.
+                 */
+                return (*cfunc)(L);
+            }
         }
-        lua_pop(L, 1); /* Remove nil from stack. */
+
+        /* If this is a getter, and the getter has methods, try them. */
+        if (is_getter && lua_istable(L, methods_idx)) {
+            lua_rawgetfield(L, methods_idx, fieldname);
+            if (!lua_isnil(L, -1)) {
+                /* Return method from methods table. */
+                return 1;
+            }
+            lua_pop(L, 1); /* Remove nil from stack. */
+        }
     }
 
     /* Use function from the class instance metatable (if any). */
     if (lua_iscfunction(L, fallback_idx)) {
         lua_CFunction cfunc = lua_tocfunction(L, fallback_idx);
-        /* Note, unlike getters/setters functions, the key must be preserved! */
+        /* Note, unlike getters/setters functions, the key must be preserved! It may not be a string */
         return (*cfunc)(L);
     }
 
     const char *classname = luaL_checkstring(L, lua_upvalueindex(1));
-    return luaL_error(L, "No such '%s' method/field for object type '%s'", fieldname, classname);
+
+    if (lua_isstring(L, 2)) {
+        return luaL_error(L, "No such method/field '%s' for object type '%s'", fieldname, classname);
+    }
+
+    /* Convert key to string, in case it isn't */
+    luaL_tolstring(L, 2, NULL);
+    const char *keystr = lua_tostring(L, -1);
+
+    /* Get typename */
+    luaL_typename(L, 2);
+    const char *keytype = lua_tostring(L, -1);
+
+    return luaL_error(L, "No such method/field '%s' (type %s) for object type '%s'", keystr, keytype, classname);
 }
 
 static int wslua_instancemeta_index(lua_State *L)
@@ -429,7 +437,7 @@ static void wslua_push_attributes(lua_State *L, const wslua_attribute_table *t, 
         return;
     }
 
-    /* If there is a methods table, prepare for a collission check. */
+    /* If there is a methods table, prepare for a collision check. */
     if (lua_istable(L, methods_idx)) {
         methods_idx = lua_absindex(L, methods_idx);
     } else {
@@ -592,23 +600,24 @@ void wslua_register_class(lua_State *L, const wslua_class *cls_def)
 #ifdef WSLUA_WITH_INTROSPECTION
     /* XXX remove these? It looks like an internal implementation detail that is
      * no longer needed but is added here to pass the wslua tests (API check) */
-    lua_getmetatable(L, -1);                /* Stack = { table, CLASSMT } */
-    luaL_getmetatable(L, cls_def->name);    /* Stack = { table, CLASSMT, MT } */
+    if (lua_getmetatable(L, -1)) {              /* Stack = { table, CLASSMT } */
+        luaL_getmetatable(L, cls_def->name);    /* Stack = { table, CLASSMT, MT } */
 
-    lua_rawgetfield(L, -1, "__getters");    /* __getters from instance MT */
-    lua_pushstring(L, "getter");
-    lua_rawsetfield(L, -2, WSLUA_TYPEOF_FIELD);
-    lua_rawsetfield(L, -3, "__getters");    /* Set property on class MT */
+        lua_rawgetfield(L, -1, "__getters");    /* __getters from instance MT */
+        lua_pushstring(L, "getter");
+        lua_rawsetfield(L, -2, WSLUA_TYPEOF_FIELD);
+        lua_rawsetfield(L, -3, "__getters");    /* Set property on class MT */
 
-    lua_rawgetfield(L, -1, "__setters");    /* setters from instance MT */
-    lua_pushstring(L, "setter");
-    lua_rawsetfield(L, -2, WSLUA_TYPEOF_FIELD);
-    lua_rawsetfield(L, -3, "__setters");    /* Set property on class MT */
-    lua_pop(L, 1);                          /* Stack = { table, CLASSMT } */
+        lua_rawgetfield(L, -1, "__setters");    /* setters from instance MT */
+        lua_pushstring(L, "setter");
+        lua_rawsetfield(L, -2, WSLUA_TYPEOF_FIELD);
+        lua_rawsetfield(L, -3, "__setters");    /* Set property on class MT */
+        lua_pop(L, 1);                          /* Stack = { table, CLASSMT } */
 
-    lua_pushvalue(L, -2);
-    lua_rawsetfield(L, -2, "__methods");    /* CLASSMT.__methods = Class */
-    lua_pop(L, 1);                          /* Stack = { table } */
+        lua_pushvalue(L, -2);
+        lua_rawsetfield(L, -2, "__methods");    /* CLASSMT.__methods = Class */
+        lua_pop(L, 1);                          /* Stack = { table } */
+    }
 #endif
 
     /* Set the class methods table as global name. STACK = { } */

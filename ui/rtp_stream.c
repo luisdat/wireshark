@@ -25,11 +25,12 @@
 #include <epan/dissectors/packet-rtp.h>
 #include <epan/addr_resolv.h>
 
-#include "ui/alert_box.h"
 #include "ui/simple_dialog.h"
 #include "ui/rtp_stream.h"
 #include "ui/tap-rtp-common.h"
+
 #include <wsutil/file_util.h>
+#include <wsutil/report_message.h>
 
 
 /****************************************************************************/
@@ -79,13 +80,13 @@ bool rtpstream_save(rtpstream_tapinfo_t *tapinfo, capture_file *cap_file, rtpstr
     /* open file for saving */
     tapinfo->save_file = ws_fopen(filename, "wb");
     if (tapinfo->save_file==NULL) {
-        open_failure_alert_box(filename, errno, true);
+        report_open_failure(filename, errno, true);
         return false;
     }
 
     rtp_write_header(stream, tapinfo->save_file);
     if (ferror(tapinfo->save_file)) {
-        write_failure_alert_box(filename, errno);
+        report_write_failure(filename, errno);
         fclose(tapinfo->save_file);
         return false;
     }
@@ -102,13 +103,13 @@ bool rtpstream_save(rtpstream_tapinfo_t *tapinfo, capture_file *cap_file, rtpstr
         remove_tap_listener_rtpstream(tapinfo);
 
     if (ferror(tapinfo->save_file)) {
-        write_failure_alert_box(filename, errno);
+        report_write_failure(filename, errno);
         fclose(tapinfo->save_file);
         return false;
     }
 
     if (fclose(tapinfo->save_file) == EOF) {
-        write_failure_alert_box(filename, errno);
+        report_write_failure(filename, errno);
         return false;
     }
     return true;
@@ -137,4 +138,12 @@ void rtpstream_mark(rtpstream_tapinfo_t *tapinfo, capture_file *cap_file, rtpstr
 
     if (!was_registered)
         remove_tap_listener_rtpstream(tapinfo);
+}
+
+void rtpstream_set_apply_display_filter(rtpstream_tapinfo_t *tapinfo, bool apply)
+{
+    if (tapinfo->apply_display_filter != apply) {
+        set_tap_flags(tapinfo, apply ? TL_LIMIT_TO_DISPLAY_FILTER : 0);
+        tapinfo->apply_display_filter = apply;
+    }
 }

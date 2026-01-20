@@ -19,7 +19,7 @@ Build-Depends: asciidoctor,
                libglib2.0-dev,
                libgnutls28-dev,
                libkrb5-dev,
-               liblua5.3-dev,
+               liblua5.4-dev | liblua5.3-dev,
                liblz4-dev,
                libmaxminddb-dev,
                libminizip-dev,
@@ -36,7 +36,7 @@ Build-Depends: asciidoctor,
                libsnappy-dev,
                libspandsp-dev,
                libspeexdsp-dev,
-               libssh-gcrypt-dev,
+               libssh-dev (>= 0.11.1-1) | libssh-gcrypt-dev,
                libsystemd-dev,
                libxkbcommon-dev,
                libxml2-dev,
@@ -54,8 +54,9 @@ Build-Depends: asciidoctor,
                qt6-base-dev,
                qt6-multimedia-dev,
                qt6-tools-dev,
+               quilt,
                xsltproc,
-               libfalcosecurity0-dev <pkg.wireshark.logray>
+               libfalcosecurity0-dev <pkg.wireshark.stratoshark>
 Build-Conflicts: libsnmp4.2-dev, libsnmp-dev
 Vcs-Git: https://salsa.debian.org/debian/wireshark -b debian/master
 Vcs-Browser: https://salsa.debian.org/debian/wireshark.git
@@ -64,7 +65,7 @@ Homepage: https://www.wireshark.org/
 Package: wireshark-common
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libwireshark0 (>= ${binary:Version}),
- libwiretap0 (>= ${binary:Version}), debconf, libcap2-bin [linux-any]
+ libwiretap0 (>= ${binary:Version}), libuiqt-plugin0 (>= ${binary:Version}), debconf, libcap2-bin [linux-any]
 Recommends: wireshark (>= ${binary:Version}) | tshark (>= ${binary:Version})
 Breaks: wireshark (<< 2.0.0~),
         wireshark-gtk (<< 3.0.0),
@@ -84,29 +85,38 @@ Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          wireshark-common (= ${binary:Version}),
-         libqt6svg6
+         libqt6svg6,
+         qt6-qpa-plugins
 Recommends: libqt6multimedia6
-Breaks: wireshark-qt,
+Breaks: libwireshark-data (<< 4.4.3-2~),
+        wireshark-qt,
         wireshark-gtk (<< 3.0.0~)
-Replaces: wireshark-qt,
+Replaces: libwireshark-data (<< 4.4.3-2~),
+          wireshark-qt,
           wireshark-gtk (<< 3.0.0~)
 Description: network traffic analyzer - graphical interface
  Wireshark is a network "sniffer" - a tool that captures and analyzes
  packets off the wire. Wireshark can decode too many protocols to list
  here.
 
-Package: logray
-Build-Profiles: <pkg.wireshark.logray>
+# We override the binary version, so use the source version here.
+Package: stratoshark
+Build-Profiles: <pkg.wireshark.stratoshark>
 Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         wireshark-common (= ${binary:Version}),
+         wireshark-common (= ${source:Version}),
          libfalcosecurity0t64,
-         libqt6svg6
+         libqt6svg6,
+         qt6-qpa-plugins
 # Recommends: libqt6multimedia6
-Description: system call and log analyzer - graphical interface
- Logray is a system call and log analyzer. It can capture and analyze
+Suggests: falcosecurity-scap-dkms
+Description: system call and log analyzer - graphical and console interfaces
+ Stratoshark is a system call and log analyzer. It can capture and analyze
  system calls on Linux and capture and analyze log data from other sources.
+ .
+ The package provides stratoshark as the graphical interface and strato
+ as the console interface.
 
 Package: tshark
 Architecture: any
@@ -123,7 +133,7 @@ Package: wireshark-dev
 Architecture: any
 Section: devel
 Depends: ${misc:Depends}, omniidl (>= 4.0.1-2), libpcap0.8-dev,
- libglib2.0-dev, python3:any, python3-ply, snacc,
+ libglib2.0-dev, python3:any, python3-ply, esnacc,
  libwireshark-dev, libwiretap-dev
 Description: network traffic analyzer - development tools
  Wireshark is a network "sniffer" - a tool that captures and analyzes
@@ -267,3 +277,13 @@ Description: network packet capture library -- development files
  capture.
  .
  This package contains the static library and the C header files.
+
+Package: libuiqt-plugin0
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}
+Description: Qt-based UI plugin library -- shared library
+ QtUIPlugin, part of the Wireshark project, is a library that allows one to
+ create UI extensions through menu options

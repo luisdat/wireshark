@@ -92,7 +92,7 @@ static dissector_table_t    pcli_subdissector_table;
 static proto_tree *
 dissect_pcli_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int* offset)
 {
-    guint32 cccid;
+    uint32_t cccid;
     proto_tree *pcli_tree;
     proto_item *pcli_item;
 
@@ -125,7 +125,7 @@ dissect_pcli_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int of
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
 
-    if (!dissector_try_payload(pcli_subdissector_table, next_tvb, pinfo, tree)) {
+    if (!dissector_try_payload_with_data(pcli_subdissector_table, next_tvb, pinfo, tree, true, NULL)) {
         call_data_dissector(next_tvb, pinfo, tree);
     }
 }
@@ -189,7 +189,7 @@ dissect_pcli20(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 }
 
 static void
-pcli_prompt(packet_info *pinfo _U_, gchar* result)
+pcli_prompt(packet_info *pinfo _U_, char* result)
 {
     snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "PCLI payload as");
 }
@@ -212,7 +212,7 @@ proto_register_pcli(void)
               NULL, HFILL }},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_pcli,
     };
 

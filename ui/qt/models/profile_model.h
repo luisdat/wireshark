@@ -58,6 +58,7 @@ public:
     enum {
         COL_NAME,
         COL_TYPE,
+        COL_AUTO_SWITCH_FILTER,
         _LAST_ENTRY
     } columns_;
 
@@ -68,7 +69,6 @@ public:
         DATA_IS_SELECTED,
         DATA_PATH,
         DATA_PATH_IS_NOT_DESCRIPTION,
-        DATA_INDEX_VALUE_IS_URL
     } data_values_;
 
     // QAbstractItemModel interface
@@ -100,7 +100,7 @@ public:
 
     bool userProfilesExist() const;
 
-#ifdef HAVE_MINIZIP
+#if defined(HAVE_MINIZIP) || defined(HAVE_MINIZIPNG)
     bool exportProfiles(QString filename, QModelIndexList items, QString * err = Q_NULLPTR);
     int importProfilesFromZip(QString filename, int *skippedCnt = Q_NULLPTR, QStringList *result = Q_NULLPTR);
 #endif
@@ -141,7 +141,7 @@ private:
     int findByNameAndVisibility(QString name, bool isGlobal = false, bool searchReference = false) const;
     int findAsReference(QString reference) const;
 
-#ifdef HAVE_MINIZIP
+#if defined(HAVE_MINIZIP) || defined(HAVE_MINIZIPNG)
     static bool acceptFile(QString fileName, int fileSize);
     static QString cleanName(QString fileName);
 #endif
@@ -149,10 +149,11 @@ private:
     QVariant dataDisplay(const QModelIndex & idx) const;
     QVariant dataFontRole(const QModelIndex & idx) const;
     QVariant dataBackgroundRole(const QModelIndex & idx) const;
+    QVariant dataForegroundRole(const QModelIndex & idx) const;
     QVariant dataToolTipRole(const QModelIndex & idx) const;
     QVariant dataPath(const QModelIndex & idx) const;
 
-#ifdef HAVE_MINIZIP
+#if defined(HAVE_MINIZIP) || defined(HAVE_MINIZIPNG)
     QStringList exportFileList(QModelIndexList items);
 #endif
     bool copyTempToProfile(QString tempPath, QString profilePath, bool *wasEmpty = Q_NULLPTR);

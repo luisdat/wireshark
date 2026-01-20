@@ -33,8 +33,8 @@
  * fmt, ...: what to print
  */
 
-void dbg_print(const gint* which, gint how, FILE* where, const gchar* fmt, ... ) {
-	static gchar debug_buffer[DEBUG_BUFFER_SIZE];
+void dbg_print(const int* which, int how, FILE* where, const char* fmt, ... ) {
+	static char debug_buffer[DEBUG_BUFFER_SIZE];
 	va_list list;
 
 	if ( ! which || *which < how ) return;
@@ -57,7 +57,9 @@ void dbg_print(const gint* which, gint how, FILE* where, const gchar* fmt, ... )
  ***************************************************************************
  * Strings repeat more often than don't. In order to save memory
  * we'll keep only one copy of each as key to a hash with a count of
- * subscribers as value.
+ * subscribers as value. Each string is truncated to be no more than
+ * SCS_HUGE_SIZE.
+ * XXX - GLib 2.58 adds reference counted strings, use that?
  ***************************************************************************/
 
 /**
@@ -67,24 +69,48 @@ void dbg_print(const gint* which, gint how, FILE* where, const gchar* fmt, ... )
  **/
 
 struct _scs_collection {
-	GHashTable* hash;	/* key: a string value: guint number of subscribers */
+	GHashTable* hash;	/* key: a string value: unsigned number of subscribers */
 };
 
-/* ToDo? free any string,ctr entries pointed to by the hash table ??
- *       XXX: AFAIKT destroy_scs_collection() might be called only when reading a
- *         mate config file. Since reading a new config file can apparently currently
- *         only be done once after starting Wireshark, in theory this fcn
- *         currently should never be called since there will never be an existing
- *         scs_collection to be destroyed.
+/*
+ * XXX: AFAICT destroy_scs_collection() might be called only when reading a
+ *      mate config file. Since reading a new config file can apparently currently
+ *      only be done once after starting Wireshark, in theory this fcn
+ *      currently should never be called since there will never be an existing
+ *      scs_collection to be destroyed.
  */
 static void destroy_scs_collection(SCS_collection* c) {
 	if (c->hash) g_hash_table_destroy(c->hash);
 }
 
+/* The same djb2 hash used in g_str_hash, except that it stops after
+ * SCS_HUGE_SIZE bytes. */
+static unsigned scs_hash(const void *v)
+{
+	const signed char *p;
+	uint32_t h = 5381;
+	size_t i = 0;
+
+	for (p = v; *p != '\0' && i++ < SCS_HUGE_SIZE; p++) {
+		h = (h << 5) + h + *p;
+	}
+
+	return h;
+}
+
+/* Compare the first SCS_HUGE_SIZE bytes for equality. */
+static gboolean scs_equal(const void *a, const void *b)
+{
+	const char *str1 = a;
+	const char *str2 = b;
+
+	return strncmp(str1, str2, SCS_HUGE_SIZE) == 0;
+}
+
 static SCS_collection* scs_init(void) {
 	SCS_collection* c = g_new(SCS_collection, 1);
 
-	c->hash =  g_hash_table_new(g_str_hash,g_str_equal);
+	c->hash = g_hash_table_new_full(scs_hash, scs_equal, g_free, g_free);
 
 	return c;
 }
@@ -96,44 +122,32 @@ static SCS_collection* scs_init(void) {
  * @param s a string
  *
  * Checks if the given string exists already and if so it increases the count of
- * subsscribers and returns a pointer to the stored string. If not It will copy
- * the given string store it in the hash and return the pointer to the copy.
+ * subscribers and returns a pointer to the stored string. If not it will copy
+ * the given string, store it in the hash, and return the pointer to the copy.
  * Remember, containment is handled internally, take care of your own strings.
  *
  * Return value: a pointer to the subscribed string.
  **/
-gchar* scs_subscribe(SCS_collection* c, const gchar* s) {
-	gchar* orig = NULL;
-	guint* ip = NULL;
+char* scs_subscribe(SCS_collection* c, const char* s) {
+	char* orig = NULL;
+	unsigned* ip = NULL;
 	size_t len = 0;
 
-	g_hash_table_lookup_extended(c->hash,(gconstpointer)s,(gpointer *)&orig,(gpointer *)&ip);
-
-	if (ip) {
+	if (g_hash_table_lookup_extended(c->hash,(const void *)s,(void * *)&orig,(void * *)&ip)) {
 		(*ip)++;
 	} else {
-		ip = g_slice_new(guint);
-		*ip = 0;
+		ip = g_new0(unsigned, 1);
 
-		len = strlen(s) + 1;
+		len = strlen(s);
 
-		if (len <= SCS_SMALL_SIZE) {
-			len = SCS_SMALL_SIZE;
-		} else if (len <= SCS_MEDIUM_SIZE) {
-			len = SCS_MEDIUM_SIZE;
-		} else if (len <= SCS_LARGE_SIZE) {
-			len = SCS_LARGE_SIZE;
-		} else if (len < SCS_HUGE_SIZE) {
-			len = SCS_HUGE_SIZE;
+		if(G_LIKELY(len <= SCS_HUGE_SIZE)) {
+			orig = g_strdup(s);
 		} else {
-			len = SCS_HUGE_SIZE;
 			ws_warning("mate SCS: string truncated due to huge size");
+			orig = g_strndup(s, SCS_HUGE_SIZE);
 		}
 
-		orig = (gchar *)g_slice_alloc(len);
-		(void) g_strlcpy(orig,s,len);
-
-		g_hash_table_insert(c->hash,orig,ip);
+		g_hash_table_insert(c->hash, orig, ip);
 	}
 
 	return orig;
@@ -147,37 +161,19 @@ gchar* scs_subscribe(SCS_collection* c, const gchar* s) {
  * decreases the count of subscribers, if zero frees the internal copy of
  * the string.
  **/
-void scs_unsubscribe(SCS_collection* c, gchar* s) {
-	gchar* orig = NULL;
-	guint* ip = NULL;
-	size_t len = 0xffff;
+void scs_unsubscribe(SCS_collection* c, char* s) {
+	char* orig = NULL;
+	unsigned* ip = NULL;
 
-	g_hash_table_lookup_extended(c->hash,(gconstpointer)s,(gpointer *)&orig,(gpointer *)&ip);
-
-	if (ip) {
+	if (g_hash_table_lookup_extended(c->hash,(const void *)s,(void **)&orig,(void **)&ip)) {
 		if (*ip == 0) {
 			g_hash_table_remove(c->hash,orig);
-
-			len = strlen(orig);
-
-			if (len < SCS_SMALL_SIZE) {
-				len = SCS_SMALL_SIZE;
-			} else if (len < SCS_MEDIUM_SIZE) {
-				len = SCS_MEDIUM_SIZE;
-			} else if (len < SCS_LARGE_SIZE) {
-				len = SCS_LARGE_SIZE;
-			} else {
-				len = SCS_HUGE_SIZE;
-			}
-
-			g_slice_free1(len, orig);
-			g_slice_free(guint,ip);
 		}
 		else {
 			(*ip)--;
 		}
 	} else {
-		ws_warning("unsubscribe: not subscribed");
+		ws_warning("mate SCS: not subscribed");
 	}
 }
 
@@ -187,18 +183,21 @@ void scs_unsubscribe(SCS_collection* c, gchar* s) {
  *
  * Formats the input and subscribes it.
  *
- * Return value: the stored copy of the formated string.
+ * Return value: the stored copy of the formatted string.
  *
  **/
-gchar* scs_subscribe_printf(SCS_collection* c, gchar* fmt, ...) {
+char* scs_subscribe_printf(SCS_collection* c, char* fmt, ...) {
 	va_list list;
-	static gchar buf[SCS_HUGE_SIZE];
+	char *buf, *ret;
 
 	va_start( list, fmt );
-	vsnprintf(buf, SCS_HUGE_SIZE, fmt, list);
+	buf = g_strdup_vprintf(fmt, list);
 	va_end( list );
 
-	return scs_subscribe(c,buf);
+	ret = scs_subscribe(c, buf);
+	g_free(buf);
+
+	return ret;
 }
 
 /***************************************************************************
@@ -222,24 +221,24 @@ typedef union _any_avp_type {
 } any_avp_type;
 
 
-static SCS_collection* avp_strings = NULL;
+static SCS_collection* avp_strings;
 
 #ifdef _AVP_DEBUGGING
-static FILE* dbg_fp = NULL;
+static FILE* dbg_fp;
 
-static int dbg_level = 0;
+static int dbg_level;
 static int* dbg = &dbg_level;
 
-static int dbg_avp_level = 0;
+static int dbg_avp_level;
 static int* dbg_avp = &dbg_avp_level;
 
-static int dbg_avp_op_level = 0;
+static int dbg_avp_op_level;
 static int* dbg_avp_op = &dbg_avp_op_level;
 
-static int dbg_avpl_level = 0;
+static int dbg_avpl_level;
 static int* dbg_avpl = &dbg_avpl_level;
 
-static int dbg_avpl_op_level = 0;
+static int dbg_avpl_op_level;
 static int* dbg_avpl_op = &dbg_avpl_op_level;
 
 /**
@@ -288,10 +287,10 @@ extern void avp_init(void) {
  * Return value: a pointer to the newly created avp.
  *
  **/
-extern AVP* new_avp_from_finfo(const gchar* name, field_info* finfo) {
+extern AVP* new_avp_from_finfo(const char* name, field_info* finfo) {
 	AVP*   new_avp_val = (AVP*)g_slice_new(any_avp_type);
-	gchar* value;
-	gchar* repr;
+	char* value;
+	char* repr;
 
 	new_avp_val->n = scs_subscribe(avp_strings, name);
 
@@ -333,7 +332,7 @@ extern AVP* new_avp_from_finfo(const gchar* name, field_info* finfo) {
  * Return value: a pointer to the newly created avp.
  *
  **/
-extern AVP* new_avp(const gchar* name, const gchar* value, gchar o) {
+extern AVP* new_avp(const char* name, const char* value, char o) {
 	AVP* new_avp_val = (AVP*)g_slice_new(any_avp_type);
 
 	new_avp_val->n = scs_subscribe(avp_strings, name);
@@ -397,7 +396,7 @@ extern AVP* avp_copy(AVP* from) {
  * Return value: a pointer to the newly created avpl.
  *
  **/
-extern AVPL* new_avpl(const gchar* name) {
+extern AVPL* new_avpl(const char* name) {
 	AVPL* new_avpl_p = (AVPL*)g_slice_new(any_avp_type);
 
 #ifdef _AVP_DEBUGGING
@@ -414,7 +413,7 @@ extern AVPL* new_avpl(const gchar* name) {
 	return new_avpl_p;
 }
 
-extern void rename_avpl(AVPL* avpl, gchar* name) {
+extern void rename_avpl(AVPL* avpl, char* name) {
 	scs_unsubscribe(avp_strings,avpl->name);
 	avpl->name = scs_subscribe(avp_strings,name);
 }
@@ -429,7 +428,7 @@ extern void rename_avpl(AVPL* avpl, gchar* name) {
  * Pre-condition: the avp is sorted before before_avp and does not already exist
  * in the avpl.
  */
-static void insert_avp_before_node(AVPL* avpl, AVPN* next_node, AVP *avp, gboolean copy_avp) {
+static void insert_avp_before_node(AVPL* avpl, AVPN* next_node, AVP *avp, bool copy_avp) {
 	AVPN* new_avp_val = (AVPN*)g_slice_new(any_avp_type);
 
 	new_avp_val->avp = copy_avp ? avp_copy(avp) : avp;
@@ -463,7 +462,7 @@ static void insert_avp_before_node(AVPL* avpl, AVPN* next_node, AVP *avp, gboole
  * BEWARE: Check the return value, you might need to delete the avp if
  *         it is not inserted.
  **/
-extern gboolean insert_avp(AVPL* avpl, AVP* avp) {
+extern bool insert_avp(AVPL* avpl, AVP* avp) {
 	AVPN* c;
 
 #ifdef _AVP_DEBUGGING
@@ -487,7 +486,7 @@ extern gboolean insert_avp(AVPL* avpl, AVP* avp) {
 				// conditions AVPs, so really check if the name,
 				// value and operator are all equal.
 				if (c->avp->o == avp->o && avp->o == AVP_OP_EQUAL) {
-					return FALSE;
+					return false;
 				}
 			}
 		}
@@ -497,9 +496,9 @@ extern gboolean insert_avp(AVPL* avpl, AVP* avp) {
 		}
 	}
 
-	insert_avp_before_node(avpl, c, avp, FALSE);
+	insert_avp_before_node(avpl, c, avp, false);
 
-	return TRUE;
+	return true;
 }
 
 /**
@@ -514,7 +513,7 @@ extern gboolean insert_avp(AVPL* avpl, AVP* avp) {
  * Return value: a pointer to the next matching avp if there's one, else NULL.
  *
  **/
-extern AVP* get_avp_by_name(AVPL* avpl, gchar* name, void** cookie) {
+extern AVP* get_avp_by_name(AVPL* avpl, char* name, void** cookie) {
 	AVPN* curr;
 	AVPN* start = (AVPN*) *cookie;
 
@@ -553,7 +552,7 @@ extern AVP* get_avp_by_name(AVPL* avpl, gchar* name, void** cookie) {
  * Return value: a pointer to extracted avp if there's one, else NULL.
  *
  **/
-extern AVP* extract_avp_by_name(AVPL* avpl, gchar* name) {
+extern AVP* extract_avp_by_name(AVPL* avpl, char* name) {
 	AVPN* curr;
 	AVP* avp = NULL;
 
@@ -598,7 +597,7 @@ extern AVP* extract_avp_by_name(AVPL* avpl, gchar* name) {
  * extract_first_avp:
  * @param avpl the avpl from which to try to extract the avp.
  *
- * Extracts the fisrt avp from the avpl.
+ * Extracts the first avp from the avpl.
  *
  * Return value: a pointer to extracted avp if there's one, else NULL.
  *
@@ -681,7 +680,7 @@ extern AVP* extract_last_avp(AVPL* avpl) {
  * so releases the avps as well.
  *
  **/
-extern void delete_avpl(AVPL* avpl, gboolean avps_too) {
+extern void delete_avpl(AVPL* avpl, bool avps_too) {
 	AVP* avp;
 #ifdef _AVP_DEBUGGING
 	dbg_print(dbg_avpl,3,dbg_fp,"delete_avpl: %p",avpl);
@@ -740,11 +739,11 @@ extern AVP* get_next_avp(AVPL* avpl, void** cookie) {
  * Return value: a pointer to the newly allocated string.
  *
  **/
-gchar* avpl_to_str(AVPL* avpl) {
+char* avpl_to_str(AVPL* avpl) {
 	AVPN* c;
 	GString* s = g_string_new("");
-	gchar* avp_s;
-	gchar* r;
+	char* avp_s;
+	char* r;
 
 	for(c=avpl->null.next; c->avp; c = c->next) {
 		avp_s = avp_to_str(c->avp);
@@ -758,11 +757,11 @@ gchar* avpl_to_str(AVPL* avpl) {
 	return r;
 }
 
-extern gchar* avpl_to_dotstr(AVPL* avpl) {
+extern char* avpl_to_dotstr(AVPL* avpl) {
 	AVPN* c;
 	GString* s = g_string_new("");
-	gchar* avp_s;
-	gchar* r;
+	char* avp_s;
+	char* r;
 
 	for(c=avpl->null.next; c->avp; c = c->next) {
 		avp_s = avp_to_str(c->avp);
@@ -785,7 +784,7 @@ extern gchar* avpl_to_dotstr(AVPL* avpl) {
  * Adds the avps of src that are not existent in dst into dst.
  *
  **/
-extern void merge_avpl(AVPL* dst, AVPL* src, gboolean copy_avps) {
+extern void merge_avpl(AVPL* dst, AVPL* src, bool copy_avps) {
 	AVPN* cd = NULL;
 	AVPN* cs = NULL;
 
@@ -848,12 +847,12 @@ extern void merge_avpl(AVPL* dst, AVPL* src, gboolean copy_avps) {
  * @param copy_avps whether avps should be copied instead of referenced.
  *
  * Creates a new avpl containing the same avps as the given avpl
- * It will either reference or copie the avps.
+ * It will either reference or copy the avps.
  *
  * Return value: a pointer to the newly allocated string.
  *
  **/
-extern AVPL* new_avpl_from_avpl(const gchar* name, AVPL* avpl, gboolean copy_avps) {
+extern AVPL* new_avpl_from_avpl(const char* name, AVPL* avpl, bool copy_avps) {
 	AVPL* newavpl = new_avpl(name);
 	void* cookie = NULL;
 	AVP* avp;
@@ -892,14 +891,14 @@ extern AVPL* new_avpl_from_avpl(const gchar* name, AVPL* avpl, gboolean copy_avp
  *
  **/
 extern AVP* match_avp(AVP* src, AVP* op) {
-	gchar** splited;
+	char** splited;
 	int i;
-	gchar* p;
-	guint ls;
-	guint lo;
-	float fs = 0.0f;
-	float fo = 0.0f;
-	gboolean lower = FALSE;
+	char* p;
+	unsigned ls;
+	unsigned lo;
+	double fs = 0.0;
+	double fo = 0.0;
+	bool lower = false;
 
 #ifdef _AVP_DEBUGGING
 	dbg_print(dbg_avpl_op,3,dbg_fp,"match_avp: %s%c%s; vs. %s%c%s;",src->n,src->o,src->v,op->n,op->o,op->v);
@@ -932,12 +931,12 @@ extern AVP* match_avp(AVP* src, AVP* op) {
 			return NULL;
 
 		case AVP_OP_LOWER:
-			lower = TRUE;
+			lower = true;
 			/* FALLTHRU */
 		case AVP_OP_HIGHER:
 
-			fs = (float) g_ascii_strtod(src->v, NULL);
-			fo = (float) g_ascii_strtod(op->v, NULL);
+			fs = g_ascii_strtod(src->v, NULL);
+			fo = g_ascii_strtod(op->v, NULL);
 
 			if (lower) {
 				if (fs<fo) return src;
@@ -948,8 +947,8 @@ extern AVP* match_avp(AVP* src, AVP* op) {
 			}
 		case AVP_OP_ENDS:
 			/* does this work? */
-			ls = (guint) strlen(src->v);
-			lo = (guint) strlen(op->v);
+			ls = (unsigned) strlen(src->v);
+			lo = (unsigned) strlen(op->v);
 
 			if ( ls < lo ) {
 				return NULL;
@@ -982,10 +981,10 @@ extern AVP* match_avp(AVP* src, AVP* op) {
  * Note: Loose will always be considered a successful match, it matches zero or
  * more conditions.
  */
-extern AVPL* new_avpl_loose_match(const gchar* name,
+extern AVPL* new_avpl_loose_match(const char* name,
 								  AVPL* src,
 								  AVPL* op,
-								  gboolean copy_avps) {
+								  bool copy_avps) {
 
 	AVPL* newavpl = new_avpl(scs_subscribe(avp_strings, name));
 	AVPN* co = NULL;
@@ -1012,7 +1011,7 @@ extern AVPL* new_avpl_loose_match(const gchar* name,
 			AVPN *cond = co;
 			do {
 				if (match_avp(cs->avp, cond->avp)) {
-					insert_avp_before_node(newavpl, newavpl->null.prev, cs->avp, copy_avps);
+					insert_avp_before_node(newavpl, newavpl->null.prev->next, cs->avp, copy_avps);
 					break;
 				}
 				cond = cond->next;
@@ -1030,26 +1029,26 @@ extern AVPL* new_avpl_loose_match(const gchar* name,
  * @param name the name of the resulting avpl
  * @param src the data AVPL to be matched against a condition AVPL
  * @param op the conditions AVPL that will be matched against the data AVPL
- * @param strict TRUE if every condition must have a matching data AVP, FALSE if
+ * @param strict true if every condition must have a matching data AVP, false if
  * it is also acceptable that only one of the condition AVPs for the same
  * attribute is matching.
  * @param copy_avps whether the avps in the resulting avpl should be copied
  *
  * Creates an AVP list by matching pairs of conditions and data AVPs, returning
- * the data AVPs. If strict is TRUE, then each condition must be paired with a
- * matching data AVP. If strict is FALSE, then some conditions are allowed to
+ * the data AVPs. If strict is true, then each condition must be paired with a
+ * matching data AVP. If strict is false, then some conditions are allowed to
  * fail when other conditions for the same attribute do have a match. Note that
  * if the condition AVPL is empty, the result will be a match (an empty list).
  *
  * Return value: a pointer to the newly created avpl containing the
  *				 matching avps or NULL if there is no match.
  */
-extern AVPL* new_avpl_pairs_match(const gchar* name, AVPL* src, AVPL* op, gboolean strict, gboolean copy_avps) {
+extern AVPL* new_avpl_pairs_match(const char* name, AVPL* src, AVPL* op, bool strict, bool copy_avps) {
 	AVPL* newavpl;
 	AVPN* co = NULL;
 	AVPN* cs = NULL;
-	const gchar *last_match = NULL;
-	gboolean matched = TRUE;
+	const char *last_match = NULL;
+	bool matched = true;
 
 	newavpl = new_avpl(scs_subscribe(avp_strings, name));
 
@@ -1061,7 +1060,7 @@ extern AVPL* new_avpl_pairs_match(const gchar* name, AVPL* src, AVPL* op, gboole
 	co = op->null.next;
 	while (cs->avp && co->avp) {
 		int name_diff = g_strcmp0(co->avp->n, cs->avp->n);
-		const gchar *failed_match = NULL;
+		const char *failed_match = NULL;
 
 		if (name_diff < 0) {
 			// op < source, op has no data avp with same attribute.
@@ -1073,7 +1072,7 @@ extern AVPL* new_avpl_pairs_match(const gchar* name, AVPL* src, AVPL* op, gboole
 		} else {
 			// Matching attributes found, now try to find a matching data AVP for the condition.
 			if (match_avp(cs->avp, co->avp)) {
-				insert_avp_before_node(newavpl, newavpl->null.prev, cs->avp, copy_avps);
+				insert_avp_before_node(newavpl, newavpl->null.prev->next, cs->avp, copy_avps);
 				last_match = co->avp->n;
 				cs = cs->next;
 			} else {
@@ -1085,12 +1084,12 @@ extern AVPL* new_avpl_pairs_match(const gchar* name, AVPL* src, AVPL* op, gboole
 		// condition did not match, check if we can continue matching.
 		if (failed_match) {
 			if (strict) {
-				matched = FALSE;
+				matched = false;
 				break;
 			} else if (last_match != failed_match) {
 				// None of the conditions so far matched the attribute, check for other candidates
 				if (!co->avp || co->avp->n != last_match) {
-					matched = FALSE;
+					matched = false;
 					break;
 				}
 			}
@@ -1099,7 +1098,7 @@ extern AVPL* new_avpl_pairs_match(const gchar* name, AVPL* src, AVPL* op, gboole
 
 	// if there are any conditions remaining, then those could not be matched
 	if (matched && strict && co->avp) {
-		matched = FALSE;
+		matched = false;
 	}
 
 	if (matched) {
@@ -1124,18 +1123,18 @@ extern AVPL* new_avpl_pairs_match(const gchar* name, AVPL* src, AVPL* op, gboole
  * If there is no match, NULL is returned. If there is actually a match, then
  * the matching AVPs (a subset of the data) are returned.
  */
-extern AVPL* new_avpl_from_match(avpl_match_mode mode, const gchar* name,AVPL* src, AVPL* op, gboolean copy_avps) {
+extern AVPL* new_avpl_from_match(avpl_match_mode mode, const char* name,AVPL* src, AVPL* op, bool copy_avps) {
 	AVPL* avpl = NULL;
 
 	switch (mode) {
 		case AVPL_STRICT:
-			avpl = new_avpl_pairs_match(name, src, op, TRUE, copy_avps);
+			avpl = new_avpl_pairs_match(name, src, op, true, copy_avps);
 			break;
 		case AVPL_LOOSE:
 			avpl = new_avpl_loose_match(name,src,op,copy_avps);
 			break;
 		case AVPL_EVERY:
-			avpl = new_avpl_pairs_match(name, src, op, FALSE, copy_avps);
+			avpl = new_avpl_pairs_match(name, src, op, false, copy_avps);
 			break;
 		case AVPL_NO_MATCH:
 			// XXX this seems unused
@@ -1164,11 +1163,11 @@ extern void delete_avpl_transform(AVPL_Transf* op) {
 		g_free(op->name);
 
 		if (op->match) {
-			delete_avpl(op->match,TRUE);
+			delete_avpl(op->match,true);
 		}
 
 		if (op->replace) {
-			delete_avpl(op->replace,TRUE);
+			delete_avpl(op->replace,true);
 		}
 
 		g_free(op);
@@ -1199,16 +1198,16 @@ extern void avpl_transform(AVPL* src, AVPL_Transf* op) {
 
 	for ( ; op ; op = op->next) {
 
-		avpl = new_avpl_from_match(op->match_mode, src->name,src, op->match, TRUE);
+		avpl = new_avpl_from_match(op->match_mode, src->name,src, op->match, true);
 
 		if (avpl) {
 			switch (op->replace_mode) {
 				case AVPL_NO_REPLACE:
-					delete_avpl(avpl,TRUE);
+					delete_avpl(avpl,true);
 					return;
 				case AVPL_INSERT:
-					merge_avpl(src,op->replace,TRUE);
-					delete_avpl(avpl,TRUE);
+					merge_avpl(src,op->replace,true);
+					delete_avpl(avpl,true);
 					return;
 				case AVPL_REPLACE:
 					cs = src->null.next;
@@ -1221,6 +1220,9 @@ extern void avpl_transform(AVPL* src, AVPL_Transf* op) {
 
 							cs->prev->next = cs->next;
 							cs->next->prev = cs->prev;
+
+							if (cs->avp)
+								delete_avp(cs->avp);
 							g_slice_free(any_avp_type,(any_avp_type*)cs);
 
 							cs = n;
@@ -1234,8 +1236,8 @@ extern void avpl_transform(AVPL* src, AVPL_Transf* op) {
 						}
 					}
 
-					merge_avpl(src,op->replace,TRUE);
-					delete_avpl(avpl,TRUE);
+					merge_avpl(src,op->replace,true);
+					delete_avpl(avpl,true);
 					return;
 			}
 		}
@@ -1251,7 +1253,7 @@ extern void avpl_transform(AVPL* src, AVPL_Transf* op) {
  *
  * Return value: a pointer to the newly created loal.
  **/
-extern LoAL* new_loal(const gchar* name) {
+extern LoAL* new_loal(const char* name) {
 	LoAL* new_loal_p = (LoAL*)g_slice_new(any_avp_type);
 
 	if (! name) {
@@ -1400,10 +1402,10 @@ extern AVPL* get_next_avpl(LoAL* loal,void** cookie) {
  * @param avpls_too whether avpls contained by the loal should be deleted as well
  * @param avps_too whether avps contained by the avpls should be also deleted
  *
- * Destroys a loal and eventually desstroys avpls and avps.
+ * Destroys a loal and eventually destroys avpls and avps.
  *
  **/
-extern void delete_loal(LoAL* loal, gboolean avpls_too, gboolean avps_too) {
+extern void delete_loal(LoAL* loal, bool avpls_too, bool avps_too) {
 	AVPL* avpl;
 
 #ifdef _AVP_DEBUGGING
@@ -1430,11 +1432,11 @@ extern void delete_loal(LoAL* loal, gboolean avpls_too, gboolean avps_too) {
  * load_loal_error:
  * Used by loal_from_file to handle errors while loading.
  **/
-static LoAL* load_loal_error(FILE* fp, LoAL* loal, AVPL* curr, int linenum, const gchar* fmt, ...) {
+static LoAL* load_loal_error(FILE* fp, LoAL* loal, AVPL* curr, int linenum, const char* fmt, ...) {
 	va_list list;
-	gchar* desc;
+	char* desc;
 	LoAL* ret = NULL;
-	gchar* err;
+	char* err;
 
 	va_start( list, fmt );
 	desc = ws_strdup_vprintf(fmt, list);
@@ -1451,8 +1453,8 @@ static LoAL* load_loal_error(FILE* fp, LoAL* loal, AVPL* curr, int linenum, cons
 	g_free(err);
 
 	if (fp) fclose(fp);
-	if (loal) delete_loal(loal,TRUE,TRUE);
-	if (curr) delete_avpl(curr,TRUE);
+	if (loal) delete_loal(loal,true,true);
+	if (curr) delete_avpl(curr,true);
 
 	return ret;
 }
@@ -1483,15 +1485,15 @@ case '7': case '8': case '9': case '.'
  * Return value: if successful a pointer to the new populated loal, else NULL.
  *
  **/
-extern LoAL* loal_from_file(gchar* filename) {
+extern LoAL* loal_from_file(char* filename) {
 	FILE *fp = NULL;
-	gchar c;
+	char c;
 	int i = 0;
-	guint32 linenum = 1;
-	gchar *linenum_buf;
-	gchar *name;
-	gchar *value;
-	gchar op = '?';
+	uint32_t linenum = 1;
+	GString *linenum_buf;
+	char *name;
+	char *value;
+	char op = '?';
 	LoAL *loal_error, *loal = new_loal(filename);
 	AVPL* curr = NULL;
 	AVP* avp;
@@ -1504,9 +1506,9 @@ extern LoAL* loal_from_file(gchar* filename) {
 		MY_IGNORE
 	} state;
 
-	linenum_buf = (gchar*)g_malloc(MAX_ITEM_LEN);
-	name = (gchar*)g_malloc(MAX_ITEM_LEN);
-	value = (gchar*)g_malloc(MAX_ITEM_LEN);
+	linenum_buf = g_string_new(NULL);
+	name = (char*)g_malloc(MAX_ITEM_LEN);
+	value = (char*)g_malloc(MAX_ITEM_LEN);
 #ifndef _WIN32
 	if (! getuid()) {
 		loal_error = load_loal_error(fp,loal,curr,linenum,"MATE Will not run as root");
@@ -1517,7 +1519,7 @@ extern LoAL* loal_from_file(gchar* filename) {
 	state = START;
 
 	if (( fp = ws_fopen(filename,"r") )) {
-		while(( c = (gchar) fgetc(fp) )){
+		while(( c = (char) fgetc(fp) )){
 
 			if ( feof(fp) ) {
 				if ( ferror(fp) ) {
@@ -1561,8 +1563,9 @@ extern LoAL* loal_from_file(gchar* filename) {
 							i = 0;
 							name[i++] = c;
 							name[i] = '\0';
-							snprintf(linenum_buf,MAX_ITEM_LEN,"%s:%u",filename,linenum);
-							curr = new_avpl(linenum_buf);
+							g_string_append_printf(linenum_buf, "%s:%u", filename, linenum);
+							curr = new_avpl(linenum_buf->str);
+							g_string_set_size(linenum_buf, 0);
 							continue;
 						case '#':
 							state = MY_IGNORE;
@@ -1576,7 +1579,7 @@ extern LoAL* loal_from_file(gchar* filename) {
 					name[0] = '\0';
 					switch (c) {
 						case '\\':
-							c = (gchar) fgetc(fp);
+							c = (char) fgetc(fp);
 							if (c != '\n') ungetc(c,fp);
 							continue;
 						case ' ':
@@ -1590,6 +1593,7 @@ extern LoAL* loal_from_file(gchar* filename) {
 							continue;
 						case '\n':
 							loal_append(loal,curr);
+							curr = NULL;
 							state = START;
 							continue;
 						default:
@@ -1632,7 +1636,7 @@ extern LoAL* loal_from_file(gchar* filename) {
 					case IN_VALUE:
 						switch (c) {
 							case '\\':
-								value[i++] = (gchar) fgetc(fp);
+								value[i++] = (char) fgetc(fp);
 								continue;
 							case ';':
 								state = BEFORE_NAME;
@@ -1657,34 +1661,28 @@ extern LoAL* loal_from_file(gchar* filename) {
 		}
 		fclose (fp);
 
-		g_free(linenum_buf);
+		if (curr) {
+			// Premature EOF? It could just be a file that doesn't
+			// end in a newline, but hard to say without checking
+			// state. Error, discard, add to existing loal?
+			delete_avpl(curr,true);
+		}
+
+		g_string_free(linenum_buf, true);
 		g_free(name);
 		g_free(value);
 
 		return loal;
 
 	} else {
-		report_open_failure(filename,errno,FALSE);
+		report_open_failure(filename,errno,false);
 		loal_error = load_loal_error(NULL,loal,NULL,0,"Cannot Open file '%s'",filename);
 	}
 
 error:
-	g_free(linenum_buf);
+	g_string_free(linenum_buf, true);
 	g_free(name);
 	g_free(value);
 
 	return loal_error;
 }
-
-/*
- * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
- *
- * Local variables:
- * c-basic-offset: 8
- * tab-width: 8
- * indent-tabs-mode: t
- * End:
- *
- * vi: set shiftwidth=8 tabstop=8 noexpandtab:
- * :indentSize=8:tabSize=8:noTabs=false:
- */

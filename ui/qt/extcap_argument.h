@@ -88,9 +88,11 @@ public:
     bool isDefault();
     virtual bool isValid();
     bool isRequired();
+    bool isSufficient();
     bool reload();
 
-    QString prefKey(const QString & device_name);
+    QString prefKey(const QString & device_name,
+        const QString & option_name, const QString & option_value);
     virtual QString prefValue();
 
     void resetValue();
@@ -103,6 +105,9 @@ public:
 
 public Q_SLOTS:
     virtual void setDefaultValue();
+    void onBoolChanged(bool);
+    void onIntChanged(int);
+    void onStringChanged(QString);
 
 Q_SIGNALS:
     void valueChanged();
@@ -121,13 +126,6 @@ protected:
     int _number;
 
     const QString label_style;
-
-private Q_SLOTS:
-
-    void onStringChanged(QString);
-    void onIntChanged(int);
-    void onBoolChanged(bool);
-
 };
 
 

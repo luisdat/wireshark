@@ -48,7 +48,7 @@ enum {
 };
 
 /* Calculate and return a bandwidth figure, in Mbs */
-static double calculate_bw(const nstime_t *start_time, const nstime_t *stop_time, guint32 bytes)
+static double calculate_bw(const nstime_t *start_time, const nstime_t *stop_time, uint32_t bytes)
 {
     /* Can only calculate bandwidth if have time delta */
     if (memcmp(start_time, stop_time, sizeof(nstime_t)) != 0) {
@@ -73,31 +73,31 @@ static double calculate_bw(const nstime_t *start_time, const nstime_t *stop_time
 
 // Stats kept for one channel.
 typedef struct rlc_channel_stats {
-    guint8   rlcMode;
-    guint8   priority;
-    guint16  channelType;
-    guint16  channelId;
+    uint8_t  rlcMode;
+    uint8_t  priority;
+    uint16_t channelType;
+    uint16_t channelId;
 
-    guint32  UL_frames;
-    guint32  UL_bytes;
+    uint32_t UL_frames;
+    uint32_t UL_bytes;
     nstime_t UL_time_start;
     nstime_t UL_time_stop;
-    gboolean UL_has_data; // i.e. not just ACKs for DL.
+    bool UL_has_data; // i.e. not just ACKs for DL.
 
-    guint32  DL_frames;
-    guint32  DL_bytes;
+    uint32_t DL_frames;
+    uint32_t DL_bytes;
     nstime_t DL_time_start;
     nstime_t DL_time_stop;
-    gboolean DL_has_data;  // i.e. not just ACKs for UL.
+    bool DL_has_data;  // i.e. not just ACKs for UL.
 
-    guint32  UL_acks;
-    guint32  UL_nacks;
+    uint32_t UL_acks;
+    uint32_t UL_nacks;
 
-    guint32  DL_acks;
-    guint32  DL_nacks;
+    uint32_t DL_acks;
+    uint32_t DL_nacks;
 
-    guint32  UL_missing;
-    guint32  DL_missing;
+    uint32_t UL_missing;
+    uint32_t DL_missing;
 } rlc_channel_stats;
 
 //-------------------------------------------------------------------
@@ -196,7 +196,7 @@ public:
                 stats_.UL_acks++;
             }
             else {
-                stats_.UL_has_data = TRUE;
+                stats_.UL_has_data = true;
             }
         }
         else {
@@ -214,7 +214,7 @@ public:
                 stats_.DL_acks++;
             }
             else {
-                stats_.DL_has_data = TRUE;
+                stats_.DL_has_data = true;
             }
         }
     }
@@ -278,65 +278,65 @@ public:
         // Are we taking RLC PDUs from MAC, or not?
         if (!recent.gui_rlc_use_pdus_from_mac) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("not mac-lte and ");
+                filter_expr += QStringLiteral("not mac-lte and ");
             }
             else {
-                filter_expr += QString("not mac-nr and ");
+                filter_expr += QStringLiteral("not mac-nr and ");
             }
         }
         else {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("mac-lte and ");
+                filter_expr += QStringLiteral("mac-lte and ");
             }
             else {
-                filter_expr += QString("mac-nr and ");
+                filter_expr += QStringLiteral("mac-nr and ");
             }
         }
 
         if (showSR) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("(mac-lte.sr-req and mac-lte.ueid == %1) or (").arg(ueid_);
+                filter_expr += QStringLiteral("(mac-lte.sr-req and mac-lte.ueid == %1) or (").arg(ueid_);
             }
         }
 
         if (showRACH) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("(mac-lte.rar or (mac-lte.preamble-sent and mac-lte.ueid == %1)) or (").arg(ueid_);
+                filter_expr += QStringLiteral("(mac-lte.rar or (mac-lte.preamble-sent and mac-lte.ueid == %1)) or (").arg(ueid_);
             }
             else {
-                filter_expr += QString("(mac-nr.rar or ");
+                filter_expr += QStringLiteral("(mac-nr.rar or ");
             }
         }
 
         // Main part of expression.
         if (rat_ == RLC_RAT_LTE) {
-            filter_expr += QString("rlc-lte.ueid==%1 and rlc-lte.channel-type == %2").
+            filter_expr += QStringLiteral("rlc-lte.ueid==%1 and rlc-lte.channel-type == %2").
                                       arg(ueid_).arg(channelType_);
         }
         else {
-            filter_expr += QString("rlc-nr.ueid==%1 and rlc-nr.bearer-type == %2").
+            filter_expr += QStringLiteral("rlc-nr.ueid==%1 and rlc-nr.bearer-type == %2").
                                       arg(ueid_).arg(channelType_);
         }
         // Channel/bearer Id
         if ((channelType_ == CHANNEL_TYPE_SRB) || (channelType_ == CHANNEL_TYPE_DRB)) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString(" and rlc-lte.channel-id == %1").arg(channelId_);
+                filter_expr += QStringLiteral(" and rlc-lte.channel-id == %1").arg(channelId_);
             }
             else {
-                filter_expr += QString(" and rlc-nr.bearer-id == %1").arg(channelId_);
+                filter_expr += QStringLiteral(" and rlc-nr.bearer-id == %1").arg(channelId_);
             }
         }
 
         // Close () if open because of SR
         if (showSR) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString(")");
+                filter_expr += QStringLiteral(")");
             }
         }
         // Close () if open because of RACH
         if (showRACH) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString(")");
+                filter_expr += QStringLiteral(")");
             }
         }
 
@@ -389,21 +389,21 @@ private:
 // Stats for one UE.  TODO: private to class?
 typedef struct rlc_ue_stats {
 
-    guint32  UL_frames;
-    guint32  UL_total_bytes;
+    uint32_t UL_frames;
+    uint32_t UL_total_bytes;
     nstime_t UL_time_start;
     nstime_t UL_time_stop;
-    guint32  UL_total_acks;
-    guint32  UL_total_nacks;
-    guint32  UL_total_missing;
+    uint32_t UL_total_acks;
+    uint32_t UL_total_nacks;
+    uint32_t UL_total_missing;
 
-    guint32  DL_frames;
-    guint32  DL_total_bytes;
+    uint32_t DL_frames;
+    uint32_t DL_total_bytes;
     nstime_t DL_time_start;
     nstime_t DL_time_stop;
-    guint32  DL_total_acks;
-    guint32  DL_total_nacks;
-    guint32  DL_total_missing;
+    uint32_t DL_total_acks;
+    uint32_t DL_total_nacks;
+    uint32_t DL_total_missing;
 
 } rlc_ue_stats;
 
@@ -553,7 +553,7 @@ public:
                                     &stats_.DL_time_stop,
                                     stats_.DL_total_bytes);
 
-        setText(col_rat_,    (rat_ == RLC_RAT_LTE) ? QString("LTE") : QString("NR"));
+        setText(col_rat_,    (rat_ == RLC_RAT_LTE) ? QStringLiteral("LTE") : QStringLiteral("NR"));
 
         // Uplink.
         setText(col_ul_frames_,  QString::number(stats_.UL_frames));
@@ -611,54 +611,54 @@ public:
         // Are we taking RLC PDUs from MAC, or not?
         if (!recent.gui_rlc_use_pdus_from_mac) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("not mac-lte and ");
+                filter_expr += QStringLiteral("not mac-lte and ");
             }
             else {
-                filter_expr += QString("not mac-nr and ");
+                filter_expr += QStringLiteral("not mac-nr and ");
             }
         }
         else {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("mac-lte and ");
+                filter_expr += QStringLiteral("mac-lte and ");
             }
             else {
-                filter_expr += QString("mac-nr and ");
+                filter_expr += QStringLiteral("mac-nr and ");
             }
         }
 
         if (showSR) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("(mac-lte.sr-req and mac-lte.ueid == %1) or (").arg(ueid_);
+                filter_expr += QStringLiteral("(mac-lte.sr-req and mac-lte.ueid == %1) or (").arg(ueid_);
             }
         }
 
         if (showRACH) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString("(mac-lte.rar or (mac-lte.preamble-sent and mac-lte.ueid == %1)) or (").arg(ueid_);
+                filter_expr += QStringLiteral("(mac-lte.rar or (mac-lte.preamble-sent and mac-lte.ueid == %1)) or (").arg(ueid_);
             }
             else {
-                filter_expr += QString("mac-nr.rar or ");
+                filter_expr += QStringLiteral("mac-nr.rar or ");
             }
         }
 
         // Must match UE
         if (rat_ == RLC_RAT_LTE) {
-            filter_expr += QString("rlc-lte.ueid==%1").arg(ueid_);
+            filter_expr += QStringLiteral("rlc-lte.ueid==%1").arg(ueid_);
         }
         else {
-            filter_expr += QString("rlc-nr.ueid==%1").arg(ueid_);
+            filter_expr += QStringLiteral("rlc-nr.ueid==%1").arg(ueid_);
         }
 
         // Close () if open because of SR
         if (showSR) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString(")");
+                filter_expr += QStringLiteral(")");
             }
         }
         // Close () if open because of RACH
         if (showRACH) {
             if (rat_ == RLC_RAT_LTE) {
-                filter_expr += QString(")");
+                filter_expr += QStringLiteral(")");
             }
         }
 
@@ -719,7 +719,7 @@ static const QString channel_col_3_title_ = QObject::tr("Priority");
 
 // Constructor.
 LteRlcStatisticsDialog::LteRlcStatisticsDialog(QWidget &parent, CaptureFile &cf, const char *filter) :
-    TapParameterDialog(parent, cf, HELP_STATS_LTE_MAC_TRAFFIC_DIALOG),
+    TapParameterDialog(parent, cf, HELP_STATS_LTE_RLC_TRAFFIC_DIALOG),
     cf_(cf),
     packet_count_(0)
 {
@@ -738,11 +738,11 @@ LteRlcStatisticsDialog::LteRlcStatisticsDialog(QWidget &parent, CaptureFile &cf,
     filter_controls_grid->setColumnStretch(5, 1);
 
     // Add individual controls into the grid
-    launchULGraph_ = new QPushButton(QString("Launch UL Graph"));
+    launchULGraph_ = new QPushButton(tr("Launch UL Graph"));
     launchULGraph_->setEnabled(false);
     filter_controls_grid->addWidget(launchULGraph_);
     connect(launchULGraph_, SIGNAL(clicked()), this, SLOT(launchULGraphButtonClicked()));
-    launchDLGraph_ = new QPushButton(QString("Launch DL Graph"));
+    launchDLGraph_ = new QPushButton(tr("Launch DL Graph"));
     launchDLGraph_->setEnabled(false);
     filter_controls_grid->addWidget(launchDLGraph_);
     connect(launchDLGraph_, SIGNAL(clicked()), this, SLOT(launchDLGraphButtonClicked()));
@@ -910,7 +910,7 @@ void LteRlcStatisticsDialog::tapDraw(void *ws_dlg_ptr)
     }
 
     // Update title
-    ws_dlg->setWindowSubtitle(QString("LTE RLC Statistics (%1 UEs, %2 frames)").
+    ws_dlg->setWindowSubtitle(tr("LTE RLC Statistics (%1 UEs, %2 frames)").
                                   arg(ws_dlg->statsTreeWidget()->topLevelItemCount()).arg(ws_dlg->getFrameCount()));
 }
 
@@ -1070,7 +1070,7 @@ QList<QVariant> LteRlcStatisticsDialog::treeItemData(QTreeWidgetItem *item) cons
 
 // Stat command + args
 
-static void
+static bool
 lte_rlc_statistics_init(const char *args, void*)
 {
     QStringList args_l = QString(args).split(',');
@@ -1079,10 +1079,11 @@ lte_rlc_statistics_init(const char *args, void*)
         filter = QStringList(args_l.mid(2)).join(",").toUtf8();
     }
     mainApp->emitStatCommandSignal("LteRlcStatistics", filter.constData(), NULL);
+    return true;
 }
 
 static stat_tap_ui lte_rlc_statistics_ui = {
-    REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU,
+    REGISTER_TELEPHONY_GROUP_3GPP_UU,
     QT_TRANSLATE_NOOP("LteRlcStatisticsDialog", "RLC Statistics"),
     "rlc-3gpp,stat",            // cli_string
     lte_rlc_statistics_init,

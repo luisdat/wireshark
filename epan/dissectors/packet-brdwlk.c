@@ -9,10 +9,16 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/*
+ * https://www.cisco.com/en/US/docs/storage/san_switches/mds9000/hw/paa/installation/note/FPAA2.pdf
+ * https://www.cisco.com/en/US/docs/storage/san_switches/mds9000/hw/paa/installation/note/FPAA2.html
+ */
+
 #include "config.h"
 
 #include <epan/packet.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
 #include "packet-fc.h"
 
 #define BRDWLK_MAX_PACKET_CNT  0xFFFF
@@ -81,13 +87,13 @@ static int hf_brdwlk_error_jumbo;
 static int hf_brdwlk_error_ctrl;
 
 /* Initialize the subtree pointers */
-static gint ett_brdwlk;
-static gint ett_brdwlk_error;
+static int ett_brdwlk;
+static int ett_brdwlk_error;
 
-static gint proto_brdwlk;
+static int proto_brdwlk;
 
-static guint16 packet_count = 0;
-static gboolean first_pkt = TRUE;                /* start of capture */
+static uint16_t packet_count;
+static bool first_pkt = true;                /* start of capture */
 
 static dissector_handle_t fc_dissector_handle;
 static dissector_handle_t brdwlk_handle;
@@ -153,12 +159,12 @@ dissect_brdwlk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
     proto_item *ti, *hidden_item;
     proto_tree *brdwlk_tree;
     tvbuff_t *next_tvb;
-    guint8 error, eof, sof;
+    uint8_t error, eof, sof;
     int hdrlen = 2,
         offset = 0;
-    gint len, reported_len, plen;
-    guint16 pkt_cnt;
-    gboolean dropped_packets;
+    int len, reported_len, plen;
+    uint16_t pkt_cnt;
+    bool dropped_packets;
     fc_data_t fc_data;
 
     /* Make entries in Protocol column and Info column on summary display */
@@ -166,7 +172,7 @@ dissect_brdwlk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 
     col_clear(pinfo->cinfo, COL_INFO);
 
-    sof = (tvb_get_guint8(tvb, offset) & 0xF0) >> 4;
+    sof = (tvb_get_uint8(tvb, offset) & 0xF0) >> 4;
 
     fc_data.sof_eof = 0;
     if ((sof == FCM_DELIM_SOFI3) || (sof == FCM_DELIM_SOFI2) || (sof == FCM_DELIM_SOFI1)
@@ -223,7 +229,7 @@ dissect_brdwlk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
             proto_tree_add_uint(brdwlk_tree, hf_brdwlk_pktcnt, tvb, offset,
                                 2, pkt_cnt);
         }
-        dropped_packets = FALSE;
+        dropped_packets = false;
         if (pinfo->fd->visited) {
             /*
              * This isn't the first pass, so we can't use the global
@@ -233,7 +239,7 @@ dissect_brdwlk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
              * any frame preceded by dropped packets.
              */
             if (p_get_proto_data(wmem_file_scope(), pinfo, proto_brdwlk, 0) != NULL)
-                dropped_packets = TRUE;
+                dropped_packets = true;
         } else {
             /*
              * This is the first pass, so we have to use the global
@@ -246,7 +252,7 @@ dissect_brdwlk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
             if (pkt_cnt != packet_count + 1) {
                 if (!first_pkt &&
                     (pkt_cnt != 0 || (packet_count != BRDWLK_MAX_PACKET_CNT))) {
-                    dropped_packets = TRUE;
+                    dropped_packets = true;
 
                     /*
                      * Mark this frame as having been preceded by dropped
@@ -264,10 +270,10 @@ dissect_brdwlk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 
         packet_count = pkt_cnt;
 
-        error=tvb_get_guint8(tvb, offset+2);
+        error=tvb_get_uint8(tvb, offset+2);
         dissect_brdwlk_err(brdwlk_tree, tvb, offset+2);
 
-        eof = tvb_get_guint8(tvb, offset+3);
+        eof = tvb_get_uint8(tvb, offset+3);
         if (eof != FCM_DELIM_EOFN) {
             fc_data.sof_eof |= FC_DATA_EOF_LAST_FRAME;
         }
@@ -281,21 +287,29 @@ dissect_brdwlk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
         if ((error & BRDWLK_HAS_PLEN) && tree) {
             /* In newer Boardwalks, if this bit is set, the actual frame length
              * is also provided. This length is the size between SOF & EOF
-             * including FC CRC.
+             * including FC CRC, measured in words.
+             *
+             * XXX - It should be between 12 (36 bytes) and 528 (2112 bytes).
              */
-            plen = tvb_get_ntohl(tvb, offset-4);
+            plen = tvb_get_ntohs(tvb, offset-4);
             plen *= 4;
             proto_tree_add_uint(brdwlk_tree, hf_brdwlk_plen, tvb, offset-4,
-                                4, plen);
+                                2, plen);
 
-#if 0
-            /* XXX - this would throw an exception if it would increase
-             * the reported length.
-             */
             if (error & BRDWLK_TRUNCATED_BIT) {
+#if 0
+                /* XXX - this would throw an exception if it would increase
+                 * the reported length. If it would decrease the reported
+                 * length, tvb_set_reported_length is used to help the Ethernet
+                 * dissector find a trailer - except that wouldn't work because
+                 * the EOF is located from the end of the frame, i.e. trailer
+                 * heuristics never work with this dissector.
+                 */
                 tvb_set_reported_length(tvb, plen);
-            }
 #endif
+                /* Set the reported length for the FC subset tvb. */
+                reported_len = plen;
+            }
         }
     }
 
@@ -309,7 +323,7 @@ static void
 brdwlk_init(void)
 {
     packet_count = 0;
-    first_pkt = TRUE;
+    first_pkt = true;
 }
 
 /* Register the protocol with Wireshark */
@@ -372,7 +386,7 @@ proto_register_brdwlk(void)
     };
 
 /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_brdwlk,
         &ett_brdwlk_error,
     };

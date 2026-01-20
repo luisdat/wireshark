@@ -22,8 +22,8 @@
 /* WSLUA_CONTINUE_MODULE Pinfo */
 
 
-static GPtrArray* outstanding_Column = NULL;
-static GPtrArray* outstanding_Columns = NULL;
+static GPtrArray* outstanding_Column;
+static GPtrArray* outstanding_Columns;
 
 CLEAR_OUTSTANDING(Column,expired, true)
 CLEAR_OUTSTANDING(Columns,expired, true)
@@ -44,9 +44,10 @@ struct col_names_t {
     int id;
 };
 
-// Duplicated belown in Columns__newindex.
+// Duplicated below in Columns__newindex.
 static const struct col_names_t colnames[] = {
     {"number",COL_NUMBER},
+    {"number_displayed",COL_NUMBER_DIS},
     {"abs_time",COL_ABS_TIME},
     {"utc_time",COL_UTC_TIME},
     {"cls_time",COL_CLS_TIME},
@@ -172,13 +173,19 @@ WSLUA_METHOD Column_set(lua_State *L) {
 WSLUA_METHOD Column_append(lua_State *L) {
     /* Appends text to a Column. */
 #define WSLUA_ARG_Column_append_TEXT 2 /* The text to append to the Column. */
+#define WSLUA_OPTARG_Column_append_SEP 3 /* An optional separator to use as prefix if the column is not empty. */
     Column c = checkColumn(L,1);
     const char* s = luaL_checkstring(L,WSLUA_ARG_Column_append_TEXT);
+    const char* sep = luaL_optstring(L,WSLUA_OPTARG_Column_append_SEP,NULL);
 
     if (!(c->cinfo))
         return 0;
 
-    col_append_str(c->cinfo, c->col, s);
+    if (sep) {
+        col_append_sep_str(c->cinfo, c->col, sep, s);
+    } else {
+        col_append_str(c->cinfo, c->col, s);
+    }
 
     return 0;
 }
@@ -198,10 +205,7 @@ WSLUA_METHOD Column_prepend(lua_State *L) {
 }
 
 WSLUA_METHOD Column_fence(lua_State *L) {
-    /* Sets Column text fence, to prevent overwriting.
-
-       @since 1.10.6
-     */
+    /* Sets Column text fence, to prevent overwriting. */
     Column c = checkColumn(L,1);
 
     if (c->cinfo)
@@ -211,10 +215,7 @@ WSLUA_METHOD Column_fence(lua_State *L) {
 }
 
 WSLUA_METHOD Column_clear_fence(lua_State *L) {
-    /* Clear Column text fence.
-
-       @since 1.11.3
-     */
+    /* Clear Column text fence. */
     Column c = checkColumn(L,1);
 
     if (c->cinfo)
@@ -244,6 +245,9 @@ WSLUA_META Column_meta[] = {
 
 int Column_register(lua_State *L) {
     WSLUA_REGISTER_CLASS(Column);
+    if (outstanding_Column != NULL) {
+        g_ptr_array_unref(outstanding_Column);
+    }
     outstanding_Column = g_ptr_array_new();
     return 0;
 }
@@ -421,6 +425,9 @@ WSLUA_META Columns_meta[] = {
 
 int Columns_register(lua_State *L) {
     WSLUA_REGISTER_META(Columns);
+    if (outstanding_Columns != NULL) {
+        g_ptr_array_unref(outstanding_Columns);
+    }
     outstanding_Columns = g_ptr_array_new();
     return 0;
 }

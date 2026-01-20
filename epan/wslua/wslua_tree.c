@@ -23,7 +23,7 @@
 
 static int wslua_ett = -1;
 
-static GPtrArray* outstanding_TreeItem = NULL;
+static GPtrArray* outstanding_TreeItem;
 
 
 /* pushing a TreeItem with a NULL item or subtree is completely valid for this function */
@@ -77,7 +77,7 @@ try_add_packet_field(lua_State *L, TreeItem tree_item, TvbRange tvbr, const int 
 {
     int err = 0;
     proto_item *volatile item = NULL;
-    int endoff = 0;
+    unsigned endoff = 0;
 
     switch(type) {
         /* these all generate ByteArrays */
@@ -173,7 +173,7 @@ try_add_packet_field(lua_State *L, TreeItem tree_item, TvbRange tvbr, const int 
 
         case FT_BOOLEAN:
             {
-                gboolean ret;
+                bool ret;
                 item = proto_tree_add_item_ret_boolean(tree_item->tree, hfid, tvbr->tvb->ws_tvb,
                                                     tvbr->offset, tvbr->len, encoding,
                                                     &ret);
@@ -183,26 +183,17 @@ try_add_packet_field(lua_State *L, TreeItem tree_item, TvbRange tvbr, const int 
             break;
 
         case FT_STRING:
+        case FT_STRINGZ:
+        case FT_STRINGZPAD:
+        case FT_STRINGZTRUNC:
+        case FT_UINT_STRING:
             {
                 const uint8_t *ret;
                 int len;
                 item = proto_tree_add_item_ret_string_and_length(tree_item->tree, hfid, tvbr->tvb->ws_tvb,
                                                     tvbr->offset, tvbr->len, encoding,
                                                     NULL, &ret, &len);
-                lua_pushstring(L, ret);
-                lua_pushinteger(L, tvbr->offset + len);
-                wmem_free(NULL, (void*)ret);
-            }
-            break;
-
-        case FT_STRINGZ:
-            {
-                const uint8_t *ret;
-                int len;
-                item = proto_tree_add_item_ret_string_and_length(tree_item->tree, hfid, tvbr->tvb->ws_tvb,
-                                                    tvbr->offset, -1, encoding,
-                                                    NULL, &ret, &len);
-                lua_pushstring(L, ret);
+                lua_pushstring(L, (const char*)ret);
                 lua_pushinteger(L, tvbr->offset + len);
                 wmem_free(NULL, (void*)ret);
             }
@@ -308,36 +299,37 @@ WSLUA_METHOD TreeItem_add_packet_field(lua_State *L) {
      tree_item:add_packet_field(proto_field [,tvbrange], encoding, ...)
      ----
 
-     In Wireshark version 1.11.3, this function was changed to return more than
-     just the new child <<lua_class_TreeItem,`TreeItem`>>. The child is the first return value, so that
-     function chaining will still work as before; but it now also returns more information.
-     The second return is the value of the extracted field (i.e., a number, `UInt64`, `Address`, etc.).
-     The third return is is the offset where data should be read next. This is useful when the length of the
-     field is not known in advance. The additional return values may be null if the field type
-     is not well supported in the Lua API.
+     This function returns more than just the new child <<lua_class_TreeItem,`TreeItem`>>.
+     The child is the first return value, so that function chaining will still work; but it
+     also returns more information. The second return is the value of the extracted field
+     (i.e., a number, `UInt64`, `Address`, etc.). The third return is is the offset where
+     data should be read next. This is useful when the length of the field is not known in
+     advance. The additional return values may be null if the field type is not well supported
+     in the Lua API.
 
-     Another new feature added to this function in Wireshark version 1.11.3 is the
-     ability to extract native number `ProtoField`++s++ from string encoding in the
-     `TvbRange`, for ASCII-based and similar string encodings. For example, a
-     <<lua_class_ProtoField,`ProtoField`>> of type `ftypes.UINT32` can be extracted from a `TvbRange`
-     containing the ASCII string "123", and it will correctly decode the ASCII to
-     the number `123`, both in the tree as well as for the second return value of
-     this function. To do so, you must set the `encoding` argument of this function
-     to the appropriate string `ENC_*` value, bitwise-or'd with the `ENC_STRING`
-     value. `ENC_STRING` is guaranteed to be a unique bit flag, and
-     thus it can added instead of bitwise-or'ed as well. Only single-byte ASCII digit
-     string encoding types can be used for this, such as `ENC_ASCII` and `ENC_UTF_8`.
+     This function can extract a <<lua_class_ProtoField,`ProtoField`>> of type `ftypes.BYTES`
+     or `ftypes.ABSOLUTE_TIME` from a string in the `TvbRange` in ASCII-based and similar
+     encodings. For example, a `ProtoField` of `ftypes.BYTES` can be extracted from a `TvbRange`
+     containing the ASCII string "a1b2c3d4e5f6", and it will correctly decode the ASCII both in the
+     tree as well as for the second return value, which will be a <<lua_class_ByteArray,`ByteArray`>>.
+     To do so, you must set the `encoding` argument of this function to the appropriate string `ENC_*`
+     value, bitwise-or'd (or added) with the `ENC_STR_HEX` value and one or more `ENC_SEP_XXX` values
+     indicating which encodings are allowed. For `ftypes.ABSOLUTE_TIME`, one of the `ENC_ISO_8601_*`
+     encodings or `ENC_IMF_DATE_TIME` must be used, and the second return value is a <<lua_class_NSTime,`NSTime`>>.
+     Only single-byte ASCII digit string encodings such as `ENC_ASCII` and `ENC_UTF_8` can be used for this.
 
-     For example, assuming the <<lua_class_Tvb,`Tvb`>> named "`tvb`" contains the string "123":
+     For example, assuming the <<lua_class_Tvb,`Tvb`>> named "`tvb`" contains the string "abcdef"
+     (61 62 63 64 65 66 in hex):
 
      [source,lua]
      ----
      -- this is done earlier in the script
-     local myfield = ProtoField.new("Transaction ID", "myproto.trans_id", ftypes.UINT16)
+     local myfield = ProtoField.new("Transaction ID", "myproto.trans_id", ftypes.BYTES)
+     myproto.fields = { myfield }
 
      -- this is done inside a dissector, post-dissector, or heuristic function
-     -- child will be the created child tree, and value will be the number 123 or nil on failure
-     local child, value = tree:add_packet_field(myfield, tvb:range(0,3), ENC_UTF_8 + ENC_STRING)
+     -- child will be the created child tree, and value will be the ByteArray "abcdef" or nil on failure
+     local child, value = tree:add_packet_field(myfield, tvb:range(0,6), ENC_UTF_8 + ENC_STR_HEX + ENC_SEP_NONE)
      ----
 
     */
@@ -369,6 +361,9 @@ WSLUA_METHOD TreeItem_add_packet_field(lua_State *L) {
         luaL_error(L,"TreeField:add_packet_field not passed a ProtoField");
         return 0;
     }
+    if (field->hfid == -2) {
+        luaL_error(L, "ProtoField %s unregistered (not added to a Proto.fields attribute)", field->abbrev);
+    }
     hfid = field->hfid;
     type = field->type;
     ett = field->ett;
@@ -383,7 +378,7 @@ WSLUA_METHOD TreeItem_add_packet_field(lua_State *L) {
         tvbr->len = 0;
     }
 
-    encoding = wslua_checkguint(L,1);
+    encoding = wslua_checkuint(L,1);
     lua_remove(L,1);
 
     /* get the number of additional args before we add more to the stack */
@@ -402,7 +397,7 @@ WSLUA_METHOD TreeItem_add_packet_field(lua_State *L) {
             break;
 
         default:
-            if (tvb_find_guint8 (tvbr->tvb->ws_tvb, tvbr->offset, -1, 0) == -1) {
+            if (!tvb_find_uint8_remaining(tvbr->tvb->ws_tvb, tvbr->offset, 0, NULL)) {
                 luaL_error(L,"out of bounds");
                 return 0;
             }
@@ -443,6 +438,10 @@ WSLUA_METHOD TreeItem_add_packet_field(lua_State *L) {
     WSLUA_RETURN(3); /* The new child <<lua_class_TreeItem,`TreeItem`>>, the field's extracted value or nil, and offset or nil. */
 }
 
+/* The following is used by TreeItem_add() and TreeItem_le() and can THROW.
+ * It should be called inside a TRY (e.g. WRAP_NON_LUA_EXCEPTIONS) block and
+ * THROW_LUA_ERROR should be used insteadof lua[L]_error.
+ */
 static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
     TvbRange tvbr;
     Proto proto;
@@ -454,10 +453,10 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
     proto_item* item = NULL;
 
     if (!tree_item) {
-        return luaL_error(L,"not a TreeItem!");
+        THROW_LUA_ERROR("not a TreeItem!");
     }
     if (tree_item->expired) {
-        luaL_error(L,"expired TreeItem");
+        THROW_LUA_ERROR("expired TreeItem");
         return 0;
     }
 
@@ -467,7 +466,7 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
             type = FT_PROTOCOL;
             ett = proto->ett;
         } else if (lua_isnil(L, 1)) {
-            return luaL_error(L, "first argument to TreeItem:add is nil!");
+            THROW_LUA_ERROR("first argument to TreeItem:add is nil!");
         }
     } else {
         hfid = field->hfid;
@@ -489,8 +488,8 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
         /* hfid is > 0 when the first arg was a ProtoField or Proto */
 
         if (type == FT_STRINGZ) {
-            if (tvb_find_guint8 (tvbr->tvb->ws_tvb, tvbr->offset, -1, 0) == -1) {
-                luaL_error(L,"out of bounds");
+            if (!tvb_find_uint8_remaining(tvbr->tvb->ws_tvb, tvbr->offset, 0, NULL)) {
+                THROW_LUA_ERROR("out of bounds");
                 return 0;
             }
             tvbr->len = tvb_strsize (tvbr->tvb->ws_tvb, tvbr->offset);
@@ -498,6 +497,14 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
 
         if (lua_gettop(L)) {
             /* if we got here, the (L,1) index is the value to add, instead of decoding from the Tvb */
+
+            /* It's invalid for it to be nil (which has been documented for
+             * a long time). Make sure we throw our error instead of an
+             * internal Lua error (due to nested setjmp/longjmp).
+             */
+            if (lua_isnil(L, 1)) {
+                THROW_LUA_ERROR("TreeItem:add value argument is nil!");
+            }
 
             switch(type) {
                 case FT_PROTOCOL:
@@ -527,13 +534,13 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                 case FT_UINT24:
                 case FT_UINT32:
                 case FT_FRAMENUM:
-                    item = proto_tree_add_uint(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,wslua_checkguint32(L,1));
+                    item = proto_tree_add_uint(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,wslua_checkuint32(L,1));
                     break;
                 case FT_INT8:
                 case FT_INT16:
                 case FT_INT24:
                 case FT_INT32:
-                    item = proto_tree_add_int(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,wslua_checkguint32(L,1));
+                    item = proto_tree_add_int(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,wslua_checkint32(L,1));
                     break;
                 case FT_FLOAT:
                     item = proto_tree_add_float(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,(float)luaL_checknumber(L,1));
@@ -564,7 +571,7 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                         uint32_t addr_value;
 
                         if (addr->type != AT_IPv4) {
-                            luaL_error(L, "Expected IPv4 address for FT_IPv4 field");
+                            THROW_LUA_ERROR("Expected IPv4 address for FT_IPv4 field");
                             return 0;
                         }
 
@@ -581,7 +588,7 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                     {
                         Address addr = checkAddress(L,1);
                         if (addr->type != AT_IPv6) {
-                            luaL_error(L, "Expected IPv6 address for FT_IPv6 field");
+                            THROW_LUA_ERROR("Expected IPv6 address for FT_IPv6 field");
                             return 0;
                         }
 
@@ -592,7 +599,7 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                     {
                         Address addr = checkAddress(L,1);
                         if (addr->type != AT_ETHER) {
-                            luaL_error(L, "Expected MAC address for FT_ETHER field");
+                            THROW_LUA_ERROR("Expected MAC address for FT_ETHER field");
                             return 0;
                         }
 
@@ -608,7 +615,7 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                 case FT_VINES:
                 case FT_FCWWN:
                 default:
-                    luaL_error(L,"FT_ not yet supported");
+                    THROW_LUA_ERROR("%s not yet supported", ftype_name(type));
                     return 0;
             }
 
@@ -616,7 +623,7 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
 
         } else {
             if (type == FT_FRAMENUM) {
-                luaL_error(L, "ProtoField FRAMENUM cannot fetch value from Tvb");
+                THROW_LUA_ERROR("ProtoField FRAMENUM cannot fetch value from Tvb");
                 return 0;
             }
             /* the Lua stack is empty - no value was given - so decode the value from the tvb */
@@ -631,7 +638,8 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
         }
 
     } else {
-        /* no ProtoField or Proto was given */
+        /* no ProtoField or Proto was given - we're adding a text-only field,
+         * any remaining parameters are parts of the text label. */
         if (lua_gettop(L)) {
             const char* s = lua_tostring(L,1);
             const int hf = get_hf_wslua_text();
@@ -640,11 +648,11 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                 item = proto_tree_add_item(tree_item->tree, hf, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len, ENC_NA);
                 proto_item_set_text(item, "%s", s);
             } else {
-                luaL_error(L,"Internal error: hf_wslua_text not registered");
+                THROW_LUA_ERROR("Internal error: hf_wslua_text not registered");
             }
             lua_remove(L,1);
         } else {
-            luaL_error(L,"Tree item ProtoField/Protocol handle is invalid (ProtoField/Proto not registered?)");
+            THROW_LUA_ERROR("Tree item ProtoField/Protocol handle is invalid (ProtoField/Proto not registered?)");
         }
     }
 
@@ -726,7 +734,12 @@ WSLUA_METHOD TreeItem_add(lua_State *L) {
 #define WSLUA_OPTARG_TreeItem_add_TVBRANGE 3 /* The <<lua_class_TvbRange,`TvbRange`>> of bytes in the packet this tree item covers/represents. */
 #define WSLUA_OPTARG_TreeItem_add_VALUE 4 /* The field's value, instead of the ProtoField/Proto one. */
 #define WSLUA_OPTARG_TreeItem_add_LABEL 5 /* One or more strings to use for the tree item label, instead of the ProtoField/Proto one. */
-    WSLUA_RETURN(TreeItem_add_item_any(L,false)); /* The new child TreeItem. */
+
+    volatile int ret;
+    WRAP_NON_LUA_EXCEPTIONS(
+        ret = TreeItem_add_item_any(L,false);
+    )
+    WSLUA_RETURN(ret); /* The new child TreeItem. */
 }
 
 WSLUA_METHOD TreeItem_add_le(lua_State *L) {
@@ -745,26 +758,28 @@ WSLUA_METHOD TreeItem_add_le(lua_State *L) {
 #define WSLUA_OPTARG_TreeItem_add_le_TVBRANGE 3 /* The TvbRange of bytes in the packet this tree item covers/represents. */
 #define WSLUA_OPTARG_TreeItem_add_le_VALUE 4 /* The field's value, instead of the ProtoField/Proto one. */
 #define WSLUA_OPTARG_TreeItem_add_le_LABEL 5 /* One or more strings to use for the tree item label, instead of the ProtoField/Proto one. */
-    WSLUA_RETURN(TreeItem_add_item_any(L,true)); /* The new child TreeItem. */
+    volatile int ret;
+    WRAP_NON_LUA_EXCEPTIONS(
+        ret = TreeItem_add_item_any(L,true);
+    )
+    WSLUA_RETURN(ret); /* The new child TreeItem. */
 }
 
 /* WSLUA_ATTRIBUTE TreeItem_text RW Set/get the <<lua_class_TreeItem,`TreeItem`>>'s display string (string).
 
     For the getter, if the TreeItem has no display string, then nil is returned.
-
-    @since 1.99.3
  */
 static int TreeItem_get_text(lua_State* L) {
     TreeItem ti = checkTreeItem(L,1);
     char label_str[ITEM_LABEL_LENGTH+1];
     char *label_ptr;
 
-    if (ti->item) {
+    if (ti->item && PITEM_FINFO(ti->item)) {
         field_info *fi = PITEM_FINFO(ti->item);
 
         if (!fi->rep) {
             label_ptr = label_str;
-            proto_item_fill_label(fi, label_str);
+            proto_item_fill_label(fi, label_str, NULL);
         } else
             label_ptr = fi->rep->representation;
 
@@ -887,10 +902,7 @@ WSLUA_METHOD TreeItem_add_expert_info(lua_State *L) {
 }
 
 WSLUA_METHOD TreeItem_add_proto_expert_info(lua_State *L) {
-    /* Sets the expert flags of the tree item and adds expert info to the packet.
-
-       @since 1.11.3
-     */
+    /* Sets the expert flags of the tree item and adds expert info to the packet. */
 #define WSLUA_ARG_TreeItem_add_proto_expert_info_EXPERT 2 /* The <<lua_class_ProtoExpert,`ProtoExpert`>> object to add to the tree. */
 #define WSLUA_OPTARG_TreeItem_add_proto_expert_info_TEXT 3 /* Text for the expert info display
                                                               (default is to use the registered
@@ -919,10 +931,7 @@ WSLUA_METHOD TreeItem_add_proto_expert_info(lua_State *L) {
 
 WSLUA_METHOD TreeItem_add_tvb_expert_info(lua_State *L) {
     /* Sets the expert flags of the tree item and adds expert info to the packet
-       associated with the <<lua_class_Tvb,`Tvb`>> or <<lua_class_TvbRange,`TvbRange`>> bytes in the packet.
-
-       @since 1.11.3
-     */
+       associated with the <<lua_class_Tvb,`Tvb`>> or <<lua_class_TvbRange,`TvbRange`>> bytes in the packet. */
 #define WSLUA_ARG_TreeItem_add_tvb_expert_info_EXPERT 2 /* The <<lua_class_ProtoExpert,`ProtoExpert`>> object to add to the tree. */
 #define WSLUA_ARG_TreeItem_add_tvb_expert_info_TVB 3 /* The <<lua_class_Tvb,`Tvb`>> or <<lua_class_TvbRange,`TvbRange`>> object bytes to associate
                                                         the expert info with. */
@@ -969,10 +978,7 @@ WSLUA_METHOD TreeItem_add_tvb_expert_info(lua_State *L) {
 }
 
 
-/* WSLUA_ATTRIBUTE TreeItem_visible RO Get the <<lua_class_TreeItem,`TreeItem`>>'s subtree visibility status (boolean).
-
-    @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE TreeItem_visible RO Get the <<lua_class_TreeItem,`TreeItem`>>'s subtree visibility status (boolean). */
 static int TreeItem_get_visible(lua_State* L) {
     TreeItem ti = checkTreeItem(L,1);
 
@@ -987,10 +993,7 @@ static int TreeItem_get_visible(lua_State* L) {
 }
 
 
-/* WSLUA_ATTRIBUTE TreeItem_generated RW Set/get the <<lua_class_TreeItem,`TreeItem`>>'s generated state (boolean).
-
-    @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE TreeItem_generated RW Set/get the <<lua_class_TreeItem,`TreeItem`>>'s generated state (boolean). */
 static int TreeItem_get_generated(lua_State* L) {
     TreeItem ti = checkTreeItem(L,1);
 
@@ -1024,10 +1027,7 @@ WSLUA_METHOD TreeItem_set_generated(lua_State *L) {
     WSLUA_RETURN(1); /* The same TreeItem. */
 }
 
-/* WSLUA_ATTRIBUTE TreeItem_hidden RW Set/get <<lua_class_TreeItem,`TreeItem`>>'s hidden state (boolean).
-
-    @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE TreeItem_hidden RW Set/get <<lua_class_TreeItem,`TreeItem`>>'s hidden state (boolean). */
 static int TreeItem_get_hidden(lua_State* L) {
     TreeItem ti = checkTreeItem(L,1);
 
@@ -1062,10 +1062,7 @@ WSLUA_METHOD TreeItem_set_hidden(lua_State *L) {
     WSLUA_RETURN(1); /* The same TreeItem. */
 }
 
-/* WSLUA_ATTRIBUTE TreeItem_len RW Set/get <<lua_class_TreeItem,`TreeItem`>>'s length inside tvb, after it has already been created.
-
-    @since 1.99.8
- */
+/* WSLUA_ATTRIBUTE TreeItem_len RW Set/get <<lua_class_TreeItem,`TreeItem`>>'s length inside tvb, after it has already been created. */
 static int TreeItem_get_len(lua_State* L) {
     TreeItem ti = checkTreeItem(L,1);
     int len = 0;
@@ -1086,6 +1083,11 @@ WSLUA_METHOD TreeItem_set_len(lua_State *L) {
 #define WSLUA_ARG_TreeItem_set_len_LEN 2 /* The length to be used. */
     TreeItem ti = checkTreeItem(L,1);
     int len = (int)luaL_checkinteger(L,WSLUA_ARG_TreeItem_set_len_LEN);
+
+    if (len < 0) {
+        luaL_argerror(L,WSLUA_ARG_TreeItem_set_len_LEN,"must be a positive value");
+        return 0;
+    }
 
     proto_item_set_len(ti->item, len);
 
@@ -1108,8 +1110,6 @@ WSLUA_METHOD TreeItem_referenced(lua_State *L) {
 
     This function takes one parameter that can be a <<lua_class_ProtoField,`ProtoField`>> or <<lua_class_Dissector,`Dissector`>>.
     The <<lua_class_Dissector,`Dissector`>> form is useful when you need to decide whether to call a sub-dissector.
-
-    @since 2.4.0
     */
 #define WSLUA_ARG_TreeItem_referenced_PROTOFIELD 2 /* The <<lua_class_ProtoField,`ProtoField`>> or <<lua_class_Dissector,`Dissector`>> to check if referenced. */
     TreeItem ti = checkTreeItem(L, 1);
@@ -1127,10 +1127,7 @@ WSLUA_METHOD TreeItem_referenced(lua_State *L) {
 }
 
 WSLUA_METAMETHOD TreeItem__tostring(lua_State* L) {
-    /* Returns string debug information about the <<lua_class_TreeItem,`TreeItem`>>.
-
-       @since 1.99.8
-     */
+    /* Returns string debug information about the <<lua_class_TreeItem,`TreeItem`>>. */
     TreeItem ti = toTreeItem(L,1);
 
     if (ti) {
@@ -1194,6 +1191,9 @@ int TreeItem_register(lua_State *L) {
     int* etts[] = { &wslua_ett };
     wslua_ett = -1; /* Reset to support reload Lua plugins */
     WSLUA_REGISTER_CLASS_WITH_ATTRS(TreeItem);
+    if (outstanding_TreeItem != NULL) {
+        g_ptr_array_unref(outstanding_TreeItem);
+    }
     outstanding_TreeItem = g_ptr_array_new();
     proto_register_subtree_array(etts,1);
     return 0;

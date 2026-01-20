@@ -26,6 +26,15 @@ slist_stnode_free(void *data)
 	}
 }
 
+static void*
+slist_stnode_dup(const void *data, void *userdata _U_)
+{
+	if (data) {
+		return stnode_dup(data);
+	}
+	return NULL;
+}
+
 void
 set_nodelist_free(GSList *params)
 {
@@ -36,9 +45,18 @@ static void
 sttype_set_free(void *value)
 {
 	/* If the data was not claimed with stnode_steal_data(), free it. */
+	/* (The test is unnecessary because NULL is an empty GSList.) */
 	if (value) {
 		set_nodelist_free(value);
 	}
+}
+
+static void *
+sttype_set_dup(const void *value)
+{
+	GSList *nodelist = (GSList*)value;
+
+	return g_slist_copy_deep(nodelist, slist_stnode_dup, NULL);
 }
 
 static char *
@@ -67,7 +85,7 @@ sttype_set_tostr(const void *data, bool pretty)
 		}
 	}
 
-	return g_string_free(repr, false);
+	return g_string_free(repr, FALSE);
 }
 
 void
@@ -77,7 +95,7 @@ sttype_register_set(void)
 		STTYPE_SET,
 		NULL,
 		sttype_set_free,
-		NULL,
+		sttype_set_dup,
 		sttype_set_tostr
 	};
 

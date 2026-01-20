@@ -26,7 +26,6 @@
 #include <epan/dissectors/packet-ieee80211-radio.h>
 
 #include <epan/color_filters.h>
-#include "frame_tvbuff.h"
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
@@ -77,8 +76,9 @@ static void reset_rgb(float rgb[TIMELINE_HEIGHT][3])
 
 static void render_pixels(QPainter &p, int x, int width, float rgb[TIMELINE_HEIGHT][3], float ratio)
 {
-    int previous = 0, i;
+    int previous, i;
     for (i = 1; i <= TIMELINE_HEIGHT; i++) {
+        previous = i - 1;
         if (i != TIMELINE_HEIGHT &&
                 rgb[previous][0] == rgb[i][0] &&
                 rgb[previous][1] == rgb[i][1] &&
@@ -87,7 +87,6 @@ static void render_pixels(QPainter &p, int x, int width, float rgb[TIMELINE_HEIG
         if (rgb[previous][0] != 1.0 || rgb[previous][1] != 1.0 || rgb[previous][2] != 1.0) {
           p.fillRect(QRectF(x/ratio, previous, width/ratio, i-previous), pcolor(rgb[previous][0],rgb[previous][1],rgb[previous][2]));
         }
-        previous = i;
     }
     reset_rgb(rgb);
 }
@@ -294,13 +293,13 @@ void WirelessTimeline::captureFileReadFinished()
 
 void WirelessTimeline::appInitialized()
 {
-    connect(qobject_cast<MainWindow *>(mainApp->mainWindow()), &MainWindow::framesSelected, this, &WirelessTimeline::selectedFrameChanged);
+    connect(mainApp->mainWindow(), &MainWindow::framesSelected, this, &WirelessTimeline::selectedFrameChanged);
 
     GString *error_string;
     error_string = register_tap_listener("wlan_radio_timeline", this, NULL, TL_REQUIRES_NOTHING, tap_timeline_reset, tap_timeline_packet, NULL/*tap_draw_cb tap_draw*/, NULL);
     if (error_string) {
         report_failure("Wireless Timeline - tap registration failed: %s", error_string->str);
-        g_string_free(error_string, true);
+        g_string_free(error_string, TRUE);
     }
 }
 
@@ -353,6 +352,12 @@ WirelessTimeline::~WirelessTimeline()
 void WirelessTimeline::setPacketList(PacketList *packet_list)
 {
     this->packet_list = packet_list;
+    PacketListModel *packet_list_model = qobject_cast<PacketListModel *>(packet_list->model());
+    if (packet_list_model) {
+        connect(packet_list_model, &PacketListModel::bgColorizationProgress,
+                this, &WirelessTimeline::bgColorizationProgress);
+    }
+
 }
 
 void WirelessTimeline::tap_timeline_reset(void* tapdata)
@@ -386,10 +391,10 @@ struct wlan_radio* WirelessTimeline::get_wlan_radio(uint32_t packet_num)
 void WirelessTimeline::doToolTip(struct wlan_radio *wr, QPoint pos, int x)
 {
     if (x < position(wr->start_tsf, 1.0)) {
-        QToolTip::showText(pos, QString("Inter frame space %1 " UTF8_MICRO_SIGN "s").arg(wr->ifs));
+        QToolTip::showText(pos, QStringLiteral("Inter frame space %1 %2s").arg(wr->ifs).arg(UTF8_MICRO_SIGN));
     } else {
-        QToolTip::showText(pos, QString("Total duration %1 " UTF8_MICRO_SIGN "s\nNAV %2 " UTF8_MICRO_SIGN "s")
-                           .arg(wr->end_tsf-wr->start_tsf).arg(wr->nav));
+        QToolTip::showText(pos, QStringLiteral("Total duration %1 %2s\nNAV %3 %2s")
+                           .arg(wr->end_tsf-wr->start_tsf).arg(UTF8_MICRO_SIGN).arg(wr->nav));
     }
 }
 
@@ -420,11 +425,7 @@ void WirelessTimeline::wheelEvent(QWheelEvent *event)
         zoom_level += steps;
         if (zoom_level < 0) zoom_level = 0;
         if (zoom_level > TIMELINE_MAX_ZOOM) zoom_level = TIMELINE_MAX_ZOOM;
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
         zoom(event->position().x() / width());
-#else
-        zoom(event->posF().x() / width());
-#endif
     }
 }
 

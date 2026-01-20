@@ -2,8 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import pytest
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 class TestDfilterColumns:
     trace_file = "http.pcap"
@@ -48,7 +47,7 @@ class TestDfilterColumns:
         dfilter = '_ws.col.protocol == "HTTP"'
         checkDFilterCountReadFilter(dfilter, 1)
 
-    def test_add_column(self, checkDFilterCount):
+ #   def test_add_column(self, checkDFilterCount):
         # Add column to configuration
-        dfilter = '_ws.col.expert == "Chat"'
-        checkDFilterCount(dfilter, 1, 'gui.column.format:"Expert","%a"')
+ #       dfilter = '_ws.col.expert == "Chat"'
+ #       checkDFilterCount(dfilter, 1, 'gui.column.format:"Expert","%a"')

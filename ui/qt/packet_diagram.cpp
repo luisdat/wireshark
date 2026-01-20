@@ -169,7 +169,7 @@ public:
         updateLayout();
 
         if (finfo_->isValid()) {
-            setToolTip(QString("%1 (%2) = %3")
+            setToolTip(QStringLiteral("%1 (%2) = %3")
                        .arg(finfo_->headerInfo().name)
                        .arg(finfo_->headerInfo().abbreviation)
                        .arg(finfo_->toString()));
@@ -251,8 +251,12 @@ public:
         }
         paintLabel(painter, label, scaled_tr_);
 
-        if (layout_->showFields()) {
-            label = finfo_->toString();
+        if (layout_->showFields() && finfo_->headerInfo().type != FT_NONE) {
+            if (representation_.isEmpty()) {
+                label = finfo_->toString();
+            } else {
+                label = representation_;
+            }
             paintLabel(painter, label, scaled_tr_.adjusted(0, scaled_tr_.height(), 0, scaled_tr_.height()));
         }
     }
@@ -371,6 +375,8 @@ void PacketDiagram::setRootNode(proto_node *root_node)
     // useful in our case because it gives us a cheap way to retain our
     // scroll position between packets.
     scene()->clear();
+    viewport()->update();
+
     selected_field_ = nullptr;
     y_pos_ = 0;
 
@@ -391,7 +397,7 @@ void PacketDiagram::setRootNode(proto_node *root_node)
         kids.next();
 
         // Exclude all ("Frame") and nothing
-        if (tl_node->finfo->start == 0 && tl_node->finfo->length == (int) tvb_captured_length(cap_file_->edt->tvb)) {
+        if (tl_node == root_node->first_child) {
             continue;
         }
         if (tl_node->finfo->length < 1) {
@@ -467,6 +473,9 @@ void PacketDiagram::contextMenuEvent(QContextMenuEvent *event)
     action->setChecked(layout_->showFields());
     connect(action, &QAction::toggled, this, &PacketDiagram::showFieldsToggled);
 
+    action = ctx_menu->addAction(tr("Refresh"));
+    connect(action, &QAction::triggered, this, &PacketDiagram::resetScene);
+
     ctx_menu->addSeparator();
 
     action = ctx_menu->addAction(tr("Save Diagram As…"));
@@ -485,7 +494,7 @@ void PacketDiagram::contextMenuEvent(QContextMenuEvent *event)
 
 void PacketDiagram::connectToMainWindow()
 {
-    MainWindow *main_window = qobject_cast<MainWindow *>(mainApp->mainWindow());
+    MainWindow *main_window = mainApp->mainWindow();
     if (!main_window) {
         return;
     }
@@ -519,7 +528,7 @@ void PacketDiagram::resetScene(bool reset_root)
         delete scene();
     }
     viewport()->update();
-    QGraphicsScene *new_scene = new QGraphicsScene();
+    QGraphicsScene *new_scene = new QGraphicsScene(this);
     setScene(new_scene);
     connect(new_scene, &QGraphicsScene::selectionChanged, this, &PacketDiagram::sceneSelectionChanged);
     setRootNode(reset_root ? nullptr : root_node_);

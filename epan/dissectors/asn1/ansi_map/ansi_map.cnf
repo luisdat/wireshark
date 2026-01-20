@@ -443,7 +443,7 @@ ReturnData
 	tvbuff_t *parameter_tvb = NULL;
 %(DEFAULT_BODY)s
 	if (parameter_tvb){
-		ServiceIndicator = tvb_get_guint8(parameter_tvb,0);
+		ServiceIndicator = tvb_get_uint8(parameter_tvb,0);
 		if (SMS_BearerData_tvb !=NULL)
 		{
 			switch(ServiceIndicator){
@@ -516,7 +516,7 @@ SSDUpdateReport   TYPE = FT_UINT16  DISPLAY = BASE_DEC   STRINGS = VALS(ansi_map
 ReauthenticationReport   TYPE = FT_UINT8  DISPLAY = BASE_DEC   STRINGS = VALS(ansi_map_ReauthenticationReport_vals)
 MSIDUsage TYPE = FT_UINT8  DISPLAY = BASE_DEC  BITMASK = 0x03 STRINGS = VALS(ansi_MSIDUsage_m_or_i_vals)
 BSMCStatus  TYPE = FT_UINT8  DISPLAY = BASE_DEC  BITMASK = 0x03 STRINGS = VALS(ansi_map_BSMCStatus_vals)
-PagingFrameClass   TYPE = FT_UINT8  DISPLAY = BASE_DEC  BITMASK = 0x03 STRINGS = VALS(ansi_map_PagingFrameClass_vals)
+PagingFrameClass   TYPE = FT_UINT8  DISPLAY = BASE_DEC STRINGS = VALS(ansi_map_PagingFrameClass_vals)
 ServicesResult TYPE = FT_UINT8  DISPLAY = BASE_DEC  BITMASK = 0x03 STRINGS = VALS(ansi_map_ServicesResult_ppr_vals)
 SOCStatus TYPE = FT_UINT8  DISPLAY = BASE_DEC  BITMASK = 0x03 STRINGS = VALS(ansi_map_SOCStatus_vals)
 #.END

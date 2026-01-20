@@ -7,12 +7,25 @@
  */
 
 #include "config.h"
+#include "netxray.h"
 
 #include <string.h>
-#include "wtap-int.h"
+
+#include <wsutil/array.h>
+#include <wsutil/pint.h>
+
+#include "wtap_module.h"
 #include "file_wrappers.h"
-#include "netxray.h"
 #include "atm.h"
+
+/*
+ * Sniffer Basic (NetXRay)/Windows Sniffer Pro
+ *
+ * Network Associates' Sniffer Basic (formerly NetXRay from Cinco Networks)
+ * file format is now supported, at least for Ethernet and token-ring.
+ * Network Associates' Windows Sniffer Pro appears to use a variant of that
+ * format; it's supported to the same extent.
+*/
 
 /* Capture file header, *including* magic number, is padded to 128 bytes. */
 #define	CAPTUREFILE_HEADER_SIZE	128
@@ -179,7 +192,7 @@ struct netxray_hdr {
  *  that captype be?
  */
 static const double TpS[] = { 1e6, 1193000.0, 1193182.0 };
-#define NUM_NETXRAY_TIMEUNITS (sizeof TpS / sizeof TpS[0])
+#define NUM_NETXRAY_TIMEUNITS array_length(TpS)
 
 /*
  * Table of time units for Ethernet captures with captype ETH_CAPTYPE_GIGPOD.
@@ -204,7 +217,7 @@ static const double TpS[] = { 1e6, 1193000.0, 1193182.0 };
  *   correct TpS values for the 'gigpod' captype).
  */
 static const double TpS_gigpod[] = { 1e9, 0.0, 31250000.0 };
-#define NUM_NETXRAY_TIMEUNITS_GIGPOD (sizeof TpS_gigpod / sizeof TpS_gigpod[0])
+#define NUM_NETXRAY_TIMEUNITS_GIGPOD array_length(TpS_gigpod)
 
 /*
  * Table of time units for Ethernet captures with captype ETH_CAPTYPE_OTHERPOD.
@@ -212,7 +225,7 @@ static const double TpS_gigpod[] = { 1e9, 0.0, 31250000.0 };
  *   correct TpS values for the 'otherpod' captype).
  */
 static const double TpS_otherpod[] = { 1e6, 0.0, 1250000.0 };
-#define NUM_NETXRAY_TIMEUNITS_OTHERPOD (sizeof TpS_otherpod / sizeof TpS_otherpod[0])
+#define NUM_NETXRAY_TIMEUNITS_OTHERPOD array_length(TpS_otherpod)
 
 /*
  * Table of time units for Ethernet captures with captype ETH_CAPTYPE_OTHERPOD2.
@@ -220,7 +233,7 @@ static const double TpS_otherpod[] = { 1e6, 0.0, 1250000.0 };
  *   correct TpS values for the 'otherpod2' captype).
  */
 static const double TpS_otherpod2[] = { 1e6, 0.0, 0.0 };
-#define NUM_NETXRAY_TIMEUNITS_OTHERPOD2 (sizeof TpS_otherpod2 / sizeof TpS_otherpod2[0])
+#define NUM_NETXRAY_TIMEUNITS_OTHERPOD2 array_length(TpS_otherpod2)
 
 /*
  * Table of time units for Ethernet captures with captype ETH_CAPTYPE_GIGPOD2.
@@ -228,7 +241,7 @@ static const double TpS_otherpod2[] = { 1e6, 0.0, 0.0 };
  *   correct TpS values for the 'gigpod2' captype).
  */
 static const double TpS_gigpod2[] = { 1e9, 0.0, 20000000.0 };
-#define NUM_NETXRAY_TIMEUNITS_GIGPOD2 (sizeof TpS_gigpod2 / sizeof TpS_gigpod2[0])
+#define NUM_NETXRAY_TIMEUNITS_GIGPOD2 array_length(TpS_gigpod2)
 
 /* Version number strings. */
 static const char vers_1_0[] = {
@@ -406,22 +419,19 @@ typedef struct {
 	unsigned	isdn_type;	/* 1 = E1 PRI, 2 = T1 PRI, 3 = BRI */
 } netxray_t;
 
-static bool netxray_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+static bool netxray_read(wtap *wth, wtap_rec *rec,
     int *err, char **err_info, int64_t *data_offset);
 static bool netxray_seek_read(wtap *wth, int64_t seek_off,
-    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+    wtap_rec *rec, int *err, char **err_info);
 static int netxray_process_rec_header(wtap *wth, FILE_T fh,
     wtap_rec *rec, int *err, char **err_info);
-static void netxray_guess_atm_type(wtap *wth, wtap_rec *rec,
-    Buffer *buf);
-static bool netxray_dump_1_1(wtap_dumper *wdh,
-    const wtap_rec *rec,
-    const uint8_t *pd, int *err, char **err_info);
+static void netxray_guess_atm_type(wtap *wth, wtap_rec *rec);
+static bool netxray_dump_1_1(wtap_dumper *wdh, const wtap_rec *rec,
+    int *err, char **err_info);
 static bool netxray_dump_finish_1_1(wtap_dumper *wdh, int *err,
     char **err_info);
-static bool netxray_dump_2_0(wtap_dumper *wdh,
-    const wtap_rec *rec,
-    const uint8_t *pd, int *err, char **err_info);
+static bool netxray_dump_2_0(wtap_dumper *wdh, const wtap_rec *rec,
+    int *err, char **err_info);
 static bool netxray_dump_finish_2_0(wtap_dumper *wdh, int *err,
     char **err_info);
 
@@ -466,7 +476,7 @@ netxray_open(wtap *wth, int *err, char **err_info)
 						/* Wireless WAN with radio information */
 		WTAP_ENCAP_UNKNOWN		/* IrDA */
 	};
-	#define NUM_NETXRAY_ENCAPS (sizeof netxray_encap / sizeof netxray_encap[0])
+	#define NUM_NETXRAY_ENCAPS array_length(netxray_encap)
 	int file_encap;
 	unsigned isdn_type = 0;
 	netxray_t *netxray;
@@ -573,8 +583,8 @@ netxray_open(wtap *wth, int *err, char **err_info)
 	/*
 	 * Figure out the time stamp units and start time stamp.
 	 */
-	start_timestamp = (double)pletoh32(&hdr.timelo)
-	    + (double)pletoh32(&hdr.timehi)*4294967296.0;
+	start_timestamp = (double)pletohu32(&hdr.timelo)
+	    + (double)pletohu32(&hdr.timehi)*4294967296.0;
 	if (is_old) {
 		ticks_per_sec = 1000.0;
 		wth->file_tsprec = WTAP_TSPREC_MSEC;
@@ -635,7 +645,7 @@ netxray_open(wtap *wth, int *err, char **err_info)
 					bug reports).
 				*/
 				if (hdr.timeunit == 2) {
-					ticks_per_sec = pletoh32(hdr.realtick);
+					ticks_per_sec = pletohu32(hdr.realtick);
 				}
 				else {
 					ticks_per_sec = TpS[hdr.timeunit];
@@ -874,7 +884,7 @@ netxray_open(wtap *wth, int *err, char **err_info)
 	wth->subtype_seek_read = netxray_seek_read;
 	wth->file_encap = file_encap;
 	wth->snapshot_length = 0;	/* not available in header */
-	netxray->start_time = pletoh32(&hdr.start_time);
+	netxray->start_time = pletohu32(&hdr.start_time);
 	netxray->ticks_per_sec = ticks_per_sec;
 	netxray->start_timestamp = start_timestamp;
 	netxray->version_major = version_major;
@@ -987,9 +997,9 @@ netxray_open(wtap *wth, int *err, char **err_info)
 	 * XXX: Remember 'start_offset' to help testing for 'short file' at EOF
 	 */
 	netxray->wrapped      = false;
-	netxray->nframes      = pletoh32(&hdr.nframes);
-	netxray->start_offset = pletoh32(&hdr.start_offset);
-	netxray->end_offset   = pletoh32(&hdr.end_offset);
+	netxray->nframes      = pletohu32(&hdr.nframes);
+	netxray->start_offset = pletohu32(&hdr.start_offset);
+	netxray->end_offset   = pletohu32(&hdr.end_offset);
 
 	/* Seek to the beginning of the data records. */
 	if (file_seek(wth->fh, netxray->start_offset, SEEK_SET, err) == -1) {
@@ -1009,8 +1019,8 @@ netxray_open(wtap *wth, int *err, char **err_info)
 
 /* Read the next packet */
 static bool
-netxray_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
-             char **err_info, int64_t *data_offset)
+netxray_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+             int64_t *data_offset)
 {
 	netxray_t *netxray = (netxray_t *)wth->priv;
 	int	padding;
@@ -1083,7 +1093,7 @@ reread:
 	/*
 	 * Read the packet data.
 	 */
-	if (!wtap_read_packet_bytes(wth->fh, buf,
+	if (!wtap_read_bytes_buffer(wth->fh, &rec->data,
 	    rec->rec_header.packet_header.caplen, err, err_info))
 		return false;
 
@@ -1098,13 +1108,12 @@ reread:
 	 * from the packet header to determine its type or subtype,
 	 * attempt to guess them from the packet data.
 	 */
-	netxray_guess_atm_type(wth, rec, buf);
+	netxray_guess_atm_type(wth, rec);
 	return true;
 }
 
 static bool
-netxray_seek_read(wtap *wth, int64_t seek_off,
-		  wtap_rec *rec, Buffer *buf,
+netxray_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 		  int *err, char **err_info)
 {
 	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
@@ -1126,8 +1135,8 @@ netxray_seek_read(wtap *wth, int64_t seek_off,
 	/*
 	 * Read the packet data.
 	 */
-	if (!wtap_read_packet_bytes(wth->random_fh, buf, rec->rec_header.packet_header.caplen, err,
-	    err_info))
+	if (!wtap_read_bytes_buffer(wth->random_fh, &rec->data,
+	    rec->rec_header.packet_header.caplen, err, err_info))
 		return false;
 
 	/*
@@ -1135,7 +1144,7 @@ netxray_seek_read(wtap *wth, int64_t seek_off,
 	 * from the packet header to determine its type or subtype,
 	 * attempt to guess them from the packet data.
 	 */
-	netxray_guess_atm_type(wth, rec, buf);
+	netxray_guess_atm_type(wth, rec);
 	return true;
 }
 
@@ -1491,7 +1500,7 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 			if (hdr.hdr_2_x.xxx[9] & 0x04)
 				rec->rec_header.packet_header.pseudo_header.atm.flags |= ATM_RAW_CELL;
 			rec->rec_header.packet_header.pseudo_header.atm.vpi = hdr.hdr_2_x.xxx[11];
-			rec->rec_header.packet_header.pseudo_header.atm.vci = pletoh16(&hdr.hdr_2_x.xxx[12]);
+			rec->rec_header.packet_header.pseudo_header.atm.vci = pletohu16(&hdr.hdr_2_x.xxx[12]);
 			rec->rec_header.packet_header.pseudo_header.atm.channel =
 			    (hdr.hdr_2_x.xxx[15] & 0x10)? 1 : 0;
 			rec->rec_header.packet_header.pseudo_header.atm.cells = 0;
@@ -1619,12 +1628,12 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 		break;
 	}
 
-	rec->rec_type = REC_TYPE_PACKET;
+	wtap_setup_packet_rec(rec, wth->file_encap);
 	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	if (netxray->version_major == 0) {
 		rec->presence_flags = WTAP_HAS_TS;
-		t = (double)pletoh32(&hdr.old_hdr.timelo)
-		    + (double)pletoh32(&hdr.old_hdr.timehi)*4294967296.0;
+		t = (double)pletohu32(&hdr.old_hdr.timelo)
+		    + (double)pletohu32(&hdr.old_hdr.timehi)*4294967296.0;
 		t /= netxray->ticks_per_sec;
 		t -= netxray->start_timestamp;
 		rec->ts.secs = netxray->start_time + (long)t;
@@ -1634,13 +1643,13 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 		 * We subtract the padding from the packet size, so our caller
 		 * doesn't see it.
 		 */
-		packet_size = pletoh16(&hdr.old_hdr.len);
+		packet_size = pletohu16(&hdr.old_hdr.len);
 		rec->rec_header.packet_header.caplen = packet_size - padding;
 		rec->rec_header.packet_header.len = rec->rec_header.packet_header.caplen;
 	} else {
 		rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
-		t = (double)pletoh32(&hdr.hdr_1_x.timelo)
-		    + (double)pletoh32(&hdr.hdr_1_x.timehi)*4294967296.0;
+		t = (double)pletohu32(&hdr.hdr_1_x.timelo)
+		    + (double)pletohu32(&hdr.hdr_1_x.timehi)*4294967296.0;
 		t /= netxray->ticks_per_sec;
 		t -= netxray->start_timestamp;
 		rec->ts.secs = netxray->start_time + (time_t)t;
@@ -1650,19 +1659,17 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 		 * We subtract the padding from the packet size, so our caller
 		 * doesn't see it.
 		 */
-		packet_size = pletoh16(&hdr.hdr_1_x.incl_len);
+		packet_size = pletohu16(&hdr.hdr_1_x.incl_len);
 		rec->rec_header.packet_header.caplen = packet_size - padding;
-		rec->rec_header.packet_header.len = pletoh16(&hdr.hdr_1_x.orig_len) - padding;
+		rec->rec_header.packet_header.len = pletohu16(&hdr.hdr_1_x.orig_len) - padding;
 	}
 
 	return padding;
 }
 
 static void
-netxray_guess_atm_type(wtap *wth, wtap_rec *rec, Buffer *buf)
+netxray_guess_atm_type(wtap *wth, wtap_rec *rec)
 {
-	const uint8_t *pd;
-
 	if (wth->file_encap == WTAP_ENCAP_ATM_PDUS_UNTRUNCATED &&
 	   !(rec->rec_header.packet_header.pseudo_header.atm.flags & ATM_REASSEMBLY_ERROR)) {
 		if (rec->rec_header.packet_header.pseudo_header.atm.aal == AAL_UNKNOWN) {
@@ -1670,16 +1677,14 @@ netxray_guess_atm_type(wtap *wth, wtap_rec *rec, Buffer *buf)
 			 * Try to guess the type and subtype based
 			 * on the VPI/VCI and packet contents.
 			 */
-			pd = ws_buffer_start_ptr(buf);
-			atm_guess_traffic_type(rec, pd);
+			atm_guess_traffic_type(rec);
 		} else if (rec->rec_header.packet_header.pseudo_header.atm.aal == AAL_5 &&
 		    rec->rec_header.packet_header.pseudo_header.atm.type == TRAF_LANE) {
 			/*
 			 * Try to guess the subtype based on the
 			 * packet contents.
 			 */
-			pd = ws_buffer_start_ptr(buf);
-			atm_guess_lane_type(rec, pd);
+			atm_guess_lane_type(rec);
 		}
 	}
 }
@@ -1699,7 +1704,7 @@ static const struct {
 	{ WTAP_ENCAP_FDDI, 2 },			/* -> NDIS FDDI */
 	{ WTAP_ENCAP_FDDI_BITSWAPPED, 2 },	/* -> NDIS FDDI */
 };
-#define NUM_WTAP_ENCAPS_1_1 (sizeof wtap_encap_1_1 / sizeof wtap_encap_1_1[0])
+#define NUM_WTAP_ENCAPS_1_1 array_length(wtap_encap_1_1)
 
 static int
 wtap_encap_to_netxray_1_1_encap(int encap)
@@ -1759,9 +1764,8 @@ netxray_dump_open_1_1(wtap_dumper *wdh, int *err, char **err_info _U_)
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 static bool
-netxray_dump_1_1(wtap_dumper *wdh,
-		 const wtap_rec *rec,
-		 const uint8_t *pd, int *err, char **err_info _U_)
+netxray_dump_1_1(wtap_dumper *wdh, const wtap_rec *rec,
+		 int *err, char **err_info _U_)
 {
 	netxray_dump_t *netxray = (netxray_dump_t *)wdh->priv;
 	uint64_t timestamp;
@@ -1771,6 +1775,7 @@ netxray_dump_1_1(wtap_dumper *wdh,
 	/* We can only write packet records. */
 	if (rec->rec_type != REC_TYPE_PACKET) {
 		*err = WTAP_ERR_UNWRITABLE_REC_TYPE;
+		*err_info = wtap_unwritable_rec_type_err_string(rec);
 		return false;
 	}
 
@@ -1833,7 +1838,8 @@ netxray_dump_1_1(wtap_dumper *wdh,
 		return false;
 
 	/* write the packet data */
-	if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
+	if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data),
+	    rec->rec_header.packet_header.caplen, err))
 		return false;
 
 	netxray->nframes++;
@@ -1897,7 +1903,7 @@ static const struct {
 	{ WTAP_ENCAP_LAPB, 3 },			/* -> NDIS WAN */
 	{ WTAP_ENCAP_SDLC, 3 },			/* -> NDIS WAN */
 };
-#define NUM_WTAP_ENCAPS_2_0 (sizeof wtap_encap_2_0 / sizeof wtap_encap_2_0[0])
+#define NUM_WTAP_ENCAPS_2_0 array_length(wtap_encap_2_0)
 
 static int
 wtap_encap_to_netxray_2_0_encap(int encap)
@@ -1957,9 +1963,8 @@ netxray_dump_open_2_0(wtap_dumper *wdh, int *err, char **err_info _U_)
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 static bool
-netxray_dump_2_0(wtap_dumper *wdh,
-		 const wtap_rec *rec,
-		 const uint8_t *pd, int *err, char **err_info _U_)
+netxray_dump_2_0(wtap_dumper *wdh, const wtap_rec *rec,
+		 int *err, char **err_info _U_)
 {
 	const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
 	netxray_dump_t *netxray = (netxray_dump_t *)wdh->priv;
@@ -1970,6 +1975,7 @@ netxray_dump_2_0(wtap_dumper *wdh,
 	/* We can only write packet records. */
 	if (rec->rec_type != REC_TYPE_PACKET) {
 		*err = WTAP_ERR_UNWRITABLE_REC_TYPE;
+		*err_info = wtap_unwritable_rec_type_err_string(rec);
 		return false;
 	}
 
@@ -2062,7 +2068,8 @@ netxray_dump_2_0(wtap_dumper *wdh,
 		return false;
 
 	/* write the packet data */
-	if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
+	if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data),
+	    rec->rec_header.packet_header.caplen, err))
 		return false;
 
 	netxray->nframes++;

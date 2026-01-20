@@ -52,24 +52,11 @@ some types, which may be the way they're sent over the wire.
 Portions Copyright (c) 2000-2002 by Gilbert Ramirez <gram@alumni.rice.edu>.
 Portions Copyright (c) Novell, Inc. 2000-2003.
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+SPDX-License-Identifier: GPL-2.0-or-later
 """
 
 import os
 import sys
-import string
 import getopt
 import traceback
 
@@ -270,7 +257,7 @@ class PTVC(NamedList):
             # the field has an integer telling us how long the string is.
             # Fields that don't have a length determinable at run-time
             # cannot be variable-length.
-            if type(ptvc_rec.Length()) == type(()):
+            if type(ptvc_rec.Length()) is tuple:
                 if isinstance(ptvc_rec.Field(), nstring):
                     expected_offset = -1
                     pass
@@ -400,7 +387,7 @@ class PTVCRecord:
 
         length = None
 
-        if type(self.length) == type(0):
+        if type(self.length) is int:
             length = self.length
         else:
             # This is for cases where a length is needed
@@ -554,7 +541,7 @@ class NCP:
             return
         min = size
         max = size
-        if type(size) == type(()):
+        if type(size) is tuple:
             min = size[0]
             max = size[1]
 
@@ -565,7 +552,7 @@ class NCP:
             rec_size = record[REC_LENGTH]
             rec_lower = rec_size
             rec_upper = rec_size
-            if type(rec_size) == type(()):
+            if type(rec_size) is tuple:
                 rec_lower = rec_size[0]
                 rec_upper = rec_size[1]
 
@@ -855,7 +842,7 @@ class struct(PTVC, Type):
                 var = NO_VAR
                 repeat = NO_REPEAT
                 req_cond = NO_REQ_COND
-            elif type(item) == type([]):
+            elif type(item) is list:
                 field = item[REC_FIELD]
                 length = item[REC_LENGTH]
                 endianness = item[REC_ENDIANNESS]
@@ -1050,7 +1037,6 @@ class val_string(Type):
         value_repr = self.value_format % 0
         result = result + "    { %s, NULL },\n" % (value_repr)
         result = result + "};\n"
-        REC_VAL_STRING_RES = self.value_format % value
         return result
 
     def ValuesCName(self):
@@ -5850,7 +5836,7 @@ def define_errors():
     errors[0xff0d] = "Object associated with ObjectID is not a manager"
     errors[0xff0e] = "Invalid initial semaphore value"
     errors[0xff0f] = "The semaphore handle is not valid"
-    errors[0xff10] = "SemaphoreHandle is not associated with a valid sempahore"
+    errors[0xff10] = "SemaphoreHandle is not associated with a valid semaphore"
     errors[0xff11] = "Invalid semaphore handle"
     errors[0xff12] = "Transaction tracking is not available"
     errors[0xff13] = "The transaction has not yet been written to disk"
@@ -5905,7 +5891,6 @@ def produce_code():
 #include "config.h"
 
 #include <string.h>
-#include <glib.h>
 #include <epan/packet.h>
 #include <epan/dfilter/dfilter.h>
 #include <epan/exceptions.h>
@@ -5917,6 +5902,7 @@ def produce_code():
 #include <epan/reassemble.h>
 #include <epan/tap.h>
 #include <epan/proto_data.h>
+#include <wsutil/array.h>
 #include "packet-ncp-int.h"
 #include "packet-ncp-nmas.h"
 #include "packet-ncp-sss.h"
@@ -6227,6 +6213,13 @@ static int hf_nds_port;
 static int hf_mv_string;
 static int hf_nds_syntax;
 static int hf_value_string;
+static int hf_server_distinguished_name;
+static int hf_distinguished_name;
+static int hf_subject;
+static int hf_delimiter;
+static int hf_relative_distinguished_name;
+static int hf_root_distinguished_name;
+static int hf_parent_distinguished_name;
 static int hf_nds_buffer_size;
 static int hf_nds_ver;
 static int hf_nds_nflags;
@@ -6580,7 +6573,7 @@ static expert_field ei_ncp_value_too_large;
 
     # Print the errors table
     print("/* Error strings. */")
-    print("static const char *ncp_errors[] = {")
+    print("static const char * const ncp_errors[] = {")
     for code in errors_used_list:
         print('    /* %02d (0x%04x) */ "%s",' % (errors_used_hash[code], code, errors[code]))
     print("};\n")
@@ -6606,7 +6599,7 @@ static expert_field ei_ncp_value_too_large;
 
     # Print the groups table
     print("/* Group strings. */")
-    print("static const char *ncp_groups[] = {")
+    print("static const char * const ncp_groups[] = {")
     for group in groups_used_list:
         print('    /* %02d (%s) */ "%s",' % (groups_used_hash[group], group, groups[group]))
     print("};\n")
@@ -6691,7 +6684,7 @@ static expert_field ei_ncp_value_too_large;
         # Make sure the record for error = 0x00 comes last.
         print("static const error_equivalency %s[] = {" % (compcodes.Name()))
         for error in errors:
-            error_in_packet = error >> 8;
+            error_in_packet = error >> 8
             ncp_error_index = errors_used_hash[error]
             print("    { 0x%02x, %d }, /* 0x%04x */" % (error_in_packet,
                     ncp_error_index, error))
@@ -7683,6 +7676,27 @@ proto_register_ncp2222(void)
     { &hf_value_string,
     { "Value", "ncp.value_string", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
+    { &hf_server_distinguished_name,
+    { "Server Distinguished Name", "ncp.server_distinguished_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+    { &hf_distinguished_name,
+    { "Distinguished Name", "ncp.distinguished_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+    { &hf_subject,
+    { "Subject", "ncp.subject", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+    { &hf_delimiter,
+    { "Delimiter", "ncp.delimiter", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+    { &hf_relative_distinguished_name,
+    { "Relative Distinguished Name", "ncp.relative_distinguished_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+    { &hf_root_distinguished_name,
+    { "Root Distinguished Name", "ncp.root_distinguished_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+    { &hf_parent_distinguished_name,
+    { "Parent Distinguished Name", "ncp.parent_distinguished_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
     { &hf_nds_stream_name,
     { "Stream Name", "ncp.nds_stream_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
@@ -8486,7 +8500,7 @@ proto_register_ncp2222(void)
     { "Vendor Name", "ncp.vendor_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
     { &hf_hardware_name,
-    { "Hardware Name", "ncp.harware_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+    { "Hardware Name", "ncp.hardware_name", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
     { &hf_no_request_record_found,
     { "No request record found. Parsing is impossible.", "ncp.no_request_record_found", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }},

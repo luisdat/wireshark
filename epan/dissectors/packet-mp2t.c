@@ -17,16 +17,20 @@
 #include <epan/packet.h>
 #include <wiretap/wtap.h>
 
-#include <epan/rtp_pt.h>
-
 #include <epan/conversation.h>
 #include <epan/expert.h>
 #include <epan/reassemble.h>
 #include <epan/proto_data.h>
+#include <epan/exported_pdu.h>
+#include <epan/tap.h>
+#include <epan/follow.h>
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
+#include <epan/addr_resolv.h>
 #include "packet-l2tp.h"
+#include "packet-udp.h"
 #include "packet-mp2t.h"
+#include "packet-rtp_pt.h"
 
 void proto_register_mp2t(void);
 void proto_reg_handoff_mp2t(void);
@@ -42,13 +46,17 @@ static dissector_handle_t mpeg_sect_handle;
 
 static heur_dissector_list_t heur_subdissector_list;
 
-static int proto_mp2t;
-static gint ett_mp2t;
-static gint ett_mp2t_header;
-static gint ett_mp2t_af;
-static gint ett_mp2t_analysis;
-static gint ett_stuff;
+static int exported_pdu_tap;
+static int mp2t_follow_tap;
 
+static int proto_mp2t;
+static int ett_mp2t;
+static int ett_mp2t_header;
+static int ett_mp2t_af;
+static int ett_mp2t_analysis;
+static int ett_stuff;
+
+static int hf_mp2t_stream;
 static int hf_mp2t_header;
 static int hf_mp2t_sync_byte;
 static int hf_mp2t_tei;
@@ -154,6 +162,7 @@ static int hf_mp2t_pointer;
  * the stream information is at pinfo->pool, they don't actually clash.
  */
 #define MP2T_PROTO_DATA_STREAM 1
+#define MP2T_PROTO_DATA_PID 2
 
 static const value_string mp2t_sync_byte_vals[] = {
     { MP2T_SYNC_BYTE, "Correct" },
@@ -216,8 +225,8 @@ static const value_string mp2t_afc_vals[] = {
     { 0, NULL }
 };
 
-static gint ett_msg_fragment;
-static gint ett_msg_fragments;
+static int ett_msg_fragment;
+static int ett_msg_fragments;
 static int hf_msg_fragments;
 static int hf_msg_fragment;
 static int hf_msg_fragment_overlap;
@@ -282,31 +291,33 @@ static const fragment_items mp2t_msg_frag_items = {
  *                            +-> ts_analysis_data
  */
 
-static wmem_map_t *mp2t_stream_hashtable = NULL;
+static wmem_map_t *mp2t_stream_hashtable;
+
+static uint32_t mp2t_stream_count;
 
 typedef struct {
     const conversation_t* conv;
-    gint dir;
+    int dir;
 } mp2t_stream_key;
 
 /* Hash functions */
-static gint
-mp2t_stream_equal(gconstpointer v, gconstpointer w)
+static int
+mp2t_stream_equal(const void *v, const void *w)
 {
     const mp2t_stream_key *v1 = (const mp2t_stream_key *)v;
     const mp2t_stream_key *v2 = (const mp2t_stream_key *)w;
-    gint result;
+    int result;
     result = (v1->conv == v2->conv && v1->dir == v2->dir);
     return result;
 }
 
-static guint
-mp2t_stream_hash(gconstpointer v)
+static unsigned
+mp2t_stream_hash(const void *v)
 {
     const mp2t_stream_key *key = (const mp2t_stream_key *)v;
     /* Actually getting multiple streams in opposite directions is
      * quite unlikely, so to optimize don't include it in the hash */
-    guint hash_val = GPOINTER_TO_UINT(key->conv);
+    unsigned hash_val = GPOINTER_TO_UINT(key->conv);
     return hash_val;
 }
 
@@ -327,9 +338,11 @@ typedef struct mp2t_analysis_data {
      */
     wmem_tree_t    *frame_table;
 
+    uint32_t stream;
+
     /* Total counters per conversation / multicast stream */
-    guint32 total_skips;
-    guint32 total_discontinuity;
+    uint32_t total_skips;
+    uint32_t total_discontinuity;
 
 } mp2t_analysis_data_t;
 
@@ -342,10 +355,10 @@ enum pid_payload_type {
 };
 
 typedef struct subpacket_analysis_data {
-    guint32     frag_cur_pos;
-    guint32     frag_tot_len;
-    gboolean    fragmentation;
-    guint32     frag_id;
+    uint32_t    frag_cur_pos;
+    uint32_t    frag_tot_len;
+    bool        fragmentation;
+    uint32_t    frag_id;
 } subpacket_analysis_data_t;
 
 typedef struct packet_analysis_data {
@@ -356,23 +369,23 @@ typedef struct packet_analysis_data {
 
 /* Analysis TS frame info needed during sequential processing */
 typedef struct pid_analysis_data {
-    guint16                  pid;
-    gint8                    cc_prev;      /* Previous CC number */
+    uint16_t                 pid;
+    int8_t                   cc_prev;      /* Previous CC number */
     enum pid_payload_type    pload_type;
     wmem_tree_t             *stream_types;
 
     /* Fragments information used for first pass */
-    gboolean                 fragmentation;
-    guint32                  frag_cur_pos;
-    guint32                  frag_tot_len;
-    guint32                  frag_id;
+    bool                     fragmentation;
+    uint32_t                 frag_cur_pos;
+    uint32_t                 frag_tot_len;
+    uint32_t                 frag_id;
 } pid_analysis_data_t;
 
 /* Analysis info stored for a TS frame */
 typedef struct ts_analysis_data {
-    guint16  pid;
-    gint8    cc_prev;      /* Previous CC number */
-    guint8   skips;          /* Skips between Ccs max 14 */
+    uint16_t pid;
+    int8_t   cc_prev;      /* Previous CC number */
+    uint8_t  skips;          /* Skips between Ccs max 14 */
 } ts_analysis_data_t;
 
 
@@ -392,6 +405,7 @@ init_mp2t_conversation_data(void)
 
     mp2t_data = wmem_new0(wmem_file_scope(), struct mp2t_analysis_data);
 
+    mp2t_data->stream = mp2t_stream_count++;
     mp2t_data->pid_table = wmem_tree_new(wmem_file_scope());
 
     mp2t_data->frame_table = wmem_tree_new(wmem_file_scope());
@@ -443,7 +457,7 @@ get_frame_analysis_data(mp2t_analysis_data_t *mp2t_data, packet_info *pinfo)
 }
 
 static pid_analysis_data_t *
-get_pid_analysis(mp2t_analysis_data_t *mp2t_data, guint32 pid)
+get_pid_analysis(mp2t_analysis_data_t *mp2t_data, uint32_t pid)
 {
     pid_analysis_data_t  *pid_data;
 
@@ -460,22 +474,88 @@ get_pid_analysis(mp2t_analysis_data_t *mp2t_data, guint32 pid)
     return pid_data;
 }
 
+uint32_t
+mp2t_get_stream_count(void)
+{
+    return mp2t_stream_count;
+}
+
+static void
+mp2t_init(void)
+{
+    mp2t_stream_count = 0;
+}
+
+static gboolean
+mp2t_stream_find(void *key _U_, void *value, void *user_data)
+{
+    uint32_t stream = GPOINTER_TO_UINT(user_data);
+    mp2t_analysis_data_t *mp2t_data = (mp2t_analysis_data_t*)value;
+    if (mp2t_data->stream == stream) {
+        return true;
+    }
+    return false;
+}
+
+bool
+mp2t_get_sub_stream_id(unsigned stream, unsigned sub_stream, bool le, unsigned *sub_stream_out)
+{
+    mp2t_analysis_data_t *mp2t_data = wmem_map_find(mp2t_stream_hashtable, mp2t_stream_find, GUINT_TO_POINTER(stream));
+    pid_analysis_data_t *pid_data;
+    if (!mp2t_data) {
+        return false;
+    }
+    if (le) {
+        pid_data = wmem_tree_lookup32_le(mp2t_data->pid_table, sub_stream);
+    } else {
+        pid_data = wmem_tree_lookup32_ge(mp2t_data->pid_table, sub_stream);
+    }
+    if (!pid_data) {
+        return false;
+    }
+
+    *sub_stream_out = pid_data->pid;
+    return true;
+}
+
+char *mp2t_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, unsigned *stream, unsigned *sub_stream)
+{
+    char *filter = NULL;
+    mp2t_stream_key *stream_key;
+    unsigned pid;
+
+    stream_key = (mp2t_stream_key *)p_get_proto_data(pinfo->pool, pinfo, proto_mp2t, MP2T_PROTO_DATA_STREAM);
+    if (stream_key) {
+        mp2t_analysis_data_t *mp2t_data = get_mp2t_conversation_data(stream_key);
+        pid = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_mp2t, MP2T_PROTO_DATA_PID));
+        *stream = mp2t_data->stream;
+        *sub_stream = pid;
+        filter = ws_strdup_printf("mp2t.stream == %u && mp2t.pid == 0x%04x", *stream, pid);
+    }
+    return filter;
+}
+
+char *mp2t_follow_index_filter(unsigned stream, unsigned sub_stream)
+{
+    return ws_strdup_printf("mp2t.stream == %u && mp2t.pid == 0x%04x", stream, sub_stream);
+}
+
 /* Structure to handle packets, spanned across
  * multiple MPEG packets
  */
 
 /* Reassembly functions */
 typedef struct _mp2t_fragment_key {
-    guint32 conv_index; /* Just use the unique index */
+    uint32_t conv_index; /* Just use the unique index */
     int     dir;
-    guint32 id;
+    uint32_t id;
 } mp2t_fragment_key;
 
-static guint
-mp2t_fragment_hash(gconstpointer k)
+static unsigned
+mp2t_fragment_hash(const void *k)
 {
     const mp2t_fragment_key* key = (const mp2t_fragment_key*) k;
-    guint hash_val;
+    unsigned hash_val;
 
     hash_val = 0;
 
@@ -488,8 +568,8 @@ mp2t_fragment_hash(gconstpointer k)
     return hash_val;
 }
 
-static gint
-mp2t_fragment_equal(gconstpointer k1, gconstpointer k2)
+static int
+mp2t_fragment_equal(const void *k1, const void *k2)
 {
     const mp2t_fragment_key* key1 = (const mp2t_fragment_key*) k1;
     const mp2t_fragment_key* key2 = (const mp2t_fragment_key*) k2;
@@ -504,8 +584,8 @@ mp2t_fragment_equal(gconstpointer k1, gconstpointer k2)
  * Create a fragment key for permanent use; we are only copying ints,
  * so our temporary keys are the same as permanent ones.
  */
-static gpointer
-mp2t_fragment_persistent_key(const packet_info *pinfo _U_, const guint32 id, const void *data)
+static void *
+mp2t_fragment_persistent_key(const packet_info *pinfo _U_, const uint32_t id, const void *data)
 {
     mp2t_fragment_key *key = g_slice_new(mp2t_fragment_key);
     DISSECTOR_ASSERT(data);
@@ -515,11 +595,11 @@ mp2t_fragment_persistent_key(const packet_info *pinfo _U_, const guint32 id, con
     key->dir = stream->dir;
     key->id = id;
 
-    return (gpointer)key;
+    return (void *)key;
 }
 
 static void
-mp2t_fragment_free_persistent_key(gpointer ptr)
+mp2t_fragment_free_persistent_key(void *ptr)
 {
     mp2t_fragment_key *key = (mp2t_fragment_key *)ptr;
     g_slice_free(mp2t_fragment_key, key);
@@ -538,7 +618,7 @@ mp2t_reassembly_table_functions = {
 static reassembly_table mp2t_reassembly_table;
 
 void
-mp2t_add_stream_type(packet_info *pinfo, guint32 pid, guint32 stream_type)
+mp2t_add_stream_type(packet_info *pinfo, uint32_t pid, uint32_t stream_type)
 {
     mp2t_stream_key *stream;
 
@@ -561,6 +641,10 @@ static void
 mp2t_dissect_packet(tvbuff_t *tvb, const pid_analysis_data_t *pid_analysis,
             packet_info *pinfo, proto_tree *tree)
 {
+    if (have_tap_listener(mp2t_follow_tap)) {
+        tap_queue_packet(mp2t_follow_tap, pinfo, tvb);
+    }
+
     switch (pid_analysis->pload_type) {
         case pid_pload_docsis:
             call_dissector(docsis_handle, tvb, pinfo, tree);
@@ -584,16 +668,16 @@ mp2t_dissect_packet(tvbuff_t *tvb, const pid_analysis_data_t *pid_analysis,
  * on the second fragment if it returned -1 previously. (Returning
  * -1 a second time indicates issues with dropped packets, etc.)
  */
-static guint
-mp2t_get_packet_length(tvbuff_t *tvb, guint offset, packet_info *pinfo,
-            guint32 frag_id, enum pid_payload_type pload_type)
+static unsigned
+mp2t_get_packet_length(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+            uint32_t frag_id, enum pid_payload_type pload_type)
 {
     mp2t_stream_key *stream;
     fragment_head *frag_head;
     fragment_item *frag = NULL;
     tvbuff_t      *len_tvb = NULL, *frag_tvb = NULL, *data_tvb = NULL;
-    gint           pkt_len = 0;
-    guint          remaining_len;
+    int            pkt_len = 0;
+    unsigned       remaining_len;
 
     stream = (mp2t_stream_key *)p_get_proto_data(pinfo->pool, pinfo, proto_mp2t, MP2T_PROTO_DATA_STREAM);
     if (pinfo->fd->visited) {
@@ -673,20 +757,20 @@ mp2t_get_packet_length(tvbuff_t *tvb, guint offset, packet_info *pinfo,
 }
 
 static void
-mp2t_fragment_handle(tvbuff_t *tvb, guint offset, packet_info *pinfo,
-        proto_tree *tree, guint32 frag_id,
-        guint frag_offset, guint frag_len,
-        gboolean fragment_last, const pid_analysis_data_t *pid_analysis)
+mp2t_fragment_handle(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+        proto_tree *tree, uint32_t frag_id,
+        unsigned frag_offset, unsigned frag_len,
+        bool fragment_last, const pid_analysis_data_t *pid_analysis)
 {
     fragment_head   *frag_msg;
     proto_item      *ti;
     tvbuff_t        *new_tvb;
     const char      *save_proto;
     mp2t_stream_key *stream;
-    gboolean         save_fragmented;
+    bool             save_fragmented;
 
     save_fragmented = pinfo->fragmented;
-    pinfo->fragmented = TRUE;
+    pinfo->fragmented = true;
     /* It's possible that a fragment in the same packet set an address already
      * (e.g., with MPE), which is why we use the conversation and direction not
      * the addresses in the packet_info to reassemble.
@@ -828,20 +912,20 @@ mp2t_fragment_handle(tvbuff_t *tvb, guint offset, packet_info *pinfo,
  * length) and will allow stuffing bytes between complete PSI sections.
  */
 static void
-mp2t_process_fragmented_payload(tvbuff_t *tvb, gint offset, guint remaining_len, packet_info *pinfo,
-        proto_tree *tree, proto_tree *header_tree, guint32 pusi_flag,
+mp2t_process_fragmented_payload(tvbuff_t *tvb, int offset, unsigned remaining_len, packet_info *pinfo,
+        proto_tree *tree, proto_tree *header_tree, uint32_t pusi_flag,
         pid_analysis_data_t *pid_analysis)
 {
     tvbuff_t                  *next_tvb;
-    guint8                     pointer       = 0;
+    uint8_t                    pointer       = 0;
     proto_item                *pi;
-    guint                      stuff_len     = 0;
+    unsigned                   stuff_len     = 0;
     proto_tree                *stuff_tree;
     packet_analysis_data_t    *pdata         = NULL;
     subpacket_analysis_data_t *spdata        = NULL;
-    guint32                    frag_cur_pos  = 0, frag_tot_len = 0;
-    gboolean                   fragmentation = FALSE;
-    guint32                    frag_id       = 0;
+    uint32_t                   frag_cur_pos  = 0, frag_tot_len = 0;
+    bool                       fragmentation = false;
+    uint32_t                   frag_id       = 0;
 
     if (pusi_flag && pid_analysis->pload_type == pid_pload_unknown
             && remaining_len > 3) {
@@ -862,7 +946,7 @@ mp2t_process_fragmented_payload(tvbuff_t *tvb, gint offset, guint remaining_len,
 
     /* PES packet don't have pointer fields, others do */
     if (pusi_flag && pid_analysis->pload_type != pid_pload_pes) {
-        pointer = tvb_get_guint8(tvb, offset);
+        pointer = tvb_get_uint8(tvb, offset);
         pi = proto_tree_add_item(header_tree, hf_mp2t_pointer, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset++;
         remaining_len--;
@@ -923,14 +1007,14 @@ mp2t_process_fragmented_payload(tvbuff_t *tvb, gint offset, guint remaining_len,
         frag_id = spdata->frag_id;
     }
 
-    if (frag_tot_len == (guint)-1) {
+    if (frag_tot_len == (unsigned)-1) {
         /* We couldn't determine the total length of the reassembly from
          * the first fragment (too short), so get it now that we have the
          * second fragment.
          */
         frag_tot_len = mp2t_get_packet_length(tvb, offset, pinfo, frag_id, pid_analysis->pload_type);
 
-        if (frag_tot_len == (guint)-1) {
+        if (frag_tot_len == (unsigned)-1) {
             /* We still don't have enough to determine the length; this can
              * only happen with dropped or out of order packets. Bail out.
              * XXX: This just skips the packet and tries the next one, but
@@ -974,13 +1058,13 @@ mp2t_process_fragmented_payload(tvbuff_t *tvb, gint offset, guint remaining_len,
          */
         if (fragmentation) {
             mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, frag_cur_pos,
-                    pointer, TRUE, pid_analysis);
+                    pointer, true, pid_analysis);
             frag_id++;
         }
 
         offset += pointer;
         remaining_len -= pointer;
-        fragmentation = FALSE;
+        fragmentation = false;
         frag_cur_pos = 0;
         frag_tot_len = 0;
 
@@ -996,7 +1080,7 @@ mp2t_process_fragmented_payload(tvbuff_t *tvb, gint offset, guint remaining_len,
 
             /* Skip stuff bytes */
             stuff_len = 0;
-            while ((tvb_get_guint8(tvb, offset + stuff_len) == 0xFF)) {
+            while ((tvb_get_uint8(tvb, offset + stuff_len) == 0xFF)) {
                 stuff_len++;
                 if (stuff_len >= remaining_len) {
                     remaining_len = 0;
@@ -1016,9 +1100,9 @@ mp2t_process_fragmented_payload(tvbuff_t *tvb, gint offset, guint remaining_len,
 
             /* Get the next packet's size if possible */
             frag_tot_len = mp2t_get_packet_length(tvb, offset, pinfo, frag_id, pid_analysis->pload_type);
-            if (frag_tot_len == (guint)-1 || !frag_tot_len) {
-                mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, 0, remaining_len, FALSE, pid_analysis);
-                fragmentation = TRUE;
+            if (frag_tot_len == (unsigned)-1 || !frag_tot_len) {
+                mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, 0, remaining_len, false, pid_analysis);
+                fragmentation = true;
                 /*offset += remaining_len;*/
                 frag_cur_pos += remaining_len;
                 goto save_state;
@@ -1052,23 +1136,23 @@ mp2t_process_fragmented_payload(tvbuff_t *tvb, gint offset, guint remaining_len,
         /* The case where PUSI was 0, a continuing SECT ended, and stuff
          * bytes follow. */
         stuff_len = frag_cur_pos + remaining_len - frag_tot_len;
-        mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, frag_cur_pos, remaining_len - stuff_len, TRUE, pid_analysis);
+        mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, frag_cur_pos, remaining_len - stuff_len, true, pid_analysis);
         offset += remaining_len - stuff_len;
         frag_id++;
-        fragmentation = FALSE;
+        fragmentation = false;
         frag_cur_pos = 0;
         frag_tot_len = 0;
         stuff_tree = proto_tree_add_subtree_format(tree, tvb, offset, stuff_len, ett_stuff, NULL, "Stuffing");
         proto_tree_add_item(stuff_tree, hf_mp2t_stuff_bytes, tvb, offset, stuff_len, ENC_NA);
     } else if ((frag_tot_len && frag_cur_pos + remaining_len == frag_tot_len) || (!frag_tot_len && pusi_flag)) {
-        mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, frag_cur_pos, remaining_len, TRUE, pid_analysis);
+        mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, frag_cur_pos, remaining_len, true, pid_analysis);
         frag_id++;
-        fragmentation = FALSE;
+        fragmentation = false;
         frag_cur_pos = 0;
         frag_tot_len = 0;
     } else {
-        mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, frag_cur_pos, remaining_len, FALSE, pid_analysis);
-        fragmentation = TRUE;
+        mp2t_fragment_handle(tvb, offset, pinfo, tree, frag_id, frag_cur_pos, remaining_len, false, pid_analysis);
+        fragmentation = true;
         frag_cur_pos += remaining_len;
     }
 
@@ -1089,8 +1173,8 @@ save_state:
  * overflow, and a value above 7 indicate several network packets
  * could be lost.
  */
-static guint32
-calc_skips(gint32 curr, gint32 prev)
+static uint32_t
+calc_skips(int32_t curr, int32_t prev)
 {
     int res;
 
@@ -1113,18 +1197,18 @@ calc_skips(gint32 curr, gint32 prev)
 
 #define KEY(pid, cc) ((pid << 4)|cc)
 
-static guint32
+static uint32_t
 detect_cc_drops(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
-        guint32 pid, gint32 cc_curr, mp2t_analysis_data_t *mp2t_data)
+        uint32_t pid, int32_t cc_curr, mp2t_analysis_data_t *mp2t_data)
 {
-    gint32 cc_prev = -1;
+    int32_t cc_prev = -1;
     pid_analysis_data_t   *pid_data              = NULL;
     ts_analysis_data_t    *ts_data               = NULL;
     frame_analysis_data_t *frame_analysis_data_p = NULL;
     proto_item            *flags_item;
 
-    gboolean detected_drop = FALSE;
-    guint32 skips = 0;
+    bool detected_drop = false;
+    uint32_t skips = 0;
 
     /* The initial sequential processing stage */
     if (!pinfo->fd->visited) {
@@ -1148,7 +1232,7 @@ detect_cc_drops(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
 
         /* Detect if CC is not increasing by one all the time */
         if (cc_curr != ((cc_prev+1) & MP2T_CC_MASK)) {
-            detected_drop = TRUE;
+            detected_drop = true;
 
             skips = calc_skips(cc_curr, cc_prev);
 
@@ -1189,7 +1273,7 @@ detect_cc_drops(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
 
             if (ts_data) {
                 if (ts_data->skips > 0) {
-                    detected_drop = TRUE;
+                    detected_drop = true;
                     cc_prev = ts_data->cc_prev;
                     skips   = ts_data->skips;
                 }
@@ -1217,21 +1301,21 @@ detect_cc_drops(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     return skips;
 }
 
-static gint
-dissect_mp2t_adaptation_field(tvbuff_t *tvb, gint offset, proto_tree *tree)
+static int
+dissect_mp2t_adaptation_field(tvbuff_t *tvb, int offset, proto_tree *tree)
 {
-    gint        af_start_offset;
+    int         af_start_offset;
     proto_item *hi;
     proto_tree *mp2t_af_tree;
-    guint8      af_length;
-    guint8      af_flags;
-    gint        stuffing_len;
+    uint8_t     af_length;
+    uint8_t     af_flags;
+    int         stuffing_len;
 
-    af_length = tvb_get_guint8(tvb, offset);
+    af_length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_mp2t_af_length, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
     /* fix issues where afc==3 but af_length==0
-     *  Adaptaion field...spec section 2.4.3.5: The value 0 is for inserting a single
+     *  Adaptation field...spec section 2.4.3.5: The value 0 is for inserting a single
      *  stuffing byte in a Transport Stream packet. When the adaptation_field_control
      *  value is '11', the value of the adaptation_field_length shall be in the range 0 to 182.
      */
@@ -1243,7 +1327,7 @@ dissect_mp2t_adaptation_field(tvbuff_t *tvb, gint offset, proto_tree *tree)
     hi = proto_tree_add_item( tree, hf_mp2t_af, tvb, offset, af_length, ENC_NA);
     mp2t_af_tree = proto_item_add_subtree( hi, ett_mp2t_af );
 
-    af_flags = tvb_get_guint8(tvb, offset);
+    af_flags = tvb_get_uint8(tvb, offset);
     proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_di, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_rai, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_espi, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1255,12 +1339,12 @@ dissect_mp2t_adaptation_field(tvbuff_t *tvb, gint offset, proto_tree *tree)
     offset += 1;
 
     if (af_flags &  MP2T_AF_PCR_MASK) {
-        guint64 pcr_base;
-        guint16 pcr_ext;
+        uint64_t pcr_base;
+        uint16_t pcr_ext;
 
         /* 33 bit PCR base, 6 bit reserved, 9 bit PCR ext */
         pcr_base = tvb_get_ntoh48(tvb, offset) >> (48-33);
-        pcr_ext  = (guint16)(tvb_get_ntoh48(tvb, offset) & 0x1FF);
+        pcr_ext  = (uint16_t)(tvb_get_ntoh48(tvb, offset) & 0x1FF);
 
          proto_tree_add_uint64(mp2t_af_tree, hf_mp2t_af_pcr, tvb, offset, 6,
                 pcr_base*300 + pcr_ext);
@@ -1269,12 +1353,12 @@ dissect_mp2t_adaptation_field(tvbuff_t *tvb, gint offset, proto_tree *tree)
     }
 
     if (af_flags &  MP2T_AF_OPCR_MASK) {
-        guint64 opcr_base;
-        guint16 opcr_ext;
+        uint64_t opcr_base;
+        uint16_t opcr_ext;
 
         /* the same format as PCR above */
         opcr_base = tvb_get_ntoh48(tvb, offset) >> (48-33);
-        opcr_ext  = (guint16)(tvb_get_ntoh48(tvb, offset) & 0x1FF);
+        opcr_ext  = (uint16_t)(tvb_get_ntoh48(tvb, offset) & 0x1FF);
 
         proto_tree_add_uint64(mp2t_af_tree, hf_mp2t_af_opcr, tvb, offset, 6,
                 opcr_base*300 + opcr_ext);
@@ -1288,9 +1372,9 @@ dissect_mp2t_adaptation_field(tvbuff_t *tvb, gint offset, proto_tree *tree)
     }
 
     if (af_flags &  MP2T_AF_TPD_MASK) {
-        guint8 tpd_len;
+        uint8_t tpd_len;
 
-        tpd_len = tvb_get_guint8(tvb, offset);
+        tpd_len = tvb_get_uint8(tvb, offset);
         proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_tpd_length, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
 
@@ -1299,16 +1383,16 @@ dissect_mp2t_adaptation_field(tvbuff_t *tvb, gint offset, proto_tree *tree)
     }
 
     if (af_flags &  MP2T_AF_AFE_MASK) {
-        guint8 e_len;
-        guint8 e_flags;
-        gint e_start_offset = offset;
-        gint reserved_len = 0;
+        uint8_t e_len;
+        uint8_t e_flags;
+        int e_start_offset = offset;
+        int reserved_len = 0;
 
-        e_len = tvb_get_guint8(tvb, offset);
+        e_len = tvb_get_uint8(tvb, offset);
         proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_e_length, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
 
-        e_flags = tvb_get_guint8(tvb, offset);
+        e_flags = tvb_get_uint8(tvb, offset);
         proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_e_ltw_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_e_pr_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item( mp2t_af_tree, hf_mp2t_af_e_ss_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1357,21 +1441,21 @@ dissect_mp2t_adaptation_field(tvbuff_t *tvb, gint offset, proto_tree *tree)
 }
 
 static void
-dissect_tsp(tvbuff_t *tvb, gint offset, packet_info *pinfo,
+dissect_tsp(tvbuff_t *tvb, int offset, packet_info *pinfo,
         proto_tree *tree, mp2t_analysis_data_t *mp2t_data)
 {
-    guint32              header;
-    guint                afc;
-    gint                 start_offset = offset;
-    gint                 payload_len;
+    uint32_t             header;
+    unsigned             afc;
+    int                  start_offset = offset;
+    int                  payload_len;
     pid_analysis_data_t *pid_analysis;
 
-    guint32     skips;
-    guint32     pid;
-    guint32     cc;
-    guint32     pusi_flag;
+    uint32_t    skips;
+    uint32_t    pid;
+    uint32_t    cc;
+    uint32_t    pusi_flag;
 
-    guint32 tsc;
+    uint32_t tsc;
 
     proto_item *ti;
     proto_item *hi;
@@ -1391,8 +1475,12 @@ dissect_tsp(tvbuff_t *tvb, gint offset, packet_info *pinfo,
     afc = (header & MP2T_AFC_MASK) >> MP2T_AFC_SHIFT;
     cc  = (header & MP2T_CC_MASK)  >> MP2T_CC_SHIFT;
 
+    p_add_proto_data(pinfo->pool, pinfo, proto_mp2t, MP2T_PROTO_DATA_PID, GUINT_TO_POINTER(pid));
     proto_item_append_text(ti, " PID=0x%x CC=%d", pid, cc);
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "MPEG TS");
+
+    hi = proto_tree_add_uint(mp2t_tree, hf_mp2t_stream, tvb, 0, 0, mp2t_data->stream);
+    proto_item_set_generated(hi);
 
     hi = proto_tree_add_item( mp2t_tree, hf_mp2t_header, tvb, offset, 4, ENC_BIG_ENDIAN);
     mp2t_header_tree = proto_item_add_subtree( hi, ett_mp2t_header );
@@ -1469,11 +1557,23 @@ dissect_tsp(tvbuff_t *tvb, gint offset, packet_info *pinfo,
     }
 }
 
+static void
+export_pdu(tvbuff_t *tvb, packet_info *pinfo)
+{
+    if (have_tap_listener(exported_pdu_tap)) {
+        exp_pdu_data_t *exp_pdu_data = wmem_new0(pinfo->pool, exp_pdu_data_t);
+
+        exp_pdu_data->tvb_captured_length = tvb_captured_length(tvb);
+        exp_pdu_data->tvb_reported_length = tvb_reported_length(tvb);
+        exp_pdu_data->pdu_tvb = tvb;
+        tap_queue_packet(exported_pdu_tap, pinfo, exp_pdu_data);
+    }
+}
 
 static int
 dissect_mp2t( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_ )
 {
-    volatile guint        offset = 0;
+    volatile unsigned     offset = 0;
     conversation_t       *conv;
     mp2t_stream_key      *stream;
     mp2t_analysis_data_t *mp2t_data;
@@ -1514,6 +1614,7 @@ dissect_mp2t( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
          * data.
          */
         saved_proto = pinfo->current_proto;
+        export_pdu(tvb_new_subset_length(tvb, offset, MP2T_PACKET_SIZE), pinfo);
         TRY {
             mp2t_data = get_mp2t_conversation_data(stream);
             dissect_tsp(tvb, offset, pinfo, tree, mp2t_data);
@@ -1533,32 +1634,32 @@ dissect_mp2t( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
     return tvb_captured_length(tvb);
 }
 
-static gboolean
+static bool
 heur_dissect_mp2t( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_ )
 {
-    gint length;
-    guint offset = 0;
+    int length;
+    unsigned offset = 0;
 
     length = tvb_reported_length_remaining(tvb, offset);
     if (length == 0) {
         /* Nothing to check for */
-        return FALSE;
+        return false;
     }
     if ((length % MP2T_PACKET_SIZE) != 0) {
         /* Not a multiple of the MPEG-2 transport packet size */
-        return FALSE;
+        return false;
     } else {
         while (tvb_offset_exists(tvb, offset)) {
-            if (tvb_get_guint8(tvb, offset) != MP2T_SYNC_BYTE) {
+            if (tvb_get_uint8(tvb, offset) != MP2T_SYNC_BYTE) {
                 /* No sync byte at the appropriate offset */
-                return FALSE;
+                return false;
             }
             offset += MP2T_PACKET_SIZE;
         }
     }
 
     dissect_mp2t(tvb, pinfo, tree, data);
-    return TRUE;
+    return true;
 }
 
 
@@ -1566,6 +1667,10 @@ void
 proto_register_mp2t(void)
 {
     static hf_register_info hf[] = {
+        { &hf_mp2t_stream, {
+            "Stream index", "mp2t.stream",
+            FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL
+        } } ,
         { &hf_mp2t_header, {
             "Header", "mp2t.header",
             FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL
@@ -1813,7 +1918,7 @@ proto_register_mp2t(void)
         } },
     };
 
-    static gint *ett[] =
+    static int *ett[] =
     {
         &ett_mp2t,
         &ett_mp2t_header,
@@ -1848,6 +1953,15 @@ proto_register_mp2t(void)
         &mp2t_reassembly_table_functions);
 
     mp2t_stream_hashtable = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), mp2t_stream_hash, mp2t_stream_equal);
+
+    register_init_routine(mp2t_init);
+
+    exported_pdu_tap = register_export_pdu_tap_with_encap("MP2T", WTAP_ENCAP_MPEG_2_TS);
+    mp2t_follow_tap = register_tap("mp2t_follow");
+
+    /* MPEG2 TS is sometimes carried on UDP or RTP over UDP so using the UDP
+     * address filter is better than nothing for tshark. */
+    register_follow_stream(proto_mp2t, "mp2t_follow", mp2t_follow_conv_filter, mp2t_follow_index_filter, udp_follow_address_filter, udp_port_to_display, follow_tvb_tap_listener, mp2t_get_stream_count, mp2t_get_sub_stream_id);
 }
 
 

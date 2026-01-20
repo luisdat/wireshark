@@ -22,7 +22,7 @@
 #  SINSP_DLL            - (Windows) Name of the libsinsp and libscap DLLs
 
 include( FindWSWinLibs )
-FindWSWinLibs( "libfalcosecurity-.*" SINSP_HINTS )
+FindWSWinLibs( "falcosecurity-libs-.*" SINSP_HINTS )
 
 include(CMakeDependentOption)
 
@@ -33,11 +33,14 @@ endif()
 
 # Include both legacy (#include <sinsp.h>) and current (#include <libsinsp/sinsp.h>) paths for now.
 if(NOT SINSP_FOUND)
-  # pkg_check_modules didn't work, so look for ourselves.
+  # We're likely building on Windows since libsinsp and libscap ship with .pc modules.
+  # We might want to dispense with this and use pkg_check_modules exclusively, but that
+  # would require adding pkg-config to the Windows build and ensuring that the .pc files
+  # we ship are discoverable and valid.
   find_path(_sinsp_include_dirs NO_CACHE
     NAMES libsinsp/sinsp.h
     HINTS "${SINSP_INCLUDEDIR}" "${SINSP_HINTS}/include"
-    PATH_SUFFIXES falcosecurity/userspace
+    PATH_SUFFIXES falcosecurity
     /usr/include
     /usr/local/include
   )
@@ -48,7 +51,7 @@ if(NOT SINSP_FOUND)
   find_path(_scap_include_dir NO_CACHE
     NAMES scap.h
     HINTS "${SINSP_INCLUDEDIR}" "${SINSP_HINTS}/include"
-    PATH_SUFFIXES falcosecurity/userspace/libscap
+    PATH_SUFFIXES falcosecurity/libscap
     /usr/include
     /usr/local/include
   )
@@ -64,6 +67,27 @@ if(NOT SINSP_FOUND)
     /usr/lib
     /usr/local/lib
   )
+
+if(WIN32)
+  find_library(_sinsp_debug_link_libs NO_CACHE
+    NAMES sinsp
+    HINTS "${SINSP_HINTS}/debug/lib"
+  )
+endif()
+
+  if (NOT SINSP_VERSION)
+    find_file(_sinsp_pkgconfig NO_CACHE
+      libsinsp.pc
+      PATHS "${SINSP_LIBDIR}/pkgconfig" "${SINSP_HINTS}/lib/pkgconfig"
+    )
+    if (_sinsp_pkgconfig)
+      file(READ ${_sinsp_pkgconfig} _sinsp_pkgconfig_contents)
+      string(REGEX MATCH "Version: *([0-9.]+)" _ ${_sinsp_pkgconfig_contents})
+      set(SINSP_VERSION ${CMAKE_MATCH_1})
+      unset(_sinsp_pkgconfig_contents)
+    endif()
+    unset(_sinsp_pkgconfig)
+  endif()
 
   set(_scap_libs
     scap
@@ -90,6 +114,22 @@ if(NOT SINSP_FOUND)
       unset(_lib)
     endif()
   endforeach()
+
+  if(WIN32)
+    set(_dep_debug_libs jsoncpp re2 tbb12_debug zlibstaticd)
+    foreach(_scap_lib ${_scap_libs} ${_dep_debug_libs})
+      find_library(_lib NO_CACHE
+        NAMES ${_scap_lib}
+        HINTS "${SINSP_HINTS}/debug/lib"
+        PATH_SUFFIXES falcosecurity
+      )
+      if (_lib)
+        list(APPEND _sinsp_debug_link_libs ${_lib})
+        unset(_lib)
+      endif()
+    endforeach()
+  endif()
+
   unset(_scap_libs)
   unset(_scap_lib)
 
@@ -168,7 +208,7 @@ if(NOT SINSP_FOUND)
   endif()
 
   find_library(_zlib_lib NO_CACHE
-    NAMES zlib
+    NAMES zlibstatic
     HINTS "${SINSP_LIBDIR}" "${SINSP_HINTS}/lib" "${SINSP_HINTS}/lib/falcosecurity"
     PATHS
     /usr/lib
@@ -182,10 +222,17 @@ if(NOT SINSP_FOUND)
   if(_sinsp_include_dirs AND _sinsp_link_libs)
     list(REMOVE_DUPLICATES _sinsp_include_dirs)
     set(SINSP_INCLUDE_DIRS ${_sinsp_include_dirs} CACHE PATH "Paths to libsinsp and libscap headers")
-    set(SINSP_LINK_LIBRARIES ${_sinsp_link_libs} CACHE PATH "Paths to libsinsp, libscap, etc.")
+    # The Debug libraries link to MSVCRTD.lib on Windows, and so we need to
+    # track them separately there. We don't need to do that elsewhere.
+    if(WIN32)
+      set(SINSP_LINK_LIBRARIES $<IF:$<CONFIG:Debug>,${_sinsp_debug_link_libs},${_sinsp_link_libs}> CACHE PATH "Paths to libsinsp, libscap, etc.")
+    else()
+      set(SINSP_LINK_LIBRARIES ${_sinsp_link_libs} CACHE PATH "Paths to libsinsp, libscap, etc.")
+    endif()
     set(SINSP_FOUND 1)
     unset(_sinsp_include_dirs)
     unset(_sinsp_link_libs)
+    unset(_sinsp_debug_link_libs)
   endif()
 
 endif()
@@ -200,10 +247,20 @@ find_package_handle_standard_args(Sinsp
   REQUIRED_VARS
     SINSP_INCLUDE_DIRS
     SINSP_LINK_LIBRARIES
-  # VERSION_VAR SINSP_VERSION
+    VERSION_VAR SINSP_VERSION
 )
 
 if(SINSP_FOUND)
+  if (SINSP_VERSION VERSION_EQUAL 0.0.0)
+    # https://github.com/falcosecurity/libs/blob/master/README.md#versioning
+    message(WARNING "libsinsp version is 0.0.0. If you built it outside of git, did you set FALCOSECURITY_LIBS_VERSION?")
+  endif()
+
+  string(REGEX MATCH "([0-9]+)\.([0-9]+)\.([0-9]+)" _ ${SINSP_VERSION})
+  # Should we cache these?
+  set(SINSP_VERSION_MAJOR ${CMAKE_MATCH_1})
+  set(SINSP_VERSION_MINOR ${CMAKE_MATCH_2})
+  set(SINSP_VERSION_MICRO ${CMAKE_MATCH_3})
 #   if (WIN32)
 #     set ( SINSP_DLL_DIR "${SINSP_HINTS}/bin"
 #       CACHE PATH "Path to sinsp DLL"
@@ -220,8 +277,30 @@ if(SINSP_FOUND)
 else()
   set(SINSP_INCLUDE_DIRS)
   set(SINSP_LINK_LIBRARIES)
+  set(SINSP_DEBUG_LINK_LIBRARIES)
+  set(SINSP_VERSION)
+  set(SINSP_VERSION_MAJOR)
+  set(SINSP_VERSION_MINOR)
+  set(SINSP_VERSION_MICRO)
 endif()
 
-cmake_dependent_option(FALCO_PLUGINS "Paths to Falco plugins. Semicolon-separated" "" SINSP_FOUND "")
-
 mark_as_advanced(SINSP_INCLUDE_DIRS SINSP_LINK_LIBRARIES)
+
+# Windows plugins
+
+set(_falco_plugins)
+if(WIN32 AND SINSP_FOUND AND NOT FALCO_PLUGINS)
+  FindWSWinLibs( "falcosecurity-plugins-.*" _falco_plugin_dir)
+  if(_falco_plugin_dir)
+    file( GLOB _falco_plugins LIST_DIRECTORIES false "${_falco_plugin_dir}/*.dll" )
+    unset(_falco_plugin_dir)
+  endif()
+endif()
+
+# XXX It looks like we can either autodiscover this value or provide an option but not both.
+if(_falco_plugins)
+  set(FALCO_PLUGINS ${_falco_plugins} CACHE FILEPATH "Paths to Falco plugins. Semicolon-separated")
+  unset(_falco_plugins)
+else()
+  cmake_dependent_option(FALCO_PLUGINS "Paths to Falco plugins. Semicolon-separated" "" "SINSP_FOUND" "")
+endif()
