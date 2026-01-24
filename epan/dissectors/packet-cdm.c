@@ -1,25 +1,17 @@
 #include "config.h"
 
-#include <time.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/proto.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
 #include <epan/dissectors/packet-tcp.h>
+
+#include <wsutil/wmem/wmem.h> 
+#include <wsutil/time_util.h>
 #include <wsutil/str_util.h>
 
-#ifndef WMEM_ALLOCATOR_T_DEFINED
-typedef struct _wmem_allocator_t wmem_allocator_t;
-#define WMEM_ALLOCATOR_T_DEFINED
-#endif
-WS_DLL_PUBLIC wmem_allocator_t* wmem_packet_scope(void);
-
-#include <wsutil/time_util.h>
-WS_DLL_PUBLIC char* ws_strptime(const char* buf, const char* format, struct tm* tm);
-
 #include "packet-cdm.h"
-#include "packet-tcp.h"
 
 #define FRAME_HEADER_LEN 32
 
@@ -41,85 +33,78 @@ uint32_t offset_message_type = 10; //offset_destination + CDM_DESTINATION_LENGTH
 uint32_t offset_sequence_number = 15; //offset_message_type + CDM_MESSAGE_TYPE_LENGTH;
 uint32_t offset_message_length = 23; //offset_sequence_number + CDM_SEQUENCE_NUMBER_LENGTH;
 uint32_t offset_timestamp = 32; //offset_message_length + CDM_MESSAGE_LENGTH_LENGTH;
-	
+
 /* global handle for calling xml decoder if required */
 static dissector_handle_t xml_handle;
 
-static guint8 * cdm_time_to_human(guint8* cdmTime) {
-  static guint8 last_time[256];
-  guint8* millis[4]; 
-  memcpy(millis, &(cdmTime[12]), 3);
-  millis[3] = '\0';
-  struct tm myTM;
-  if(ws_strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
-  {
-    gint milliseconds = atoi((const char*) millis);
-	//const time_t epoch_time = (time_t)(seconds);
-	//struct tm * utc = gmtime(&epoch_time);
-	
-	//int millis = microseconds / 1000;
-	
-	snprintf(last_time, sizeof(last_time), "%04d/%02d/%02d - %02d:%02d:%02d.%03d",
-			myTM.tm_year + 1900,
-			myTM.tm_mon + 1,
-			myTM.tm_mday,
-			myTM.tm_hour,
-			myTM.tm_min,
-			myTM.tm_sec,
-		  milliseconds	
-	);
-  }
-	return last_time;
+#if 0
+static guint8* cdm_time_to_human(guint8* cdmTime) {
+    static guint8 last_time[256];
+    guint8* millis[4];
+    memcpy(millis, &(cdmTime[12]), 3);
+    millis[3] = '\0';
+    struct tm myTM;
+    if (ws_strptime((const char*)cdmTime, "%d%m%y%H%M%S", &myTM))
+    {
+        gint milliseconds = atoi((const char*)millis);
+
+        snprintf((char*)last_time, sizeof(last_time), "%04d/%02d/%02d - %02d:%02d:%02d.%03d",
+            myTM.tm_year + 1900,
+            myTM.tm_mon + 1,
+            myTM.tm_mday,
+            myTM.tm_hour,
+            myTM.tm_min,
+            myTM.tm_sec,
+            milliseconds
+        );
+    }
+    return last_time;
 }
+#endif
 
 static nstime_t cdm_time_to_ws(guint8* cdmTime) {
-  static nstime_t last_time;
-  guint8* millis[4]; 
-  memcpy(millis, &(cdmTime[12]), 3);
-  millis[3] = '\0';
-  struct tm myTM;
-  if(ws_strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
-  {
-    gint milliseconds = atoi((const char*) millis);
-    last_time.secs = mktime(&myTM);
-    last_time.nsecs = milliseconds * 1000000;
-  }
-	
-  return last_time;
+    static nstime_t last_time = { 0, 0 };
+    struct tm myTM;
+    int day, month, year, hour, min, sec, ms;
+
+    memset(&myTM, 0, sizeof(myTM));
+
+    if (sscanf((const char*)cdmTime, "%2d%2d%2d%2d%2d%2d%3d",
+        &day, &month, &year, &hour, &min, &sec, &ms) == 7)
+    {
+        myTM.tm_mday = day;
+        myTM.tm_mon = month - 1;   // struct tm usa meses 0-11
+        myTM.tm_year = year + 100;  // struct tm cuenta años desde 1900. (2024 = 124)
+        myTM.tm_hour = hour;
+        myTM.tm_min = min;
+        myTM.tm_sec = sec;
+        myTM.tm_isdst = -1;         // Deja que mktime decida si hay horario de verano
+
+        last_time.secs = mktime(&myTM);
+        last_time.nsecs = ms * 1000000;
+    }
+
+    return last_time;
 }
 
-/*
-struct CDMHeaderType
-{
-  char[5] source;
-  char[5] destination;
-  char[5] messageType;
-  char[8] sequenceNumber;
-  char[9] messageLength;
-  char[15] timestamp;
-};
-*/
-
 static const value_string vs_source[] = {
-	{0,  "CDM"},
-	{1,  "SACTA"},
-	{2,  "ERROR"}
+        {0,  "CDM"},
+        {1,  "SACTA"},
+        {2,  "ERROR"}
 };
 
 static const value_string vs_message_type[] = {
-	{0,  "TEST"},
-	{1,  "ACK"},
-	{2,  "INFO"},
-	{3,  "CARGA"},
-	{4,  "ERROR"}
+        {0,  "TEST"},
+        {1,  "ACK"},
+        {2,  "INFO"},
+        {3,  "CARGA"},
+        {4,  "ERROR"}
 };
 
-//void proto_register_cdmproto(void);
-//void proto_reg_handoff_cdmproto(void);
-int dissect_cdm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data);
-int dissect_cdm_message(tvbuff_t *tvb, packet_info * pinfo, proto_tree * tree, void * data);
-static guint get_cdm_message_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_);
-const char * get_cdm_message_length(uint16_t w_size);
+int dissect_cdm(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
+int dissect_cdm_message(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
+static guint get_cdm_message_len(packet_info* pinfo _U_, tvbuff_t* tvb, int offset, void* data _U_);
+const char* get_cdm_message_length(uint16_t w_size);
 
 static heur_dissector_list_t heur_subdissector_list;
 
@@ -138,19 +123,19 @@ static int hf_cdm_data_length = -1;
 static int hf_cdm_timestamp = -1;
 
 static hf_register_info hf_cdm[] = {
-	{&hf_cdm_source,         {"Source",          "cdm.source", FT_UINT16, BASE_DEC, VALS(vs_source), 0x0, NULL, HFILL}},
-	{&hf_cdm_destination,    {"Destination",     "cdm.destination",  FT_UINT16, BASE_DEC, VALS(vs_source), 0x0, NULL, HFILL}},
-	{&hf_cdm_message_type  , {"Message type",    "cdm.message_type", FT_UINT16, BASE_DEC, VALS(vs_message_type), 0x0, NULL, HFILL}},
-	{&hf_cdm_sequence_number,{"Sequence number", "cdm.sequence_number", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}},
-	{&hf_cdm_message_length, {"Length",          "cdm.length", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}},
-	{&hf_cdm_data_length,    {"Data length",     "cdm.data_length", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}},
-	{&hf_cdm_timestamp,      {"Timestamp",       "cdm.timestamp", FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0, NULL, HFILL}}
+        {&hf_cdm_source,         {"Source",          "cdm.source", FT_UINT16, BASE_DEC, VALS(vs_source), 0x0, NULL, HFILL}},
+        {&hf_cdm_destination,    {"Destination",     "cdm.destination",  FT_UINT16, BASE_DEC, VALS(vs_source), 0x0, NULL, HFILL}},
+        {&hf_cdm_message_type  , {"Message type",    "cdm.message_type", FT_UINT16, BASE_DEC, VALS(vs_message_type), 0x0, NULL, HFILL}},
+        {&hf_cdm_sequence_number,{"Sequence number", "cdm.sequence_number", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_cdm_message_length, {"Length",          "cdm.length", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_cdm_data_length,    {"Data length",     "cdm.data_length", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_cdm_timestamp,      {"Timestamp",       "cdm.timestamp", FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0, NULL, HFILL}}
 };
 
-static int * ett_cdm[] = {
-	&ett_cdm_proto,
-	&ett_cdm_src,
-	&ett_cdm_dst
+static int* ett_cdm[] = {
+        &ett_cdm_proto,
+        &ett_cdm_src,
+        &ett_cdm_dst
 };
 
 static bool cdm_heur = true;
@@ -158,169 +143,172 @@ static bool cdm_heur = true;
 static heur_dtbl_entry_t* dissect_cdm_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
     heur_dtbl_entry_t* res = NULL;
 
-  static guint8 MAGIC1[] = "SACTA";
-  static guint8 MAGIC2[] = "CDM  ";
-	//uint16_t w_size = tvb_get_ntohs(tvb, 14);
-	//unsigned int end_data = tvb_captured_length(tvb) - SACTA_HEADER_SIZE;
-	guint8* cdm_source = tvb_get_string_enc(pinfo->pool, tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
-  if(memcmp(cdm_source, MAGIC1, 5) == 0 ||
-     memcmp(cdm_source, MAGIC2, 5) == 0)
-  {
-    dissect_cdm(tvb, pinfo, tree, data);
-	  res = (heur_dtbl_entry_t*)1;
-  }
-	
-	return NULL;
+    static guint8 MAGIC1[] = "SACTA";
+    static guint8 MAGIC2[] = "CDM  ";
+
+    if (tvb_captured_length(tvb) < CDM_SOURCE_LENGTH) {
+        return NULL;
+    }
+
+    guint8* cdm_source = tvb_get_string_enc(pinfo->pool, tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
+
+    if (memcmp(cdm_source, MAGIC1, 5) == 0 ||
+        memcmp(cdm_source, MAGIC2, 5) == 0)
+    {
+        dissect_cdm(tvb, pinfo, tree, data);
+        res = (heur_dtbl_entry_t*)1;
+    }
+
+    return res;
 }
 
-static guint get_cdm_message_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset _U_, void *data _U_)
+static guint get_cdm_message_len(packet_info* pinfo _U_, tvbuff_t* tvb, int offset _U_, void* data _U_)
 {
-  guint8* cdm_message_length = tvb_get_string_enc(pinfo->pool, tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
-  int cdmLength = atoi(cdm_message_length);
-  return cdmLength;
+    guint8* cdm_message_length = tvb_get_string_enc(pinfo->pool, tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
+    int cdmLength = atoi((const char*)cdm_message_length);
+    return cdmLength;
 }
 
-static guint16 get_source(guint8 *cdm_source)
+static guint16 get_source(guint8* cdm_source)
 {
-  guint res = 2;
-  if(strncmp(cdm_source, "CDM  ", 5) == 0)
-  {
-    res = 0;
-  }
-  else if(strncmp(cdm_source, "SACTA", 5) == 0)
-  {
-    res = 1;
-  }
+    guint res = 2;
+    if (strncmp((const char*)cdm_source, "CDM  ", 5) == 0)
+    {
+        res = 0;
+    }
+    else if (strncmp((const char*)cdm_source, "SACTA", 5) == 0)
+    {
+        res = 1;
+    }
 
-  return res;
+    return res;
 }
 
-static guint16 get_destination(guint8 *cdm_destination)
+static guint16 get_destination(guint8* cdm_destination)
 {
-  guint res = 2;
-  if(strncmp(cdm_destination, "CDM  ", 5) == 0)
-  {
-    res = 0;
-  }
-  else if(strncmp(cdm_destination, "SACTA", 5) == 0)
-  {
-    res = 1;
-  }
+    guint res = 2;
+    if (strncmp((const char*)cdm_destination, "CDM  ", 5) == 0)
+    {
+        res = 0;
+    }
+    else if (strncmp((const char*)cdm_destination, "SACTA", 5) == 0)
+    {
+        res = 1;
+    }
 
-  return res;
+    return res;
 }
 
-static guint16 get_message_type(guint8 *message_type)
+static guint16 get_message_type(guint8* message_type)
 {
-  guint res = 4;
-  if(strncmp(message_type, "TEST ", 5) == 0)
-  {
-    res = 0;
-  }
-  else if(strncmp(message_type, "ACK  ", 5) == 0)
-  {
-    res = 1;
-  }
-  else if(strncmp(message_type, "INFO ", 5) == 0)
-  {
-    res = 2;
-  }
-  else if(strncmp(message_type, "CARGA", 5) == 0)
-  {
-    res = 3;
-  }
+    guint res = 4;
+    if (strncmp((const char*)message_type, "TEST ", 5) == 0)
+    {
+        res = 0;
+    }
+    else if (strncmp((const char*)message_type, "ACK  ", 5) == 0)
+    {
+        res = 1;
+    }
+    else if (strncmp((const char*)message_type, "INFO ", 5) == 0)
+    {
+        res = 2;
+    }
+    else if (strncmp((const char*)message_type, "CARGA", 5) == 0)
+    {
+        res = 3;
+    }
 
-  return res;
+    return res;
 }
 
-int dissect_cdm(tvbuff_t *tvb, packet_info * pinfo, proto_tree * tree, void * data) {
+int dissect_cdm(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
 
-  tcp_dissect_pdus(tvb, pinfo, tree, TRUE, FRAME_HEADER_LEN,
-                   get_cdm_message_len, dissect_cdm_message, data);
-  return tvb_captured_length(tvb);
+    tcp_dissect_pdus(tvb, pinfo, tree, TRUE, FRAME_HEADER_LEN,
+        get_cdm_message_len, dissect_cdm_message, data);
+    return tvb_captured_length(tvb);
 }
 
 
-int dissect_cdm_message(tvbuff_t *tvb, packet_info * pinfo, proto_tree * tree, void * data _U_) {
-	proto_item * ti = proto_tree_add_item(tree, proto_cdm, tvb, 0, -1, ENC_NA);
-	proto_tree * cdm_tree = proto_item_add_subtree(ti, ett_cdm_proto);
-	
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "CDM");
-	
-        guint8* cdm_source = tvb_get_string_enc(pinfo->pool, tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
-	proto_tree_add_uint(cdm_tree, hf_cdm_source, tvb, offset_source, (gint16) strlen(cdm_source), get_source(cdm_source));
+int dissect_cdm_message(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_) {
+    proto_item* ti = proto_tree_add_item(tree, proto_cdm, tvb, 0, -1, ENC_NA);
+    proto_tree* cdm_tree = proto_item_add_subtree(ti, ett_cdm_proto);
 
-        guint8* cdm_destination = tvb_get_string_enc(pinfo->pool, tvb, offset_destination, CDM_DESTINATION_LENGTH, ENC_UTF_8);
-	proto_tree_add_uint(cdm_tree, hf_cdm_destination, tvb, offset_destination, (gint16) strlen(cdm_destination), get_destination(cdm_destination));
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, "CDM");
 
-	guint8* cdm_message_type = tvb_get_string_enc(pinfo->pool, tvb, offset_message_type, CDM_MESSAGE_TYPE_LENGTH, ENC_UTF_8);
-	proto_tree_add_uint(cdm_tree, hf_cdm_message_type, tvb, offset_message_type, (gint16) strlen(cdm_message_type), get_message_type(cdm_message_type));
+    guint8* cdm_source = tvb_get_string_enc(pinfo->pool, tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
+    proto_tree_add_uint(cdm_tree, hf_cdm_source, tvb, offset_source, (gint16)strlen((const char*)cdm_source), get_source(cdm_source));
 
-	guint8* cdm_sequence_number = tvb_get_string_enc(pinfo->pool, tvb, offset_sequence_number, CDM_SEQUENCE_NUMBER_LENGTH, ENC_UTF_8);
-        guint32 cdm_sequence_number_int = atoi(cdm_sequence_number);
-	proto_tree_add_uint(cdm_tree, hf_cdm_sequence_number, tvb, offset_sequence_number, (gint16) strlen(cdm_sequence_number), cdm_sequence_number_int);
+    guint8* cdm_destination = tvb_get_string_enc(pinfo->pool, tvb, offset_destination, CDM_DESTINATION_LENGTH, ENC_UTF_8);
+    proto_tree_add_uint(cdm_tree, hf_cdm_destination, tvb, offset_destination, (gint16)strlen((const char*)cdm_destination), get_destination(cdm_destination));
 
-	guint8* cdm_message_length = tvb_get_string_enc(pinfo->pool, tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
-        guint32 cdm_message_length_int = atoi(cdm_message_length);
-        guint32 cdm_data_length_int = cdm_message_length_int - CDM_HEADER_SIZE;
-	proto_tree_add_uint(cdm_tree, hf_cdm_message_length, tvb, offset_message_length, (gint16) strlen(cdm_message_length), cdm_message_length_int);
-        if(cdm_data_length_int > 0)
-	{
-	  proto_tree_add_uint(cdm_tree, hf_cdm_data_length, tvb, offset_message_length, (gint16) strlen(cdm_message_length), cdm_data_length_int);
-	}
+    guint8* cdm_message_type = tvb_get_string_enc(pinfo->pool, tvb, offset_message_type, CDM_MESSAGE_TYPE_LENGTH, ENC_UTF_8);
+    proto_tree_add_uint(cdm_tree, hf_cdm_message_type, tvb, offset_message_type, (gint16)strlen((const char*)cdm_message_type), get_message_type(cdm_message_type));
 
-	guint8* cdm_timestamp = tvb_get_string_enc(pinfo->pool, tvb, offset_timestamp, CDM_TIMESTAMP_LENGTH, ENC_UTF_8);
-        //guint8* cdm_time_readable = cdm_time_to_human(cdm_timestamp);
-        nstime_t cdm_time = cdm_time_to_ws(cdm_timestamp);
-	proto_tree_add_time(cdm_tree, hf_cdm_timestamp, tvb, offset_timestamp, CDM_TIMESTAMP_LENGTH, &cdm_time);
+    guint8* cdm_sequence_number = tvb_get_string_enc(pinfo->pool, tvb, offset_sequence_number, CDM_SEQUENCE_NUMBER_LENGTH, ENC_UTF_8);
+    guint32 cdm_sequence_number_int = atoi((const char*)cdm_sequence_number);
+    proto_tree_add_uint(cdm_tree, hf_cdm_sequence_number, tvb, offset_sequence_number, (gint16)strlen((const char*)cdm_sequence_number), cdm_sequence_number_int);
 
-  guint packet_length = atoi(cdm_message_length);
+    guint8* cdm_message_length = tvb_get_string_enc(pinfo->pool, tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
+    guint32 cdm_message_length_int = atoi((const char*)cdm_message_length);
+    guint32 cdm_data_length_int = cdm_message_length_int - CDM_HEADER_SIZE;
+    proto_tree_add_uint(cdm_tree, hf_cdm_message_length, tvb, offset_message_length, (gint16)strlen((const char*)cdm_message_length), cdm_message_length_int);
+    if (cdm_data_length_int > 0)
+    {
+        proto_tree_add_uint(cdm_tree, hf_cdm_data_length, tvb, offset_message_length, (gint16)strlen((const char*)cdm_message_length), cdm_data_length_int);
+    }
 
-  col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s", "CDM", cdm_message_type);
-  if(cdm_data_length_int > 0)
-  {
-    proto_item_append_text(ti, ", Message type: %s, Data length: %d",
-                    cdm_message_type,
-                    cdm_data_length_int);
-  }
-  else
-  {
-    proto_item_append_text(ti, ", Message type: %s, No data",
-                    cdm_message_type);
-  }
- 
-  //After header, dissect payload
-	//heur_dtbl_entry_t * hdtbl_entry = NULL;
-	tvbuff_t * data_tvb = tvb_new_subset_remaining(tvb, CDM_HEADER_SIZE);
-	if (xml_handle != NULL && packet_length > CDM_HEADER_SIZE)
-  {
-		call_dissector(xml_handle, data_tvb, pinfo, tree);
-  }
+    guint8* cdm_timestamp = tvb_get_string_enc(pinfo->pool, tvb, offset_timestamp, CDM_TIMESTAMP_LENGTH, ENC_UTF_8);
+    nstime_t cdm_time = cdm_time_to_ws(cdm_timestamp);
+    proto_tree_add_time(cdm_tree, hf_cdm_timestamp, tvb, offset_timestamp, CDM_TIMESTAMP_LENGTH, &cdm_time);
 
-	return 0;
+    guint packet_length = atoi((const char*)cdm_message_length);
+
+    col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s", "CDM", (const char*)cdm_message_type);
+    if (cdm_data_length_int > 0)
+    {
+        proto_item_append_text(ti, ", Message type: %s, Data length: %d",
+            (const char*)cdm_message_type,
+            cdm_data_length_int);
+    }
+    else
+    {
+        proto_item_append_text(ti, ", Message type: %s, No data",
+            (const char*)cdm_message_type);
+    }
+
+    //After header, dissect payload
+    tvbuff_t* data_tvb = tvb_new_subset_remaining(tvb, CDM_HEADER_SIZE);
+    if (xml_handle != NULL && packet_length > CDM_HEADER_SIZE)
+    {
+        call_dissector(xml_handle, data_tvb, pinfo, tree);
+    }
+
+    return 0;
 }
 
 void proto_register_cdmproto(void) {
-	module_t * cdm_module;
-	
-	proto_cdm = proto_register_protocol("CDM Protocol", "CDM", "cdm");
-	proto_register_field_array(proto_cdm, hf_cdm, array_length(hf_cdm));
-	proto_register_subtree_array(ett_cdm, array_length(ett_cdm));
-	
-	cdm_module = prefs_register_protocol(proto_cdm, NULL);
-	heur_subdissector_list = register_heur_dissector_list("cdm", proto_cdm);
-	prefs_register_bool_preference(cdm_module, "heur",
-		"Use heuristics for calculate if a TCP message is CDM Protocol",
-		"Use heuristics for calculate if a TCP message is CDM Protocol",
-		&cdm_heur
-	);
+    module_t* cdm_module;
+
+    proto_cdm = proto_register_protocol("CDM Protocol", "CDM", "cdm");
+    proto_register_field_array(proto_cdm, hf_cdm, array_length(hf_cdm));
+    proto_register_subtree_array(ett_cdm, array_length(ett_cdm));
+
+    cdm_module = prefs_register_protocol(proto_cdm, NULL);
+    heur_subdissector_list = register_heur_dissector_list("cdm", proto_cdm);
+    prefs_register_bool_preference(cdm_module, "heur",
+        "Use heuristics for calculate if a TCP message is CDM Protocol",
+        "Use heuristics for calculate if a TCP message is CDM Protocol",
+        &cdm_heur
+    );
 }
 
 void proto_reg_handoff_cdmproto(void) {
-	dissector_handle_t cdm_handle _U_;
-	xml_handle = find_dissector_add_dependency("xml", proto_cdm);
-	cdm_handle = create_dissector_handle(dissect_cdm, proto_cdm);
-	//dissector_add_uint_with_preference("tcp.port1", CDM_TCP_PORT_1, cdm_handle);
-	//dissector_add_uint_with_preference("tcp.port2", CDM_TCP_PORT_2, cdm_handle);
-	heur_dissector_add("tcp", (heur_dissector_t) dissect_cdm_heur_tcp, "CDM over TCP", "cdm_tcp", proto_cdm, HEURISTIC_ENABLE);
+    dissector_handle_t cdm_handle _U_;
+    xml_handle = find_dissector_add_dependency("xml", proto_cdm);
+    cdm_handle = create_dissector_handle(dissect_cdm, proto_cdm);
+
+    //TODO: not working in github workflow
+    //heur_dissector_t heuristic_dissector_function = dissect_cdm_heur_tcp;
+    //heur_dissector_add("tcp", heuristic_dissector_function, "CDM over TCP", "cdm_tcp", proto_cdm, HEURISTIC_ENABLE);
 }

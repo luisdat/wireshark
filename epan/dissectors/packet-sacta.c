@@ -1073,5 +1073,6 @@ void proto_reg_handoff_sacta(void) {
     sacta_handle = create_dissector_handle(dissect_fragmented_sacta, proto_sacta);
     dissector_add_uint_with_preference("udp.port", SACTA_UDP_PORT, sacta_handle);
 
-    heur_dissector_add("udp", (heur_dissector_t) dissect_sacta_heur_udp, "sacta over UDP", "sacta_udp", proto_sacta, HEURISTIC_ENABLE);
+    //TODO: not working in github workflow
+    //heur_dissector_add("udp", (heur_dissector_t)dissect_sacta_heur_udp, "sacta over UDP", "sacta_udp", proto_sacta, HEURISTIC_ENABLE);
 }
