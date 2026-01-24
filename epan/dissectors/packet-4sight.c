@@ -24,7 +24,7 @@ uint32_t _4SIGHT_PROCESOR_ID_SIZE = 12;
 const uint32_t _4SIGHT_TCP_PORT_1 = 64000;
 const uint32_t _4SIGHT_TCP_PORT_2 = 64010;
 
-uint32_t _4sight_offset_magic = 0;
+//uint32_t _4sight_offset_magic = 0;
 uint32_t _4sight_offset_message_type = 4;
 uint32_t _4sight_offset_payload_length = 8;
 uint32_t _4sight_offset_processor_id = 12;
@@ -65,6 +65,7 @@ static int* ett_4sight[] = {
 
 static bool _4sight_heur = true;
 
+#if 0
 static heur_dtbl_entry_t* dissect_4sight_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
     heur_dtbl_entry_t* res = NULL;
 
@@ -84,6 +85,7 @@ static heur_dtbl_entry_t* dissect_4sight_heur_tcp(tvbuff_t* tvb, packet_info* pi
 
     return res;
 }
+#endif
 
 static guint32 get_4sight_message_len(packet_info* pinfo _U_, tvbuff_t* tvb, int offset _U_, void* data _U_)
 {
