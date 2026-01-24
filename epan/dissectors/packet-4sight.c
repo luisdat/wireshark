@@ -91,11 +91,13 @@ static guint32 get_4sight_message_len(packet_info* pinfo _U_, tvbuff_t* tvb, int
     return _4SIGHT_HEADER_SIZE + _4sight_message_length;
 }
 
+#if 0
 static guint32 get_4sight_payload_len(packet_info* pinfo _U_, tvbuff_t* tvb, int offset _U_, void* data _U_)
 {
     guint32 _4sight_message_length = tvb_get_uint32(tvb, _4sight_offset_payload_length, ENC_BIG_ENDIAN);
     return _4sight_message_length;
 }
+#endif
 
 int dissect_4sight(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
 
@@ -168,8 +170,9 @@ void proto_reg_handoff_4sightproto(void) {
     xml_handle = find_dissector_add_dependency("xml", proto_4sight);
     _4sight_handle = create_dissector_handle(dissect_4sight, proto_4sight);
 
-    heur_dissector_t heuristic_dissector_function = (heur_dissector_t) dissect_4sight_heur_tcp;
-    heur_dissector_add("tcp", heuristic_dissector_function, "FourSight over TCP", "foursight_tcp", proto_4sight, HEURISTIC_ENABLE);
+    //TODO: NOT WORKING in github workflow
+    //heur_dissector_t heuristic_dissector_function = (heur_dissector_t) dissect_4sight_heur_tcp;
+    //heur_dissector_add("tcp", heuristic_dissector_function, "FourSight over TCP", "foursight_tcp", proto_4sight, HEURISTIC_ENABLE);
 
     dissector_add_for_decode_as_with_preference("tcp.port", _4sight_handle);
 }
