@@ -32,6 +32,24 @@
 
 #include "ws_attributes.h"
 
+#include <inttypes.h>
+#include <stdbool.h>
+
+/**
+ * @def ws_cpuid
+ * @brief Execute the x86 CPUID instruction with the given selector.
+ *
+ * Retrieves CPU information by executing the CPUID instruction with the specified
+ * selector. The results are stored in the `CPUInfo` array as
+ * EAX, EBX, ECX, and EDX, respectively.
+ *
+ * @param CPUInfo   Pointer to an array of four uint32_t values to receive
+ *                  EAX, EBX, ECX, and EDX results, in that order.
+ * @param selector  Initial EAX value for the CPUID instruction.
+ * @return          true if cpuinfo is available, otherwise 0.
+ */
+
+
 #if defined(_MSC_VER)     /* MSVC */
 
 /*
@@ -44,30 +62,30 @@
  * on Windows anyway, so the answer is probably "no".
  */
 #if defined(_M_IX86) || defined(_M_X64)
-static gboolean
-ws_cpuid(guint32 *CPUInfo, guint32 selector)
+static bool
+ws_cpuid(uint32_t *CPUInfo, uint32_t selector)
 {
 	/* https://docs.microsoft.com/en-us/cpp/intrinsics/cpuid-cpuidex */
 
 	CPUInfo[0] = CPUInfo[1] = CPUInfo[2] = CPUInfo[3] = 0;
 	__cpuid((int *) CPUInfo, selector);
 	/* XXX, how to check if it's supported on MSVC? just in case clear all flags above */
-	return TRUE;
+	return true;
 }
 #else /* not x86 */
-static gboolean
-ws_cpuid(guint32 *CPUInfo _U_, int selector _U_)
+static bool
+ws_cpuid(uint32_t *CPUInfo _U_, int selector _U_)
 {
 	/* Not x86, so no cpuid instruction */
-	return FALSE;
+	return false;
 }
 #endif
 
 #elif defined(__GNUC__)  /* GCC/clang */
 
 #if defined(__x86_64__)
-static inline gboolean
-ws_cpuid(guint32 *CPUInfo, int selector)
+static inline bool
+ws_cpuid(uint32_t *CPUInfo, int selector)
 {
 	__asm__ __volatile__("cpuid"
 						: "=a" (CPUInfo[0]),
@@ -76,11 +94,11 @@ ws_cpuid(guint32 *CPUInfo, int selector)
 							"=d" (CPUInfo[3])
 						: "a" (selector),
 							"c" (0));
-	return TRUE;
+	return true;
 }
 #elif defined(__i386__)
-static gboolean
-ws_cpuid(guint32 *CPUInfo _U_, int selector _U_)
+static bool
+ws_cpuid(uint32_t *CPUInfo _U_, int selector _U_)
 {
 	/*
 	 * TODO: need a test if older processors have the cpuid instruction.
@@ -105,30 +123,30 @@ ws_cpuid(guint32 *CPUInfo _U_, int selector _U_)
 	 * it's probably best to ask the OS, if it supplies the result
 	 * of any CPU type testing it's done.
 	 */
-	return FALSE;
+	return false;
 }
 #else /* not x86 */
-static gboolean
-ws_cpuid(guint32 *CPUInfo _U_, int selector _U_)
+static bool
+ws_cpuid(uint32_t *CPUInfo _U_, int selector _U_)
 {
 	/* Not x86, so no cpuid instruction */
-	return FALSE;
+	return false;
 }
 #endif
 
 #else /* Other compilers */
 
-static gboolean
-ws_cpuid(guint32 *CPUInfo _U_, int selector _U_)
+static bool
+ws_cpuid(uint32_t *CPUInfo _U_, int selector _U_)
 {
-	return FALSE;
+	return false;
 }
 #endif
 
 static int
 ws_cpuid_sse42(void)
 {
-	guint32 CPUInfo[4];
+	uint32_t CPUInfo[4];
 
 	if (!ws_cpuid(CPUInfo, 1))
 		return 0;

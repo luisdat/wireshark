@@ -51,7 +51,7 @@ public:
     BoolPreference(QObject * parent = Q_NULLPTR) : WiresharkPreference(parent) {}
     virtual QWidget * editor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index)
     {
-        const_cast<QAbstractItemModel*>(index.model())->setData(index, QString("BOOL"), Qt::EditRole);
+        const_cast<QAbstractItemModel*>(index.model())->setData(index, QStringLiteral("BOOL"), Qt::EditRole);
         return WiresharkPreference::editor(parent, option, index);
     }
 };
@@ -80,6 +80,7 @@ public:
 };
 REGISTER_PREFERENCE_TYPE(PREF_STRING, StringPreference)
 REGISTER_PREFERENCE_TYPE(PREF_CUSTOM, StringPreference)
+REGISTER_PREFERENCE_TYPE(PREF_DISSECTOR, StringPreference)
 
 class PasswordPreference : public StringPreference
 {
@@ -101,7 +102,20 @@ public:
     UIntPreference(QObject * parent = Q_NULLPTR) : StringPreference(parent) {}
 };
 REGISTER_PREFERENCE_TYPE(PREF_UINT, UIntPreference)
-REGISTER_PREFERENCE_TYPE(PREF_DECODE_AS_UINT, UIntPreference)
+
+class IntPreference : public StringPreference
+{
+public:
+    IntPreference(QObject* parent = Q_NULLPTR) : StringPreference(parent) {}
+};
+REGISTER_PREFERENCE_TYPE(PREF_INT, IntPreference)
+
+class FloatPreference : public StringPreference
+{
+public:
+    FloatPreference(QObject* parent = Q_NULLPTR) : StringPreference(parent) {}
+};
+REGISTER_PREFERENCE_TYPE(PREF_FLOAT, FloatPreference)
 
 class EnumPreference : public WiresharkPreference
 {
@@ -239,10 +253,9 @@ public:
     UatPreference(QObject * parent = Q_NULLPTR) : WiresharkPreference(parent) {}
     virtual QWidget * editor(QWidget * parent, const QStyleOptionViewItem &option, const QModelIndex &index)
     {
-        if (prefsItem()->getPrefGUIType() == GUI_ALL || prefsItem()->getPrefGUIType() == GUI_QT) {
-            UatDialog uat_dlg(parent, prefs_get_uat_value(prefsItem()->getPref()));
-            uat_dlg.exec();
-        }
+        UatDialog uat_dlg(parent, prefs_get_uat_value(prefsItem()->getPref()));
+        uat_dlg.exec();
+
         return WiresharkPreference::editor(parent, option, index);
     }
 };

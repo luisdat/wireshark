@@ -7,7 +7,8 @@ usr/bin/mmdbresolve
 usr/bin/randpkt
 usr/bin/rawshark
 usr/bin/reordercap
+usr/bin/sharkd
 usr/bin/text2pcap
-usr/lib/*/wireshark/extcap
+usr/libexec/wireshark/extcap
 usr/share/icons/
 usr/share/mime/packages/

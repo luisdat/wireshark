@@ -8,9 +8,24 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include <stdbool.h>
+
 #include "config.h"
 
 #include <wsutil/feature_list.h>
+
+#if !GLIB_CHECK_VERSION(2, 68, 0)
+static GString*
+g_string_find_and_erase(GString *string, const char* find)
+{
+    /* Find and erases find a single time. */
+    const char* pos = strstr(string->str, find);
+    if (pos != NULL) {
+        g_string_erase(string, pos - string->str, strlen(find));
+    }
+    return string;
+}
+#endif
 
 void
 with_feature(feature_list l, const char *fmt, ...)
@@ -20,6 +35,14 @@ with_feature(feature_list l, const char *fmt, ...)
     va_start(arg, fmt);
     g_string_append_vprintf(msg, fmt, arg);
     va_end(arg);
+    /* Strip "version" from the string */
+#if GLIB_CHECK_VERSION(2, 68, 0)
+    g_string_replace(msg, " version", "", 0);
+    g_string_replace(msg, " based on", "", 0);
+#else
+    g_string_find_and_erase(msg, " version");
+    g_string_find_and_erase(msg, " based on");
+#endif
     *l = g_list_prepend(*l, g_string_free(msg, FALSE));
 }
 
@@ -34,16 +57,32 @@ without_feature(feature_list l, const char *fmt, ...)
     *l = g_list_prepend(*l, g_string_free(msg, FALSE));
 }
 
-static gint
-feature_sort_alpha(gconstpointer a, gconstpointer b)
+static int
+feature_sort_alpha(const void *a, const void *b)
 {
-    return g_ascii_strcasecmp((gchar *)a + 1, (gchar *)b + 1);
+    return g_ascii_strcasecmp((char *)a + 1, (char *)b + 1);
 }
 
 void
 sort_features(feature_list l)
 {
     *l = g_list_sort(*l, feature_sort_alpha);
+}
+
+void
+separate_features(feature_list l, feature_list with_list, feature_list without_list)
+{
+    GList *iter;
+    char *data;
+    for (iter = *l; iter != NULL; iter = iter->next) {
+        data = (char *)iter->data;
+        if (data[0] == '+')
+            *with_list = g_list_prepend(*with_list, g_strdup(data));
+        else
+            *without_list = g_list_prepend(*without_list, g_strdup(data));
+    }
+    *with_list = g_list_reverse(*with_list);
+    *without_list = g_list_reverse(*without_list);
 }
 
 void

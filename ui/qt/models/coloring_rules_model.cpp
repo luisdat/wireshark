@@ -14,6 +14,7 @@
 #include <errno.h>
 
 #include "ui/ws_ui_util.h" //for color_filter_add_cb
+#include <app/application_flavor.h>
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
@@ -72,7 +73,7 @@ ColoringRuleItem& ColoringRuleItem::operator=(ColoringRuleItem& rhs)
 
 // Callback for color_filters_clone.
 void
-color_filter_add_cb(color_filter_t *colorf, gpointer user_data)
+color_filter_add_cb(color_filter_t *colorf, void *user_data)
 {
     ColoringRulesModel *model = (ColoringRulesModel*)user_data;
 
@@ -149,7 +150,7 @@ void ColoringRulesModel::addColor(bool disabled, QString filter, QColor foregrou
 bool ColoringRulesModel::importColors(QString filename, QString& err)
 {
     bool success = true;
-    gchar* err_msg = NULL;
+    char* err_msg = NULL;
     if (!color_filters_import(filename.toUtf8().constData(), this, &err_msg, color_filter_add_cb)) {
         err = gchar_free_to_qstring(err_msg);
         success = false;
@@ -162,8 +163,8 @@ bool ColoringRulesModel::exportColors(QString filename, QString& err)
 {
     GSList *cfl = createColorFilterList();
     bool success = true;
-    gchar* err_msg = NULL;
-    if (!color_filters_export(filename.toUtf8().constData(), cfl, FALSE, &err_msg)) {
+    char* err_msg = NULL;
+    if (!color_filters_export(filename.toUtf8().constData(), cfl, false, application_flavor_name_proper(), &err_msg)) {
         err = gchar_free_to_qstring(err_msg);
         success = false;
     }
@@ -176,13 +177,13 @@ bool ColoringRulesModel::writeColors(QString& err)
 {
     GSList *cfl = createColorFilterList();
     bool success = true;
-    gchar* err_msg = NULL;
+    char* err_msg = NULL;
     if (!color_filters_apply(conversation_colors_, cfl, &err_msg)) {
         err = gchar_free_to_qstring(err_msg);
         success = false;
     }
-    if (!color_filters_write(cfl, &err_msg)) {
-        err = QString(tr("Unable to save coloring rules: %1").arg(g_strerror(errno)));
+    if (!color_filters_write(cfl, application_flavor_name_proper(), application_configuration_environment_prefix(), &err_msg)) {
+        err = tr("Unable to save coloring rules: %1").arg(g_strerror(errno));
         success = false;
         g_free(err_msg);
     }
@@ -429,13 +430,15 @@ QMimeData* ColoringRulesModel::mimeData(const QModelIndexList &indexes) const
         if (index.column() == 0)
         {
             ColoringRuleItem * item = root_->child(index.row());
-            QJsonObject entry;
-            entry["disabled"] = item->disabled_;
-            entry["name"] = item->name_;
-            entry["filter"] = item->filter_;
-            entry["foreground"] = QVariant::fromValue(item->foreground_).toString();
-            entry["background"] = QVariant::fromValue(item->background_).toString();
-            data.append(entry);
+            if (item != nullptr) {
+                QJsonObject entry;
+                entry["disabled"] = item->disabled_;
+                entry["name"] = item->name_;
+                entry["filter"] = item->filter_;
+                entry["foreground"] = QVariant::fromValue(item->foreground_).toString();
+                entry["background"] = QVariant::fromValue(item->background_).toString();
+                data.append(entry);
+            }
         }
     }
 

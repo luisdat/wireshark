@@ -13,9 +13,9 @@
 
 #include <epan/packet.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
-#include "packet-pkixqualified.h"
 #include "packet-x509af.h"
 #include "packet-x509ce.h"
 #include "packet-x509sat.h"
@@ -29,7 +29,7 @@ void proto_reg_handoff_pkixqualified(void);
 
 
 /* Initialize the protocol and registered fields */
-static int proto_pkixqualified = -1;
+static int proto_pkixqualified;
 #include "packet-pkixqualified-hf.c"
 
 /* Initialize the subtree pointers */
@@ -49,7 +49,7 @@ void proto_register_pkixqualified(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
 #include "packet-pkixqualified-ettarr.c"
   };
 

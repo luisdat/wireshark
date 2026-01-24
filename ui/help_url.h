@@ -12,6 +12,8 @@
 #ifndef __HELP_URL_H__
 #define __HELP_URL_H__
 
+#include <ws_attributes.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
@@ -24,22 +26,28 @@ typedef enum {
     TOPIC_ACTION_NONE,
 
     /* pages online at www.wireshark.org */
-    ONLINEPAGE_HOME,
-    ONLINEPAGE_WIKI,
+    ONLINEPAGE_WIRESHARK_HOME,
+    ONLINEPAGE_WIRESHARK_WIKI,
     ONLINEPAGE_USERGUIDE,
     ONLINEPAGE_FAQ,
-    ONLINEPAGE_DOWNLOAD,
+    ONLINEPAGE_WIRESHARK_DOWNLOAD,
     ONLINEPAGE_DOCS,
     ONLINEPAGE_SAMPLE_FILES,
     ONLINEPAGE_CAPTURE_SETUP,
     ONLINEPAGE_NETWORK_MEDIA,
     ONLINEPAGE_SAMPLE_CAPTURES,
     ONLINEPAGE_SECURITY,
-    ONLINEPAGE_CHIMNEY,
     ONLINEPAGE_ASK,
+    ONLINEPAGE_DFILTER_REF,
+
+    /* pages online at stratoshark.org */
+    ONLINEPAGE_STRATOSHARK_HOME,
+    ONLINEPAGE_STRATOSHARK_WIKI,
+    ONLINEPAGE_STRATOSHARK_DOWNLOAD,
 
     /* local manual pages */
     LOCALPAGE_MAN_WIRESHARK = 100,
+    LOCALPAGE_MAN_STRATOSHARK,
     LOCALPAGE_MAN_WIRESHARK_FILTER,
     LOCALPAGE_MAN_CAPINFOS,
     LOCALPAGE_MAN_DUMPCAP,
@@ -50,13 +58,18 @@ typedef enum {
     LOCALPAGE_MAN_TEXT2PCAP,
     LOCALPAGE_MAN_TSHARK,
 
-    /* help pages (textfiles or local HTML User's Guide) */
+    /* Release Notes */
+    LOCALPAGE_WIRESHARK_RELEASE_NOTES,
+    LOCALPAGE_STRATOSHARK_RELEASE_NOTES,
+
+    /* help pages (textfiles or HTML User's Guide) */
     HELP_CONTENT = 200,
     HELP_GETTING_STARTED,           /* currently unused */
     HELP_CAPTURE_OPTIONS,           /* currently unused */
     HELP_CAPTURE_FILTERS_DIALOG,
     HELP_DISPLAY_FILTERS_DIALOG,
     HELP_FILTER_EXPRESSION_DIALOG,
+    HELP_DISPLAY_MACRO_DIALOG,
     HELP_COLORING_RULES_DIALOG,
     HELP_CONFIG_PROFILES_DIALOG,
     HELP_PRINT_DIALOG,
@@ -88,6 +101,8 @@ typedef enum {
     HELP_CAPTURE_INFO_DIALOG,
     HELP_EXPORT_FILE_DIALOG,
     HELP_EXPORT_BYTES_DIALOG,
+    HELP_EXPORT_PDUS_DIALOG,
+    HELP_STRIP_HEADERS_DIALOG,
     HELP_EXPORT_OBJECT_LIST,
     HELP_OPEN_DIALOG,
     HELP_MERGE_DIALOG,
@@ -104,26 +119,26 @@ typedef enum {
     HELP_NEW_PACKET_DIALOG,
     HELP_IAX2_ANALYSIS_DIALOG,
     HELP_TELEPHONY_RTP_PLAYER_DIALOG,
-    HELP_STAT_FLOW_GRAPH
+    HELP_STAT_FLOW_GRAPH,
+    HELP_STATS_PLOT_DIALOG
 } topic_action_e;
 
-/** Given a page in the Wireshark User's Guide return its URL. If the
- *  attempt succeeds NULL will be returned.
+/** Given a page in the Wireshark User's Guide return its URL. Returns a
+ *  URL to a local file if present, or to the online guide if the local
+ *  file is unavailable.
  *
  * @param page A page in the User's Guide.
- * @return A static URL or NULL. A non-NULL return value must be freed
- * with g_free().
+ * @return A static URL. The return value must be freed with g_free().
  */
-gchar *user_guide_url(const gchar *page);
+WS_RETNONNULL char *user_guide_url(const char *page);
 
-/** Given a topic action return its URL. If the attempt succeeds NULL
+/** Given a topic action return its URL. If the attempt fails NULL
  *  will be returned.
  *
  * @param action Topic action.
- * @return A static URL or NULL. A non-NULL return value must be freed
- * with g_free().
+ * @return A static URL. The return value must be freed with g_free().
  */
-gchar *topic_action_url(topic_action_e action);
+WS_RETNONNULL char *topic_action_url(topic_action_e action);
 
 /** Open a specific topic (create a "Help" dialog box or open a webpage).
  *

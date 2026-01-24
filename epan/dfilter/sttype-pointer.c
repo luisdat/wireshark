@@ -15,7 +15,7 @@
 #include <epan/proto.h> // For BASE_NONE
 
 static void
-sttype_fvalue_free(gpointer value)
+sttype_fvalue_free(void *value)
 {
 	fvalue_t *fvalue = value;
 
@@ -26,7 +26,7 @@ sttype_fvalue_free(gpointer value)
 }
 
 static void
-pcre_free(gpointer value)
+pcre_free(void *value)
 {
 	ws_regex_t *pcre = value;
 
@@ -36,8 +36,27 @@ pcre_free(gpointer value)
 	}
 }
 
+static void *
+sttype_fvalue_dup(const void *value)
+{
+	const fvalue_t *fvalue = value;
+
+	/* If the data was not claimed with stnode_steal_data(), dup it. */
+	if (fvalue) {
+		return fvalue_dup(fvalue);
+	}
+
+	return NULL;
+}
+
+static void *
+charconst_dup(const void *value)
+{
+	return g_memdup2(value, sizeof(unsigned long));
+}
+
 static char *
-sttype_fvalue_tostr(const void *data, gboolean pretty)
+sttype_fvalue_tostr(const void *data, bool pretty)
 {
 	const fvalue_t *fvalue = data;
 
@@ -53,13 +72,13 @@ sttype_fvalue_tostr(const void *data, gboolean pretty)
 }
 
 static char *
-pcre_tostr(const void *data, gboolean pretty _U_)
+pcre_tostr(const void *data, bool pretty _U_)
 {
 	return g_strdup(ws_regex_pattern(data));
 }
 
 static char *
-charconst_tostr(const void *data, gboolean pretty _U_)
+charconst_tostr(const void *data, bool pretty _U_)
 {
 	unsigned long num = *(const unsigned long *)data;
 
@@ -107,26 +126,24 @@ sttype_register_pointer(void)
 {
 	static sttype_t fvalue_type = {
 		STTYPE_FVALUE,
-		"FVALUE",
 		NULL,
 		sttype_fvalue_free,
-		NULL,
+		sttype_fvalue_dup,
 		sttype_fvalue_tostr
 	};
 	static sttype_t pcre_type = {
 		STTYPE_PCRE,
-		"PCRE",
 		NULL,
 		pcre_free,
-		NULL,
+		NULL,	// Need to add a ws_regex_dup, but a STTYPE_PCRE can't
+			// be duped with the current syntax and semantic check.
 		pcre_tostr
 	};
 	static sttype_t charconst_type = {
 		STTYPE_CHARCONST,
-		"CHARCONST",
 		NULL,
 		g_free,
-		NULL,
+		charconst_dup,
 		charconst_tostr
 	};
 

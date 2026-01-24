@@ -10,7 +10,7 @@
 
 #include "config.h"
 
-#include <glib.h>
+#include <wireshark.h>
 
 #include <string.h>
 #include <ws_attributes.h>
@@ -18,7 +18,7 @@
 
 #ifdef HAVE_LIBPCAP
 
-#include <pcap.h>
+#include <pcap/pcap.h>
 
 #ifdef HAVE_LIBCAP
 # include <sys/capability.h>
@@ -31,6 +31,7 @@
 #ifdef HAVE_PCAP_REMOTE
 GList *
 get_remote_interface_list(const char *hostname, const char *port,
+			  bool wireshark_remote _U_,
 			  int auth_type, const char *username,
 			  const char *passwd, int *err, char **err_str)
 {
@@ -40,16 +41,22 @@ get_remote_interface_list(const char *hostname, const char *port,
 #endif
 
 GList *
-get_interface_list(int *err, char **err_str)
+get_interface_list_ws(int *err, char **err_str)
 {
-	return get_interface_list_findalldevs(err, err_str);
+	return get_interface_list_findalldevs(true, err, err_str);
+}
+
+GList*
+get_interface_list_ss(int* err, char** err_str)
+{
+	return get_interface_list_findalldevs(false, err, err_str);
 }
 
 /*
  * Get an error message string for a CANT_GET_INTERFACE_LIST error from
  * "get_interface_list()".
  */
-gchar *
+char *
 cant_get_if_list_error_message(const char *err_str)
 {
 	return ws_strdup_printf("Can't get list of interfaces: %s", err_str);
@@ -59,37 +66,22 @@ if_capabilities_t *
 get_if_capabilities_local(interface_options *interface_opts,
     cap_device_open_status *status, char **status_str)
 {
-#ifdef HAVE_PCAP_CREATE
 	return get_if_capabilities_pcap_create(interface_opts, status,
 	    status_str);
-#else
-	return get_if_capabilities_pcap_open_live(interface_opts, status,
-	    status_str);
-#endif
 }
 
 pcap_t *
-open_capture_device_local(capture_options *capture_opts
-#ifndef HAVE_PCAP_CREATE
-	_U_
-#endif
-	,
+open_capture_device_local(capture_options *capture_opts,
     interface_options *interface_opts, int timeout,
     cap_device_open_status *open_status,
     char (*open_status_str)[PCAP_ERRBUF_SIZE])
 {
 	/*
 	 * We're not opening a remote device; use pcap_create() and
-	 * pcap_activate() if we have them, so that we can set various
-	 * options, otherwise use pcap_open_live().
+	 * pcap_activate() so that we can set various options.
 	 */
-#ifdef HAVE_PCAP_CREATE
 	return open_capture_device_pcap_create(capture_opts,
 	    interface_opts, timeout, open_status, open_status_str);
-#else
-	return open_capture_device_pcap_open_live(interface_opts, timeout,
-	    open_status, open_status_str);
-#endif
 }
 
 /*
@@ -148,11 +140,7 @@ gather_caplibs_compile_info(feature_list l)
 #ifdef __linux__
 	/* This is a Linux-specific library. */
 	/* LIBNL */
-#if defined(HAVE_LIBNL1)
-	with_feature(l, "libnl 1");
-#elif defined(HAVE_LIBNL2)
-	with_feature(l, "libnl 2");
-#elif defined(HAVE_LIBNL3)
+#if defined(HAVE_LIBNL3)
 	with_feature(l, "libnl 3");
 #else /* no libnl */
 	without_feature(l, "libnl");
@@ -163,16 +151,7 @@ gather_caplibs_compile_info(feature_list l)
 void
 gather_caplibs_runtime_info(feature_list l)
 {
-	const char *vstr = pcap_lib_version();
-
-	/*
-	 * Remove the substring "version" from the output of pcap_lib_version()
-	 * to be consistent with our format.
-	 */
-	if (g_str_has_prefix(vstr, "libpcap version ")) /* Sanity check */
-		with_feature(l, "libpcap %s", vstr + strlen("libpcap version "));
-	else
-		with_feature(l, "%s", vstr);
+	with_feature(l, "%s", pcap_lib_version());
 }
 
 #else /* HAVE_LIBPCAP */

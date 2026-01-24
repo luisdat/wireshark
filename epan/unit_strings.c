@@ -15,7 +15,7 @@
 #include "unit_strings.h"
 
 /** Returns the unit string appropriate for the 32 bit value. */
-const char* unit_name_string_get_value(guint32 value, const unit_name_string* units)
+const char* unit_name_string_get_value(uint32_t value, const unit_name_string* units)
 {
     if (units->plural == NULL)
         return units->singular;
@@ -24,7 +24,7 @@ const char* unit_name_string_get_value(guint32 value, const unit_name_string* un
 }
 
 /** Returns the unit string appropriate for the 64 bit value. */
-const char* unit_name_string_get_value64(guint64 value, const unit_name_string* units)
+const char* unit_name_string_get_value64(uint64_t value, const unit_name_string* units)
 {
     if (units->plural == NULL)
         return units->singular;
@@ -55,6 +55,10 @@ const unit_name_string units_word_words = { " word", " words" };
 const unit_name_string units_tick_ticks = { " tick", " ticks" };
 const unit_name_string units_meters = { "m", NULL };
 const unit_name_string units_meter_meters = { " meter", " meters" };
+const unit_name_string units_centimeters = { "cm", NULL };
+const unit_name_string units_centimeter_centimeters = { " centimeter", " centimeters" };
+const unit_name_string units_millimeters = { "mm", NULL };
+const unit_name_string units_millimeter_millimeters = { " millimeter", " millimeters" };
 const unit_name_string units_week_weeks = { " week", " weeks" };
 const unit_name_string units_day_days = { " day", " days" };
 const unit_name_string units_hour_hours = { " hour", " hours" };
@@ -70,6 +74,9 @@ const unit_name_string units_microseconds = { UTF8_MICRO_SIGN "s", NULL };
 const unit_name_string units_nanosecond_nanoseconds = { " nanosecond", " nanoseconds" };
 const unit_name_string units_nanoseconds = { "ns", NULL };
 const unit_name_string units_nanometers = { "nm", NULL };
+const unit_name_string units_picoseconds = { "ps", NULL };
+const unit_name_string units_femtoseconds = { "fs", NULL };
+const unit_name_string units_attoseconds = { "as", NULL };
 const unit_name_string units_degree_degrees = { " degree", " degrees" };
 const unit_name_string units_degree_celsius = { UTF8_DEGREE_SIGN "C", NULL };
 const unit_name_string units_degree_bearing = { UTF8_DEGREE_SIGN, NULL };
@@ -77,6 +84,7 @@ const unit_name_string units_centibels = { " cB", NULL };
 const unit_name_string units_decibels = { " dB", NULL };
 const unit_name_string units_dbm = { " dBm", NULL };
 const unit_name_string units_dbi = { " dBi", NULL };
+const unit_name_string units_dbhz = { " dB-Hz", NULL };
 const unit_name_string units_mbm = { " mBm", NULL };
 const unit_name_string units_percent = { "%", NULL };
 const unit_name_string units_khz = { "kHz", NULL };
@@ -91,9 +99,14 @@ const unit_name_string units_pkts = { " pkts", NULL };
 const unit_name_string units_pkts_per_sec = { " pkts/s", NULL };
 const unit_name_string units_km = { "km", NULL };
 const unit_name_string units_kmh = { "km/h", NULL };
+const unit_name_string units_m_s = { "m/s", NULL };
+const unit_name_string units_cm_s = { "cm/s", NULL };
+const unit_name_string units_mm_s = { "mm/s", NULL };
 const unit_name_string units_bit_sec = { "bits/s", NULL };
 const unit_name_string units_milliamps = { "mA", NULL };
-const unit_name_string units_microwatts = { UTF8_MICRO_SIGN "W", NULL };
+const unit_name_string units_watt = { "W", NULL };
+const unit_name_string units_milliwatt = { "mW", NULL };
+const unit_name_string units_microwatt = { UTF8_MICRO_SIGN "W", NULL };
 const unit_name_string units_volt = { "V", NULL };
 const unit_name_string units_grams_per_second = { "g/s", NULL };
 const unit_name_string units_meter_sec = { "m/s", NULL };
@@ -101,14 +114,16 @@ const unit_name_string units_meter_sec_squared = { "m/s" UTF8_SUPERSCRIPT_TWO , 
 const unit_name_string units_segment_remaining = { " segment remaining", " segments remaining" };
 const unit_name_string units_frame_frames = { " frame", " frames" };
 const unit_name_string units_revolutions_per_minute = { "rpm", NULL };
+const unit_name_string units_pascal = { "Pa", NULL };
 const unit_name_string units_kilopascal = { "kPa", NULL };
 const unit_name_string units_newton_metre = { "Nm", NULL };
 const unit_name_string units_liter_per_hour = { "L/h", NULL };
 const unit_name_string units_amp = { "A", NULL };
 const unit_name_string units_watthour = { "Wh", NULL };
-const unit_name_string units_watt = { "W", NULL };
 const unit_name_string units_bpm = { " BPM", NULL };
 const unit_name_string units_calorie = { " cal", NULL };
+const unit_name_string units_cycle_cycles = { " cycle", " cycles" };
+const unit_name_string units_ppm = { " ppm", NULL };
 
 
 /*

@@ -25,6 +25,7 @@
 #include "ui/rtp_stream.h"
 
 #include <QString>
+#include <QUuid>
 
 class QAction;
 class QFont;
@@ -40,6 +41,7 @@ extern "C" {
 
 struct _address;
 struct epan_range;
+struct _e_guid_t;
 
 #ifdef __cplusplus
 }
@@ -61,7 +63,7 @@ struct epan_range;
  *
  * @return A copy of the QString. UTF-8 allocated with g_malloc().
  */
-gchar *qstring_strdup(QString q_string);
+char *qstring_strdup(QString q_string);
 
 /** Transfer ownership of a GLib character string to a newly constructed QString
  *
@@ -70,7 +72,7 @@ gchar *qstring_strdup(QString q_string);
  *
  * @return A QString instance created from the input string.
  */
-QString gchar_free_to_qstring(gchar *glib_string);
+QString gchar_free_to_qstring(char *glib_string);
 
 /** Transfer ownership of a GLib character string to a newly constructed QString
  *
@@ -79,7 +81,7 @@ QString gchar_free_to_qstring(gchar *glib_string);
  *
  * @return A QByteArray instance created from the input string.
  */
-QByteArray gchar_free_to_qbytearray(gchar *glib_string);
+QByteArray gchar_free_to_qbytearray(char *glib_string);
 
 /** Transfer ownership of a GLib character string to a newly constructed QByteArray
  *
@@ -89,6 +91,13 @@ QByteArray gchar_free_to_qbytearray(gchar *glib_string);
  * @return A QByteArray instance created from the input string.
  */
 QByteArray gstring_free_to_qbytearray(GString *glib_gstring);
+
+/** Transfer ownership of a GbyteArray to a newly constructed QByteArray
+ *
+ * @param glib_array A GByteArray or NULL. Will be freed.
+ * @return A QByteArray instance created from the input array.
+ */
+QByteArray gbytearray_free_to_qbytearray(GByteArray *glib_array);
 
 /** Convert an integer to a formatted string representation.
  *
@@ -118,7 +127,7 @@ const QString address_to_qstring(const struct _address *address, bool enclose = 
  */
 const QString address_to_display_qstring(const struct _address *address);
 
-/** Convert a value_string to a QString using val_to_str_wmem().
+/** Convert a value_string to a QString using val_to_str().
  *
  * @param val The value to convert to string.
  * @param vs value_string array.
@@ -126,10 +135,10 @@ const QString address_to_display_qstring(const struct _address *address);
  *
  * @return A QString representation of the value_string.
  */
-const QString val_to_qstring(const guint32 val, const struct _value_string *vs, const char *fmt)
+const QString val_to_qstring(const uint32_t val, const struct _value_string *vs, const char *fmt)
 G_GNUC_PRINTF(3, 0);
 
-/** Convert a value_string_ext to a QString using val_to_str_ext_wmem().
+/** Convert a value_string_ext to a QString using val_to_str_ext().
  *
  * @param val The value to convert to string.
  * @param vse value_string_ext array.
@@ -137,7 +146,7 @@ G_GNUC_PRINTF(3, 0);
  *
  * @return A QString representation of the value_string_ext.
  */
-const QString val_ext_to_qstring(const guint32 val, struct _value_string_ext *vse, const char *fmt)
+const QString val_ext_to_qstring(const uint32_t val, struct _value_string_ext *vse, const char *fmt)
 G_GNUC_PRINTF(3, 0);
 
 /** Convert a range to a QString using range_convert_range().
@@ -162,15 +171,23 @@ const QString bits_s_to_qstring(const double bits_s);
  *
  * @return A QString representation of the file size in SI units.
  */
-const QString file_size_to_qstring(const gint64 size);
+const QString file_size_to_qstring(const int64_t size);
 
 /** Convert a time_t value to a human-readable QString using QDateTime.
  *
  * @param ti_time The value to convert.
  *
- * @return A QString representation of the file size in SI units.
+ * @return A QString representation of the date time value.
  */
 const QString time_t_to_qstring(time_t ti_time);
+
+/** Convert a e_guid_t value to a QUuid.
+ *
+ * @param guid The value to convert.
+ *
+ * @return A QUuid instance created from the e_guid_t.
+ */
+QUuid e_guid_t_to_quuid(const struct _e_guid_t &guid);
 
 /** Escape HTML metacharacters in a string.
  *
@@ -261,7 +278,7 @@ QString make_filter_based_on_rtpstream_id(QVector<rtpstream_id_t *> stream_ids);
  *
  * @return a reference to that directory.
  */
-QString lastOpenDir();
+QString openDialogInitialDir();
 
 /**
  * @brief Store the directory as last directory being used

@@ -24,8 +24,10 @@
 #include <wsutil/interface.h>
 #include <wsutil/file_util.h>
 #include <wsutil/filesystem.h>
+#include <app/application_flavor.h>
 #include <wsutil/privileges.h>
 #include <wsutil/wslog.h>
+#include <wsutil/ws_padding_to.h>
 #include <writecap/pcapio.h>
 #include <wiretap/wtap.h>
 
@@ -50,7 +52,7 @@ enum {
 	OPT_START_FROM
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
 	EXTCAP_BASE_OPTIONS,
 	{ "help", ws_no_argument, NULL, OPT_HELP},
 	{ "version", ws_no_argument, NULL, OPT_VERSION},
@@ -66,10 +68,10 @@ static struct ws_option longopts[] = {
 #define ENTRY_BUF_LENGTH WTAP_MAX_PACKET_SIZE_STANDARD
 #define MAX_EXPORT_ENTRY_LENGTH (ENTRY_BUF_LENGTH - 4 - 4 - 4) // Block type - total length - total length
 
-static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
+static int sdj_dump_entries(sd_journal *jnl, ws_cwstream* fp)
 {
 	int ret = EXIT_SUCCESS;
-	guint8 *entry_buff = g_new(guint8, ENTRY_BUF_LENGTH);
+	uint8_t *entry_buff = g_new(uint8_t, ENTRY_BUF_LENGTH);
 	int jr = 0;
 
 	/*
@@ -81,11 +83,11 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 		uint64_t pkt_rt_ts, mono_ts;
 		sd_id128_t boot_id;
 		char boot_id_str[FLD_BOOT_ID_LEN] = FLD_BOOT_ID;
-		guint32 block_type = BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT;
-		guint32 data_end = 8; // Block type + total length
+		uint32_t block_type = BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT;
+		uint32_t data_end = 8; // Block type + total length
 		const void *fld_data;
 		size_t fld_len;
-		guint64 bytes_written = 0;
+		uint64_t bytes_written = 0;
 		int err;
 
 		memcpy(entry_buff, &block_type, 4);
@@ -105,7 +107,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			ws_warning("Error fetching cursor: %s", g_strerror(jr));
 			goto end;
 		}
-		data_end += snprintf(entry_buff+data_end, MAX_EXPORT_ENTRY_LENGTH-data_end, "__CURSOR=%s\n", cursor);
+		data_end += snprintf((char*)(entry_buff+data_end), MAX_EXPORT_ENTRY_LENGTH-data_end, "__CURSOR=%s\n", cursor);
 		free(cursor);
 
 		jr = sd_journal_get_realtime_usec(jnl, &pkt_rt_ts);
@@ -113,7 +115,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			ws_warning("Error fetching realtime timestamp: %s", g_strerror(jr));
 			goto end;
 		}
-		data_end += snprintf(entry_buff+data_end, MAX_EXPORT_ENTRY_LENGTH-data_end, "__REALTIME_TIMESTAMP=%" PRIu64 "\n", pkt_rt_ts);
+		data_end += snprintf((char*)(entry_buff+data_end), MAX_EXPORT_ENTRY_LENGTH-data_end, "__REALTIME_TIMESTAMP=%" PRIu64 "\n", pkt_rt_ts);
 
 		jr = sd_journal_get_monotonic_usec(jnl, &mono_ts, &boot_id);
 		if (jr < 0) {
@@ -121,16 +123,16 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			goto end;
 		}
 		sd_id128_to_string(boot_id, boot_id_str + strlen(FLD_BOOT_ID));
-		data_end += snprintf(entry_buff+data_end, MAX_EXPORT_ENTRY_LENGTH-data_end, "__MONOTONIC_TIMESTAMP=%" PRIu64 "\n%s\n", mono_ts, boot_id_str);
+		data_end += snprintf((char*)(entry_buff+data_end), MAX_EXPORT_ENTRY_LENGTH-data_end, "__MONOTONIC_TIMESTAMP=%" PRIu64 "\n%s\n", mono_ts, boot_id_str);
 		ws_debug("Entry header is %u bytes", data_end);
 
 		SD_JOURNAL_FOREACH_DATA(jnl, fld_data, fld_len) {
-			guint8 *eq_ptr = (guint8 *) memchr(fld_data, '=', fld_len);
+			uint8_t *eq_ptr = (uint8_t *) memchr(fld_data, '=', fld_len);
 			if (!eq_ptr) {
 				ws_warning("Invalid field.");
 				goto end;
 			}
-			if (g_utf8_validate((const char *) fld_data, (gssize) fld_len, NULL)) {
+			if (g_utf8_validate((const char *) fld_data, (ssize_t) fld_len, NULL)) {
 				// Allow for two trailing newlines, one here and one
 				// at the end of the buffer.
 				if (fld_len > MAX_EXPORT_ENTRY_LENGTH-data_end-2) {
@@ -138,7 +140,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 					break;
 				}
 				memcpy(entry_buff+data_end, fld_data, fld_len);
-				data_end += (guint32) fld_len;
+				data_end += (uint32_t) fld_len;
 				entry_buff[data_end] = '\n';
 				data_end++;
 			} else {
@@ -147,7 +149,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 					ws_debug("Breaking on binary field: %u + %zd", data_end, fld_len);
 					break;
 				}
-				ptrdiff_t name_len = eq_ptr - (const guint8 *) fld_data;
+				ptrdiff_t name_len = eq_ptr - (const uint8_t *) fld_data;
 				uint64_t le_data_len;
 				le_data_len = htole64(fld_len - name_len - 1);
 				memcpy(entry_buff+data_end, fld_data, name_len);
@@ -156,18 +158,18 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 				data_end++;
 				memcpy(entry_buff+data_end, &le_data_len, 8);
 				data_end += 8;
-				memcpy(entry_buff+data_end, (const guint8 *) fld_data + name_len + 1, fld_len - name_len);
+				memcpy(entry_buff+data_end, (const uint8_t *) fld_data + name_len + 1, fld_len - name_len);
 				data_end += fld_len - name_len;
 			}
 		}
 
 		if (data_end % 4) {
-			size_t pad_len = 4 - (data_end % 4);
+			size_t pad_len = WS_PADDING_TO_4(data_end);
 			memset(entry_buff+data_end, '\0', pad_len);
 			data_end += pad_len;
 		}
 
-		guint32 total_len = data_end + 4;
+		uint32_t total_len = data_end + 4;
 		memcpy (entry_buff+4, &total_len, 4);
 		memcpy (entry_buff+data_end, &total_len, 4);
 
@@ -178,7 +180,7 @@ static int sdj_dump_entries(sd_journal *jnl, FILE* fp)
 			break;
 		}
 
-		fflush(fp);
+		ws_cwstream_flush(fp, &err);
 	}
 
 end:
@@ -186,10 +188,10 @@ end:
 	return ret;
 }
 
-static int sdj_start_export(const int start_from_entries, const gboolean start_from_end, const char* fifo)
+static int sdj_start_export(const int start_from_entries, const bool start_from_end, const char* fifo)
 {
-	FILE* fp = stdout;
-	guint64 bytes_written = 0;
+	ws_cwstream* fp = NULL;
+	uint64_t bytes_written = 0;
 	int err;
 	sd_journal *jnl = NULL;
 	sd_id128_t boot_id;
@@ -197,17 +199,23 @@ static int sdj_start_export(const int start_from_entries, const gboolean start_f
 	int ret = EXIT_FAILURE;
 	char* err_info = NULL;
 	char *appname;
-	gboolean success;
+	bool success;
 	int jr = 0;
 
 	if (g_strcmp0(fifo, "-")) {
 		/* Open or create the output file */
-		fp = fopen(fifo, "wb");
+		fp = ws_cwstream_open(fifo, WS_FILE_UNCOMPRESSED, &err);
 		if (fp == NULL) {
 			ws_warning("Error creating output file: %s (%s)", fifo, g_strerror(errno));
 			return EXIT_FAILURE;
 		}
-	}
+	} else {
+		fp = ws_cwstream_open_stdout(WS_FILE_UNCOMPRESSED, &err);
+		if (fp == NULL) {
+			ws_warning("Error opening standard out: %s", g_strerror(errno));
+			return EXIT_FAILURE;
+		}
+        }
 
 
 	appname = ws_strdup_printf(SDJOURNAL_EXTCAP_INTERFACE " (Wireshark) %s.%s.%s",
@@ -299,9 +307,7 @@ cleanup:
 	g_free(err_info);
 
 	/* clean up and exit */
-	if (g_strcmp0(fifo, "-")) {
-		fclose(fp);
-	}
+        ws_cwstream_close(fp, NULL);
 	return ret;
 }
 
@@ -335,14 +341,17 @@ int main(int argc, char **argv)
 	int result;
 	int option_idx = 0;
 	int start_from_entries = 10;
-	gboolean start_from_end = TRUE;
+	bool start_from_end = true;
 	int ret = EXIT_FAILURE;
 	extcap_parameters* extcap_conf = g_new0(extcap_parameters, 1);
 	char* help_url;
 	char* help_header = NULL;
 
+	/* Set the program name. */
+	g_set_prgname("sdjournal");
+
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init("sdjournal");
+	extcap_log_init();
 
 	/*
 	 * Get credential information for later use.
@@ -353,14 +362,14 @@ int main(int argc, char **argv)
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	configuration_init_error = configuration_init(argv[0], NULL);
+	configuration_init_error = configuration_init(argv[0], "wireshark");
 	if (configuration_init_error != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			configuration_init_error);
 		g_free(configuration_init_error);
 	}
 
-	help_url = data_file_url("sdjournal.html");
+	help_url = data_file_url("sdjournal.html", application_configuration_environment_prefix());
 	extcap_base_set_util_info(extcap_conf, argv[0], SDJOURNAL_VERSION_MAJOR, SDJOURNAL_VERSION_MINOR,
 			SDJOURNAL_VERSION_RELEASE, help_url);
 	g_free(help_url);
@@ -411,10 +420,10 @@ int main(int argc, char **argv)
 					goto end;
 				}
 				if (strlen(ws_optarg) > 0 && ws_optarg[0] == '+') {
-					start_from_end = FALSE;
+					start_from_end = false;
 				}
 				if (start_from_entries < 0) {
-					start_from_end = TRUE;
+					start_from_end = true;
 					start_from_entries *= -1;
 				}
 				ws_debug("start %d from %s", start_from_entries, start_from_end ? "end" : "beginning");

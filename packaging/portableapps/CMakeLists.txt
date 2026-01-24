@@ -15,11 +15,7 @@
 # packages. We don't do that because a) we're large and b) we build
 # our 32-bit and 64-bit packages independently in separate pipelines.
 
-if(WIRESHARK_TARGET_PLATFORM STREQUAL "win64")
-	set(PORTABLEAPPS_BITS 64)
-else()
-	message(FATAL_ERROR "Your mysterious moon-man architecture \"${WIRESHARK_TARGET_PLATFORM}\" frightens and confuses us.")
-endif()
+set(PORTABLEAPPS_BITS 64)
 set(PORTABLEAPPS_BITS ${PORTABLEAPPS_BITS} PARENT_SCOPE)
 
 set(PORTABLEAPPS_NAME "${CMAKE_PROJECT_NAME}Portable${PORTABLEAPPS_BITS}")
@@ -44,7 +40,10 @@ macro( ADD_PORTABLEAPPS_PACKAGE_TARGET )
 	set(_wireshark_portableapps_app_dir "${PORTABLEAPPS_LAUNCHER_STAGING_DIR}/App/${CMAKE_PROJECT_NAME}")
 	file(TO_NATIVE_PATH "${_wireshark_portableapps_app_dir}" _wireshark_portableapps_app_dir_native)
 	file(TO_NATIVE_PATH "${DATAFILE_DIR}" _datafile_dir_native)
-	file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/packaging/portableapps/xcopy-deploy-exclude.txt" _xcopy_deploy_exclude)
+	file(TO_NATIVE_PATH "${_wireshark_portableapps_app_dir}/extcap" _wireshark_portableapps_extcap_dir_native)
+	file(TO_NATIVE_PATH "${DATAFILE_DIR}/extcap/${CMAKE_PROJECT_NAME}" _extcap_dir_native)
+	file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/packaging/portableapps/xcopy-deploy-exclude-pdb.txt" _xcopy_deploy_exclude_pdb)
+	file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/packaging/portableapps/xcopy-deploy-exclude-other.txt" _xcopy_deploy_exclude_other)
 
 	add_custom_target(wireshark_portableapps_app_dir
 		# We "Deploy using XCopy," which is described at
@@ -52,7 +51,8 @@ macro( ADD_PORTABLEAPPS_PACKAGE_TARGET )
 		# We also assume that the project has been built at this point.
 		COMMAND ${CMAKE_COMMAND} -E remove_directory ${_wireshark_portableapps_app_dir}
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${_wireshark_portableapps_app_dir}
-		COMMAND xcopy ${_datafile_dir_native} ${_wireshark_portableapps_app_dir_native} /D /I /E /Y /exclude:${_xcopy_deploy_exclude}
+		COMMAND xcopy ${_datafile_dir_native} ${_wireshark_portableapps_app_dir_native} /D /I /E /Y /exclude:${_xcopy_deploy_exclude_pdb}+${_xcopy_deploy_exclude_other}
+		COMMAND xcopy ${_extcap_dir_native} ${_wireshark_portableapps_extcap_dir_native} /D /I /E /Y /exclude:${_xcopy_deploy_exclude_pdb}
 	)
 
 	set_target_properties(wireshark_portableapps_app_dir PROPERTIES
@@ -118,7 +118,7 @@ macro( ADD_PORTABLEAPPS_PACKAGE_TARGET )
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/resources/icons/wireshark.ico ${PORTABLEAPPS_LAUNCHER_STAGING_DIR}/App/AppInfo/appicon.ico
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/resources/icons/wsicon16.png ${PORTABLEAPPS_LAUNCHER_STAGING_DIR}/App/AppInfo/appicon_16.png
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/resources/icons/wsicon32.png ${PORTABLEAPPS_LAUNCHER_STAGING_DIR}/App/AppInfo/appicon_32.png
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/resources/icons/wsicon128.png ${PORTABLEAPPS_LAUNCHER_STAGING_DIR}/App/AppInfo/appicon_128.png
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/resources/icons/wsicon256.png ${PORTABLEAPPS_LAUNCHER_STAGING_DIR}/App/AppInfo/appicon_256.png
 		COMMAND ${PORTABLEAPPS_LAUNCHER_GENERATOR_EXECUTABLE} ${_portableapps_native}
 	)
 

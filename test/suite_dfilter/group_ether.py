@@ -2,13 +2,10 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import unittest
-import fixtures
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
-@fixtures.uses_fixtures
-class case_bytes_ether(unittest.TestCase):
+class TestDfilterEther:
     trace_file = "ipx_rip.pcap"
 
     ### Note: Bytes test does not yet test FT_INT64.

@@ -29,8 +29,8 @@ The cleanup callback:
 Other than that the stats_tree should be registered.
 
 If you want to make it a plugin, stats_tree_register() should be called by
-plugin_register_tap_listener() read README.plugins for other information
-regarding Wireshark plugins.
+plugin_register_tap_listener() read the "Plugins" chapter of the
+Developer's Guide for other information regarding Wireshark plugins.
 
 If you want it as part of the dissector stats_tree_register() can be called
 either by proto_register_xxx() or if you prefer by proto_reg_handoff_xxx().
@@ -58,12 +58,12 @@ A small example of a very basic stats_tree plugin follows.
 #include <epan/dissectors/udp.h>
 
 static int st_udp_term;
-static gchar* st_str_udp_term = "UDP terminations";
+static char* st_str_udp_term = "UDP terminations";
 
 /* this one initializes the tree, creating the root nodes */
 extern void udp_term_stats_tree_init(stats_tree* st) {
 	/* we create a node under which we'll add every termination */
-	st_udp_term = stats_tree_create_node(st, st_str_udp_term, 0, STAT_DT_INT, TRUE);
+	st_udp_term = stats_tree_create_node(st, st_str_udp_term, 0, STAT_DT_INT, true);
 }
 
 /* this one will be called with every udp packet */
@@ -71,33 +71,34 @@ extern tap_packet_status
 udp_term_stats_tree_packet(stats_tree *st, /* st as it was passed to us */
                            packet_info *pinfo,  /* we'll fetch the addresses from here */
                            epan_dissect_t *edt _U_, /* unused */
-                           const void *p) /* we'll use this to fetch the ports */
+                           const void *p, /* we'll use this to fetch the ports */
+                           tap_flags_t flags _U_) /* unused */
 {
-	static guint8 str[128];
+	static uint8_t str[128];
 	e_udphdr* udphdr = (e_udphdr*) p;
 
 	/* we increment by one (tick) the root node */
-	tick_stat_node(st, st_str_udp_term, 0, FALSE);
+	tick_stat_node(st, st_str_udp_term, 0, false);
 
 	/* we then tick a node for this src_addr:src_port
 	   if the node doesn't exists it will be created */
 	snprintf(str, sizeof(str),"%s:%u",address_to_str(&pinfo->net_src),udphdr->sport);
-	tick_stat_node(st, str, st_udp_term, FALSE);
+	tick_stat_node(st, str, st_udp_term, false);
 
 	/* same thing for dst */
 	snprintf(str, sizeof(str),"%s:%u",address_to_str(&pinfo->net_dst),udphdr->dport);
-	tick_stat_node(st, str, st_udp_term, FALSE);
+	tick_stat_node(st, str, st_udp_term, false);
 
 	return 1;
 }
 
-WS_DLL_PUBLIC_DEF const gchar version[] = "0.0";
+WS_DLL_PUBLIC_DEF const char version[] = "0.0";
 
 WS_DLL_PUBLIC_DEF void plugin_register_tap_listener(void) {
 
     stats_tree_register_plugin("udp", /* the proto we are going to "tap" */
                                "udp_terms", /* the abbreviation for this tree (to be used as -z udp_terms,tree) */
-                               st_str_udp_term, /* the name of the menu and window (use "/" for sub menus)*/
+                               st_str_udp_term, /* the name of the menu and window (use "//" for sub menus)*/
                                0, /* tap listener flags for per-packet callback */
                                udp_term_stats_tree_packet, /* the per packet callback */
                                udp_term_stats_tree_init, /* the init callback */
@@ -116,14 +117,43 @@ stats_tree_register(tapname, abbr, name, flags, packet_cb, init_cb, cleanup_cb);
  registers a new stats tree with default group REGISTER_STAT_GROUP_UNSORTED
 
 stats_tree_register_plugin(tapname, abbr, name, flags, packet_cb, init_cb, cleanup_cb);
- registers a new stats tree from a plugin with the default group
+ registers a new stats tree from a plugin with the default group REGISTER_STAT_GROUP_UNSORTED
 
-stats_tree_register_with_group(tapname, abbr, name, flags, packet_cb, init_cb, cleanup_cb, stat_group);
- registers a new stats tree under a particular stat group
+stats_tree_set_group(st_config, stat_group);
+ changes the menu statistics group for a stats tree
 
 stats_tree_parent_id_by_name( st, parent_name)
-  returns the id of a candidate parent node given its name
+ returns the id of a candidate parent node given its name
 
+flags
+is a bitmask set of flags for the tap listener. Generic tap system flags
+(TL_*) described in README.tapping can be used, along with stat tree specific
+flags that control the default sorting, six for choosing the column and one
+for the order:
+
+	ST_SORT_COL_NAME
+		Sort nodes by node names
+	ST_SORT_COL_COUNT
+		Sort nodes by node count
+	ST_SORT_COL_AVG
+		Sort nodes by node average
+	ST_SORT_COL_MIN
+		Sort nodes by minimum node value
+	ST_SORT_COL_MAX
+		Sort nodes by maximum node value
+	ST_SORT_COL_BURSTRATE
+		Sort nodes by burst rate
+
+	ST_FLG_SORT_DESC
+		Sort nodes in descending order using the chosen column
+                The default if only a column is given is to use ascending
+                order
+
+The sort column flags need to be left shifted by ST_FLG_SRTCOL_SHIFT when
+registering. If no sort columns flags are given, values from the preferences
+(found in the "Statistics" module) are used for both column and order. The
+default preferences are to sort in descending order of node count, i.e.,
+(ST_SORT_COL_COUNT << ST_FLG_SRTCOL_SHIFT) | ST_FLG_SORT_DESC
 
 Node functions
 ==============
@@ -136,7 +166,7 @@ stats_tree_create_node(st, name, parent_id, datatype, with_children)
     parent_id: the id of the parent_node (NULL for root)
     datatype: datatype of the new node, STAT_DT_INT or STAT_DT_FLOAT. The only
               methods implemented for floats are averages.
-    with_children: TRUE if this node will have "dynamically created" children
+    with_children: true if this node will have "dynamically created" children
                    (i.e. it will be a candidate parent)
 
 
@@ -214,7 +244,9 @@ stat_node_clear_flags functions. Currently these flags are defined:
 	ST_FLG_DEF_NOEXPAND: By default the top-level nodes in a tree are
 			automatically expanded in the GUI. Setting this flag on
 			such a node prevents the node from automatically
-			expanding.
+			expanding. (However, if there are fewer than some fixed
+			total number of nodes, currently 100, in the tree, then
+			all the nodes will be expanded anyway.)
 	ST_FLG_SORT_TOP: Nodes with this flag is sorted separately from nodes
 			without this flag (in effect partitioning tree into a top
 			and bottom half. Each half is sorted normally. Top always

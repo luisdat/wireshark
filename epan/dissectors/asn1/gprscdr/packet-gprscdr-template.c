@@ -17,6 +17,7 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-gsm_map.h"
@@ -33,24 +34,25 @@
 void proto_register_gprscdr(void);
 
 /* Define the GPRS CDR proto */
-static int proto_gprscdr = -1;
+static int proto_gprscdr;
 
 #include "packet-gprscdr-hf.c"
 
-static int ett_gprscdr = -1;
-static int ett_gprscdr_timestamp = -1;
-static int ett_gprscdr_plmn_id = -1;
-static int ett_gprscdr_pdp_pdn_type = -1;
-static int ett_gprscdr_eps_qos_arp = -1;
-static int ett_gprscdr_managementextension_information = -1;
-static int ett_gprscdr_userlocationinformation = -1;
+static int ett_gprscdr;
+static int ett_gprscdr_timestamp;
+static int ett_gprscdr_plmn_id;
+static int ett_gprscdr_pdp_pdn_type;
+static int ett_gprscdr_eps_qos_arp;
+static int ett_gprscdr_managementextension_information;
+static int ett_gprscdr_userlocationinformation;
 #include "packet-gprscdr-ett.c"
 
-static expert_field ei_gprscdr_not_dissected = EI_INIT;
-static expert_field ei_gprscdr_choice_not_found = EI_INIT;
+static expert_field ei_gprscdr_not_dissected;
+static expert_field ei_gprscdr_choice_not_found;
+static expert_field ei_gprscdr_timestamp_wrong_format;
 
 /* Global variables */
-static const char *obj_id = NULL;
+static const char *obj_id;
 
 static const value_string gprscdr_daylight_saving_time_vals[] = {
     {0, "No adjustment"},
@@ -86,7 +88,7 @@ static const value_string gprscdr_rat_type_vals[] = {
 static int
 dissect_gprscdr_uli(tvbuff_t *tvb _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int type) {
   proto_tree *ext_tree_uli;
-  guint       length;
+  unsigned    length;
 
   length = tvb_reported_length(tvb);
   ext_tree_uli = proto_tree_add_subtree(tree, tvb, 0, length, ett_gprscdr_userlocationinformation, NULL, "UserLocationInformation");
@@ -128,7 +130,7 @@ proto_register_gprscdr(void)
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_gprscdr,
     &ett_gprscdr_timestamp,
     &ett_gprscdr_plmn_id,
@@ -142,6 +144,7 @@ proto_register_gprscdr(void)
   static ei_register_info ei[] = {
     { &ei_gprscdr_not_dissected, { "gprscdr.not_dissected", PI_UNDECODED, PI_WARN, "Not dissected", EXPFILL }},
     { &ei_gprscdr_choice_not_found, { "gprscdr.error.choice_not_found", PI_MALFORMED, PI_WARN, "GPRS CDR Error: This choice field(Record type) was not found", EXPFILL }},
+    { &ei_gprscdr_timestamp_wrong_format, { "gprscdr.timestamp.wrong_format", PI_MALFORMED, PI_ERROR, "Bad TimeStamp format", EXPFILL }},
   };
 
   expert_module_t* expert_gprscdr;

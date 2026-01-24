@@ -19,6 +19,7 @@
 #include <wsutil/utf8_entities.h>
 #include <wsutil/wslog.h>
 
+#include <ui/qt/main_window.h>
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "main_application.h"
 
@@ -27,7 +28,6 @@
 #include <QMessageBox>
 #include <QMutex>
 #include <QRegularExpression>
-#include <QTextCodec>
 
 /* Simple dialog function - Displays a dialog box with the supplied message
  * text.
@@ -42,10 +42,10 @@
  * ...        : Argument list for msg_format
  */
 
+typedef QPair<QString,QString> MessagePair;
+
 QList<MessagePair> message_queue_;
 ESD_TYPE_E max_severity_ = ESD_TYPE_INFO;
-
-const char *primary_delimiter_ = "__CB754A38-94A2-4E59-922D-DD87EDC80E22__";
 
 struct VisibleAsyncMessage
 {
@@ -74,24 +74,14 @@ static void visible_message_finished(QMessageBox *box, int result _U_)
     visible_messages_mutex.unlock();
 }
 
-const char *
-simple_dialog_primary_start(void) {
-    return primary_delimiter_;
-}
-
-const char *
-simple_dialog_primary_end(void) {
-    return primary_delimiter_;
-}
-
 char *
 simple_dialog_format_message(const char *msg)
 {
     return g_strdup(msg);
 }
 
-gpointer
-simple_dialog(ESD_TYPE_E type, gint btn_mask, const gchar *msg_format, ...)
+void *
+simple_dialog(ESD_TYPE_E type, int btn_mask, const char *msg_format, ...)
 {
     va_list ap;
 
@@ -103,8 +93,8 @@ simple_dialog(ESD_TYPE_E type, gint btn_mask, const gchar *msg_format, ...)
     return NULL;
 }
 
-gpointer
-simple_dialog_async(ESD_TYPE_E type, gint btn_mask, const gchar *msg_format, ...)
+void *
+simple_dialog_async(ESD_TYPE_E type, int btn_mask, const char *msg_format, ...)
 {
     va_list ap;
 
@@ -121,7 +111,7 @@ simple_dialog_async(ESD_TYPE_E type, gint btn_mask, const gchar *msg_format, ...
  * and checkbox, and optional secondary text.
  */
 void
-simple_message_box(ESD_TYPE_E type, gboolean *notagain,
+simple_message_box(ESD_TYPE_E type, bool *notagain,
                    const char *secondary_msg, const char *msg_format, ...)
 {
     if (notagain && *notagain) {
@@ -131,10 +121,8 @@ simple_message_box(ESD_TYPE_E type, gboolean *notagain,
     va_list ap;
 
     va_start(ap, msg_format);
-    SimpleDialog sd(mainApp->mainWindow(), type, ESD_BTN_OK, msg_format, ap);
+    SimpleDialog sd(mainApp->mainWindow(), type, ESD_BTN_OK, msg_format, ap, secondary_msg);
     va_end(ap);
-
-    sd.setDetailedText(secondary_msg);
 
     QCheckBox *cb = NULL;
     if (notagain) {
@@ -160,7 +148,7 @@ vsimple_error_message_box(const char *msg_format, va_list ap)
 #ifdef HAVE_LIBPCAP
     // We want to quit after reading the capture file, hence
     // we don't actually open the error dialog.
-    if (global_commandline_info.quit_after_cap)
+    if (commandline_is_quit_after_capture())
         exit(0);
 #endif
 
@@ -177,7 +165,7 @@ vsimple_warning_message_box(const char *msg_format, va_list ap)
 #ifdef HAVE_LIBPCAP
     // We want to quit after reading the capture file, hence
     // we don't actually open the error dialog.
-    if (global_commandline_info.quit_after_cap)
+    if (commandline_is_quit_after_capture())
         exit(0);
 #endif
 
@@ -198,11 +186,11 @@ simple_error_message_box(const char *msg_format, ...)
     va_end(ap);
 }
 
-SimpleDialog::SimpleDialog(QWidget *parent, ESD_TYPE_E type, int btn_mask, const char *msg_format, va_list ap) :
+SimpleDialog::SimpleDialog(QWidget *parent, ESD_TYPE_E type, int btn_mask, const char *msg_format, va_list ap, QString secondary) :
     check_box_(0),
     message_box_(0)
 {
-    gchar *vmessage;
+    char *vmessage;
     QString message;
 
     vmessage = ws_strdup_vprintf(msg_format, ap);
@@ -216,15 +204,16 @@ SimpleDialog::SimpleDialog(QWidget *parent, ESD_TYPE_E type, int btn_mask, const
 #else
     //
     // On UN*X, who knows?  Assume the locale's encoding.
+    // Note on Qt 6 the process locale encoding is always UTF-8 and this
+    // is the same as above.
     //
-    message = QTextCodec::codecForLocale()->toUnicode(vmessage);
+    message = QString().fromLocal8Bit(vmessage, -1);
 #endif
     g_free(vmessage);
 
-    MessagePair msg_pair = splitMessage(message);
     // Remove leading and trailing whitespace along with excessive newline runs.
-    QString primary = msg_pair.first.trimmed();
-    QString secondary = msg_pair.second.trimmed();
+    QString primary = message.trimmed();
+    secondary = secondary.trimmed();
     secondary.replace(QRegularExpression("\n\n+"), "\n\n");
 
     if (primary.isEmpty()) {
@@ -232,7 +221,11 @@ SimpleDialog::SimpleDialog(QWidget *parent, ESD_TYPE_E type, int btn_mask, const
     }
 
     if (!parent || !mainApp->isInitialized() || mainApp->isReloadingLua()) {
-        message_queue_ << msg_pair;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        message_queue_.emplaceBack(primary, secondary);
+#else
+        message_queue_ << MessagePair(primary, secondary);
+#endif
         if (type > max_severity_) {
             max_severity_ = type;
         }
@@ -286,7 +279,12 @@ SimpleDialog::SimpleDialog(QWidget *parent, ESD_TYPE_E type, int btn_mask, const
 
 
     message_box_->setText(primary);
-    message_box_->setInformativeText(secondary);
+    // This used to be DetailedText, which is broken on Qt6.5 for macOS:
+    // https://bugreports.qt.io/browse/QTBUG-118992
+    // It might make sense to send very long messages to DetailedText,
+    // at least on versions that work, or have an explicit tertiary text.
+    // https://gitlab.com/wireshark/wireshark/-/issues/20573
+    setInformativeText(secondary);
 }
 
 SimpleDialog::~SimpleDialog()
@@ -356,12 +354,14 @@ int SimpleDialog::exec()
         return 0;
     }
 
+    message_box_->setInformativeText(informative_text_);
     message_box_->setDetailedText(detailed_text_);
     message_box_->setCheckBox(check_box_);
 
     int status = message_box_->exec();
     delete message_box_;
     message_box_ = 0;
+    informative_text_ = QString();
     detailed_text_ = QString();
 
     switch (status) {
@@ -387,6 +387,7 @@ void SimpleDialog::show()
         return;
     }
 
+    message_box_->setInformativeText(informative_text_);
     message_box_->setDetailedText(detailed_text_);
     message_box_->setCheckBox(check_box_);
 
@@ -426,25 +427,4 @@ void SimpleDialog::show()
 
     /* Message box was shown and will be deleted once user closes it */
     message_box_ = 0;
-}
-
-const MessagePair SimpleDialog::splitMessage(QString &message) const
-{
-    if (message.startsWith(primary_delimiter_)) {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-        QStringList parts = message.split(primary_delimiter_, Qt::SkipEmptyParts);
-#else
-        QStringList parts = message.split(primary_delimiter_, QString::SkipEmptyParts);
-#endif
-        switch (parts.length()) {
-        case 0:
-            return MessagePair(QString(), QString());
-        case 1:
-            return MessagePair(parts[0], QString());
-        default:
-            QString first = parts.takeFirst();
-            return MessagePair(first, parts.join(" "));
-        }
-    }
-    return MessagePair(message, QString());
 }

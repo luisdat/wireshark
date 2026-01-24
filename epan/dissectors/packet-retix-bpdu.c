@@ -12,26 +12,19 @@
 
 #include "config.h"
 
-#if 0
-#endif
 #include <epan/packet.h>
-#if 0
-#include <epan/llcsaps.h>
-#include <epan/ppptypes.h>
-#include <epan/chdlctypes.h>
-#endif
 #include <epan/addr_resolv.h>
 
 void proto_register_retix_bpdu(void);
 
-static gint ett_retix_bpdu = -1;
-static int proto_retix_bpdu = -1;
+static int ett_retix_bpdu;
+static int proto_retix_bpdu;
 
-static int hf_retix_bpdu_root_mac = -1;
-static int hf_retix_bpdu_bridge_mac = -1;
-static int hf_retix_bpdu_max_age = -1;
-static int hf_retix_bpdu_hello_time = -1;
-static int hf_retix_bpdu_forward_delay = -1;
+static int hf_retix_bpdu_root_mac;
+static int hf_retix_bpdu_bridge_mac;
+static int hf_retix_bpdu_max_age;
+static int hf_retix_bpdu_hello_time;
+static int hf_retix_bpdu_forward_delay;
 
 /* I don't have the spec's for this protcol so it's been reverse engineered
  * It seems quite like 802.1D
@@ -90,7 +83,7 @@ proto_register_retix_bpdu(void)
     NULL, HFILL}},
   };
 
-  static gint *ett[] ={
+  static int *ett[] ={
     &ett_retix_bpdu,
   };
 

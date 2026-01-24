@@ -11,18 +11,18 @@
 
 
 /* This code is based on the DOCSIS 1.1 specification available at:
- * http://www.cablelabs.com/wp-content/uploads/specdocs/CM-SP-RFIv1.1-C01-050907.pdf
+ * https://www.cablelabs.com/specifications/radio-frequency-interface-specification
  *
  * This code was updated to include DOCSIS 3.1 specification details available at:
- * http://www.cablelabs.com/wp-content/uploads/specdocs/CM-SP-MULPIv3.1-I09-160602.pdf
+ * https://www.cablelabs.com/specifications/CM-SP-MULPIv3.1
  *
- * Updates are backward compatible with previous DOCSIS spcifications.
+ * Updates are backward compatible with previous DOCSIS specifications.
  *
  * DOCSIS Captures can be facilitated using the Cable Monitor Feature
  * available on Cisco Cable Modem Termination Systems:
  * https://www.cisco.com/c/en/us/td/docs/cable/cmts/config_guide/b_cmts_security_and_cable_monitoring_features/b_cmts_security_and_cable_monitoring_features_chapter_010.html
  *
- * This dissector depends on the presence of a DOCSIS enapsulation type.
+ * This dissector depends on the presence of a DOCSIS encapsulation type.
  * There is no simple way to distinguish DOCSIS Frames from Ethernet frames,
  * since the frames are copied from the RF interface on the CMTS to
  * a Fast Ethernet interface; thus a preference was needed to enable
@@ -44,8 +44,8 @@
 #include <epan/prefs.h>
 #include <epan/reassemble.h>
 #include <epan/addr_resolv.h>
-#include <wiretap/wtap.h>
 #include <epan/exceptions.h>
+#include <epan/tfs.h>
 #include <epan/crc16-tvb.h>
 #include <epan/crc32-tvb.h>
 
@@ -53,13 +53,13 @@ void proto_register_docsis(void);
 void proto_reg_handoff_docsis(void);
 
 /* Assume all packets have an FCS */
-static gboolean docsis_check_fcs = TRUE;
-static gboolean docsis_dissect_encrypted_frames = FALSE;
+static bool docsis_check_fcs = true;
+static bool docsis_dissect_encrypted_frames;
 
 #define DOCSIS_MIN_HEADER_LEN   6
 
 #define FCTYPE_PACKET   0x00
-#define FCTYPE_RESERVED 0x01
+#define FCTYPE_SPECIAL  0x01
 #define FCTYPE_ISOLAT   0x02
 #define FCTYPE_MACSPC   0x03
 
@@ -96,92 +96,95 @@ static gboolean docsis_dissect_encrypted_frames = FALSE;
 #define EH_EXTENDED         15
 
 /* Initialize the protocol and registered fields */
-static int proto_docsis = -1;
-static int hf_docsis_fctype = -1;
-static int hf_docsis_machdr_fcparm = -1;
-static int hf_docsis_fcparm = -1;
-static int hf_docsis_exthdr = -1;
-static int hf_docsis_concat_cnt = -1;
-static int hf_docsis_macparm = -1;
-static int hf_docsis_ehdrlen = -1;
-static int hf_docsis_len = -1;
-static int hf_docsis_eh_type = -1;
-static int hf_docsis_eh_len = -1;
-static int hf_docsis_eh_val = -1;
-static int hf_docsis_frag_rsvd = -1;
-static int hf_docsis_frag_first = -1;
-static int hf_docsis_frag_last = -1;
-static int hf_docsis_frag_seq = -1;
-static int hf_docsis_sid = -1;
-static int hf_docsis_mini_slots = -1;
-static int hf_docsis_requested_size = -1;
-static int hf_docsis_hcs = -1;
-static int hf_docsis_hcs_status = -1;
-static int hf_docsis_bpi_en = -1;
-static int hf_docsis_toggle_bit = -1;
-static int hf_docsis_key_seq = -1;
-static int hf_docsis_ehdr_ver = -1;
-static int hf_docsis_said = -1;
-static int hf_docsis_ehdr_phsi = -1;
-static int hf_docsis_ehdr_qind = -1;
-static int hf_docsis_ehdr_grants = -1;
-static int hf_docsis_reserved = -1;
-static int hf_docsis_ehdr_ds_traffic_pri = -1;
-static int hf_docsis_ehdr_ds_seq_chg_cnt = -1;
-static int hf_docsis_ehdr_ds_dsid = -1;
-static int hf_docsis_ehdr_ds_pkt_seq_num = -1;
-static int hf_docsis_ehdr_bpup2_bpi_en = -1;
-static int hf_docsis_ehdr_bpup2_toggle_bit = -1;
-static int hf_docsis_ehdr_bpup2_key_seq = -1;
-static int hf_docsis_ehdr_bpup2_ver = -1;
-static int hf_docsis_ehdr_bpup2_sid = -1;
-static int hf_docsis_ehdr_pv_st_refpt = -1;
-static int hf_docsis_ehdr_pv_timestamp = -1;
+static int proto_docsis;
+static int hf_docsis_fctype;
+static int hf_docsis_machdr_fcparm;
+static int hf_docsis_fcparm;
+static int hf_docsis_exthdr;
+static int hf_docsis_concat_cnt;
+static int hf_docsis_macparm;
+static int hf_docsis_ehdrlen;
+static int hf_docsis_len;
+static int hf_docsis_eh_type;
+static int hf_docsis_eh_len;
+static int hf_docsis_eh_val;
+static int hf_docsis_ehx_type;
+static int hf_docsis_ehx_len;
+static int hf_docsis_frag_rsvd;
+static int hf_docsis_frag_first;
+static int hf_docsis_frag_last;
+static int hf_docsis_frag_seq;
+static int hf_docsis_sid;
+static int hf_docsis_mini_slots;
+static int hf_docsis_requested_size;
+static int hf_docsis_hcs;
+static int hf_docsis_hcs_status;
+static int hf_docsis_bpi_en;
+static int hf_docsis_toggle_bit;
+static int hf_docsis_key_seq;
+static int hf_docsis_ehdr_ver;
+static int hf_docsis_said;
+static int hf_docsis_ehdr_phsi;
+static int hf_docsis_ehdr_qind;
+static int hf_docsis_ehdr_grants;
+static int hf_docsis_reserved;
+static int hf_docsis_ehdr_ds_traffic_pri;
+static int hf_docsis_ehdr_ds_seq_chg_cnt;
+static int hf_docsis_ehdr_ds_dsid;
+static int hf_docsis_ehdr_ds_pkt_seq_num;
+static int hf_docsis_ehdr_bpup2_bpi_en;
+static int hf_docsis_ehdr_bpup2_toggle_bit;
+static int hf_docsis_ehdr_bpup2_key_seq;
+static int hf_docsis_ehdr_bpup2_ver;
+static int hf_docsis_ehdr_bpup2_sid;
+static int hf_docsis_ehdr_pv_st_refpt;
+static int hf_docsis_ehdr_pv_timestamp;
 
-static int hf_docsis_fragments = -1;
-static int hf_docsis_fragment = -1;
-static int hf_docsis_fragment_overlap = -1;
-static int hf_docsis_fragment_overlap_conflict = -1;
-static int hf_docsis_fragment_multiple_tails = -1;
-static int hf_docsis_fragment_too_long_fragment = -1;
-static int hf_docsis_fragment_error = -1;
-static int hf_docsis_fragment_count = -1;
-static int hf_docsis_reassembled_in = -1;
-static int hf_docsis_reassembled_length = -1;
-static int hf_docsis_reassembled_data = -1;
-static int hf_docsis_frag_fcs = -1;
-static int hf_docsis_frag_fcs_status = -1;
+static int hf_docsis_fragments;
+static int hf_docsis_fragment;
+static int hf_docsis_fragment_overlap;
+static int hf_docsis_fragment_overlap_conflict;
+static int hf_docsis_fragment_multiple_tails;
+static int hf_docsis_fragment_too_long_fragment;
+static int hf_docsis_fragment_error;
+static int hf_docsis_fragment_count;
+static int hf_docsis_reassembled_in;
+static int hf_docsis_reassembled_length;
+static int hf_docsis_reassembled_data;
+static int hf_docsis_frag_fcs;
+static int hf_docsis_frag_fcs_status;
 
-static int hf_docsis_dst = -1;
-static int hf_docsis_dst_resolved = -1;
-static int hf_docsis_src = -1;
-static int hf_docsis_src_resolved = -1;
-static int hf_docsis_lg = -1;
-static int hf_docsis_ig = -1;
-static int hf_docsis_encrypted_payload = -1;
+static int hf_docsis_dst;
+static int hf_docsis_dst_resolved;
+static int hf_docsis_src;
+static int hf_docsis_src_resolved;
+static int hf_docsis_lg;
+static int hf_docsis_ig;
+static int hf_docsis_encrypted_payload;
 
 static dissector_handle_t docsis_handle;
-static dissector_handle_t eth_withoutfcs_handle;
+static dissector_handle_t eth_maybefcs_handle;
 static dissector_handle_t docsis_mgmt_handle;
 #if 0
 static dissector_table_t docsis_dissector_table;
 #endif
 
-static expert_field ei_docsis_hcs_bad = EI_INIT;
-static expert_field ei_docsis_len = EI_INIT;
-static expert_field ei_docsis_frag_fcs_bad = EI_INIT;
-static expert_field ei_docsis_eh_len = EI_INIT;
+static expert_field ei_docsis_hcs_bad;
+static expert_field ei_docsis_len;
+static expert_field ei_docsis_len_small;
+static expert_field ei_docsis_frag_fcs_bad;
+static expert_field ei_docsis_eh_len;
 
 /* Initialize the subtree pointers */
-static gint ett_docsis = -1;
-static gint ett_ehdr = -1;
-static gint ett_docsis_fragments = -1;
-static gint ett_docsis_fragment = -1;
-static gint ett_addr = -1;
+static int ett_docsis;
+static int ett_ehdr;
+static int ett_docsis_fragments;
+static int ett_docsis_fragment;
+static int ett_addr;
 
 static const value_string fctype_vals[] = {
   {FCTYPE_PACKET,   "Packet PDU"},
-  {FCTYPE_RESERVED, "Reserved"},
+  {FCTYPE_SPECIAL,  "Special Use"},
   {FCTYPE_ISOLAT,   "Isolation PDU"},
   {FCTYPE_MACSPC,   "MAC Specific"},
   {0, NULL}
@@ -228,16 +231,6 @@ static const true_false_string exthdr_tfs = {
   "Extended Header Absent"
 };
 
-
-static const value_string local_proto_checksum_vals[] = {
-  { PROTO_CHECKSUM_E_BAD,        "Bad"  },
-  { PROTO_CHECKSUM_E_GOOD,       "Good" },
-  { PROTO_CHECKSUM_E_UNVERIFIED, "Unverified" },
-  { PROTO_CHECKSUM_E_NOT_PRESENT, "Not present" },
-
-  { 0,        NULL }
-};
-
 static const true_false_string qind_tfs = {
   "Rate overrun",
   "Rate non-overrun"
@@ -254,9 +247,9 @@ static const value_string unique_no_phs[] = {
 };
 
 /* Fragmentation Flags / Sequence */
-static guint8 frag_flags;
-static guint8 frag_seq;
-static guint16 frag_sid;
+static uint8_t frag_flags;
+static uint8_t frag_seq;
+static uint16_t frag_sid;
 
 /*
  * Defragmentation of DOCSIS
@@ -284,24 +277,24 @@ static const fragment_items docsis_frag_items = {
 /* Dissection */
 /* Code to Dissect the extended header; TLV Formatted headers */
 static void
-dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *is_encrypted)
+dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, bool *is_encrypted)
 {
   proto_tree *ehdr_tree;
   proto_item *eh_length_item;
-  gint ehdrlen;
+  int ehdrlen;
   int pos;
-  guint8 type;
-  guint8 len;
+  uint8_t type;
+  uint8_t len;
 
-  ehdrlen = tvb_get_guint8 (tvb, 1);
+  ehdrlen = tvb_get_uint8 (tvb, 1);
   pos = 4;
 
   ehdr_tree = proto_tree_add_subtree(tree, tvb, pos, ehdrlen, ett_ehdr, NULL, "Extended Header");
 
   while (pos < ehdrlen + 4)
   {
-    type = (tvb_get_guint8 (tvb, pos) & 0xF0);
-    len = (tvb_get_guint8 (tvb, pos) & 0x0F);
+    type = (tvb_get_uint8 (tvb, pos) & 0xF0);
+    len = (tvb_get_uint8 (tvb, pos) & 0x0F);
     if ((((type >> 4) & 0x0F)== 6) && (len == 2))
     {
       proto_tree_add_uint_format_value(ehdr_tree, hf_docsis_eh_type, tvb, pos, 1, 0x60, "Unsolicited Grant Sync EHDR Sub-Element");
@@ -312,7 +305,7 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
     }
 
     eh_length_item = proto_tree_add_item (ehdr_tree, hf_docsis_eh_len, tvb, pos, 1, ENC_BIG_ENDIAN);
-
+    pos++;
 
     switch ((type >> 4) & 0x0F)
     {
@@ -320,8 +313,8 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
         /* Request: Minislots Requested */
         if (len == 3)
         {
-          proto_tree_add_item(ehdr_tree, hf_docsis_mini_slots, tvb, pos + 1, 1, ENC_NA);
-          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos + 2, 2, ENC_BIG_ENDIAN);
+          proto_tree_add_item(ehdr_tree, hf_docsis_mini_slots, tvb, pos, 1, ENC_NA);
+          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos + 1, 2, ENC_BIG_ENDIAN);
         }
         else
         {
@@ -333,7 +326,7 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
         /* Deprecated in DOCSIS 3.1 */
         if (len == 2)
         {
-          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos + 1, 2, ENC_BIG_ENDIAN);
+          proto_tree_add_item(ehdr_tree, hf_docsis_sid, tvb, pos, 2, ENC_BIG_ENDIAN);
         }
         else
         {
@@ -343,141 +336,141 @@ dissect_ehdr (tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, gboolean *
         break;
       case EH_BP_UP:
         /* Upstream Privacy EH Element or Upstream Privacy with fragmentation */
-        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 2, 1,
+        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 1, 1,
                              ENC_BIG_ENDIAN, is_encrypted);
-        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 1,
                              1, ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_sid, tvb, pos + 2, 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_sid, tvb, pos + 1, 2,
                              ENC_BIG_ENDIAN);
-        frag_sid = tvb_get_guint8 (tvb, pos+2) & 0xCFFF;
-        proto_tree_add_item (ehdr_tree, hf_docsis_mini_slots, tvb, pos + 4,
+        frag_sid = tvb_get_uint8 (tvb, pos+1) & 0xCFFF;
+        proto_tree_add_item (ehdr_tree, hf_docsis_mini_slots, tvb, pos + 3,
                              1, ENC_BIG_ENDIAN);
         if (pinfo->fragmented)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_rsvd, tvb, pos+5,
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_rsvd, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
-          frag_flags = tvb_get_guint8 (tvb, pos+5) & 0x30;
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_first, tvb, pos+5,
+          frag_flags = tvb_get_uint8 (tvb, pos+4) & 0x30;
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_first, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_last, tvb, pos+5,
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_last, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
-          frag_seq = tvb_get_guint8 (tvb, pos+5) & 0x0F;
-          proto_tree_add_item (ehdr_tree, hf_docsis_frag_seq, tvb, pos+5,
+          frag_seq = tvb_get_uint8 (tvb, pos+4) & 0x0F;
+          proto_tree_add_item (ehdr_tree, hf_docsis_frag_seq, tvb, pos+4,
                                1, ENC_BIG_ENDIAN);
         }
         break;
       case EH_BP_DOWN:
         /* Downstream Privacy EH Element */
-        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_key_seq, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ver, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 2, 1,
+        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_bpi_en, tvb, pos + 1, 1,
                              ENC_BIG_ENDIAN, is_encrypted);
-        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_toggle_bit, tvb, pos + 1,
                              1, ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_said, tvb, pos + 2, 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_said, tvb, pos + 1, 2,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_reserved, tvb, pos + 4, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_reserved, tvb, pos + 3, 1,
                              ENC_BIG_ENDIAN);
         break;
       case EH_SFLOW_HDR_DOWN:
         /* Deprecated in DOCSIS 3.1, was Downstream Service Flow EH Element in earlier revisions */
       case EH_SFLOW_HDR_UP:
         /* Deprecated in DOCSIS 3.1, was Upstream Service Flow EH Element in earlier revisions */
-        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_phsi, tvb, pos+1, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_phsi, tvb, pos, 1, ENC_BIG_ENDIAN);
 
         if (len == 2)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_qind, tvb, pos+2, 1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_grants, tvb, pos+2, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_qind, tvb, pos+1, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_grants, tvb, pos+1, 1, ENC_BIG_ENDIAN);
         }
         break;
       case EH_BP_UP2:
         /* Upstream Privacy EH Element, version 2, with no piggyback request */
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_key_seq, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_key_seq, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_ver, tvb, pos + 1, 1,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_ver, tvb, pos, 1,
                              ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_ehdr_bpup2_bpi_en, tvb, pos + 2, 1,
+        proto_tree_add_item_ret_boolean (ehdr_tree, hf_docsis_ehdr_bpup2_bpi_en, tvb, pos + 1, 1,
                              ENC_BIG_ENDIAN, is_encrypted);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_toggle_bit, tvb, pos + 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_toggle_bit, tvb, pos + 1,
                              1, ENC_BIG_ENDIAN);
-        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_sid, tvb, pos + 2, 2,
+        proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_bpup2_sid, tvb, pos + 1, 2,
                              ENC_BIG_ENDIAN);
         break;
       case EH_DS_SERVICE:
         /* Downstream Service EH Element */
-        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_ds_traffic_pri, tvb, pos+1, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item(ehdr_tree, hf_docsis_ehdr_ds_traffic_pri, tvb, pos, 1, ENC_BIG_ENDIAN);
 
         if (len == 3)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos+1, 3, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos, 3, ENC_BIG_ENDIAN);
         }
 
         if (len == 5)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_seq_chg_cnt, tvb, pos+1, 1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos+1, 3, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_pkt_seq_num, tvb, pos+4, 2, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_seq_chg_cnt, tvb, pos, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_dsid, tvb, pos, 3, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_ds_pkt_seq_num, tvb, pos+3, 2, ENC_BIG_ENDIAN);
         }
         break;
       case EH_PATH_VERIFY:
         /* Path Verify EH Element */
         if (len == 5)
         {
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_st_refpt, tvb, pos+1, 1, ENC_BIG_ENDIAN);
-          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_timestamp, tvb, pos+2, 4, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_st_refpt, tvb, pos, 1, ENC_BIG_ENDIAN);
+          proto_tree_add_item (ehdr_tree, hf_docsis_ehdr_pv_timestamp, tvb, pos+1, 4, ENC_BIG_ENDIAN);
         }
         break;
       case EH_EXTENDED:
-        /* Extended EH Element, one or more Sub EH fields may follow; simply recurse */
-        {
-            tvbuff_t *subset = tvb_new_subset_remaining(tvb, pos);
-            dissect_ehdr (subset, ehdr_tree, pinfo, is_encrypted);
-        }
-        break;
+        /* Extended EH Element, ignore eh_len */
+        proto_tree_add_item(ehdr_tree, hf_docsis_ehx_type, tvb, pos, 1, ENC_NA);
+        pos++;
+        proto_tree_add_item_ret_uint8(ehdr_tree, hf_docsis_ehx_len, tvb, pos, 1, ENC_NA, &len);
+        pos++;
+        /* FALLTHROUGH */
       default:
         if (len > 0)
-          proto_tree_add_item (ehdr_tree, hf_docsis_eh_val, tvb, pos + 1,
+          proto_tree_add_item (ehdr_tree, hf_docsis_eh_val, tvb, pos,
                                len, ENC_NA);
     }
-    pos += len + 1;
+    pos += len;
   }
 
   return;
 }
 
 /* Code to Dissect the Header Check Sequence field */
-/* Return FALSE in case FCS validation is enabled, but FCS is incorrect */
-/* Return TRUE in all other cases */
-static gboolean
-dissect_hcs_field (tvbuff_t * tvb, packet_info * pinfo, proto_tree * docsis_tree, gint hdrlen)
+/* Return false in case FCS validation is enabled, but FCS is incorrect */
+/* Return true in all other cases */
+static bool
+dissect_hcs_field (tvbuff_t * tvb, packet_info * pinfo, proto_tree * docsis_tree, int hdrlen)
 {
   /* dissect the header check sequence */
   if(docsis_check_fcs){
     /* CRC-CCITT(16+12+5+1) */
-    guint16 fcs = g_ntohs(crc16_ccitt_tvb(tvb, (hdrlen - 2)));
+    uint16_t fcs = g_ntohs(crc16_ccitt_tvb(tvb, (hdrlen - 2)));
     proto_tree_add_checksum(docsis_tree, tvb, (hdrlen - 2), hf_docsis_hcs, hf_docsis_hcs_status, &ei_docsis_hcs_bad, pinfo, fcs, ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
 
-    return (tvb_get_ntohs(tvb, (hdrlen - 2)) == fcs) ? TRUE : FALSE;
+    return (tvb_get_ntohs(tvb, (hdrlen - 2)) == fcs) ? true : false;
   }
   else
   {
     proto_tree_add_checksum(docsis_tree, tvb, (hdrlen - 2), hf_docsis_hcs, hf_docsis_hcs_status, &ei_docsis_hcs_bad, pinfo, 0, ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
   }
-  return TRUE;
+  return true;
 }
 
 /* Code to Dissect the extended header length / MAC Param field and Length field */
-/* The length field may condain a SID, but this logic is not handled here */
-static void
+/* The length field may contain a SID, but this logic is not handled here */
+static proto_item*
 dissect_exthdr_length_field (tvbuff_t * tvb, packet_info * pinfo, proto_tree * docsis_tree,
-                             guint8 exthdr, guint16 mac_parm, guint16 len_sid, guint16 *payload_length, gboolean *is_encrypted)
+                             uint8_t exthdr, uint16_t mac_parm, uint16_t len_sid, uint16_t *payload_length, bool *is_encrypted)
 {
   proto_item *length_item;
   if (exthdr == EXT_HDR_ON)
@@ -506,17 +499,17 @@ dissect_exthdr_length_field (tvbuff_t * tvb, packet_info * pinfo, proto_tree * d
       expert_add_info(pinfo, length_item, &ei_docsis_len);
     }
   }
-  return;
+  return length_item;
 }
 
 /* Code to Dissect Encrypted DOCSIS Frames */
 /* Print DST and SRC MACs and do not dissect the payload */
 /* Implementation inferred from packet-eth.c */
 static void
-dissect_encrypted_frame (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, const guint8 fctype, const guint8 fcparm)
+dissect_encrypted_frame (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, const uint8_t fctype, const uint8_t fcparm)
 {
-  guint32           offset, frame_len;
-  const guint8      *src_addr, *dst_addr;
+  uint32_t          offset, frame_len;
+  const uint8_t     *src_addr, *dst_addr;
   const char        *src_addr_name, *dst_addr_name;
   proto_item        *addr_item;
   proto_tree        *addr_tree=NULL;
@@ -584,26 +577,26 @@ dissect_encrypted_frame (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
 static int
 dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data _U_)
 {
-  guint8 fc = 0;
-  guint8 fctype = 0;
-  guint8 fcparm = 0;
-  guint8 exthdr = 0;
-  guint16 mac_parm = 0;
-  guint8 hdrlen = DOCSIS_MIN_HEADER_LEN;
-  guint16 len_sid = 0;
+  uint8_t fc = 0;
+  uint8_t fctype = 0;
+  uint8_t fcparm = 0;
+  uint8_t exthdr = 0;
+  uint16_t mac_parm = 0;
+  uint8_t hdrlen = DOCSIS_MIN_HEADER_LEN;
+  uint16_t len_sid = 0;
   tvbuff_t *next_tvb = NULL;
   tvbuff_t *mgt_tvb = NULL;
-  gint pdulen = 0;
-  guint16 payload_length = 0;
-  /* guint16 framelen = 0; */
-  gboolean save_fragmented;
-  gboolean is_encrypted = FALSE;
-  gboolean fcs_correct;
+  int pdulen = 0;
+  uint16_t payload_length = 0;
+  /* uint16_t framelen = 0; */
+  bool save_fragmented;
+  bool is_encrypted = false;
+  bool fcs_correct;
   proto_item *ti;
   proto_tree *docsis_tree;
 
   /* Extract Frame Control parts */
-  fc = tvb_get_guint8 (tvb, 0); /* Frame Control Byte */
+  fc = tvb_get_uint8 (tvb, 0); /* Frame Control Byte */
   fctype = (fc >> 6) & 0x03;    /* Frame Control Type:  2 MSB Bits */
   fcparm = (fc >> 1) & 0x1F;    /* Frame Control Parameter: Next 5 Bits */
   exthdr = (fc & 0x01);         /* Extended Header Bit: LSB */
@@ -614,7 +607,7 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
     len_sid = tvb_get_ntohs (tvb, 3);
     hdrlen = DOCSIS_MIN_HEADER_LEN + 1; // 7-byte header for this message type
   } else {
-    mac_parm = tvb_get_guint8 (tvb, 1);
+    mac_parm = tvb_get_uint8 (tvb, 1);
     len_sid = tvb_get_ntohs (tvb, 2);
   }
 
@@ -649,8 +642,8 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
     case FCTYPE_PACKET:
       col_set_str (pinfo->cinfo, COL_INFO, "Packet PDU");
       break;
-    case FCTYPE_RESERVED:
-      col_set_str (pinfo->cinfo, COL_INFO, "Reserved PDU");
+    case FCTYPE_SPECIAL:
+      col_set_str (pinfo->cinfo, COL_INFO, "Special Use");
       break;
     case FCTYPE_ISOLAT:
       col_set_str (pinfo->cinfo, COL_INFO, "Isolation PDU");
@@ -696,24 +689,32 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
         if(is_encrypted && !docsis_dissect_encrypted_frames)
           dissect_encrypted_frame (next_tvb, pinfo, docsis_tree, fctype, fcparm);
         else
-          call_dissector (eth_withoutfcs_handle, next_tvb, pinfo, docsis_tree);
+          call_dissector (eth_maybefcs_handle, next_tvb, pinfo, docsis_tree);
       }
       break;
     }
-    case FCTYPE_RESERVED:
+    case FCTYPE_SPECIAL:
     {
-      proto_item_append_text (ti, " Reserved PDU");
-      proto_tree_add_item (docsis_tree, hf_docsis_fcparm, tvb, 0, 1, ENC_BIG_ENDIAN);
+      proto_item_append_text (ti, " Special Use PDU");
+      proto_tree_add_item (docsis_tree, hf_docsis_machdr_fcparm, tvb, 0, 1, ENC_BIG_ENDIAN);
       proto_tree_add_item (docsis_tree, hf_docsis_exthdr, tvb, 0, 1, ENC_BIG_ENDIAN);
       /* Dissect Length field for a PDU */
       dissect_exthdr_length_field (tvb, pinfo, docsis_tree, exthdr, mac_parm, len_sid, &payload_length, &is_encrypted);
       /* Dissect Header Check Sequence field for a PDU */
       fcs_correct = dissect_hcs_field (tvb, pinfo, docsis_tree, hdrlen);
-      if (fcs_correct)
-      {
-        /* Don't do anything for a Reserved Frame */
-        next_tvb =  tvb_new_subset_remaining(tvb, hdrlen);
-        call_data_dissector(next_tvb, pinfo, tree);
+      if (fcs_correct) {
+        if (fcparm == FCPARM_MAC_MGMT_HDR && exthdr == EXT_HDR_OFF) {
+          /* Pass off to the DOCSIS Management dissector/s */
+          mgt_tvb = tvb_new_subset_remaining(tvb, hdrlen);
+          if (is_encrypted && !docsis_dissect_encrypted_frames)
+            dissect_encrypted_frame (mgt_tvb, pinfo, docsis_tree, fctype, fcparm);
+          else
+            call_dissector (docsis_mgmt_handle, mgt_tvb, pinfo, docsis_tree);
+        } else {
+          /* Don't do anything for a Reserved Frame */
+          next_tvb =  tvb_new_subset_remaining(tvb, hdrlen);
+          call_data_dissector(next_tvb, pinfo, tree);
+        }
       }
       break;
     }
@@ -732,7 +733,7 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
         if(is_encrypted && !docsis_dissect_encrypted_frames)
           dissect_encrypted_frame (next_tvb, pinfo, docsis_tree, fctype, fcparm);
         else
-          call_dissector (eth_withoutfcs_handle, next_tvb, pinfo, docsis_tree);
+          call_dissector (eth_maybefcs_handle, next_tvb, pinfo, docsis_tree);
       }
       break;
     }
@@ -777,22 +778,33 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
         }
         case FCPARM_FRAG_HDR:
         {
+          proto_item *length_item;
           /* Check if this is a fragmentation header */
           save_fragmented = pinfo->fragmented;
-          pinfo->fragmented = TRUE;
+          pinfo->fragmented = true;
 
           /* Dissect Length field for a PDU */
-          dissect_exthdr_length_field (tvb, pinfo, docsis_tree, exthdr, mac_parm, len_sid, &payload_length, &is_encrypted);
+          length_item = dissect_exthdr_length_field (tvb, pinfo, docsis_tree, exthdr, mac_parm, len_sid, &payload_length, &is_encrypted);
+          if (len_sid < 4) {
+            expert_add_info_format(pinfo, length_item, &ei_docsis_len_small, "Len field value is too small to fit fragment FCS");
+            THROW(ReportedBoundsError);
+          }
           /* Dissect Header Check Sequence field for a PDU */
           fcs_correct = dissect_hcs_field (tvb, pinfo, docsis_tree, hdrlen);
           if (fcs_correct)
           {
-            /* Grab the Fragment FCS */
-            guint32 sent_fcs = tvb_get_ntohl(tvb, (hdrlen + len_sid - 4));
-            guint32 fcs = crc32_802_tvb(tvb, tvb_captured_length(tvb) - 4);
+            uint32_t fcs = 0;
+            if (!tvb_bytes_exist(tvb, hdrlen, len_sid)) {
+              fcs_correct = false;
+            } else {
+              /* Grab the Fragment FCS */
+              uint32_t sent_fcs = tvb_get_ntohl(tvb, (hdrlen + len_sid - 4));
+              fcs = crc32_802_tvb(tvb, hdrlen + len_sid - 4);
+              fcs_correct = (sent_fcs == fcs);
+            }
 
             /* Only defragment valid frames with a good FCS */
-            if (sent_fcs == fcs)
+            if (fcs_correct)
             {
               fragment_head *frag_msg = NULL;
               frag_msg = fragment_add_seq_check(&docsis_reassembly_table,
@@ -807,9 +819,9 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
                                                   NULL, docsis_tree);
 
               if (frag_flags == FRAG_LAST)
-                pinfo->fragmented = FALSE;
+                pinfo->fragmented = false;
               else
-                pinfo->fragmented = TRUE;
+                pinfo->fragmented = true;
 
               if (frag_msg) { /* Reassembled */
                 proto_item_append_text (ti, " (Message Reassembled)");
@@ -821,18 +833,15 @@ dissect_docsis (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* da
               if(next_tvb)
               {
                 /* By default assume an Ethernet payload */
-              if(is_encrypted && !docsis_dissect_encrypted_frames)
-                dissect_encrypted_frame (next_tvb, pinfo, docsis_tree, fctype, fcparm);
-              else
-                call_dissector (eth_withoutfcs_handle, next_tvb, pinfo, docsis_tree);
+                if(is_encrypted && !docsis_dissect_encrypted_frames)
+                  dissect_encrypted_frame (next_tvb, pinfo, docsis_tree, fctype, fcparm);
+                else
+                  call_dissector (eth_maybefcs_handle, next_tvb, pinfo, docsis_tree);
               } else {
                 /* Otherwise treat as Data */
-                tvbuff_t *payload_tvb = tvb_new_subset_length_caplen(tvb, hdrlen, (len_sid - 4), -1);
+                tvbuff_t *payload_tvb = tvb_new_subset_length(tvb, hdrlen, len_sid - 4);
                 call_data_dissector(payload_tvb, pinfo, docsis_tree);
               }
-            } else {
-              /* Report frames with a bad FCS */
-              expert_add_info(pinfo, ti, &ei_docsis_frag_fcs_bad);
             }
             /* Add the Fragment FCS to the end of the parent tree */
             proto_tree_add_checksum(docsis_tree, tvb, (hdrlen + len_sid - 4), hf_docsis_frag_fcs, hf_docsis_frag_fcs_status, &ei_docsis_frag_fcs_bad, pinfo, fcs, ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
@@ -953,6 +962,16 @@ proto_register_docsis (void)
       FT_BYTES, BASE_NONE, NULL, 0x0,
       "TLV Value", HFILL}
     },
+    {&hf_docsis_ehx_type,
+     {"Extended Type", "docsis.ehdr.ehx_type",
+      FT_UINT8, BASE_DEC, NULL, 0x0,
+      "TLV Type", HFILL}
+    },
+    {&hf_docsis_ehx_len,
+     {"Extended Length", "docsis.ehdr.ehx_len",
+      FT_UINT8, BASE_DEC, NULL, 0x0,
+      "TLV Len", HFILL}
+    },
     {&hf_docsis_frag_rsvd,
      {"Reserved", "docsis.frag_rsvd",
       FT_UINT8, BASE_DEC, NULL, 0xC0,
@@ -995,7 +1014,7 @@ proto_register_docsis (void)
     },
     {&hf_docsis_requested_size,
      {"Requested bytes in units of N bytes, N a parameter of the service flow for which this request is being made", "docsis.ehdr.reqsize",
-      FT_UINT16, BASE_DEC, NULL, 0xFFFF,
+      FT_UINT16, BASE_DEC, NULL, 0x0,
       NULL, HFILL}
     },
     {&hf_docsis_key_seq,
@@ -1085,7 +1104,7 @@ proto_register_docsis (void)
     },
     { &hf_docsis_hcs_status,
      { "HCS Status", "docsis.hcs.status",
-       FT_UINT8, BASE_NONE, VALS(local_proto_checksum_vals), 0x0,
+       FT_UINT8, BASE_NONE, VALS(proto_checksum_vals), 0x0,
        NULL, HFILL}
     },
     { &hf_docsis_bpi_en,
@@ -1160,7 +1179,7 @@ proto_register_docsis (void)
     },
     { &hf_docsis_frag_fcs_status,
      { "Fragment FCS Status", "docsis.frag.fcs.status",
-       FT_UINT8, BASE_NONE, VALS(local_proto_checksum_vals), 0x0,
+       FT_UINT8, BASE_NONE, VALS(proto_checksum_vals), 0x0,
        NULL, HFILL}
     },
     { &hf_docsis_encrypted_payload,
@@ -1171,13 +1190,14 @@ proto_register_docsis (void)
   };
 
   static ei_register_info ei[] = {
-      { &ei_docsis_hcs_bad, { "docsis.hcs_bad", PI_CHECKSUM, PI_ERROR, "Bad checksum", EXPFILL }},
+      { &ei_docsis_hcs_bad, { "docsis.hcs_bad", PI_CHECKSUM, PI_ERROR, "Bad header check sequence", EXPFILL }},
       { &ei_docsis_len, { "docsis.len.past_end", PI_MALFORMED, PI_ERROR, "Length field value goes past the end of the payload", EXPFILL }},
+      { &ei_docsis_len_small, { "docsis.len.too_small", PI_MALFORMED, PI_ERROR, "Length field value is too small", EXPFILL }},
       { &ei_docsis_frag_fcs_bad, { "docsis.frag.fcs_bad", PI_CHECKSUM, PI_ERROR, "Bad checksum", EXPFILL }},
       { &ei_docsis_eh_len, { "docsis.ehdr.len.past_end", PI_MALFORMED, PI_ERROR, "Extended Header Length Invalid!", EXPFILL }}
   };
 
-  static gint *ett[] = {
+  static int *ett[] = {
       &ett_docsis,
       &ett_ehdr,
       &ett_docsis_fragment,
@@ -1231,7 +1251,7 @@ proto_reg_handoff_docsis (void)
   hf_docsis_ig = proto_registrar_get_id_byname ("eth.ig");
 
   docsis_mgmt_handle = find_dissector ("docsis_mgmt");
-  eth_withoutfcs_handle = find_dissector_add_dependency("eth_withoutfcs", proto_docsis);
+  eth_maybefcs_handle = find_dissector_add_dependency("eth_maybefcs", proto_docsis);
 }
 
 /*

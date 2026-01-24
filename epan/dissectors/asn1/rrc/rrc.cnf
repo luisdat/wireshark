@@ -8,6 +8,272 @@ UNALIGNED
 PROTO_ROOT_NAME    proto_rrc
 #.END
 
+#.TYPE_RENAME
+
+#.FIELD_RENAME
+ActiveSetUpdate-r3-IEs/dummy integrityProtectionModeInfo
+ActiveSetUpdate-r3-IEs/dummy2 cipheringModeInfo
+ActiveSetUpdate-r3-IEs/dummy3 dL-CounterSynchronisationInfo
+ActiveSetUpdate-r3-IEs/dummy4 sSDT-Information
+ActiveSetUpdate-v4b0ext-IEs/dummy sSDT-UL
+ActiveSetUpdateComplete/dummy integrityProtActivationInfo
+ActiveSetUpdateComplete/dummy2 rB-ActivationTimeInfoList
+ActiveSetUpdateComplete/dummy3 uL-CounterSynchronisationInfo
+CellChangeOrderFromUTRAN-r3-IEs/dummy integrityProtectionModeInfo
+
+CellChangeOrderFromUTRANFailure-r3-IEs/dummy integrityProtectionModeInfo
+CellUpdateConfirm-r3-IEs/modeSpecificTransChInfo/fdd/dummy cPCH-SetID
+CellUpdateConfirm-r3-IEs/modeSpecificTransChInfo/fdd/dummy2 dRAC-StaticInformationList
+CellUpdateConfirm-r3-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Informatio
+CellUpdateConfirm-r4-IEs/modeSpecificTransChInfo/fdd/dummy cPCH-SetID
+CellUpdateConfirm-r4-IEs/modeSpecificTransChInfo/fdd/dummy2 dRAC-StaticInformationList
+CellUpdateConfirm-r4-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Informatio
+CellUpdateConfirm-r5-IEs/modeSpecificTransChInfo/fdd/dummy cPCH-SetID
+CellUpdateConfirm-r5-IEs/modeSpecificTransChInfo/fdd/dummy2 dRAC-StaticInformationList
+CellUpdateConfirm-r5-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Informatio
+CellUpdateConfirm-r8-IEs/dummy defaultConfigForCellFACH
+CellUpdateConfirm-r9-IEs/dummy defaultConfigForCellFACH
+CellUpdateConfirm-r10-IEs/dummy defaultConfigForCellFACH
+CellUpdateConfirm-r10-IEs/dummy2 sR-VCC-Info
+CellUpdateConfirm-r11-IEs/dummy defaultConfigForCellFACH
+CellUpdateConfirm-r11-IEs/dummy2 sR-VCC-Info
+CellUpdateConfirm-v4b0ext-IEs/dummy sSDT-UL
+ETWSPrimaryNotificationWithSecurity/dummy eTWS-WarningSecurityInfo
+HandoverToUTRANCommand-r3-IEs/dummy activationTime
+HandoverToUTRANCommand-r3-IEs/specificationMode/complete/modeSpecificInfo/fdd/dummy dL-PDSCH-Information
+HandoverToUTRANCommand-r3-IEs/specificationMode/complete/modeSpecificInfo/fdd/dummy2 cPCH-SetInfo
+HandoverToUTRANCommand-r4-IEs/specificationMode/complete/modeSpecificInfo/fdd/dummy dL-PDSCH-Information
+HandoverToUTRANCommand-r4-IEs/specificationMode/complete/modeSpecificInfo/fdd/dummy2 cPCH-SetInfo
+HandoverToUTRANCommand-r5-IEs/specificationMode/complete/modeSpecificInfo/fdd/dummy dL-PDSCH-Information
+HandoverToUTRANCommand-r5-IEs/specificationMode/complete/modeSpecificInfo/fdd/dummy2 cPCH-SetInfo
+HandoverToUTRANCommand-r8-IEs/dummy defaultConfigForCellFACH
+HandoverToUTRANCommand-r8-IEs/specificationMode/preconfiguration/preConfigMode/defaultConfig/dummy dLUL-HSPA-Information-r8
+HandoverToUTRANCommand-r9-IEs/dummy defaultConfigForCellFACH
+HandoverToUTRANCommand-r9-IEs/specificationMode/preconfiguration/preConfigMode/defaultConfig/dummy dLUL-HSPA-Information-r8
+HandoverToUTRANCommand-r10-IEs/dummy defaultConfigForCellFACH
+HandoverToUTRANCommand-r10-IEs/specificationMode/preconfiguration/preConfigMode/defaultConfig/dummy dLUL-HSPA-Information-r8
+MeasurementReport-v4b0ext-IEs/dummy primaryCPICH-Info
+PhysicalChannelReconfiguration-r3-IEs/modeSpecificInfo/fdd/dummy dL-PDSCH-Information
+PhysicalChannelReconfiguration-v4b0ext-IEs/dummy sSDT-UL
+PhysicalChannelReconfiguration-r4-IEs/modeSpecificInfo/fdd/dummy dL-PDSCH-Information
+PhysicalChannelReconfiguration-r5-IEs/modeSpecificInfo/fdd/dummy dL-PDSCH-Information
+PhysicalChannelReconfigurationComplete/dummy rB-ActivationTimeInfoList
+RadioBearerReconfiguration-r3-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerReconfiguration-r3-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerReconfiguration-r3-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerReconfiguration-v4b0ext-IEs/dummy sSDT-UL
+RadioBearerReconfiguration-r4-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerReconfiguration-r4-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerReconfiguration-r4-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerReconfiguration-r5-IEs/specificationMode/complete/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerReconfiguration-r5-IEs/specificationMode/complete/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerReconfiguration-r5-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerReconfiguration-r8-IEs/dummy defaultConfigForCellFACH
+RadioBearerReconfiguration-r9-IEs/dummy defaultConfigForCellFACH
+RadioBearerReconfiguration-r10-IEs/dummy defaultConfigForCellFACH
+RadioBearerReconfigurationComplete/dummy rB-ActivationTimeInfoList
+RadioBearerRelease-r3-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerRelease-r3-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerRelease-r3-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerRelease-v4b0ext-IEs/dummy sSDT-UL
+RadioBearerRelease-r4-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerRelease-r4-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerRelease-r4-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerRelease-r5-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerRelease-r5-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerRelease-r5-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerReleaseComplete/dummy rB-ActivationTimeInfoList
+RadioBearerSetup-r3-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerSetup-r3-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerSetup-r3-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerSetup-v4b0ext-IEs/dummy sSDT-UL
+RadioBearerSetup-r4-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerSetup-r4-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerSetup-r4-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerSetup-r5-IEs/dummy/fdd/dummy1 cPCH-SetID
+RadioBearerSetup-r5-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+RadioBearerSetup-r5-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+RadioBearerSetupComplete/dummy rB-ActivationTimeInfoList
+RRCConnectionSetup-v4b0ext-IEs/dummy sSDT-UL
+RRCConnectionSetup-r8-IEs/dummy defaultConfigForCellFACH
+RRCConnectionSetup-r9-IEs/dummy defaultConfigForCellFACH
+RRCConnectionSetup-r10-IEs/dummy defaultConfigForCellFACH
+TransportChannelReconfiguration-r3-IEs/dummy/fdd/dummy1 cPCH-SetID
+TransportChannelReconfiguration-r3-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+TransportChannelReconfiguration-r3-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+TransportChannelReconfiguration-v4b0ext-IEs/dummy sSDT-UL
+TransportChannelReconfiguration-r4-IEs/dummy/fdd/dummy1 cPCH-SetID
+TransportChannelReconfiguration-r4-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+TransportChannelReconfiguration-r4-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+TransportChannelReconfiguration-r5-IEs/dummy/fdd/dummy1 cPCH-SetID
+TransportChannelReconfiguration-r5-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+TransportChannelReconfiguration-r5-IEs/modeSpecificPhysChInfo/fdd/dummy dL-PDSCH-Information
+TransportChannelReconfigurationComplete/dummy rB-ActivationTimeInfoList
+URAUpdateConfirm-v860ext-IEs/dummy defaultConfigForCellFACH
+UTRANMobilityInformationConfirm/dummy rB-ActivationTimeInfoList
+UEInformationResponse-vb50ext-IEs/dummy connectionEstablishmentFailureReport
+Gsm-map-IDNNS/dummy dummy_bool
+CipheringModeCommand/dummy dummy_null
+DL-PhysChCapabilityFDD-v380ext/dummy supportOfDedicatedPilotsForChEstimation
+DL-PhysChCapabilityFDD/dummy dummy_bool
+DL-PhysChCapabilityFDD/dummy2 simultaneousSCCPCH-DPCH-Reception
+PhysicalChannelCapability-hspdsch-r5/fdd-hspdsch/supported/dummy dummy_bool
+PhysicalChannelCapability-hspdsch-r5/fdd-hspdsch/supported/dummy2 dummy_bool
+UL-PhysChCapabilityFDD/dummy dummy_bool
+DL-RFC3095-r4/dummy cID-InclusionInfo-r4
+DL-RLC-StatusInfo/dummy timerEPC
+PDCP-InfoReconfig/dummy dummy_int_0_65535
+UL-RFC3095-r4/dummy1 cID-InclusionInfo-r4
+UL-RFC3095-r4/dummy rOHC-PacketSizeList-r4
+UL-TransportChannelType/dummy dummy_null
+AddOrReconfMAC-ehs-ReordQ/dummy mAC-ehs-DelReordQ-List
+DL-AddReconfTransChInformation/dummy tM-SignallingInfo
+TFCS/dummy splitTFCI-Signalling
+DL-CommonInformation/modeSpecificInfo/fdd/dummy sSDT-Information
+DL-CommonInformation-r4/modeSpecificInfo/fdd/dummy sSDT-Information
+DL-CommonInformation-r5/modeSpecificInfo/fdd/dummy sSDT-Information
+DL-DPCH-InfoCommon/cfnHandling/initialise/dummy cfntargetsfnframeoffset
+DL-DPCH-InfoCommon-r4/cfnHandling/initialise/dummy cfntargetsfnframeoffset
+DL-DPCH-InfoPerRL/fdd/dummy sSDT-CellIdentity
+DL-DPCH-InfoPerRL-r4/fdd/dummy sSDT-CellIdentity
+DL-DPCH-InfoPerRL-r5/fdd/dummy sSDT-CellIdentity
+DL-InformationPerRL/modeSpecificInfo/fdd/dummy1 pDSCH-SHO-DCH-Info
+DL-InformationPerRL/modeSpecificInfo/fdd/dummy2 pDSCH-CodeMapping
+DL-InformationPerRL/dummy sCCPCH-InfoForFACH
+DL-InformationPerRL-r4/modeSpecificInfo/fdd/dummy1 pDSCH-SHO-DCH-Info
+DL-InformationPerRL-r4/modeSpecificInfo/fdd/dummy2 pDSCH-CodeMapping
+DL-InformationPerRL-r4/dummy sCCPCH-InfoForFACH
+DL-InformationPerRL-r5/modeSpecificInfo/fdd/dummy1 pDSCH-SHO-DCH-Info
+DL-InformationPerRL-r5/modeSpecificInfo/fdd/dummy2 pDSCH-CodeMapping
+DL-InformationPerRL-r5/dummy sCCPCH-InfoForFACH
+DL-InformationPerRL-r5bis/modeSpecificInfo/fdd/dummy1 pDSCH-SHO-DCH-Info
+DL-InformationPerRL-r5bis/modeSpecificInfo/fdd/dummy2 pDSCH-CodeMapping
+DL-InformationPerRL-r5bis/dummy sCCPCH-InfoForFACH
+DL-PDSCH-Information/dummy1 pDSCH-SHO-DCH-Info
+DL-PDSCH-Information/dummy2 pDSCH-CodeMapping
+E-PUCH-Info-TDD128/dummy dummy_int_0_6
+
+RL-AdditionInformation/dummy dummy_bool
+RL-AdditionInformation/dummy2 sCCPCH-InfoForFACH
+SCCPCH-SystemInformation-MBMS-r6/fachCarryingMSCH/dummy mBMS-MSCH-ConfigurationInfo-r6
+SecondaryCCPCH-Info/modeSpecificInfo/fdd/dummy1 pCPICH-UsageForChannelEst
+SecondaryCCPCH-Info/modeSpecificInfo/fdd/dummy2 secondaryCPICH-Info
+TGPS-ConfigurationParams/dummy tGPL
+UL-ChannelRequirement/dummy cPCH-SetInfo
+UL-ChannelRequirement-r4/dummy cPCH-SetInfo
+UL-ChannelRequirement-r5/dummy cPCH-SetInfo
+UL-ChannelRequirementWithCPCH-SetID/dummy1 vPCH-SetInfo
+UL-ChannelRequirementWithCPCH-SetID/dummy2 cPCH-SetID
+UL-ChannelRequirementWithCPCH-SetID-r4/dummy1 vPCH-SetInfo
+UL-ChannelRequirementWithCPCH-SetID-r4/dummy2 cPCH-SetID
+UL-ChannelRequirementWithCPCH-SetID-r5/dummy1 vPCH-SetInfo
+UL-ChannelRequirementWithCPCH-SetID-r5/dummy2 cPCH-SetID
+CellMeasuredResults/dummy sFN-SFN-ObsTimeDifference
+CellReportingQuantities/dummy sFN-SFN-OTD-Type
+DGPS-CorrectionSatInfo/dummy1 deltaPRC
+DGPS-CorrectionSatInfo/dummy2 deltaPRC
+DGPS-CorrectionSatInfo/dummy3 deltaPRC
+DGPS-CorrectionSatInfo/dummy4 deltaPRC
+Event2a/dummy threshold
+GSM-MeasuredResults/dummy dummy_int_46_173SIBb-TypeAnd
+GSM-MeasuredResults/dummy2 observedTimeDifferenceToGSM
+InterRATReportingQuantity/ratSpecificInfo/gsm/dummy dummy_bool
+InterRATReportingQuantity/ratSpecificInfo/gsm/dummy2 dummy_bool
+MeasurementControlSysInfo/dummy uE-InternalMeasurementSysInfo
+NewInterRATCell/technologySpecificInfo/gsm/dummy dummy_null
+NewInterRATCell-B/technologySpecificInfo/gsm/dummy dummy_null
+NonUsedFreqParameter-r11/dummy cellInfoListToBeExcluded
+NonUsedFreq2aParameter-r11/dummy cellInfoListToBeExcluded
+TrafficVolumeMeasSysInfo/dummy measurementValidity
+UE-AutonomousUpdateMode/dummy dummy_null
+UE-AutonomousUpdateMode/dummy2 rL-InformationLists
+UE-Positioning-GPS-AssistanceData/dummy uE-Positioning-GPS-ReferenceCellInfo
+UE-Positioning-ReportingQuantity/dummy1 uE-Positioning-ResponseTime
+UE-Positioning-ReportingQuantity/dummy2 dummy_bool
+SIB-TypeAndTag/dummy cellValueTag
+SIB-TypeAndTag/dummy2 dummy_null
+SIB-TypeAndTag/dummy3 dummy_null
+SIBSb-TypeAndTag/dummy cellValueTag
+SIBSb-TypeAndTag/dummy2 dummy_null
+SIBSb-TypeAndTag/dummy3 dummy_null
+SysInfoType5-v860ext-IEs/dummy dummy_seq
+SysInfoType6/modeSpecificInfo/fdd/dummy cSICH-PowerOffset
+SysInfoType8/dummy1 cPCH-Parameters
+SysInfoType8/dummy2 cPCH-SetInfoList
+SysInfoType8/dummy3 cSICH-PowerOffset
+SysInfoType9/dummy cPCH-PersistenceLevelsList
+SysInfoType10/dummy dRAC-SysInfoList
+SysInfoType11-v690ext-IEs/dummy dummy-InterFreqRACHReportingInfo
+SysInfoType12-v690ext-IEs/dummy dummy-InterFreqRACHReportingInfo
+MBMS-ModifedService-r6/dummy dummy_enum
+
+SRNC-RelocationInfo-r3-IEs/modeSpecificInfo/fdd/dummy cPCH-SetID
+SRNC-RelocationInfo-r3-IEs/modeSpecificInfo/fdd/dummy2 dRAC-StaticInformationList
+SRNC-RelocationInfo-r4-IEs/dummy/fdd/dummy1 cPCH-SetID
+SRNC-RelocationInfo-r4-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+SRNC-RelocationInfo-r5-IEs/dummy/fdd/dummy1 cPCH-SetID
+SRNC-RelocationInfo-r5-IEs/dummy/fdd/dummy2 dRAC-StaticInformationList
+DL-PhysChCapabilityFDD-r4/dummy dummy_bool
+DL-PhysChCapabilityFDD-r4/dummy2 simultaneousSCCPCH-DPCH-Reception
+DL-PhysChCapabilityFDD-r5/dummy dummy_bool
+DL-PhysChCapabilityFDD-r5/dummy2 simultaneousSCCPCH-DPCH-Reception
+DL-PhysChCapabilityFDD-r5/dummy3 supportOfDedicatedPilotsForChEstimation
+
+DL-PhysChCapabilityFDD-r5/fdd-hspdsch/supported/dummy dummy_bool
+DL-PhysChCapabilityFDD-r5/fdd-hspdsch/supported/dummy2 dummy_bool
+
+InterRATHandoverInfo/predefinedConfigStatusList/present predefinedConfigStatusList
+InterRATHandoverInfo/uE-SecurityInformation/present uE-SecurityInformation
+
+AccessServiceClass-TDD/subchannelSize/size2/subchannels subchannels_size2
+AccessServiceClass-TDD/subchannelSize/size4/subchannels subchannels_size4
+AccessServiceClass-TDD/subchannelSize/size8/subchannels subchannels_size8
+AccessServiceClass-TDD-r7/subchannelSize/size2/subchannels subchannels_size2
+AccessServiceClass-TDD-r7/subchannelSize/size4/subchannels subchannels_size4
+AccessServiceClass-TDD-r7/subchannelSize/size8/subchannels subchannels_size8
+AccessServiceClass-TDD-r7/subchannelSize/size16/subchannels subchannels_size16
+AccessServiceClass-TDD-LCR-r4/subchannelSize/size2/subchannels subchannels_size2
+AccessServiceClass-TDD-LCR-r4/subchannelSize/size4/subchannels subchannels_size4
+AccessServiceClass-TDD-LCR-r4/subchannelSize/size8/subchannels subchannels_size8
+
+E-PUCH-Info/modeSpecificInfo/tdd128/beaconPLEst beaconPLEst_bool
+E-PUCH-Info-TDD128/beaconPLEst beaconPLEst_bool
+
+MIMO-Parameters-v7g0ext/precodingWeightSetRestriction precodingWeightSetRestriction_enum
+MIMO-Parameters-r9/modeSpecificInfo/fdd/precodingWeightSetRestriction precodingWeightSetRestriction_enum
+SecondaryCellMIMOparametersFDD-v950ext/precodingWeightSetRestriction precodingWeightSetRestriction_enum
+
+AlmanacSatInfo/t-oa almanacSatInfo-t-oa
+ALM-keplerianParameters/t-oa t-oa-0-1023
+
+SecondaryCell4x4MIMOparametersFDD/configurationInfo/newConfiguration/precodingWeightSetRestriction precodingWeightSetRestriction_bit_string
+MIMO4x4-Parameters/configurationInfo/newConfiguration/precodingWeightSetRestriction precodingWeightSetRestriction_bit_string
+Event2g/useCIO useCIO_enum
+GANSSSatelliteInformation/codePhaseSearchWindow codePhaseSearchWindow_bit_string
+GANSSSatelliteInformation-r10/codePhaseSearchWindow codePhaseSearchWindow_bit_string
+GANSSSatelliteInformation-r12/codePhaseSearchWindow codePhaseSearchWindow_bit_string
+SatellitesListRelatedData/iod iod_int_0_1023
+Satellite-clock-model/tgd tgd_bit_string
+UE-InternalReportingQuantity/modeSpecificInfo/tdd/appliedTA appliedTA_bool
+UE-InternalReportingQuantity-r4/modeSpecificInfo/tdd/tddOption/tdd384/appliedTA appliedTA_bool
+UE-InternalReportingQuantity-r14/modeSpecificInfo/tdd/tddOption/tdd384/appliedTA appliedTA_bool
+UE-InternalReportingQuantity-r14/modeSpecificInfo/fdd/ue-powerheadroom ue-powerheadroom_bool
+UE-Positioning-GANSS-AddIonoModel/dataID dataID_bit_string
+CDMA2000-Message/payload payload_bit_string
+System-Information-Container/sysInfoTypeSB1 sysInfoTypeSB1_msg
+System-Information-Container/sysInfoTypeSB2 sysInfoTypeSB2_msg
+System-Information-Container/sysInfoType1 sysInfoType1_msg
+System-Information-Container/sysInfoType3 sysInfoType3_msg
+System-Information-Container/sysInfoType5 sysInfoType5_msg
+System-Information-Container/sysInfoType11 sysInfoType11_msg
+System-Information-Container/sysInfoType11bis sysInfoType11bis_msg
+System-Information-Container/sysInfoType12 sysInfoType12_msg
+System-Information-Container-vb50ext-IEs/sysInfoType22 sysInfoType22_msg
+ToTargetRNC-Container/interRATHandoverInfo interRATHandoverInfoWithInterRATCapabilities-r3
+SIB-TypeAndTag/sysInfoType12 cellValueTag
+#.FIELD_ATTR
+
+
 #.USE_VALS_EXT
 AverageRLC-BufferPayload
 DL-DCCH-MessageType
@@ -234,7 +500,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 #.FN_BODY CellUpdateConfirm-CCCH
   fp_info  *fpinf = NULL;
   rlc_info *rlcinf = NULL;
-  guint32 u_rnti;
+  uint32_t u_rnti;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "CellUpdateConfirm-CCCH");
 %(DEFAULT_BODY)s
   if(PINFO_FD_VISITED(actx->pinfo)) {
@@ -258,7 +524,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 #.FN_BODY CellUpdateConfirm
   fp_info  *fpinf = NULL;
   rlc_info *rlcinf = NULL;
-  guint32 u_rnti;
+  uint32_t u_rnti;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "CellUpdateConfirm");
 %(DEFAULT_BODY)s
   if(PINFO_FD_VISITED(actx->pinfo)) {
@@ -386,7 +652,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 #.FN_BODY PhysicalChannelReconfiguration
   fp_info  *fpinf = NULL;
   rlc_info *rlcinf = NULL;
-  guint32 u_rnti;
+  uint32_t u_rnti;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "PhysicalChannelReconfiguration");
 %(DEFAULT_BODY)s
   if(PINFO_FD_VISITED(actx->pinfo)) {
@@ -427,7 +693,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 #.FN_BODY RadioBearerReconfiguration
   fp_info  *fpinf = NULL;
   rlc_info *rlcinf = NULL;
-  guint32 u_rnti;
+  uint32_t u_rnti;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "RadioBearerReconfiguration");
 %(DEFAULT_BODY)s
   if(PINFO_FD_VISITED(actx->pinfo)) {
@@ -502,7 +768,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 %(DEFAULT_BODY)s
 
 #.FN_BODY RRCConnectionSetup
-  guint32 new_u_rnti;
+  uint32_t new_u_rnti;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "RRCConnectionSetup");
 %(DEFAULT_BODY)s
   if (PINFO_FD_VISITED(actx->pinfo)) {
@@ -525,7 +791,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   fp_info            *fpinf;
   rlc_info           *rlcinf;
   rrc_ciphering_info *ciphering_info = NULL;
-  guint8              direction;
+  uint8_t             direction;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "SecurityModeCommand");
 
   fpinf = (fp_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_fp, 0);
@@ -546,7 +812,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   fp_info            *fpinf;
   rlc_info           *rlcinf;
   rrc_ciphering_info *ciphering_info = NULL;
-  guint8              direction;
+  uint8_t             direction;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "SecurityModeComplete");
 
   fpinf = (fp_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_fp, 0);
@@ -592,7 +858,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 #.FN_BODY TransportChannelReconfiguration
   fp_info  *fpinf = NULL;
   rlc_info *rlcinf = NULL;
-  guint32 u_rnti;
+  uint32_t u_rnti;
   col_append_str(actx->pinfo->cinfo, COL_INFO, "TransportChannelReconfiguration");
 %(DEFAULT_BODY)s
   if(PINFO_FD_VISITED(actx->pinfo)) {
@@ -700,7 +966,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 
 #.FN_BODY HandoverFromUTRANCommand-GSM-r3-IEs/gsm-message/single-GSM-Message single-GSM-Message-r3
   tvbuff_t *gsm_message_tvb=NULL;
-  guint bits_remaining, whole_octets_remaining;
+  unsigned bits_remaining, whole_octets_remaining;
 
 %(DEFAULT_BODY)s
 
@@ -715,7 +981,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   }
 #.FN_BODY HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Message-r6
   tvbuff_t *gsm_message_tvb=NULL;
-  guint bits_remaining, whole_octets_remaining;
+  unsigned bits_remaining, whole_octets_remaining;
 
 %(DEFAULT_BODY)s
 
@@ -734,7 +1000,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 
 %(DEFAULT_BODY)s
   if (parameter_tvb){
-    guint8 byte = tvb_get_guint8(parameter_tvb, 0);
+    uint8_t byte = tvb_get_uint8(parameter_tvb, 0);
     if (byte == 0x06) {
       if (gsm_a_dtap_handle) {
         call_dissector(gsm_a_dtap_handle, parameter_tvb, actx->pinfo, tree);
@@ -751,7 +1017,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 
 %(DEFAULT_BODY)s
   if (parameter_tvb){
-    de_ms_cm_2(parameter_tvb, tree, actx->pinfo, 2, tvb_get_guint8(parameter_tvb,1), NULL, 0);
+    de_ms_cm_2(parameter_tvb, tree, actx->pinfo, 2, tvb_get_uint8(parameter_tvb,1), NULL, 0);
   }
 
 #.FN_BODY GSM-Classmark3 VAL_PTR = &parameter_tvb
@@ -808,7 +1074,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   if(eutraFeatureGroupIndicators_tvb){
     /* Dissect eutraFeatureGroupIndicators */
     proto_tree *subtree;
-    gint curr_bit_offset = 0;
+    int curr_bit_offset = 0;
     subtree = proto_item_add_subtree(actx->created_item, ett_rrc_eutraFeatureGroupIndicators);
     proto_tree_add_bits_item(subtree, hf_rrc_eutra_feat_group_ind_1, eutraFeatureGroupIndicators_tvb, curr_bit_offset, 1, ENC_BIG_ENDIAN);
     curr_bit_offset++;
@@ -822,8 +1088,8 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 #.FN_BODY PLMN-Identity
   wmem_strbuf_t* mcc_mnc_strbuf;
   wmem_strbuf_t* mcc_strbuf;
-  guint32 string_len;
-  gchar* mcc_mnc_string;
+  uint32_t string_len;
+  char* mcc_mnc_string;
   tvbuff_t* mcc_mnc_tvb;
 
   /* Reset the digits string in the private data struct */
@@ -831,7 +1097,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   mcc_mnc_strbuf = wmem_strbuf_new_sized(actx->pinfo->pool,7);
   private_data_set_digits_strbuf(actx, mcc_mnc_strbuf);
   /* Reset parsing failure flag*/
-  private_data_set_digits_strbuf_parsing_failed_flag(actx, FALSE);
+  private_data_set_digits_strbuf_parsing_failed_flag(actx, false);
 %(DEFAULT_BODY)s
   private_data_set_digits_strbuf(actx, NULL);
   /* Check for parsing errors */
@@ -840,7 +1106,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   }
 
   /* Extracting the string collected in the strbuf */
-  string_len = (guint32)wmem_strbuf_get_len(mcc_mnc_strbuf);
+  string_len = (uint32_t)wmem_strbuf_get_len(mcc_mnc_strbuf);
   mcc_mnc_string = wmem_strbuf_finalize(mcc_mnc_strbuf);
 
   if(string_len >= 3)
@@ -855,7 +1121,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   }
 
   /* Creating TVB from extracted string*/
-  mcc_mnc_tvb = tvb_new_child_real_data(tvb, (guint8*)mcc_mnc_string, string_len, string_len);
+  mcc_mnc_tvb = tvb_new_child_real_data(tvb, (uint8_t*)mcc_mnc_string, string_len, string_len);
   add_new_data_source(actx->pinfo, mcc_mnc_tvb, "MCC-MNC");
 
   /* Calling E.212 */
@@ -865,8 +1131,8 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   wmem_strbuf_t* mcc_mnc_strbuf;
   wmem_strbuf_t* temp_strbuf;
   wmem_strbuf_t* last_mcc_strbuf;
-  guint32 string_len;
-  gchar* mcc_mnc_string;
+  uint32_t string_len;
+  char* mcc_mnc_string;
   tvbuff_t* mcc_mnc_tvb;
 
   /* Reset the digits string in the private data struct */
@@ -874,7 +1140,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   mcc_mnc_strbuf = wmem_strbuf_new_sized(actx->pinfo->pool,7);
   private_data_set_digits_strbuf(actx, mcc_mnc_strbuf);
   /* Reset parsing failure flag*/
-  private_data_set_digits_strbuf_parsing_failed_flag(actx, FALSE);
+  private_data_set_digits_strbuf_parsing_failed_flag(actx, false);
 %(DEFAULT_BODY)s
   private_data_set_digits_strbuf(actx, NULL);
   /* Check for parsing errors */
@@ -883,7 +1149,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   }
 
   /* Extracting the string collected in the strbuf */
-  string_len = (guint32)wmem_strbuf_get_len(mcc_mnc_strbuf);
+  string_len = (uint32_t)wmem_strbuf_get_len(mcc_mnc_strbuf);
   mcc_mnc_string = wmem_strbuf_finalize(mcc_mnc_strbuf);
   if (string_len > 3) {
       /* 3 MCC digits and at least 1 MNC digit were found, keep MCC for later
@@ -906,7 +1172,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
         wmem_strbuf_append_printf(temp_strbuf,"%%s",wmem_strbuf_get_str(last_mcc_strbuf));
         wmem_strbuf_append_printf(temp_strbuf,"%%s",mcc_mnc_string);
         /* Update length of recovered MCC-MNC pair */
-        string_len = (guint32)wmem_strbuf_get_len(temp_strbuf);
+        string_len = (uint32_t)wmem_strbuf_get_len(temp_strbuf);
         mcc_mnc_string = wmem_strbuf_finalize(temp_strbuf);
       }
   }
@@ -915,7 +1181,7 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
     /* optional MCC was present (or restored above), we can call E.212 dissector */
 
     /* Creating TVB from extracted string*/
-    mcc_mnc_tvb = tvb_new_child_real_data(tvb, (guint8*)mcc_mnc_string, string_len, string_len);
+    mcc_mnc_tvb = tvb_new_child_real_data(tvb, (uint8_t*)mcc_mnc_string, string_len, string_len);
     add_new_data_source(actx->pinfo, mcc_mnc_tvb, "MCC-MNC");
 
     /* Calling E.212 */
@@ -924,15 +1190,15 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 
 #.FN_BODY IMSI-GSM-MAP
   wmem_strbuf_t* imsi_strbuf;
-  guint32 string_len;
-  gchar* imsi_string;
+  uint32_t string_len;
+  char* imsi_string;
   tvbuff_t* imsi_tvb;
 
   /* Reset the digits string in the private data struct */
   imsi_strbuf = wmem_strbuf_new_sized(actx->pinfo->pool,16);
   private_data_set_digits_strbuf(actx, imsi_strbuf);
   /* Reset parsing failure flag*/
-  private_data_set_digits_strbuf_parsing_failed_flag(actx, FALSE);
+  private_data_set_digits_strbuf_parsing_failed_flag(actx, false);
 %(DEFAULT_BODY)s
   private_data_set_digits_strbuf(actx, NULL);
   /* Check for parsing errors */
@@ -941,18 +1207,18 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   }
 
   /* Extracting the string collected in the strbuf */
-  string_len = (guint32)wmem_strbuf_get_len(imsi_strbuf);
+  string_len = (uint32_t)wmem_strbuf_get_len(imsi_strbuf);
   imsi_string = wmem_strbuf_finalize(imsi_strbuf);
 
   /* Creating TVB from extracted string*/
-  imsi_tvb = tvb_new_child_real_data(tvb, (guint8*)imsi_string, string_len, string_len);
+  imsi_tvb = tvb_new_child_real_data(tvb, (uint8_t*)imsi_string, string_len, string_len);
   add_new_data_source(actx->pinfo, imsi_tvb, "IMSI");
 
   /* Calling E.212 */
   dissect_e212_utf8_imsi(imsi_tvb,actx->pinfo,tree,0,string_len);
 
 #.FN_BODY Digit VAL_PTR = &digit
-  guint32 digit;
+  uint32_t digit;
   wmem_strbuf_t* digits_strbuf; /* The string of either an IMSI or a MCC-MNC pair */
 %(DEFAULT_BODY)s
 
@@ -962,15 +1228,15 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
 
   digits_strbuf = private_data_get_digits_strbuf(actx);
   if (digits_strbuf) {
-    gchar digit_char;
+    char digit_char;
 
     if(digit > 9) {
-      private_data_set_digits_strbuf_parsing_failed_flag(actx, TRUE);
+      private_data_set_digits_strbuf_parsing_failed_flag(actx, true);
       return offset;
     }
 
-    /* Converting to the matching gchar */
-    digit_char = (gchar)(digit + '0');
+    /* Converting to the matching char */
+    digit_char = (char)(digit + '0');
 
     /* Appending to the digits string */
     wmem_strbuf_append_c(digits_strbuf, digit_char);
@@ -982,19 +1248,19 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
   private_data_set_curr_sib_segment_type(actx,RRC_SIB_SEG_NO_SEGMENT); /* Resetting value */
 
 #.FN_BODY SIB-Type VAL_PTR = &sib_type
-  guint32 sib_type;
+  uint32_t sib_type;
 %(DEFAULT_BODY)s
   private_data_set_curr_sib_type(actx,sib_type);
 
 #.FN_BODY SIB-Data-variable VAL_PTR = &sib_data_tvb
   tvbuff_t *sib_data_tvb;
-  guint32 sib_type;
+  uint32_t sib_type;
   proto_tree *subtree;
-  guint32 seg_type;
+  uint32_t seg_type;
 
 %(DEFAULT_BODY)s
 
-  seg_type = (guint32)private_data_get_curr_sib_segment_type(actx);
+  seg_type = (uint32_t)private_data_get_curr_sib_segment_type(actx);
   if(seg_type != RRC_SIB_SEG_COMP) {
       /* TODO: The Dissector only handles 'complete SIBs' right now.
        * Reassembly logic should be implemented, taking into acocunt that
@@ -1118,8 +1384,8 @@ HandoverFromUTRANCommand-GSM-r6-IEs/gsm-message/single-GSM-Message single-GSM-Me
        Decoding specified in TS 124 237 V11.4.0 Annex D.5.3.3 ATGW transfer details
      */
     proto_tree *subtree;
-    gint curr_offset = 0;
-    guint32 atgw_trans_det_cont;
+    int curr_offset = 0;
+    uint32_t atgw_trans_det_cont;
     subtree = proto_item_add_subtree(actx->created_item, ett_rrc_ims_info);
     proto_tree_add_item_ret_uint(subtree, hf_rrc_ims_info_atgw_trans_det_cont_type, imsInformation_tvb, curr_offset, 1, ENC_BIG_ENDIAN, &atgw_trans_det_cont);
     curr_offset++;
@@ -1149,9 +1415,10 @@ HNBName TYPE=FT_STRING DISPLAY=BASE_NONE
   actx->created_item = proto_tree_add_item(tree, hf_index, hnbname_tvb, 0, -1, ENC_UTF_8|ENC_NA);
 
 #.FN_BODY CN-DomainIdentity VAL_PTR = &nas_sys_info
-  guint32 nas_sys_info;
+  uint32_t nas_sys_info;
 %(DEFAULT_BODY)s
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, "(%%s)", val_to_str_const(nas_sys_info,rrc_CN_DomainIdentity_vals,"Unknown"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, "(%%s)",
+                  val_to_str_const(nas_sys_info,rrc_CN_DomainIdentity_vals, "Unknown"));
   nas_sys_info++; /* CS = 0, PS = 1 but the enum defines 0 as Unknown and CS = 1, PS = 2 */
   private_data_set_cn_domain(actx, (enum nas_sys_info_gsm_map) nas_sys_info);
 
@@ -1173,7 +1440,7 @@ HNBName TYPE=FT_STRING DISPLAY=BASE_NONE
 
 #.FN_BODY NAS-SystemInformationGSM-MAP VAL_PTR = &nas_sys_info_gsm_map_tvb
   tvbuff_t *nas_sys_info_gsm_map_tvb = NULL;
-  guint32 length;
+  uint32_t length;
   enum nas_sys_info_gsm_map cn_domain;
   proto_tree *subtree;
 
@@ -1220,14 +1487,14 @@ HNBName TYPE=FT_STRING DISPLAY=BASE_NONE
 #.FN_BODY U-RNTI
   private_data_set_s_rnc_id(actx, 0);
   private_data_set_s_rnti(actx, 0);
-  guint32 s_rnc_id;
-  guint32 s_rnti;
-  guint32 u_rnti_value;
-  guint32 original_offset;
+  uint32_t s_rnc_id;
+  uint32_t s_rnti;
+  uint32_t u_rnti_value;
+  uint32_t original_offset;
   proto_item *ti;
-  guint32 item_len;
+  uint32_t item_len;
   proto_tree *sub_tree;
-  gboolean is_new_urnti;
+  bool is_new_urnti;
   int generated_field_hf;
   original_offset = offset;
 %(DEFAULT_BODY)s
@@ -1268,8 +1535,8 @@ HNBName TYPE=FT_STRING DISPLAY=BASE_NONE
   umts_fp_conversation_info_t *umts_fp_conversation_info = NULL;
   fp_fach_channel_info_t *fp_fach_channel_info = NULL;
   tvbuff_t * c_rnti_tvb = NULL;
-  guint16 c_rnti = 0;
-  guint32 u_rnti = 0;
+  uint16_t c_rnti = 0;
+  uint32_t u_rnti = 0;
   fp_crnti_allocation_info_t *fp_crnti_allocation_info = NULL;
 %(DEFAULT_BODY)s
   if (!c_rnti_tvb)
@@ -1331,14 +1598,14 @@ HNBName TYPE=FT_STRING DISPLAY=BASE_NONE
   wmem_tree_insert32(rrc_global_urnti_crnti_map, c_rnti, (void *)fp_crnti_allocation_info);
 
 #.FN_BODY UL-ScramblingCode VAL_PTR = &scrambling_code
-guint32 scrambling_code;
+uint32_t scrambling_code;
 %(DEFAULT_BODY)s
 private_data_set_scrambling_code(actx,scrambling_code);
 
 #.FN_BODY RRC-StateIndicator VAL_PTR = &state_dec
-gint32 state_dec = -1;
+uint32_t state_dec = -1;
 %(DEFAULT_BODY)s
-if(state_dec >= 0 && state_dec <= 3) {
+if(state_dec <= 3) {
   state_dec++; /* Encoded values are 0-based, Values in the enum are 1-based*/
   private_data_set_rrc_state_indicator(actx,(enum rrc_ue_state)state_dec);
 }
@@ -1359,9 +1626,10 @@ if(state_dec >= 0 && state_dec <= 3) {
 
 #.FN_BODY DL-TransportChannelType-r5 VAL_PTR = &type
 /*Here we try to figure out which HS-DSCH channels are multiplexed*/
-    guint *flowd_p;
-    guint *cur_val=NULL;
+    unsigned *flowd_p;
+    unsigned *cur_val=NULL;
     struct rrc_info *rrcinf;
+    fp_info *fpinf;
 
     %(DEFAULT_BODY)s
 
@@ -1371,16 +1639,17 @@ if(state_dec >= 0 && state_dec <= 3) {
 
         if(num_chans_per_flow[flowd] > 1 ){
             rrcinf = (rrc_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_rrc, 0);
-            if((rrcinf == NULL) || (rrcinf->hrnti[actx->pinfo->fd->subnum] == 0)){
+            fpinf = (fp_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_fp, 0);
+            if((rrcinf == NULL) || (fpinf == NULL) || (rrcinf->hrnti[fpinf->cur_tb] == 0)){
                 expert_add_info(actx->pinfo, actx->created_item, &ei_rrc_no_hrnti);
             }
             else{
                 /*If it doesn't exists, insert it*/
-                if( (cur_val=(gint *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((guint)rrcinf->hrnti[actx->pinfo->fd->subnum]))) == NULL ){
+                if( (cur_val=(unsigned *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]))) == NULL ){
 
-                    flowd_p = g_new0(guint, 1);
+                    flowd_p = g_new0(unsigned, 1);
                     *flowd_p = (1U<<flowd);    /*Set the bit to mark it as true*/
-                    g_tree_insert(hsdsch_muxed_flows, GUINT_TO_POINTER((guint)rrcinf->hrnti[actx->pinfo->fd->subnum]), flowd_p);
+                    g_tree_insert(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]), flowd_p);
 
                 }else{
                     *cur_val = (1U<<flowd) | *cur_val;
@@ -1394,9 +1663,10 @@ if(state_dec >= 0 && state_dec <= 3) {
 
 #.FN_BODY DL-TransportChannelType-r7 VAL_PTR = &type
 /*Here we try to figure out which HS-DSCH channels are multiplexed*/
-    guint *flowd_p;
-    guint *cur_val=NULL;
+    unsigned *flowd_p;
+    unsigned *cur_val=NULL;
     struct rrc_info *rrcinf;
+    fp_info *fpinf;
 
     %(DEFAULT_BODY)s
 
@@ -1407,16 +1677,17 @@ if(state_dec >= 0 && state_dec <= 3) {
 
         if(num_chans_per_flow[flowd] > 1 ){
             rrcinf = (rrc_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_rrc, 0);
-            if((rrcinf == NULL) || (rrcinf->hrnti[actx->pinfo->fd->subnum] == 0)){
+            fpinf = (fp_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_fp, 0);
+            if((rrcinf == NULL) || (fpinf == NULL) || (rrcinf->hrnti[fpinf->cur_tb] == 0)){
                 expert_add_info(actx->pinfo, actx->created_item, &ei_rrc_no_hrnti);
             }
             else{
                 /*If it doesn't exists, insert it*/
-                if( (cur_val=(gint *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((guint)rrcinf->hrnti[actx->pinfo->fd->subnum]))) == NULL ){
+                if( (cur_val=(unsigned *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]))) == NULL ){
 
-                    flowd_p = g_new0(guint, 1);
+                    flowd_p = g_new0(unsigned, 1);
                     *flowd_p = (1U<<flowd);    /* Set the bit to mark it as true*/
-                    g_tree_insert(hsdsch_muxed_flows, GUINT_TO_POINTER((guint)rrcinf->hrnti[actx->pinfo->fd->subnum]), flowd_p);
+                    g_tree_insert(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]), flowd_p);
 
                 }else{
                     *cur_val = (1U<<flowd) | *cur_val;
@@ -1434,22 +1705,26 @@ if(state_dec >= 0 && state_dec <= 3) {
 #.FN_BODY H-RNTI VAL_PTR = &hrnti_tvb
   tvbuff_t *hrnti_tvb;
   struct rrc_info *rrcinf;
+  fp_info *fpinf;
 %(DEFAULT_BODY)s
 
 #.FN_FTR H-RNTI
   rrcinf = (struct rrc_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_rrc, 0);
-  if (!rrcinf) {
-    rrcinf = wmem_new0(wmem_file_scope(), struct rrc_info);
-    p_add_proto_data(wmem_file_scope(), actx->pinfo, proto_rrc, 0, rrcinf);
+  fpinf = (fp_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_fp, 0);
+  if (fpinf) {
+    if (!rrcinf) {
+      rrcinf = wmem_new0(wmem_file_scope(), struct rrc_info);
+      p_add_proto_data(wmem_file_scope(), actx->pinfo, proto_rrc, 0, rrcinf);
+    }
+    rrcinf->hrnti[fpinf->cur_tb] = tvb_get_ntohs(hrnti_tvb, 0);
   }
-  rrcinf->hrnti[actx->pinfo->fd->subnum] = tvb_get_ntohs(hrnti_tvb, 0);
 
 #.FN_BODY START-Value VAL_PTR = &start_val
   tvbuff_t * start_val;
   fp_info       *fpinf;
   rlc_info      *rlcinf;
   rrc_ciphering_info * ciphering_info;
-  guint32 * start;
+  uint32_t * start;
   enum nas_sys_info_gsm_map cn_domain;
 
 %(DEFAULT_BODY)s
@@ -1478,7 +1753,7 @@ if(state_dec >= 0 && state_dec <= 3) {
 
       /*Retrieve and store the value*/
       if(ciphering_info && ciphering_info->start_ps) {
-        start = g_new(guint32,1);
+        start = g_new(uint32_t,1);
         *start = tvb_get_bits32(start_val,0,20,ENC_BIG_ENDIAN);
         /*Insert the value based on current frame num since this might vary over time*/
         g_tree_insert(ciphering_info->start_ps, GUINT_TO_POINTER(actx->pinfo->num), start);
@@ -1493,9 +1768,9 @@ if(state_dec >= 0 && state_dec <= 3) {
   fp_info            *fpinf;
   rlc_info           *rlcinf;
   rrc_ciphering_info *ciphering_info;
-  guint32 rbid;
-  guint32 rlc_ciphering_sqn;
-  guint32 direction;
+  uint32_t rbid;
+  uint32_t rlc_ciphering_sqn;
+  uint32_t direction;
 
   fpinf = (fp_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_fp, 0);
   rlcinf = (rlc_info *)p_get_proto_data(wmem_file_scope(), actx->pinfo, proto_umts_rlc, 0);
@@ -1520,19 +1795,19 @@ if(state_dec >= 0 && state_dec <= 3) {
 
 
 #.FN_BODY RB-Identity VAL_PTR = &rbid
-guint32 rbid;
+uint32_t rbid;
 %(DEFAULT_BODY)s
 private_data_set_rbid(actx, rbid);
 
 
 #.FN_BODY RLC-SequenceNumber VAL_PTR = &rlc_ciphering_sqn
-guint32 rlc_ciphering_sqn;
+uint32_t rlc_ciphering_sqn;
 %(DEFAULT_BODY)s
 private_data_set_rlc_ciphering_sqn(actx, rlc_ciphering_sqn);
 
 #.FN_BODY CipheringAlgorithm VAL_PTR = &ciphering_algo
   rrc_ciphering_info *ciphering_info;
-  gint32 ciphering_algo;
+  uint32_t ciphering_algo;
 
 %(DEFAULT_BODY)s
 
@@ -1540,11 +1815,11 @@ private_data_set_rlc_ciphering_sqn(actx, rlc_ciphering_sqn);
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->ciphering_algorithm = ciphering_algo;
+  ciphering_info->ciphering_algorithm = (int32_t)ciphering_algo;
 
 #.FN_BODY CipheringAlgorithm-r7 VAL_PTR = &ciphering_algo
   rrc_ciphering_info *ciphering_info;
-  gint32 ciphering_algo;
+  uint32_t ciphering_algo;
 
 %(DEFAULT_BODY)s
 
@@ -1552,11 +1827,11 @@ private_data_set_rlc_ciphering_sqn(actx, rlc_ciphering_sqn);
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->ciphering_algorithm = ciphering_algo;
+  ciphering_info->ciphering_algorithm = (int32_t)ciphering_algo;
 
 #.FN_BODY IntegrityProtectionAlgorithm VAL_PTR = &integrity_algo
   rrc_ciphering_info *ciphering_info;
-  gint32 integrity_algo;
+  uint32_t integrity_algo;
 
 %(DEFAULT_BODY)s
 
@@ -1564,11 +1839,11 @@ private_data_set_rlc_ciphering_sqn(actx, rlc_ciphering_sqn);
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->integrity_algorithm = integrity_algo;
+  ciphering_info->integrity_algorithm = (int32_t)integrity_algo;
 
 #.FN_BODY IntegrityProtectionAlgorithm-r7 VAL_PTR = &integrity_algo
   rrc_ciphering_info *ciphering_info;
-  gint32 integrity_algo;
+  uint32_t integrity_algo;
 
 %(DEFAULT_BODY)s
 
@@ -1576,7 +1851,7 @@ private_data_set_rlc_ciphering_sqn(actx, rlc_ciphering_sqn);
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->integrity_algorithm = integrity_algo;
+  ciphering_info->integrity_algorithm = (int32_t)integrity_algo;
 
 #.FN_BODY DL-DCCH-MessageType VAL_PTR = &msg_type
 %(DEFAULT_BODY)s
@@ -1596,10 +1871,10 @@ private_data_set_rlc_ciphering_sqn(actx, rlc_ciphering_sqn);
 %(DEFAULT_BODY)s
 
 #.FN_BODY ReleaseCause VAL_PTR=&value
-  guint32 value;
+  uint32_t value;
 %(DEFAULT_BODY)s
   col_append_fstr(actx->pinfo->cinfo, COL_INFO, " [cause=%%s]",
-                  val_to_str(value, rrc_ReleaseCause_vals, "Unknown"));
+                  val_to_str_const(value, rrc_ReleaseCause_vals, "Unknown"));
 
 #.FN_BODY MasterInformationBlock
   col_append_str(actx->pinfo->cinfo, COL_INFO, "MasterInformationBlock");

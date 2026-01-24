@@ -15,7 +15,6 @@
 #include "globals.h"
 #include "wsutil/os_version_info.h"
 #include "wsutil/tempfile.h"
-#include "wsutil/version_info.h"
 
 #include <epan/tap.h>
 #include <epan/prefs.h>
@@ -24,22 +23,23 @@
 #include <wiretap/wtap.h>
 #include <wiretap/wtap_opttypes.h>
 
-#include "ui/alert_box.h"
 #include "ui/simple_dialog.h"
 #include "tap_export_pdu.h"
 #include "export_pdu_ui_utils.h"
 
+#include <wsutil/report_message.h>
+
 void
-do_export_pdu(const char *filter, const gchar *temp_dir, const gchar *tap_name)
+do_export_pdu(const char *filter, const char *temp_dir, const char *tap_name)
 {
     exp_pdu_t exp_pdu_tap_data;
     char *error;
     int   import_file_fd;
     int   file_type_subtype;
     char *capfile_name = NULL, *comment;
-    gboolean status;
+    bool status;
     int   err;
-    gchar *err_info;
+    char *err_info;
 
     error = exp_pdu_pre_open(tap_name, filter, &exp_pdu_tap_data);
     if (error) {
@@ -53,7 +53,7 @@ do_export_pdu(const char *filter, const gchar *temp_dir, const gchar *tap_name)
     GError *err_tempfile = NULL;
     import_file_fd = create_tempfile(temp_dir, &capfile_name, "Wireshark_PDU_", NULL, &err_tempfile);
     if (import_file_fd < 0) {
-        failure_alert_box("Temporary file could not be created: %s", err_tempfile->message);
+        report_failure("Temporary file could not be created: %s", err_tempfile->message);
         g_error_free(err_tempfile);
         g_free(capfile_name);
         return;
@@ -67,8 +67,8 @@ do_export_pdu(const char *filter, const gchar *temp_dir, const gchar *tap_name)
                           import_file_fd, comment, &err, &err_info);
     g_free(comment);
     if (!status) {
-        cfile_dump_open_failure_alert_box(capfile_name ? capfile_name : "temporary file",
-                                          err, err_info, file_type_subtype);
+        report_cfile_dump_open_failure(capfile_name ? capfile_name : "temporary file",
+                                       err, err_info, file_type_subtype);
         g_free(capfile_name);
         return;
     }
@@ -77,7 +77,7 @@ do_export_pdu(const char *filter, const gchar *temp_dir, const gchar *tap_name)
     cf_retap_packets(&cfile);
 
     if (!exp_pdu_close(&exp_pdu_tap_data, &err, &err_info)) {
-        cfile_close_failure_alert_box(capfile_name, err, err_info);
+        report_cfile_close_failure(capfile_name, err, err_info);
         /*
          * XXX - remove the temporary file and don't open it as
          * the current capture?
@@ -85,13 +85,13 @@ do_export_pdu(const char *filter, const gchar *temp_dir, const gchar *tap_name)
     }
 
     /* XXX: should this use the open_routine type in the cfile instead of WTAP_TYPE_AUTO? */
-    if (cf_open(&cfile, capfile_name, WTAP_TYPE_AUTO, TRUE /* temporary file */, &err) != CF_OK) {
+    if (cf_open(&cfile, capfile_name, WTAP_TYPE_AUTO, true /* temporary file */, &err) != CF_OK) {
         /* cf_open() has put up a dialog box for the error */
         g_free(capfile_name);
         return;
     }
 
-    switch (cf_read(&cfile, FALSE)) {
+    switch (cf_read(&cfile, /*reloading=*/false)) {
     case CF_READ_OK:
     case CF_READ_ERROR:
         /* Just because we got an error, that doesn't mean we were unable

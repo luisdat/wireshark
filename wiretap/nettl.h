@@ -12,8 +12,7 @@
 #ifndef __NETTL_H__
 #define __NETTL_H__
 
-#include <glib.h>
-#include <wiretap/wtap.h>
+#include "wtap.h"
 
 /* nettl subsystems are defined in /etc/nettlgen.conf */
 
@@ -116,6 +115,6 @@
 
 #define NETTL_HDR_PDU_MASK              0x30000000
 
-wtap_open_return_val nettl_open(wtap *wth, int *err, gchar **err_info);
+wtap_open_return_val nettl_open(wtap *wth, int *err, char **err_info);
 
 #endif

@@ -14,9 +14,11 @@
 
 #include <epan/packet.h>
 #include <epan/conversation.h>
-#include <epan/ipproto.h>
+#include <epan/uuid_types.h>
 #include "packet-rpc.h"
 #include "packet-portmap.h"
+#include "packet-ip.h"
+#include "data-iana.h"
 
 /*
  * See:
@@ -26,44 +28,43 @@
 void proto_register_portmap(void);
 void proto_reg_handoff_portmap(void);
 
-static int proto_portmap = -1;
-static int hf_portmap_procedure_v1 = -1;
-static int hf_portmap_procedure_v2 = -1;
-static int hf_portmap_procedure_v3 = -1;
-static int hf_portmap_procedure_v4 = -1;
-static int hf_portmap_proto = -1;
-static int hf_portmap_prog = -1;
-static int hf_portmap_proc = -1;
-static int hf_portmap_version = -1;
-static int hf_portmap_port = -1;
-static int hf_portmap_answer = -1;
-static int hf_portmap_args = -1;
-static int hf_portmap_result = -1;
-static int hf_portmap_rpcb = -1;
-static int hf_portmap_rpcb_prog = -1;
-static int hf_portmap_rpcb_version = -1;
-static int hf_portmap_rpcb_netid = -1;
-static int hf_portmap_rpcb_addr = -1;
-static int hf_portmap_rpcb_owner = -1;
-static int hf_portmap_uaddr = -1;
+static int proto_portmap;
+static int hf_portmap_procedure_v1;
+static int hf_portmap_procedure_v2;
+static int hf_portmap_procedure_v3;
+static int hf_portmap_procedure_v4;
+static int hf_portmap_proto;
+static int hf_portmap_prog;
+static int hf_portmap_proc;
+static int hf_portmap_version;
+static int hf_portmap_port;
+static int hf_portmap_answer;
+static int hf_portmap_args;
+static int hf_portmap_result;
+static int hf_portmap_rpcb;
+static int hf_portmap_rpcb_prog;
+static int hf_portmap_rpcb_version;
+static int hf_portmap_rpcb_netid;
+static int hf_portmap_rpcb_addr;
+static int hf_portmap_rpcb_owner;
+static int hf_portmap_uaddr;
 
 
-static gint ett_portmap = -1;
-static gint ett_portmap_rpcb = -1;
-static gint ett_portmap_entry = -1;
+static int ett_portmap;
+static int ett_portmap_rpcb;
+static int ett_portmap_entry;
 
 static dissector_handle_t rpc_handle;
 
 /* Dissect a getport call */
 static int
-dissect_getport_call(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *tree, void* data)
+dissect_getport_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-	guint32 proto, version;
-	guint32 prog;
+	uint32_t proto, version;
+	uint32_t prog;
 	const char *prog_name;
 	const char *proto_name;
-	int offset = 0;
+	unsigned offset = 0;
 
 	/* make sure we remember protocol type until the reply packet */
 	if(!pinfo->fd->visited){
@@ -78,7 +79,7 @@ dissect_getport_call(tvbuff_t *tvb, packet_info *pinfo _U_,
 
 	/* program */
 	prog = tvb_get_ntohl(tvb, offset+0);
-	prog_name = rpc_prog_name(prog);
+	prog_name = uuid_type_get_uuid_name("rpc", GUINT_TO_POINTER(prog), pinfo->pool);
 	proto_tree_add_uint_format_value(tree, hf_portmap_prog, tvb,
 		offset, 4, prog, "%s (%u)",
 		prog_name, prog);
@@ -116,15 +117,15 @@ static int
 dissect_getport_reply(tvbuff_t *tvb, packet_info *pinfo _U_,
 	proto_tree *tree, void* data)
 {
-	guint32 portx;
-	int offset = 0;
+	uint32_t portx;
+	unsigned offset = 0;
 
 	/* we might have learnt a <ipaddr><protocol><port> mapping for ONC-RPC*/
 	if(!pinfo->fd->visited){
 		rpc_call_info_value *rpc_call=(rpc_call_info_value *)data;
 		/* only do this for UDP, TCP does not need anything like this */
 		if(rpc_call && (GPOINTER_TO_UINT(rpc_call->private_data)==PT_UDP) ){
-			guint32 port;
+			uint32_t port;
 			port=tvb_get_ntohl(tvb, offset);
 			if(port){
 				conversation_t *conv;
@@ -153,19 +154,18 @@ dissect_getport_reply(tvbuff_t *tvb, packet_info *pinfo _U_,
 
 /* Dissect a 'set' call */
 static int
-dissect_set_call(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *tree, void* data _U_)
+dissect_set_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint32 proto;
-	guint32 prog;
-	int offset = 0;
+	uint32_t proto;
+	uint32_t prog;
+	unsigned offset = 0;
 
 	if ( tree )
 	{
 		prog = tvb_get_ntohl(tvb, offset+0);
 		proto_tree_add_uint_format_value(tree, hf_portmap_prog, tvb,
 			offset, 4, prog, "%s (%d)",
-			rpc_prog_name(prog), prog);
+			uuid_type_get_uuid_name("rpc", GUINT_TO_POINTER(prog), pinfo->pool), prog);
 		proto_tree_add_item(tree, hf_portmap_version, tvb,
 			offset+4, 4, ENC_BIG_ENDIAN);
 
@@ -182,19 +182,18 @@ dissect_set_call(tvbuff_t *tvb, packet_info *pinfo _U_,
 
 /* Dissect a 'unset' call */
 static int
-dissect_unset_call(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *tree, void* data _U_)
+dissect_unset_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint32 proto;
-	guint32 prog;
-	int offset = 0;
+	uint32_t proto;
+	uint32_t prog;
+	unsigned offset = 0;
 
 	if ( tree )
 	{
 		prog = tvb_get_ntohl(tvb, offset+0);
 		proto_tree_add_uint_format_value(tree, hf_portmap_prog, tvb,
 			offset, 4, prog, "%s (%d)",
-			rpc_prog_name(prog), prog);
+			uuid_type_get_uuid_name("rpc", GUINT_TO_POINTER(prog), pinfo->pool), prog);
 		proto_tree_add_item(tree, hf_portmap_version, tvb,
 			offset+4, 4, ENC_BIG_ENDIAN);
 
@@ -210,15 +209,13 @@ dissect_unset_call(tvbuff_t *tvb, packet_info *pinfo _U_,
 }
 
 static int
-dissect_set_reply(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *tree, void* data _U_)
+dissect_set_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	return dissect_rpc_bool(tvb, tree, hf_portmap_answer, 0);
 }
 
 static int
-dissect_dump_entry(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-	proto_tree *tree, void* data _U_)
+dissect_dump_entry(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int prog, version, proto, port;
 	proto_tree *subtree;
@@ -229,13 +226,14 @@ dissect_dump_entry(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	port = tvb_get_ntohl(tvb, offset+12);
 	if ( tree )
 	{
+		const char* prog_name = uuid_type_get_uuid_name("rpc", GUINT_TO_POINTER(prog), pinfo->pool);
 		subtree = proto_tree_add_subtree_format(tree, tvb, offset, 16,
 			ett_portmap_entry, NULL, "Map Entry: %s (%u) V%d",
-			rpc_prog_name(prog), prog, version);
+			prog_name, prog, version);
 
 		proto_tree_add_uint_format_value(subtree, hf_portmap_prog, tvb,
 			offset+0, 4, prog,
-			"%s (%u)", rpc_prog_name(prog), prog);
+			"%s (%u)", prog_name, prog);
 		proto_tree_add_uint(subtree, hf_portmap_version, tvb,
 			offset+4, 4, version);
 		proto_tree_add_uint_format_value(subtree, hf_portmap_proto, tvb,
@@ -249,26 +247,24 @@ dissect_dump_entry(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 }
 
 static int
-dissect_dump_reply(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, void* data _U_)
+dissect_dump_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	return dissect_rpc_list(tvb, pinfo, tree, 0, dissect_dump_entry, NULL);
 }
 
 /* Dissect a callit call */
 static int
-dissect_callit_call(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, void* data _U_)
+dissect_callit_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint32 prog, vers, proc;
-	int offset = 0;
+	uint32_t prog, vers, proc;
+	unsigned offset = 0;
 
 	prog = tvb_get_ntohl(tvb, offset+0);
 	if ( tree )
 	{
 		proto_tree_add_uint_format_value(tree, hf_portmap_prog, tvb,
 			offset, 4, prog, "%s (%u)",
-			rpc_prog_name(prog), prog);
+			uuid_type_get_uuid_name("rpc", GUINT_TO_POINTER(prog), pinfo->pool), prog);
 	}
 
 	vers = tvb_get_ntohl(tvb, offset+4);
@@ -283,7 +279,7 @@ dissect_callit_call(tvbuff_t *tvb, packet_info *pinfo,
 	{
 		proto_tree_add_uint_format_value(tree, hf_portmap_proc, tvb,
 			offset+8, 4, proc, "%s (%u)",
-			rpc_proc_name(prog, vers, proc), proc);
+			rpc_proc_name(pinfo->pool, prog, vers, proc), proc);
 	}
 
 	offset += 12;
@@ -291,7 +287,7 @@ dissect_callit_call(tvbuff_t *tvb, packet_info *pinfo,
 	/* Dissect the arguments for this procedure.
 	   Make the columns non-writable, so the dissector won't change
 	   them out from under us. */
-	col_set_writable(pinfo->cinfo, -1, FALSE);
+	col_set_writable(pinfo->cinfo, -1, false);
 	offset = dissect_rpc_indir_call(tvb, pinfo, tree, offset,
 		hf_portmap_args, prog, vers, proc);
 
@@ -300,10 +296,9 @@ dissect_callit_call(tvbuff_t *tvb, packet_info *pinfo,
 
 /* Dissect a callit reply */
 static int
-dissect_callit_reply(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, void* data _U_)
+dissect_callit_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	int offset = 0;
+	unsigned offset = 0;
 
 	proto_tree_add_item(tree, hf_portmap_port, tvb,
 			offset, 4, ENC_BIG_ENDIAN);
@@ -312,7 +307,7 @@ dissect_callit_reply(tvbuff_t *tvb, packet_info *pinfo,
 	/* Dissect the result of this procedure.
 	   Make the columns non-writable, so the dissector won't change
 	   them out from under us. */
-	col_set_writable(pinfo->cinfo, -1, FALSE);
+	col_set_writable(pinfo->cinfo, -1, false);
 	offset = dissect_rpc_indir_reply(tvb, pinfo, tree, offset,
 		hf_portmap_result, hf_portmap_prog, hf_portmap_version,
 		hf_portmap_proc);
@@ -370,31 +365,30 @@ static const value_string portmap2_proc_vals[] = {
 
 /* RFC 1833, Page 3 */
 static int
-dissect_rpcb(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_rpcb(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item* rpcb_item;
 	proto_tree* rpcb_tree;
 	int old_offset = offset;
-	guint32 prog;
+	uint32_t prog;
 
 	rpcb_item = proto_tree_add_item(tree, hf_portmap_rpcb, tvb,
 			offset, -1, ENC_NA);
 	rpcb_tree = proto_item_add_subtree(rpcb_item, ett_portmap_rpcb);
 
 	prog = tvb_get_ntohl(tvb, offset);
-	if (rpcb_tree)
-		proto_tree_add_uint_format_value(rpcb_tree, hf_portmap_rpcb_prog, tvb,
+	proto_tree_add_uint_format_value(rpcb_tree, hf_portmap_rpcb_prog, tvb,
 			offset, 4, prog,
-			"%s (%u)", rpc_prog_name(prog), prog);
+			"%s (%u)", uuid_type_get_uuid_name("rpc", GUINT_TO_POINTER(prog), pinfo->pool), prog);
 	offset += 4;
 
 	offset = dissect_rpc_uint32(tvb, rpcb_tree,
 	    hf_portmap_rpcb_version, offset);
-	offset = dissect_rpc_string(tvb, rpcb_tree,
+	offset = dissect_rpc_string(tvb, pinfo, rpcb_tree,
 	    hf_portmap_rpcb_netid, offset, NULL);
-	offset = dissect_rpc_string(tvb, rpcb_tree,
+	offset = dissect_rpc_string(tvb, pinfo, rpcb_tree,
 	    hf_portmap_rpcb_addr, offset, NULL);
-	offset = dissect_rpc_string(tvb, rpcb_tree,
+	offset = dissect_rpc_string(tvb, pinfo, rpcb_tree,
 	    hf_portmap_rpcb_owner, offset, NULL);
 
 	/* now we know, that rpcb is shorter */
@@ -409,8 +403,7 @@ dissect_rpcb(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree
 
 /* RFC 1833, Page 7 */
 static int
-dissect_rpcb3_getaddr_call(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, void* data _U_)
+dissect_rpcb3_getaddr_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	return dissect_rpcb(tvb, 0, pinfo, tree, data);
 }
@@ -418,36 +411,33 @@ dissect_rpcb3_getaddr_call(tvbuff_t *tvb, packet_info *pinfo,
 
 /* RFC 1833, Page 7 */
 static int
-dissect_rpcb3_getaddr_reply(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *tree, void* data _U_)
+dissect_rpcb3_getaddr_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	return dissect_rpc_string(tvb, tree, hf_portmap_uaddr, 0, NULL);
+	return dissect_rpc_string(tvb, pinfo, tree, hf_portmap_uaddr, 0, NULL);
 }
 
 
 /* RFC 1833, Page 7 */
 static int
-dissect_rpcb3_dump_reply(tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *tree, void* data _U_)
+dissect_rpcb3_dump_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	return dissect_rpc_list(tvb, pinfo, tree, 0, dissect_rpcb, NULL);
 }
 
 /* RFC 1833, page 4 */
 static int
-dissect_rpcb_rmtcallres(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *tree, void* data _U_)
+dissect_rpcb_rmtcallres(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	int offset = 0;
+	unsigned offset = 0;
 
 	/* Dissect the remote universal address. */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 	    hf_portmap_rpcb_addr, offset, NULL);
 
 	/* Dissect the result of this procedure.
 	   Make the columns non-writable, so the dissector won't change
 	   them out from under us. */
-	col_set_writable(pinfo->cinfo, -1, FALSE);
+	col_set_writable(pinfo->cinfo, -1, false);
 	offset = dissect_rpc_indir_reply(tvb, pinfo, tree, offset,
 		hf_portmap_result, hf_portmap_prog, hf_portmap_version,
 		hf_portmap_proc);
@@ -461,9 +451,9 @@ static const vsff portmap3_proc[] = {
 	{ RPCBPROC_NULL,	"NULL",
 		dissect_rpc_void, dissect_rpc_void },
 	{ RPCBPROC_SET,		"SET",
-		dissect_rpc_unknown, dissect_rpc_unknown },
+		dissect_rpcb3_getaddr_call, dissect_set_reply },
 	{ RPCBPROC_UNSET,	"UNSET",
-		dissect_rpc_unknown, dissect_rpc_unknown },
+		dissect_rpcb3_getaddr_call, dissect_set_reply },
 	{ RPCBPROC_GETADDR,	"GETADDR",
 		dissect_rpcb3_getaddr_call, dissect_rpcb3_getaddr_reply},
 	{ RPCBPROC_DUMP,	"DUMP",
@@ -498,9 +488,9 @@ static const vsff portmap4_proc[] = {
 	{ RPCBPROC_NULL,	"NULL",
 		dissect_rpc_void, dissect_rpc_void },
 	{ RPCBPROC_SET,		"SET",
-		dissect_rpc_unknown, dissect_rpc_unknown },
+		dissect_rpcb3_getaddr_call, dissect_set_reply },
 	{ RPCBPROC_UNSET,	"UNSET",
-		dissect_rpc_unknown, dissect_rpc_unknown },
+		dissect_rpcb3_getaddr_call, dissect_set_reply },
 	{ RPCBPROC_GETADDR,	"GETADDR",
 		dissect_rpcb3_getaddr_call, dissect_rpcb3_getaddr_reply},
 	{ RPCBPROC_DUMP,	"DUMP",
@@ -610,7 +600,7 @@ proto_register_portmap(void)
 			"Universal Address", "portmap.uaddr", FT_STRING, BASE_NONE,
 			NULL, 0, NULL, HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_portmap,
 		&ett_portmap_rpcb,
 		&ett_portmap_entry

@@ -2,13 +2,10 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import unittest
-import fixtures
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
-@fixtures.uses_fixtures
-class case_syntax(unittest.TestCase):
+class TestDfilterSyntax:
     trace_file = "http.pcap"
 
     def test_exists_1(self, checkDFilterCount):
@@ -16,9 +13,25 @@ class case_syntax(unittest.TestCase):
         checkDFilterCount(dfilter, 1)
 
     def test_exists_2(self, checkDFilterCount):
-        # Identifier using minus
+        # Protocol using minus
         dfilter = "mac-lte"
         checkDFilterCount(dfilter, 0)
+
+    def test_exists_3(self, checkDFilterCount):
+        # Protocol starting with digit
+        dfilter = "9p or http"
+        checkDFilterCount(dfilter, 1)
+
+    # The HTTP dissector no longer has a expert Chat
+        # def test_exists_4(self, checkDFilterCount):
+        # Protocol with dot
+        # dfilter = "_ws.expert"
+        # checkDFilterCount(dfilter, 1)
+
+    def test_exists_5(self, checkDFilterSucceed):
+        # Protocol field name with leading digit and minus
+        dfilter = "diameter.3GPP-Reporting-Reason"
+        checkDFilterSucceed(dfilter)
 
     def test_commute_1(self, checkDFilterCount):
         dfilter = "ip.proto == 6"
@@ -119,7 +132,7 @@ class case_syntax(unittest.TestCase):
         dfilter = "tcp.flags.push == True"
         checkDFilterCount(dfilter, 1)
 
-    def test_bool_2(self, checkDFilterCount):
+    def test_bool_3(self, checkDFilterCount):
         dfilter = "tcp.flags.push == FALSE"
         checkDFilterCount(dfilter, 0)
 
@@ -138,8 +151,11 @@ class case_syntax(unittest.TestCase):
         dfilter = 'frame == tcp()'
         checkDFilterFail(dfilter, error)
 
-@fixtures.uses_fixtures
-class case_equality(unittest.TestCase):
+    def test_between_1(self, checkDFilterCount):
+        dfilter = "tcp.dstport <= '\x50' < tcp.srcport"
+        checkDFilterCount(dfilter, 1)
+
+class TestDfilterEquality:
     trace_file = "sip.pcapng"
 
     def test_all_eq_1(self, checkDFilterCount):
@@ -213,8 +229,7 @@ class case_equality(unittest.TestCase):
         dfilter = 'frame contains fc:'
         checkDFilterSucceed(dfilter)
 
-@fixtures.uses_fixtures
-class case_bitwise(unittest.TestCase):
+class TestDfilterBitwise:
     trace_file = "http.pcap"
 
     def test_exists_1(self, checkDFilterCount):
@@ -222,6 +237,10 @@ class case_bitwise(unittest.TestCase):
         checkDFilterCount(dfilter, 1)
 
     def test_exists_2(self, checkDFilterCount):
+        dfilter = "tcp.flags bitand 0x8"
+        checkDFilterCount(dfilter, 1)
+
+    def test_exists_3(self, checkDFilterCount):
         dfilter = "eth[0] & 1"
         checkDFilterCount(dfilter, 0)
 
@@ -233,8 +252,15 @@ class case_bitwise(unittest.TestCase):
         dfilter = "tcp.srcport != tcp.dstport & 0x0F"
         checkDFilterCount(dfilter, 1)
 
-@fixtures.uses_fixtures
-class case_unary_minus(unittest.TestCase):
+    def test_equal_3(self, checkDFilterCount):
+        dfilter = "tcp.srcport != tcp.dstport bitand 0x0F"
+        checkDFilterCount(dfilter, 1)
+
+    def test_equal_4(self, checkDFilterCount):
+        dfilter = "tcp.srcport != tcp.dstport bitwise_and 0x0F"
+        checkDFilterCount(dfilter, 1)
+
+class TestDfilterUnaryMinus:
     trace_file = "http.pcap"
 
     def test_minus_const_1(self, checkDFilterCount):
@@ -257,10 +283,9 @@ class case_unary_minus(unittest.TestCase):
         dfilter = "tcp.window_size_scalefactor == +tcp.dstport"
         checkDFilterCount(dfilter, 0)
 
-    def test_unary_3(self, checkDFilterFail):
-        error = 'Constant expression is invalid on the LHS'
+    def test_unary_3(self, checkDFilterCount):
         dfilter = "-2 == tcp.dstport"
-        checkDFilterFail(dfilter, error)
+        checkDFilterCount(dfilter, 0)
 
     def test_unary_4(self, checkDFilterCount):
         dfilter = "tcp.window_size_scalefactor == -{tcp.dstport * 20}"
@@ -271,8 +296,7 @@ class case_unary_minus(unittest.TestCase):
         dfilter = "-tcp"
         checkDFilterFail(dfilter, error)
 
-@fixtures.uses_fixtures
-class case_arithmetic(unittest.TestCase):
+class TestDfilterArithmetic:
     trace_file = "dhcp.pcap"
 
     def test_add_1(self, checkDFilterCount):
@@ -287,20 +311,23 @@ class case_arithmetic(unittest.TestCase):
         dfilter = "udp.dstport == 66+1"
         checkDFilterCount(dfilter, 2)
 
-    def test_add_4(self, checkDFilterFail):
-        error = 'Unknown type for left side of +'
+    def test_add_4(self, checkDFilterCount):
         dfilter = "1 + 2 == frame.number"
-        checkDFilterFail(dfilter, error)
+        checkDFilterCount(dfilter, 1)
 
     def test_add_5(self, checkDFilterFail):
-        error = 'Unknown type for left side of +'
+        error = 'Constant expression is invalid'
         dfilter = "1 + 2 == 2 + 1"
         checkDFilterFail(dfilter, error)
 
     def test_add_6(self, checkDFilterFail):
-        error = 'Unknown type for left side of -'
+        error = 'Constant expression is invalid'
         dfilter = "1 - 2"
         checkDFilterFail(dfilter, error)
+
+    def test_add_7(self, checkDFilterCount):
+        dfilter = r"udp.dstport == 66+'\x01'"
+        checkDFilterCount(dfilter, 2)
 
     def test_sub_1(self, checkDFilterCount):
         dfilter = "udp.srcport == udp.dstport - 1"
@@ -310,15 +337,29 @@ class case_arithmetic(unittest.TestCase):
         dfilter = "udp.dstport == 68 - 1"
         checkDFilterCount(dfilter, 2)
 
-    def test_sub_3(self, checkDFilterFail):
-        # Minus operator requires spaces around it.
-        error = '"68-1" is not a valid number.'
+    def test_sub_3(self, checkDFilterCount):
+        dfilter = "udp.length == ip.len - 20"
+        checkDFilterCount(dfilter, 4)
+
+    def test_sub_4(self, checkDFilterCount):
+        # The RHS is sometimes negative, sometimes equal to LHS.
+        # LHS is a FT_UINT8. It should match twice.
+        dfilter = "ip.proto == ip.len - 311"
+        checkDFilterCount(dfilter, 2)
+
+    def test_sub_no_space_1(self, checkDFilterFail):
+        # Minus operator requires whitespace preceding it.
+        error = '"68-1" cannot be converted to Unsigned integer'
         dfilter = "udp.dstport == 68-1"
         checkDFilterFail(dfilter, error)
 
-    def test_sub_4(self, checkDFilterCount):
-        dfilter = "udp.length == ip.len - 20"
-        checkDFilterCount(dfilter, 4)
+    def test_sub_no_space_2(self, checkDFilterFail):
+        # Different case, 68-67 should not be parsed
+        # as bytes separated by hyphen XX-XX-XX
+        # Minus operator still requires whitespace preceding it.
+        error = '"68-67" cannot be converted to Unsigned integer'
+        dfilter = "frame.number == 68-67"
+        checkDFilterFail(dfilter, error)
 
     def test_expr_1(self, checkDFilterCount):
         dfilter = 'udp.port * { 10 / {5 - 4} } == udp.port * { {50 + 50} / 2 - 40 }'
@@ -328,8 +369,7 @@ class case_arithmetic(unittest.TestCase):
         dfilter = 'udp.dstport * { udp.srcport / {5 - 4} } == udp.srcport * { 2 * udp.dstport - 68 }'
         checkDFilterCount(dfilter, 2)
 
-@fixtures.uses_fixtures
-class case_field_reference(unittest.TestCase):
+class TestDfilterFieldReference:
     trace_file = "ipoipoip.pcap"
 
     def test_ref_1(self, checkDFilterCountWithSelectedFrame):
@@ -342,8 +382,33 @@ class case_field_reference(unittest.TestCase):
         # select frame 1, expect 1 frames out of 2.
         checkDFilterCountWithSelectedFrame(dfilter, 1, 1)
 
-@fixtures.uses_fixtures
-class case_layer(unittest.TestCase):
+    def test_ref_3(self, checkDFilterCountWithSelectedFrame):
+        dfilter = 'frame.number < $frame.number'
+        # select frame 2, expect 1 frames out of 2.
+        checkDFilterCountWithSelectedFrame(dfilter, 1, 2)
+
+    def test_ref_4(self, checkDFilterCountWithSelectedFrame):
+        dfilter = 'ip.src#3 == $ip.src#4'
+        # select frame 1, expect 1 frames out of 2.
+        checkDFilterCountWithSelectedFrame(dfilter, 1, 1)
+
+    def test_ref_5(self, checkDFilterCountWithSelectedFrame):
+        dfilter = 'frame[52-54] == ${@ip.src}[0-2]'
+        # select frame 1, expect 1 frames out of 2.
+        checkDFilterCountWithSelectedFrame(dfilter, 1, 1)
+
+    def test_ref_6(self, checkDFilterCountWithSelectedFrame):
+        dfilter = 'frame[52-54] == $@ip.src[0-2]'
+        # select frame 1, expect 1 frames out of 2.
+        checkDFilterCountWithSelectedFrame(dfilter, 1, 1)
+
+    def test_ref_7(self, checkDFilterFail):
+        # anything after $ must be a field
+        dfilter = 'frame == $aaaa'
+        error = '"aaaa" is not a valid protocol or protocol field'
+        checkDFilterFail(dfilter, error)
+
+class TestDfilterLayer:
     trace_file = "ipoipoip.pcap"
 
     def test_layer_1(self, checkDFilterCount):
@@ -374,8 +439,15 @@ class case_layer(unittest.TestCase):
         dfilter = 'ip.dst#[-5] == 2.2.2.2'
         checkDFilterCount(dfilter, 1)
 
-@fixtures.uses_fixtures
-class case_quantifiers(unittest.TestCase):
+    def test_layer_invalid_1(self, checkDFilterFail):
+        dfilter = r"ip.dst#"
+        checkDFilterFail(dfilter, "layer number or range was missing")
+
+    def test_layer_invalid_2(self, checkDFilterFail):
+        dfilter = r"ip.dst#ip"
+        checkDFilterFail(dfilter, "Expected digit or \"[\"")
+
+class TestDfilterQuantifiers:
     trace_file = "ipoipoip.pcap"
 
     def test_any_1(self, checkDFilterCount):
@@ -386,8 +458,7 @@ class case_quantifiers(unittest.TestCase):
         dfilter = 'all ip.addr > 1.1.1.1'
         checkDFilterCount(dfilter, 1)
 
-@fixtures.uses_fixtures
-class case_raw_modifier(unittest.TestCase):
+class TestDfilterRawModifier:
     trace_file = "s7comm-fuzz.pcapng.gz"
 
     def test_regular(self, checkDFilterCount):
@@ -406,3 +477,108 @@ class case_raw_modifier(unittest.TestCase):
         dfilter = '@s7comm.blockinfo.blocktype == ${@s7comm.blockinfo.blocktype}'
         # select frame 3, expect 2 frames out of 3.
         checkDFilterCountWithSelectedFrame(dfilter, 2, 3)
+
+class TestDfilterRawSlice:
+    trace_file = "http.pcap"
+
+    def test_raw_slice1(self, checkDFilterFail):
+        dfilter = 'tcp.port[1] == 0xc3'
+        checkDFilterFail(dfilter, "cannot be sliced")
+
+    def test_raw_slice2(self, checkDFilterCount):
+        dfilter = '@tcp.port[1] == 0xc3'
+        checkDFilterCount(dfilter, 1)
+
+    def test_raw_slice3(self, checkDFilterFail):
+        dfilter = 'tcp.port[0:] == 0c:c3'
+        checkDFilterFail(dfilter, "cannot be sliced")
+
+    def test_raw_slice4(self, checkDFilterCount):
+        dfilter = '@tcp.port[0:] == 0c:c3'
+        checkDFilterCount(dfilter, 1)
+
+class TestDfilterXor:
+    trace_file = "ipoipoip.pcap"
+
+    def test_xor_1(self, checkDFilterCount):
+        dfilter = 'ip.src == 7.7.7.7 xor ip.dst == 7.7.7.7'
+        checkDFilterCount(dfilter, 1)
+
+    def test_xor_2(self, checkDFilterCount):
+        dfilter = 'ip.src == 7.7.7.7 ^^ ip.dst == 7.7.7.7'
+        checkDFilterCount(dfilter, 1)
+
+    def test_xor_3(self, checkDFilterCount):
+        dfilter = 'ip.src == 9.9.9.9 xor ip.dst == 9.9.9.9'
+        checkDFilterCount(dfilter, 0)
+
+    def test_xor_4(self, checkDFilterCount):
+        dfilter = 'ip.src == 9.9.9.9 ^^ ip.dst == 9.9.9.9'
+        checkDFilterCount(dfilter, 0)
+
+    def test_xor_5(self, checkDFilterCount):
+        dfilter = 'eth ^^ ip.proto in {"udp", "tcp"}'
+        checkDFilterCount(dfilter, 2)
+
+class TestDfilterTFSValueString:
+    trace_file = "http.pcap"
+
+    def test_tfs_1(self, checkDFilterCount):
+        dfilter = 'ip.flags.df == True'
+        checkDFilterCount(dfilter, 1)
+
+    def test_tfs_2(self, checkDFilterFail):
+        # Should this fail or give a warning?
+        error = 'expected "Set" or "Not set", not "True"'
+        dfilter = 'ip.flags.df == "True"'
+        checkDFilterFail(dfilter, error)
+
+    def test_tfs_3(self, checkDFilterCount):
+        dfilter = 'ip.flags.df == "Set"'
+        checkDFilterCount(dfilter, 1)
+
+    def test_tfs_4(self, checkDFilterCount):
+        dfilter = 'frame.ignored == False'
+        checkDFilterCount(dfilter, 1)
+
+    def test_tfs_5(self, checkDFilterCount):
+        dfilter = 'frame.ignored == "False"'
+        checkDFilterCount(dfilter, 1)
+
+    def test_tfs_6(self, checkDFilterFail):
+        error = 'expected "True" or "False", not "Unset"'
+        dfilter = 'frame.ignored == "Unset"'
+        checkDFilterFail(dfilter, error)
+
+class TestDfilterValueString:
+    trace_file = "tls-over-tls.pcapng.gz"
+    # This file has VLAN. vlan.priority has multiple hfinfo with the same
+    # abbrev but different value strings (for different versions).
+    # This means that value string tests cannot be optimized, and must
+    # match against the entire string.
+
+    def test_value_string(self, checkDFilterCount):
+        dfilter = 'vlan.priority == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 24)
+
+    def test_value_string_layer(self, checkDFilterCount):
+        dfilter = 'vlan.priority#1 == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 24)
+
+    def test_value_string_layer_2(self, checkDFilterCount):
+        dfilter = 'vlan.priority#2 == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 0)
+
+    # To use "contains" with a value string we must explicitly
+    # convert with the "vals" function. Note that this never
+    # optimizes, so it's always a string comparison.
+    def test_value_string_func(self, checkDFilterCount):
+        dfilter = 'vals(tls.handshake.type) contains "Client"'
+        checkDFilterCount(dfilter, 2)
+
+    # A Client Hello appears in TLS layer 1 in one packet, and
+    # Client Key Exchange appears in TLS layer 1 in another (as
+    # the second record at that layer).
+    def test_value_string_func_layer(self, checkDFilterCount):
+        dfilter = 'vals(tls.handshake.type#1) contains "Client"'
+        checkDFilterCount(dfilter, 2)

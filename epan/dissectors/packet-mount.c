@@ -16,75 +16,77 @@
 #include <epan/exceptions.h>
 #include <epan/to_str.h>
 #include <epan/strutil.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include "packet-mount.h"
 #include "packet-nfs.h"
 
 void proto_register_mount(void);
 void proto_reg_handoff_mount(void);
 
-static int proto_mount = -1;
-static int proto_sgi_mount = -1;
-static int hf_mount_procedure_v1 = -1;
-static int hf_mount_procedure_v2 = -1;
-static int hf_mount_procedure_v3 = -1;
-static int hf_sgi_mount_procedure_v1 = -1;
-static int hf_mount_path = -1;
-static int hf_mount3_status = -1;
-static int hf_mount_mountlist_hostname = -1;
-static int hf_mount_mountlist_directory = -1;
-static int hf_mount_mountlist = -1;
-static int hf_mount_groups_group = -1;
-static int hf_mount_groups = -1;
-static int hf_mount_exportlist_directory = -1;
-static int hf_mount_exportlist = -1;
-static int hf_mount_has_options = -1;
-static int hf_mount_options = -1;
-static int hf_mount_pathconf_link_max = -1;
-static int hf_mount_pathconf_max_canon = -1;
-static int hf_mount_pathconf_max_input = -1;
-static int hf_mount_pathconf_name_max = -1;
-static int hf_mount_pathconf_path_max = -1;
-static int hf_mount_pathconf_pipe_buf = -1;
-static int hf_mount_pathconf_vdisable = -1;
-static int hf_mount_pathconf_mask = -1;
-static int hf_mount_pathconf_error_all = -1;
-static int hf_mount_pathconf_error_link_max = -1;
-static int hf_mount_pathconf_error_max_canon = -1;
-static int hf_mount_pathconf_error_max_input = -1;
-static int hf_mount_pathconf_error_name_max = -1;
-static int hf_mount_pathconf_error_path_max = -1;
-static int hf_mount_pathconf_error_pipe_buf = -1;
-static int hf_mount_pathconf_chown_restricted = -1;
-static int hf_mount_pathconf_no_trunc = -1;
-static int hf_mount_pathconf_error_vdisable = -1;
-static int hf_mount_statvfs_bsize = -1;
-static int hf_mount_statvfs_frsize = -1;
-static int hf_mount_statvfs_blocks = -1;
-static int hf_mount_statvfs_bfree = -1;
-static int hf_mount_statvfs_bavail = -1;
-static int hf_mount_statvfs_files = -1;
-static int hf_mount_statvfs_ffree = -1;
-static int hf_mount_statvfs_favail = -1;
-static int hf_mount_statvfs_fsid = -1;
-static int hf_mount_statvfs_basetype = -1;
-static int hf_mount_statvfs_flag = -1;
-static int hf_mount_statvfs_flag_rdonly = -1;
-static int hf_mount_statvfs_flag_nosuid = -1;
-static int hf_mount_statvfs_flag_notrunc = -1;
-static int hf_mount_statvfs_flag_nodev = -1;
-static int hf_mount_statvfs_flag_grpid = -1;
-static int hf_mount_statvfs_flag_local = -1;
-static int hf_mount_statvfs_namemax = -1;
-static int hf_mount_statvfs_fstr = -1;
-static int hf_mount_flavors = -1;
-static int hf_mount_flavor = -1;
+static int proto_mount;
+static int proto_sgi_mount;
+static int hf_mount_procedure_v1;
+static int hf_mount_procedure_v2;
+static int hf_mount_procedure_v3;
+static int hf_sgi_mount_procedure_v1;
+static int hf_mount_path;
+static int hf_mount3_status;
+static int hf_mount_mountlist_hostname;
+static int hf_mount_mountlist_directory;
+static int hf_mount_mountlist;
+static int hf_mount_groups_group;
+static int hf_mount_groups;
+static int hf_mount_exportlist_directory;
+static int hf_mount_exportlist;
+static int hf_mount_has_options;
+static int hf_mount_options;
+static int hf_mount_pathconf_link_max;
+static int hf_mount_pathconf_max_canon;
+static int hf_mount_pathconf_max_input;
+static int hf_mount_pathconf_name_max;
+static int hf_mount_pathconf_path_max;
+static int hf_mount_pathconf_pipe_buf;
+static int hf_mount_pathconf_vdisable;
+static int hf_mount_pathconf_mask;
+static int hf_mount_pathconf_error_all;
+static int hf_mount_pathconf_error_link_max;
+static int hf_mount_pathconf_error_max_canon;
+static int hf_mount_pathconf_error_max_input;
+static int hf_mount_pathconf_error_name_max;
+static int hf_mount_pathconf_error_path_max;
+static int hf_mount_pathconf_error_pipe_buf;
+static int hf_mount_pathconf_chown_restricted;
+static int hf_mount_pathconf_no_trunc;
+static int hf_mount_pathconf_error_vdisable;
+static int hf_mount_statvfs_bsize;
+static int hf_mount_statvfs_frsize;
+static int hf_mount_statvfs_blocks;
+static int hf_mount_statvfs_bfree;
+static int hf_mount_statvfs_bavail;
+static int hf_mount_statvfs_files;
+static int hf_mount_statvfs_ffree;
+static int hf_mount_statvfs_favail;
+static int hf_mount_statvfs_fsid;
+static int hf_mount_statvfs_basetype;
+static int hf_mount_statvfs_flag;
+static int hf_mount_statvfs_flag_rdonly;
+static int hf_mount_statvfs_flag_nosuid;
+static int hf_mount_statvfs_flag_notrunc;
+static int hf_mount_statvfs_flag_nodev;
+static int hf_mount_statvfs_flag_grpid;
+static int hf_mount_statvfs_flag_local;
+static int hf_mount_statvfs_namemax;
+static int hf_mount_statvfs_fstr;
+static int hf_mount_flavors;
+static int hf_mount_flavor;
 
-static gint ett_mount = -1;
-static gint ett_mount_mountlist = -1;
-static gint ett_mount_groups = -1;
-static gint ett_mount_exportlist = -1;
-static gint ett_mount_pathconf_mask = -1;
-static gint ett_mount_statvfs_flag = -1;
+static int ett_mount;
+static int ett_mount_mountlist;
+static int ett_mount_groups;
+static int ett_mount_exportlist;
+static int ett_mount_pathconf_mask;
+static int ett_mount_statvfs_flag;
 
 /* RFC 1813, Page 107 */
 static const value_string mount3_mountstat3[] =
@@ -109,12 +111,12 @@ static const value_string mount3_mountstat3[] =
  * 3 of the protocol.
  * Though not formally defined in the standard, we use the same
  * value-to-string mappings as version 3 since we believe that this mapping
- * is consistant with most v1 and v2 implementations.
+ * is consistent with most v1 and v2 implementations.
  */
-static int
-dissect_fhstatus(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, rpc_call_info_value* civ)
+static unsigned
+dissect_fhstatus(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, rpc_call_info_value* civ)
 {
-	gint32 status;
+	int32_t status;
 
 	status=tvb_get_ntohl(tvb,offset);
 	offset = dissect_rpc_uint32(tvb,tree,hf_mount3_status,offset);
@@ -127,7 +129,7 @@ dissect_fhstatus(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree
 			/* void */
 			col_append_fstr(
 					pinfo->cinfo, COL_INFO, " Error:%s",
-					val_to_str(status, mount3_mountstat3,
+					val_to_str(pinfo->pool, status, mount3_mountstat3,
 					    "Unknown (0x%08X)"));
 		break;
 	}
@@ -137,21 +139,20 @@ dissect_fhstatus(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree
 
 
 static int
-dissect_mount_dirpath_call(tvbuff_t *tvb, packet_info *pinfo,
-		proto_tree *tree, void* data)
+dissect_mount_dirpath_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
 	const char *mountpoint=NULL;
-	int offset = 0;
+	unsigned offset = 0;
 
 	if((!pinfo->fd->visited) && nfs_file_name_snooping){
 		rpc_call_info_value *civ=(rpc_call_info_value *)data;
 
 		if(civ->request && (civ->proc==1)){
-			guint32 len_field;
+			uint32_t len_field;
 
 			len_field = tvb_get_ntohl(tvb, offset);
 			if (len_field < ITEM_LABEL_LENGTH) {
-				gchar *name, *ptr;
+				char *name, *ptr;
 				int addr_len, name_len;
 
 				name = address_to_str(pinfo->pool, &pinfo->dst);
@@ -159,7 +160,7 @@ dissect_mount_dirpath_call(tvbuff_t *tvb, packet_info *pinfo,
 				/* IP address, colon, path, terminating 0 */
 				name_len = addr_len + 1 + len_field + 1;
 
-				name = (gchar *)wmem_realloc(pinfo->pool,
+				name = (char *)wmem_realloc(pinfo->pool,
 						(void *)name, name_len);
 				ptr = name + addr_len;
 				*ptr++ = ':';
@@ -172,7 +173,7 @@ dissect_mount_dirpath_call(tvbuff_t *tvb, packet_info *pinfo,
 		}
 	}
 
-	offset = dissect_rpc_string(tvb,tree,hf_mount_path,offset,&mountpoint);
+	offset = dissect_rpc_string(tvb,pinfo,tree,hf_mount_path,offset,&mountpoint);
 	col_append_fstr(pinfo->cinfo, COL_INFO," %s", mountpoint);
 
 	return offset;
@@ -191,7 +192,7 @@ dissect_mount1_mnt_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 /* RFC 1094, Page 26 */
 /* RFC 1813, Page 110 */
 static int
-dissect_mountlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_mountlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item* lock_item;
 	proto_tree* lock_tree;
@@ -204,9 +205,9 @@ dissect_mountlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree 
 
 	lock_tree = proto_item_add_subtree(lock_item, ett_mount_mountlist);
 
-	offset = dissect_rpc_string(tvb, lock_tree,
+	offset = dissect_rpc_string(tvb, pinfo, lock_tree,
 			hf_mount_mountlist_hostname, offset, &hostname);
-	offset = dissect_rpc_string(tvb, lock_tree,
+	offset = dissect_rpc_string(tvb, pinfo, lock_tree,
 			hf_mount_mountlist_directory, offset, &directory);
 
 	if (lock_item) {
@@ -234,12 +235,12 @@ dissect_mount_dump_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 /* RFC 1094, Page 26 */
 /* RFC 1813, Page 110 */
 static int
-dissect_group(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data)
+dissect_group(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data)
 {
 	wmem_strbuf_t *group_name_list = (wmem_strbuf_t *)data;
 	const char *group_name;
 
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_mount_groups_group, offset, &group_name);
 	if (wmem_strbuf_get_len(group_name_list) != 0)
 		wmem_strbuf_append_c(group_name_list, ' ');
@@ -252,7 +253,7 @@ dissect_group(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tre
 /* RFC 1094, Page 26 */
 /* RFC 1813, Page 113 */
 static int
-dissect_exportlist(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_exportlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item* exportlist_item = NULL;
 	proto_tree* exportlist_tree = NULL;
@@ -269,7 +270,7 @@ dissect_exportlist(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tr
 		exportlist_tree = proto_item_add_subtree(exportlist_item, ett_mount_exportlist);
 	}
 
-	offset = dissect_rpc_string(tvb, exportlist_tree,
+	offset = dissect_rpc_string(tvb, pinfo, exportlist_tree,
 			hf_mount_exportlist_directory, offset, &directory);
 	groups_offset = offset;
 
@@ -382,7 +383,7 @@ static const true_false_string tos_error_vdisable = {
 static int
 dissect_mount_pathconf_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	guint32 pc_mask;
+	uint32_t pc_mask;
 	static int * const flags[] = {
 		&hf_mount_pathconf_error_all,
 		&hf_mount_pathconf_error_link_max,
@@ -396,7 +397,7 @@ dissect_mount_pathconf_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
 		&hf_mount_pathconf_error_vdisable,
 		NULL
 	};
-	int offset = 0;
+	unsigned offset = 0;
 
 	/*
 	 * Extract the mask first, so we know which other fields the
@@ -460,16 +461,16 @@ dissect_mount_pathconf_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
 
 
 /* RFC 1813, Page 107 */
-static int
-dissect_mountstat3(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, int offset, int hfindex, guint32 *status)
+static unsigned
+dissect_mountstat3(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, unsigned offset, int hfindex, uint32_t *status)
 {
-	guint32 mountstat3;
+	uint32_t mountstat3;
 
 	mountstat3 = tvb_get_ntohl(tvb, offset);
 	if(mountstat3){
 		col_append_fstr(
 				pinfo->cinfo, COL_INFO, " Error:%s",
-				val_to_str(mountstat3, mount3_mountstat3,
+				val_to_str(pinfo->pool, mountstat3, mount3_mountstat3,
 				    "Unknown (0x%08X)"));
 	}
 
@@ -482,11 +483,11 @@ dissect_mountstat3(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, int offs
 static int
 dissect_mount3_mnt_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-	guint32 status;
-	guint32 auth_flavors;
-	guint32 auth_flavor;
-	guint32 auth_flavor_i;
-	int offset = 0;
+	uint32_t status;
+	uint32_t auth_flavors;
+	uint32_t auth_flavor;
+	uint32_t auth_flavor_i;
+	unsigned offset = 0;
 
 	offset = dissect_mountstat3(pinfo,tvb,tree,offset,hf_mount3_status,&status);
 
@@ -514,7 +515,7 @@ dissect_mount3_mnt_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 }
 
 static int
-dissect_sgi_exportlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_sgi_exportlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item* exportlist_item = NULL;
 	proto_tree* exportlist_tree = NULL;
@@ -529,13 +530,13 @@ dissect_sgi_exportlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_
 						ett_mount_exportlist);
 	}
 
-	offset = dissect_rpc_string(tvb, exportlist_tree,
+	offset = dissect_rpc_string(tvb, pinfo, exportlist_tree,
 			hf_mount_exportlist_directory, offset, &directory);
 
 	offset = dissect_rpc_bool(tvb, exportlist_tree,
 			hf_mount_has_options, offset);
 
-	offset = dissect_rpc_string(tvb, exportlist_tree, hf_mount_options,
+	offset = dissect_rpc_string(tvb, pinfo, exportlist_tree, hf_mount_options,
 			 offset, &options);
 
 	if (exportlist_item) {
@@ -595,7 +596,7 @@ static const true_false_string tos_st_local = {
 };
 
 static int
-dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	static int * const flags[] = {
 		&hf_mount_statvfs_flag_rdonly,
@@ -606,7 +607,7 @@ dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 		&hf_mount_statvfs_flag_local,
 		NULL
 	};
-	int offset = 0;
+	unsigned offset = 0;
 
 	dissect_rpc_uint32(tvb, tree, hf_mount_statvfs_bsize, offset);
 	offset += 4;
@@ -632,11 +633,11 @@ dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 	dissect_rpc_uint32(tvb, tree, hf_mount_statvfs_favail, offset);
 	offset += 4;
 
-	dissect_rpc_bytes(tvb, tree, hf_mount_statvfs_basetype, offset,
-			16, TRUE, NULL);
+	dissect_rpc_bytes(tvb, pinfo, tree, hf_mount_statvfs_basetype, offset,
+			16, true, NULL);
 	offset += 16;
 
-	dissect_rpc_bytes(tvb, tree, hf_mount_statvfs_fstr, offset, 32, FALSE, NULL);
+	dissect_rpc_bytes(tvb, pinfo, tree, hf_mount_statvfs_fstr, offset, 32, false, NULL);
 	offset += 32;
 
 	dissect_rpc_uint32(tvb, tree, hf_mount_statvfs_fsid, offset);
@@ -999,7 +1000,7 @@ proto_register_mount(void)
 			"Flavor", "mount.flavor", FT_UINT32, BASE_DEC,
 			VALS(rpc_auth_flavor), 0, NULL, HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_mount,
 		&ett_mount_mountlist,
 		&ett_mount_groups,

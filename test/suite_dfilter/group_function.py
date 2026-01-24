@@ -2,12 +2,9 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import unittest
-import fixtures
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
-@fixtures.uses_fixtures
-class case_dfunction_string(unittest.TestCase):
+class TestFunctionString:
     trace_file = "dhcp.pcap"
 
     def test_matches_1(self, checkDFilterCount):
@@ -42,8 +39,7 @@ class case_dfunction_string(unittest.TestCase):
         error = 'String conversion for field "dhcp.option.value" is not supported'
         checkDFilterFail(dfilter, error)
 
-@fixtures.uses_fixtures
-class case_dfunction_maxmin(unittest.TestCase):
+class TestFunctionMaxMin:
     trace_file = "sip.pcapng"
 
     def test_min_1(self, checkDFilterCount):
@@ -70,15 +66,82 @@ class case_dfunction_maxmin(unittest.TestCase):
         dfilter = 'max(5060, udp.dstport) == udp.srcport'
         checkDFilterCount(dfilter, 2)
 
-    def test_max_5(self, checkDFilterFail):
-        error = 'Constant expression is invalid on the LHS'
+    def test_max_5(self, checkDFilterCount):
         dfilter = 'max(5060, 5070) == udp.srcport'
-        checkDFilterFail(dfilter, error)
+        checkDFilterCount(dfilter, 1)
 
-@fixtures.uses_fixtures
-class case_dfunction_abs(unittest.TestCase):
+    def text_max_6(self, checkDFilterCount):
+        # Extraneous negative numbers don't affect anything.
+        dfilter = 'max(udp.srcport, udp.dstport, -200) == 5060'
+        checkDFilterCount(dfilter, 2)
+
+class TestFunctionAbs:
     trace_file = "dhcp.pcapng"
 
     def test_function_abs_1(self, checkDFilterCount):
         dfilter = 'udp.dstport == abs(-67)'
         checkDFilterCount(dfilter, 2)
+
+class TestFunctionLen:
+    trace_file = "http.pcap"
+
+    def test_function_len_1(self, checkDFilterCount):
+        dfilter = 'len(http.host) == 27'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_len_2(self, checkDFilterCount):
+        dfilter = 'len(http.host) != 0'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_len_3(self, checkDFilterCount):
+        dfilter = 'len(http.host) == 0'
+        checkDFilterCount(dfilter, 0)
+
+    def test_function_len_4(self, checkDFilterCount):
+        dfilter = 'len(http.host)'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_len_5(self, checkDFilterCount):
+        dfilter = '!len(http.host)'
+        checkDFilterCount(dfilter, 0)
+
+class TestFunctionNested:
+    trace_file = 'http.pcap'
+
+    def test_function_nested_1(self, checkDFilterCount):
+        dfilter = 'abs(min(tcp.srcport, tcp.dstport)) == 80'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_nested_2(self, checkDFilterCount):
+        dfilter = 'min(tcp.srcport * 10, tcp.dstport * 10, udp.srcport * 10, udp.dstport * 10) == 800'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_nested_3(self, checkDFilterCount):
+        dfilter = 'min(len(tcp.payload), len(udp.payload)) == 153'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_nested_4(self, checkDFilterCount):
+        # udp.payload does not exist. Check that len(udp.payload) + 2
+        # resolves to NULL, not to 2.
+        dfilter = 'min(len(tcp.payload[2:]) + 2, len(udp.payload[2:]) + 2) == 153'
+        checkDFilterCount(dfilter, 1)
+
+class TestFunctionDouble:
+    trace_file = "dhcp.pcapng"
+
+    # Observer differences in precision and how they affect equality tests
+    def test_function_double_1(self, checkDFilterCount):
+        dfilter = 'double(len(udp.payload)) / double(udp.time_relative) == 3883.9942311262157'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_double_2(self, checkDFilterCount):
+        dfilter = 'float(double(len(udp.payload)) / double(udp.time_relative)) == 3883.994140625'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_float_1(self, checkDFilterCount):
+        dfilter = 'float(len(udp.payload)) / float(udp.time_relative) == 3883.9941111147282'
+        checkDFilterCount(dfilter, 1)
+
+    def test_function_float_2(self, checkDFilterCount):
+        dfilter = 'float(float(len(udp.payload)) / float(udp.time_relative)) == 3883.994140625'
+        checkDFilterCount(dfilter, 1)

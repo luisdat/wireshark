@@ -18,6 +18,7 @@
 
 #include <QPushButton>
 #include <QTreeWidgetItem>
+#include <QLabel>
 
 namespace Ui {
 class ProfileDialog;
@@ -34,14 +35,14 @@ public:
     };
 
     explicit ProfileDialog(QWidget *parent = Q_NULLPTR);
-    ~ProfileDialog();
+    virtual ~ProfileDialog();
     int execAction(ProfileAction profile_action);
 
     /**
      * @brief Select the profile with the given name.
      *
-     * If the profile name is empty, the currently selected profile will be choosen instead.
-     * If the choosen profile is invalid, the first row will be choosen.
+     * If the profile name is empty, the currently selected profile will be chosen instead.
+     * If the chosen profile is invalid, the first row will be chosen.
      *
      * @param profile the name of the profile to be selected
      */
@@ -49,12 +50,14 @@ public:
 
 protected:
     virtual void keyPressEvent(QKeyEvent *event);
+    // UI getters
+    QLabel* autoSwitchLimitLabel() const;
 
 private:
     Ui::ProfileDialog *pd_ui_;
     QPushButton *ok_button_;
     QPushButton *import_button_;
-#ifdef HAVE_MINIZIP
+#if defined(HAVE_MINIZIP) || defined(HAVE_MINIZIPNG)
     QPushButton *export_button_;
     QAction *export_selected_entry_;
 #endif
@@ -68,18 +71,18 @@ private:
 
 private slots:
     void currentItemChanged(const QModelIndex & c = QModelIndex(), const QModelIndex & p = QModelIndex());
-#ifdef HAVE_MINIZIP
+#if defined(HAVE_MINIZIP) || defined(HAVE_MINIZIPNG)
     void exportProfiles(bool exportAllPersonalProfiles = false);
     void importFromZip();
 #endif
     void importFromDirectory();
 
-    void on_newToolButton_clicked();
-    void on_deleteToolButton_clicked();
-    void on_copyToolButton_clicked();
-    void on_buttonBox_accepted();
-    void on_buttonBox_rejected();
-    void on_buttonBox_helpRequested();
+    void newToolButtonClicked();
+    void deleteToolButtonClicked();
+    void copyToolButtonClicked();
+    void buttonBoxAccepted();
+    void buttonBoxRejected();
+    void buttonBoxHelpRequested();
     void dataChanged(const QModelIndex &);
 
     void filterChanged(const QString &);

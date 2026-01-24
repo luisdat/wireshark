@@ -16,9 +16,6 @@
 #include <wiretap/wtap.h>
 #include <wiretap/socketcan.h>
 
-//#define BUSMASTER_DEBUG
-//#define BUSMASTER_PARSER_TRACE
-
 typedef enum {
     LOG_ENTRY_ERROR = -1,
     LOG_ENTRY_NONE = 0,
@@ -50,70 +47,54 @@ typedef enum {
     TIME_MODE_RELATIVE,
 } time_mode_t;
 
-typedef enum {
-    MSG_TYPE_STD,
-    MSG_TYPE_EXT,
-    MSG_TYPE_STD_RTR,
-    MSG_TYPE_EXT_RTR,
-    MSG_TYPE_STD_FD,
-    MSG_TYPE_EXT_FD,
-    MSG_TYPE_ERR,
-} msg_type_t;
-
 typedef struct {
-    guint year;
-    guint month;
-    guint day;
+    unsigned year;
+    unsigned month;
+    unsigned day;
 } msg_date_t;
 
 typedef struct {
-    guint hours;
-    guint minutes;
-    guint seconds;
-    guint micros;
+    unsigned hours;
+    unsigned minutes;
+    unsigned seconds;
+    unsigned micros;
 } msg_time_t;
 
 typedef struct {
-    msg_date_t date;
-    msg_time_t time;
+    msg_date_t d;
+    msg_time_t t;
 } msg_date_time_t;
 
 typedef struct {
-    guint      length;
-    guint8     data[CANFD_MAX_DLEN];
-} msg_data_t;
-
-typedef struct {
     msg_time_t timestamp;
-    msg_type_t type;
-    guint32    id;
-    msg_data_t data;
+    wtap_can_msg_type_t type;
+    uint32_t   id;
+    wtap_can_msg_data_t data;
 } msg_t;
 
 typedef struct {
-    gint64 v0;
-    gint64 v1;
-    gint64 v2;
-    gint64 v3;
+    int64_t v0;
+    int64_t v1;
+    int64_t v2;
+    int64_t v3;
 } token_t;
 
 typedef struct {
-    gint64      file_start_offset;
-    gint64      file_end_offset;
+    int64_t     file_start_offset;
+    int64_t     file_end_offset;
     protocol_type_t  protocol;
     data_mode_t data_mode;
     time_mode_t time_mode;
-    msg_date_t  start_date;
-    msg_time_t  start_time;
+    msg_date_time_t  start;
 } busmaster_priv_t;
 
 typedef struct {
     FILE_T   fh;
-    gint64   file_bytes_read;
+    int64_t  file_bytes_read;
 
-    gchar   *parse_error;
+    char    *parse_error;
     int      err;
-    gchar   *err_info;
+    char    *err_info;
 
     token_t  token;
 
@@ -122,15 +103,8 @@ typedef struct {
     msg_t            msg;
 } busmaster_state_t;
 
-gboolean
+bool
 run_busmaster_parser(busmaster_state_t *state,
-                     int               *err, gchar **err_info);
-
-#ifdef BUSMASTER_DEBUG
-#include <stdio.h>
-#define busmaster_debug_printf(...) printf(__VA_ARGS__)
-#else
-#define busmaster_debug_printf(...) (void)0
-#endif
+                     int               *err, char **err_info);
 
 #endif  /* BUSMASTER_PRIV_H__ */

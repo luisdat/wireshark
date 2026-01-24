@@ -9,11 +9,10 @@
 #ifndef __W_K12_H__
 #define __W_K12_H__
 
-#include <glib.h>
 #include "wtap.h"
 
-wtap_open_return_val k12_open(wtap *wth, int *err, gchar **err_info);
-wtap_open_return_val k12text_open(wtap *wth, int *err, gchar **err_info);
+wtap_open_return_val k12_open(wtap *wth, int *err, char **err_info);
+wtap_open_return_val k12text_open(wtap *wth, int *err, char **err_info);
 
 #endif
 

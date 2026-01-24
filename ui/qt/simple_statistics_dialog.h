@@ -50,8 +50,8 @@ private slots:
 /** Register function to register dissectors that support a "simple" statistics table.
  *
  * @param key is tap string
- * @param value stat_tap_table_ui* representing dissetor stat table
+ * @param value stat_tap_table_ui* representing dissector stat table
  */
-gboolean register_simple_stat_tables(const void *key, void *value, void*);
+bool register_simple_stat_tables(const void *key, void *value, void*);
 
 #endif // __SIMPLE_STATISTICS_DIALOG_H__

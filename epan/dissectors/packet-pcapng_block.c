@@ -1,4 +1,4 @@
-/* packet-pcapng.c
+/* packet-pcapng_block.c
  * Dissector to handle pcapng file-type-specific blocks.
  *
  * Wireshark - Network traffic analyzer
@@ -15,9 +15,13 @@
 #include <wiretap/wtap.h>
 
 void proto_register_pcapng_block(void);
+void event_register_pcapng_block(void);
 void proto_reg_handoff_pcapng_block(void);
+void event_reg_handoff_pcapng_block(void);
 
-static int proto_pcapng_block = -1;
+static dissector_handle_t pcapng_block_handle;
+
+static int proto_pcapng_block;
 
 static dissector_table_t pcapng_block_type_dissector_table;
 
@@ -42,23 +46,42 @@ dissect_pcapng_block(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 	return tvb_captured_length(tvb);
 }
 
-void proto_register_pcapng_block(void)
+static void common_register_pcapng_block(void)
 {
-	proto_pcapng_block = proto_register_protocol("Pcapng block",
-	    "PCAPNG", "pcapng");
+	proto_pcapng_block = proto_register_protocol("Pcapng block", "PCAPNG", "pcapng");
 	pcapng_block_type_dissector_table = register_dissector_table("pcapng.block_type",
 	    "pcapng block type", proto_pcapng_block, FT_UINT32, BASE_DEC);
+
+	pcapng_block_handle = register_dissector("pcapng", dissect_pcapng_block,
+	    proto_pcapng_block);
+}
+
+void proto_register_pcapng_block(void)
+{
+	common_register_pcapng_block();
+}
+
+void event_register_pcapng_block(void)
+{
+	common_register_pcapng_block();
+}
+
+static void common_reg_handoff_pcapng_block(void)
+{
+	dissector_add_uint("wtap_fts_rec", wtap_pcapng_file_type_subtype(),
+		pcapng_block_handle);
 }
 
 void
 proto_reg_handoff_pcapng_block(void)
 {
-	dissector_handle_t pcapng_block_handle;
+	common_reg_handoff_pcapng_block();
+}
 
-	pcapng_block_handle = create_dissector_handle(dissect_pcapng_block,
-	    proto_pcapng_block);
-	dissector_add_uint("wtap_fts_rec", wtap_pcapng_file_type_subtype(),
-	    pcapng_block_handle);
+void
+event_reg_handoff_pcapng_block(void)
+{
+	common_reg_handoff_pcapng_block();
 }
 
 /*

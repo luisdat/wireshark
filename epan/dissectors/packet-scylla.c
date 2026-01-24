@@ -25,10 +25,12 @@
 #include <epan/expert.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <epan/dissectors/packet-tcp.h>
+#include "packet-tcp.h"
 
 void proto_reg_handoff_scylla(void);
 void proto_register_scylla(void);
+
+static dissector_handle_t scylla_handle;
 
 #define SCYLLA_PORT 0 /* Not IANA registered, 7000 is the expected value */
 
@@ -44,47 +46,55 @@ void proto_register_scylla(void);
 #define SCYLLA_NEGOTIATION_SIZE 12
 #define SCYLLA_NEGOTIATION_LEN_OFFSET 8
 
-static int proto_scylla = -1;
+static int proto_scylla;
 
-static int hf_scylla_request = -1;
-static int hf_scylla_request_response_frame = -1;
-static int hf_scylla_timeout = -1;
-static int hf_scylla_verb = -1;
-static int hf_scylla_msg_id = -1;
-static int hf_scylla_len = -1;
-static int hf_scylla_response = -1;
-static int hf_scylla_response_size = -1;
-static int hf_scylla_response_request_frame = -1;
-static int hf_scylla_negotiation_magic = -1;
-static int hf_scylla_negotiation_size = -1;
-static int hf_scylla_payload = -1; // TODO: dissect everything, so that generic "payload" is not needed
+static int hf_scylla_request;
+static int hf_scylla_request_response_frame;
+static int hf_scylla_timeout;
+static int hf_scylla_verb;
+static int hf_scylla_msg_id;
+static int hf_scylla_len;
+static int hf_scylla_response;
+static int hf_scylla_response_size;
+static int hf_scylla_response_request_frame;
+static int hf_scylla_negotiation_magic;
+static int hf_scylla_negotiation_size;
+static int hf_scylla_feature_number;
+static int hf_scylla_feature_len;
+static int hf_scylla_feature_data;
+static int hf_scylla_connection_id;
+static int hf_scylla_isolation_cookie;
+static int hf_scylla_streaming_len;
+static int hf_scylla_payload; // TODO: dissect everything, so that generic "payload" is not needed
 
 // Mutation
-static int hf_scylla_mut_size1 = -1;
-static int hf_scylla_mut_size2 = -1;
-static int hf_scylla_mut_table_id = -1;
-static int hf_scylla_mut_schema_id = -1;
-static int hf_scylla_mut_len_pkeys = -1;
-static int hf_scylla_mut_num_pkeys = -1;
-static int hf_scylla_mut_len_pkey = -1;
-static int hf_scylla_mut_pkey = -1;
+static int hf_scylla_mut_size1;
+static int hf_scylla_mut_size2;
+static int hf_scylla_mut_table_id;
+static int hf_scylla_mut_schema_id;
+static int hf_scylla_mut_len_pkeys;
+static int hf_scylla_mut_num_pkeys;
+static int hf_scylla_mut_len_pkey;
+static int hf_scylla_mut_pkey;
 
 // Read data
-static int hf_scylla_read_data_timeout = -1;
-static int hf_scylla_read_data_table_id = -1;
-static int hf_scylla_read_data_schema_version = -1;
+static int hf_scylla_read_data_timeout;
+static int hf_scylla_read_data_table_id;
+static int hf_scylla_read_data_schema_version;
 
-static gint ett_scylla = -1;
-static gint ett_scylla_header = -1;
-static gint ett_scylla_response = -1;
-static gint ett_scylla_negotiation = -1;
-static gint ett_scylla_mut = -1;
-static gint ett_scylla_mut_pkey = -1;
-static gint ett_scylla_read_data = -1;
+static int ett_scylla;
+static int ett_scylla_header;
+static int ett_scylla_response;
+static int ett_scylla_negotiation;
+static int ett_scylla_negotiation_features;
+static int ett_sclla_streaming;
+static int ett_scylla_mut;
+static int ett_scylla_mut_pkey;
+static int ett_scylla_read_data;
 
-static gboolean scylla_desegment = TRUE;
+static bool scylla_desegment = true;
 
-static expert_field ei_scylla_response_missing = EI_INIT;
+static expert_field ei_scylla_response_missing;
 
 enum scylla_packets {
     CLIENT_ID = 0,
@@ -135,7 +145,38 @@ enum scylla_packets {
     PAXOS_LEARN = 41,
     HINT_MUTATION = 42,
     PAXOS_PRUNE = 43,
-    LAST = 44,
+    GOSSIP_GET_ENDPOINT_STATES = 44,
+    NODE_OPS_CMD = 45,
+    RAFT_SEND_SNAPSHOT = 46,
+    RAFT_APPEND_ENTRIES = 47,
+    RAFT_APPEND_ENTRIES_REPLY = 48,
+    RAFT_VOTE_REQUEST = 49,
+    RAFT_VOTE_REPLY = 50,
+    RAFT_TIMEOUT_NOW = 51,
+    RAFT_READ_QUORUM = 52,
+    RAFT_READ_QUORUM_REPLY = 53,
+    RAFT_EXECUTE_READ_BARRIER_ON_LEADER = 54,
+    RAFT_ADD_ENTRY = 55,
+    RAFT_MODIFY_CONFIG = 56,
+    GROUP0_PEER_EXCHANGE = 57,
+    GROUP0_MODIFY_CONFIG = 58,
+    REPAIR_UPDATE_SYSTEM_TABLE = 59,
+    REPAIR_FLUSH_HINTS_BATCHLOG = 60,
+    MAPREDUCE_REQUEST = 61,
+    GET_GROUP0_UPGRADE_STATE = 62,
+    DIRECT_FD_PING = 63,
+    RAFT_TOPOLOGY_CMD = 64,
+    RAFT_PULL_SNAPSHOT = 65,
+    TABLET_STREAM_DATA = 66,
+    TABLET_CLEANUP = 67,
+    JOIN_NODE_REQUEST = 68,
+    JOIN_NODE_RESPONSE = 69,
+    TABLET_STREAM_FILES = 70,
+    STREAM_BLOB = 71,
+    TABLE_LOAD_STATS = 72,
+    JOIN_NODE_QUERY = 73,
+    TASKS_GET_CHILDREN = 74,
+    LAST = 75,
 };
 
 static const val64_string packettypenames[] = {
@@ -183,34 +224,92 @@ static const val64_string packettypenames[] = {
     {PAXOS_LEARN,                                "PAXOS_LEARN"},
     {HINT_MUTATION,                              "HINT_MUTATION"},
     {PAXOS_PRUNE,                                "PAXOS_PRUNE"},
+    {GOSSIP_GET_ENDPOINT_STATES,                 "GOSSIP_GET_ENDPOINT_STATES"},
+    {NODE_OPS_CMD,                               "NODE_OPS_CMD"},
+    {RAFT_SEND_SNAPSHOT,                         "RAFT_SEND_SNAPSHOT"},
+    {RAFT_APPEND_ENTRIES,                        "RAFT_APPEND_ENTRIES"},
+    {RAFT_APPEND_ENTRIES_REPLY,                  "RAFT_APPEND_ENTRIES_REPLY"},
+    {RAFT_VOTE_REQUEST,                          "RAFT_VOTE_REQUEST"},
+    {RAFT_VOTE_REPLY,                            "RAFT_VOTE_REPLY"},
+    {RAFT_TIMEOUT_NOW,                           "RAFT_TIMEOUT_NOW"},
+    {RAFT_READ_QUORUM,                           "RAFT_READ_QUORUM"},
+    {RAFT_READ_QUORUM_REPLY,                     "RAFT_READ_QUORUM_REPLY"},
+    {RAFT_EXECUTE_READ_BARRIER_ON_LEADER,        "RAFT_EXECUTE_READ_BARRIER_ON_LEADER"},
+    {RAFT_ADD_ENTRY,                             "RAFT_ADD_ENTRY"},
+    {RAFT_MODIFY_CONFIG,                         "RAFT_MODIFY_CONFIG"},
+    {GROUP0_PEER_EXCHANGE,                       "GROUP0_PEER_EXCHANGE"},
+    {GROUP0_MODIFY_CONFIG,                       "GROUP0_MODIFY_CONFIG"},
+    {REPAIR_UPDATE_SYSTEM_TABLE,                 "REPAIR_UPDATE_SYSTEM_TABLE"},
+    {REPAIR_FLUSH_HINTS_BATCHLOG,                "REPAIR_FLUSH_HINTS_BATCHLOG"},
+    {MAPREDUCE_REQUEST,                          "MAPREDUCE_REQUEST"},
+    {GET_GROUP0_UPGRADE_STATE,                   "GET_GROUP0_UPGRADE_STATE"},
+    {DIRECT_FD_PING,                             "DIRECT_FD_PING"},
+    {RAFT_TOPOLOGY_CMD,                          "RAFT_TOPOLOGY_CMD"},
+    {RAFT_PULL_SNAPSHOT,                         "RAFT_PULL_SNAPSHOT"},
+    {TABLET_STREAM_DATA,                         "TABLET_STREAM_DATA"},
+    {TABLET_CLEANUP,                             "TABLET_CLEANUP"},
+    {JOIN_NODE_REQUEST,                          "JOIN_NODE_REQUEST"},
+    {JOIN_NODE_RESPONSE,                         "JOIN_NODE_RESPONSE"},
+    {TABLET_STREAM_FILES,                        "TABLET_STREAM_FILES"},
+    {STREAM_BLOB,                                "STREAM_BLOB"},
+    {TABLE_LOAD_STATS,                           "TABLE_LOAD_STATS"},
+    {JOIN_NODE_QUERY,                            "JOIN_NODE_QUERY"},
+    {TASKS_GET_CHILDREN,                         "TASKS_GET_CHILDREN"},
     {0, NULL}
 };
 
-static gboolean
-looks_like_rpc_negotiation(tvbuff_t *tvb, const gint offset) {
-    return tvb_memeql(tvb, offset, (const guint8 *)"SSTARRPC", 8) == 0;
+enum features {
+    COMPRESSION = 0,
+    TIMEOUT_PROPAGATION = 1,
+    CONNECTION_ID = 2,
+    STREAM_PARENT = 3,
+    ISOLATION = 4,
+    HANDLER_DURATION = 5,
+};
+
+static const value_string feature_names[] = {
+    {COMPRESSION,           "Compression"},
+    {TIMEOUT_PROPAGATION,   "Timeout propagation"},
+    {CONNECTION_ID,         "Connection ID"},
+    {STREAM_PARENT,         "Stream parent"},
+    {ISOLATION,             "Isolation"},
+    {HANDLER_DURATION,      "Handler duration"},
+    {0, NULL}
+};
+
+static bool
+looks_like_rpc_negotiation(tvbuff_t *tvb) {
+    return tvb_memeql(tvb, 0, (const uint8_t *)"SSTARRPC", 8) == 0;
 }
 
-static gboolean
-looks_like_response(guint64 verb_type, guint32 len) {
+static bool
+looks_like_response(uint64_t verb_type, uint32_t len) {
     return verb_type >= LAST || len > 64*1024*1024;
 }
 
 typedef struct {
-    guint64 verb_type;
-    guint32 request_frame_num;
-    guint32 response_frame_num;
+    uint64_t verb_type;
+    uint32_t request_frame_num;
+    uint32_t response_frame_num;
 } request_response_t;
 
-static guint
+static unsigned
 get_scylla_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
-    guint64 verb_type = LAST;
-    guint32 plen = 0;
-    if (looks_like_rpc_negotiation(tvb, offset)) {
+    uint64_t verb_type = LAST;
+    uint32_t plen = 0;
+    unsigned int reported_len;
+    if (looks_like_rpc_negotiation(tvb)) {
         return tvb_get_letohl(tvb, offset + SCYLLA_NEGOTIATION_LEN_OFFSET) + SCYLLA_NEGOTIATION_SIZE;
     }
-    if (tvb_reported_length(tvb) >= SCYLLA_HEADER_SIZE) {
+
+    reported_len = tvb_reported_length(tvb);
+
+    /* streaming */
+    if (reported_len == tvb_get_letohl(tvb, 0) + 4)
+        return reported_len - 4;
+
+    if (reported_len >= SCYLLA_HEADER_SIZE) {
         plen = tvb_get_letohl(tvb, offset + SCYLLA_HEADER_LEN_OFFSET);
         verb_type = tvb_get_letoh64(tvb, offset + SCYLLA_HEADER_VERB_OFFSET);
     }
@@ -218,22 +317,51 @@ get_scylla_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data
     if (looks_like_response(verb_type, plen)) {
         return tvb_get_letohl(tvb, offset + SCYLLA_RESPONSE_LEN_OFFSET) + SCYLLA_RESPONSE_SIZE;
     }
+
     return plen + SCYLLA_HEADER_SIZE;
 }
 
 static int
 dissect_scylla_negotiation_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tree)
 {
-    gint offset = 0;
-    guint32 len = tvb_get_letohl(tvb, offset + SCYLLA_NEGOTIATION_LEN_OFFSET) + SCYLLA_NEGOTIATION_SIZE;
+    int offset = 0;
+    uint32_t feature_number, feature_len;
+    uint64_t conn_id;
+    proto_tree *scylla_features_tree;
+    uint32_t len = tvb_get_letohl(tvb, offset + SCYLLA_NEGOTIATION_LEN_OFFSET);
 
     proto_tree *scylla_negotiation_tree = proto_tree_add_subtree(scylla_tree, tvb, offset,
-            len, ett_scylla_negotiation, NULL, "Protocol negotiation");
+            len + SCYLLA_NEGOTIATION_SIZE, ett_scylla_negotiation, NULL, "Protocol negotiation");
     proto_tree_add_item(scylla_negotiation_tree, hf_scylla_negotiation_magic, tvb, offset, 8, ENC_ASCII);
-    gint negotiation_offset = 8;
-    proto_tree_add_item(scylla_negotiation_tree, hf_scylla_negotiation_size, tvb, offset + negotiation_offset, 4, ENC_LITTLE_ENDIAN);
-    negotiation_offset += 4;
-    proto_tree_add_item(scylla_negotiation_tree, hf_scylla_payload, tvb, offset + negotiation_offset, len - negotiation_offset, ENC_NA);
+    offset += 8;
+    proto_tree_add_item(scylla_negotiation_tree, hf_scylla_negotiation_size, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+    offset += 4;
+    scylla_features_tree = proto_tree_add_subtree(scylla_negotiation_tree, tvb, offset, len, ett_scylla_negotiation_features, NULL, "Negotiation features");
+    while (len > 0) {
+        proto_tree_add_item_ret_uint(scylla_features_tree, hf_scylla_feature_number, tvb, offset, 4, ENC_LITTLE_ENDIAN, &feature_number);
+        offset += 4;
+        proto_tree_add_item_ret_uint(scylla_features_tree, hf_scylla_feature_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &feature_len);
+        offset += 4;
+        len -= 8;
+        if (feature_len > 0) {
+            switch (feature_number)
+            {
+            case CONNECTION_ID:
+            case STREAM_PARENT:
+                if (feature_len == 8)
+                    proto_tree_add_item_ret_uint64(scylla_features_tree, hf_scylla_connection_id, tvb, offset, 8, ENC_LITTLE_ENDIAN, &conn_id);
+                break;
+            case ISOLATION:
+                proto_tree_add_item(scylla_features_tree, hf_scylla_isolation_cookie, tvb, offset, feature_len, ENC_NA);
+                break;
+            default:
+                proto_tree_add_item(scylla_features_tree, hf_scylla_feature_data, tvb, offset, feature_len, ENC_NA);
+                break;
+            }
+            len -= feature_len;
+            offset += feature_len;
+        }
+    }
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Scylla");
     col_set_str(pinfo->cinfo, COL_INFO, "Protocol negotiation");
@@ -243,17 +371,17 @@ dissect_scylla_negotiation_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *sc
 static int
 dissect_scylla_response_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tree, request_response_t *req_resp)
 {
-    gint offset = 0;
-    guint32 len = tvb_get_letohl(tvb, offset + SCYLLA_RESPONSE_LEN_OFFSET) + SCYLLA_RESPONSE_SIZE;
+    int offset = 0;
+    uint32_t len = tvb_get_letohl(tvb, offset + SCYLLA_RESPONSE_LEN_OFFSET) + SCYLLA_RESPONSE_SIZE;
 
     /* Add response subtree */
     proto_item *response_ti = proto_tree_add_string_format(scylla_tree, hf_scylla_response,
                                                            tvb, offset, len, "", "Response");
     proto_tree *scylla_response_tree = proto_item_add_subtree(response_ti, ett_scylla_response);
 
-    gint resp_offset = 0;
+    int resp_offset = 0;
 
-    guint64 msg_id;
+    uint64_t msg_id;
     proto_tree_add_item_ret_uint64(scylla_response_tree, hf_scylla_msg_id, tvb, offset + resp_offset, 8, ENC_LITTLE_ENDIAN, &msg_id);
     resp_offset += 8;
     proto_tree_add_item(scylla_response_tree, hf_scylla_response_size, tvb, offset + resp_offset, 4, ENC_LITTLE_ENDIAN);
@@ -271,11 +399,11 @@ dissect_scylla_response_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scyll
         proto_item_set_generated(req);
 
         proto_item_append_text(response_ti, " (msg_id=%" PRIu64 ", %s)",
-                               msg_id, val64_to_str(req_resp->verb_type, packettypenames, "Unknown (0x%02x)"));
+                               msg_id, val64_to_str_wmem(pinfo->pool, req_resp->verb_type, packettypenames, "Unknown (0x%02x)"));
 
         col_clear(pinfo->cinfo, COL_INFO);
         col_add_fstr(pinfo->cinfo, COL_INFO, "Response for %s",
-            val64_to_str(req_resp->verb_type, packettypenames, "Unknown (0x%02x)"));
+            val64_to_str_wmem(pinfo->pool, req_resp->verb_type, packettypenames, "Unknown (0x%02x)"));
     } else {
         col_set_str(pinfo->cinfo, COL_INFO, "Response for unknown packet");
     }
@@ -283,23 +411,23 @@ dissect_scylla_response_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scyll
 }
 
 static int
-dissect_scylla_msg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tree, proto_item *ti, guint64 verb_type, guint32 len, request_response_t *req_resp)
+dissect_scylla_msg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tree, proto_item *ti, uint64_t verb_type, uint32_t len, request_response_t *req_resp)
 {
-    gint offset = 0;
+    int offset = 0;
 
     /* Add request subtree */
     proto_item *request_ti = proto_tree_add_string_format(scylla_tree, hf_scylla_request,
                                                           tvb, offset, SCYLLA_HEADER_SIZE,
                                                           "", "Header for %s",
-                                                          val64_to_str(verb_type, packettypenames, "Unknown (0x%02x)"));
+                                                          val64_to_str_wmem(pinfo->pool, verb_type, packettypenames, "Unknown (0x%02x)"));
     proto_tree *scylla_header_tree = proto_item_add_subtree(request_ti, ett_scylla_response);
 
     proto_tree_add_item(scylla_header_tree, hf_scylla_timeout, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
-    proto_item_append_text(ti, ", Type %s", val64_to_str(verb_type, packettypenames, "Unknown (0x%02x)"));
+    proto_item_append_text(ti, ", Type %s", val64_to_str_wmem(pinfo->pool, verb_type, packettypenames, "Unknown (0x%02x)"));
     proto_tree_add_item(scylla_header_tree, hf_scylla_verb, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
-    guint64 msg_id;
+    uint64_t msg_id;
     proto_tree_add_item_ret_uint64(scylla_header_tree, hf_scylla_msg_id, tvb, offset, 8, ENC_LITTLE_ENDIAN, &msg_id);
     offset += 8;
     proto_tree_add_item(scylla_header_tree, hf_scylla_len, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -311,9 +439,9 @@ dissect_scylla_msg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tre
     case MUTATION: {
         proto_tree* scylla_mut_tree = proto_tree_add_subtree(scylla_tree, tvb, offset,
                 len, ett_scylla_mut, NULL, "Mutation");
-        gint mut_offset = 0;
-        guint32 len_keys;
-        guint32 num_keys;
+        int mut_offset = 0;
+        uint32_t len_keys;
+        uint32_t num_keys;
         proto_tree_add_item(scylla_mut_tree, hf_scylla_mut_size1, tvb, offset + mut_offset, 4, ENC_LITTLE_ENDIAN);
         mut_offset += 4;
         proto_tree_add_item(scylla_mut_tree, hf_scylla_mut_size2, tvb, offset + mut_offset, 4, ENC_LITTLE_ENDIAN);
@@ -328,9 +456,9 @@ dissect_scylla_msg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tre
                 len - mut_offset, ett_scylla_mut_pkey, NULL, "Partition key");
         proto_tree_add_item_ret_uint(scylla_mut_pkey_tree, hf_scylla_mut_num_pkeys, tvb, offset + mut_offset, 4, ENC_LITTLE_ENDIAN, &num_keys);
         mut_offset += 4;
-        guint i;
+        unsigned i;
         for (i = 0; i < num_keys; ++i) {
-            guint32 len_pkey = tvb_get_letohl(tvb, offset + mut_offset);
+            uint32_t len_pkey = tvb_get_letohl(tvb, offset + mut_offset);
             proto_tree_add_item(scylla_mut_pkey_tree, hf_scylla_mut_len_pkey, tvb, offset + mut_offset, 4, ENC_LITTLE_ENDIAN);
             mut_offset += 4;
             proto_tree_add_item(scylla_mut_pkey_tree, hf_scylla_mut_pkey, tvb, offset + mut_offset, len_pkey, ENC_NA);
@@ -343,7 +471,7 @@ dissect_scylla_msg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tre
     case READ_DATA: {
         proto_tree* scylla_read_tree = proto_tree_add_subtree(scylla_tree, tvb, offset,
                 len, ett_scylla_read_data, NULL, "Read data");
-        gint rd_offset = 0;
+        int rd_offset = 0;
 
         proto_tree_add_item(scylla_read_tree, hf_scylla_read_data_timeout, tvb, offset + rd_offset, 4, ENC_LITTLE_ENDIAN);
         rd_offset += 4;
@@ -374,12 +502,12 @@ dissect_scylla_msg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *scylla_tre
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Scylla");
     col_clear(pinfo->cinfo, COL_INFO);
     col_add_fstr(pinfo->cinfo, COL_INFO, "Request %s",
-             val64_to_str(verb_type, packettypenames, "Unknown (0x%02x)"));
+             val64_to_str_wmem(pinfo->pool, verb_type, packettypenames, "Unknown (0x%02x)"));
     return tvb_reported_length(tvb);
 }
 
-static gboolean
-response_expected(guint64 verb_type)
+static bool
+response_expected(uint64_t verb_type)
 {
     switch (verb_type) {
     case GOSSIP_DIGEST_SYN:
@@ -393,27 +521,26 @@ response_expected(guint64 verb_type)
     case HINT_MUTATION:
     case PAXOS_LEARN:
     case PAXOS_PRUNE:
-        return FALSE;
+        return false;
     default:
-        return TRUE;
+        return true;
     }
 }
-
 
 static int
 dissect_scylla_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    gint offset = 0;
+    int offset = 0;
     conversation_t *conversation;
     wmem_map_t *conv_map;
 
     proto_item *ti = proto_tree_add_item(tree, proto_scylla, tvb, 0, -1, ENC_NA);
     proto_tree *scylla_tree = proto_item_add_subtree(ti, ett_scylla);
 
-    guint64 verb_type = LAST;
-    guint32 len = 0;
+    uint64_t verb_type = LAST;
+    uint32_t len = 0;
 
-    if (looks_like_rpc_negotiation(tvb, offset)) {
+    if (looks_like_rpc_negotiation(tvb)) {
         return dissect_scylla_negotiation_pdu(tvb, pinfo, scylla_tree);
     }
 
@@ -431,18 +558,18 @@ dissect_scylla_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 
     if (looks_like_response(verb_type, len)) {
         void *req_resp;
-        guint64 msg_id;
+        uint64_t msg_id;
         msg_id = tvb_get_letoh64(tvb, offset + SCYLLA_RESPONSE_MSG_ID_OFFSET);
         req_resp = wmem_map_lookup(conv_map, &msg_id);
         return dissect_scylla_response_pdu(tvb, pinfo, scylla_tree, (request_response_t *)req_resp);
     }
 
-    guint64 msg_id = tvb_get_letoh64(tvb, offset + SCYLLA_HEADER_MSG_ID_OFFSET);
+    uint64_t msg_id = tvb_get_letoh64(tvb, offset + SCYLLA_HEADER_MSG_ID_OFFSET);
     void *req_resp = NULL;
 
     if (response_expected(verb_type)) {
         if (!PINFO_FD_VISITED(pinfo)) {
-            guint64 *key = wmem_new(wmem_file_scope(), guint64);
+            uint64_t *key = wmem_new(wmem_file_scope(), uint64_t);
             request_response_t *val = wmem_new(wmem_file_scope(), request_response_t);
             *key = msg_id;
             val->verb_type = verb_type;
@@ -481,6 +608,12 @@ proto_register_scylla(void)
         { &hf_scylla_response_request_frame, { "Request frame", "scylla.response.request", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0, NULL, HFILL } },
         { &hf_scylla_negotiation_magic, { "negotiation magic sequence", "scylla.negotiation.magic", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL } },
         { &hf_scylla_negotiation_size, { "negotiation size", "scylla.negotiation.size", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_scylla_feature_number, { "feature number", "scylla.negotiation.feature.number", FT_UINT32, BASE_DEC, VALS(feature_names), 0x0, NULL, HFILL } },
+        { &hf_scylla_feature_len, { "feature len", "scylla.negotiation.feature.len", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_scylla_feature_data, { "feature data", "scylla.negotiation.feature.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+        { &hf_scylla_connection_id, { "connection ID", "scylla.connection_id", FT_UINT64, BASE_HEX, NULL, 0x0, NULL, HFILL } },
+        { &hf_scylla_isolation_cookie, { "isolation cookie", "scylla.isolation_cookie", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+        { &hf_scylla_streaming_len, { "streaming length", "scylla.streaming.length", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
         // mutation verb
         { &hf_scylla_mut_size1, { "mutation size 1", "scylla.mut.size1", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
         { &hf_scylla_mut_size2, { "mutation size 2", "scylla.mut.size2", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
@@ -504,11 +637,13 @@ proto_register_scylla(void)
     };
 
     /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_scylla,
         &ett_scylla_header,
         &ett_scylla_response,
         &ett_scylla_negotiation,
+        &ett_scylla_negotiation_features,
+        &ett_sclla_streaming,
         &ett_scylla_mut,
         &ett_scylla_mut_pkey,
         &ett_scylla_read_data,
@@ -527,14 +662,13 @@ proto_register_scylla(void)
     proto_register_subtree_array(ett, array_length(ett));
     expert_scylla = expert_register_protocol(proto_scylla);
     expert_register_field_array(expert_scylla, ei, array_length(ei));
+
+    scylla_handle = register_dissector("scylla", dissect_scylla, proto_scylla);
 }
 
 void
 proto_reg_handoff_scylla(void)
 {
-    static dissector_handle_t scylla_handle;
-
-    scylla_handle = create_dissector_handle(dissect_scylla, proto_scylla);
     dissector_add_uint_with_preference("tcp.port", SCYLLA_PORT, scylla_handle);
 }
 

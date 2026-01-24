@@ -35,13 +35,12 @@ class ExtcapOptionsDialog : public QDialog
 
 public:
     ~ExtcapOptionsDialog();
-    static ExtcapOptionsDialog * createForDevice(QString &device_name, bool startCaptureOnClose, QWidget *parent = 0);
+    static ExtcapOptionsDialog * createForDevice(QString &device_name, bool startCaptureOnClose, QWidget *parent = 0,
+        QString *option_name = NULL, QString *option_value = NULL);
 
     ExtcapValueList loadValuesFor(int argNum, QString call, QString parent = "");
 
 private Q_SLOTS:
-    void on_buttonBox_accepted();
-    void on_buttonBox_rejected();
     void on_buttonBox_clicked(QAbstractButton *button);
     void on_buttonBox_helpRequested();
     void updateWidgets();
@@ -52,7 +51,9 @@ private:
 
     Ui::ExtcapOptionsDialog *ui;
     QString device_name;
-    guint device_idx;
+    QString option_name;  // If using the UI to edit the config of a sub-argument
+    QString option_value;  // If using the UI to edit the config of a sub-argument
+    unsigned device_idx;
     QIcon defaultValueIcon_;
 
     ExtcapArgumentList extcapArguments;

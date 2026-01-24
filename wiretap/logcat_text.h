@@ -9,8 +9,6 @@
 #ifndef __LOGCAT_TEXT_H__
 #define __LOGCAT_TEXT_H__
 
-#include <glib.h>
-
 #include "wtap.h"
 
 #define SPECIAL_STRING "[-]+ (beginning of \\/?.+)"
@@ -22,7 +20,7 @@
 #define THREADTIME_STRING "(\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) +(\\d+) +(\\d+) ([IVDWEF]) (.*?): (.*)"
 #define LONG_STRING "\\[ (\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) +(\\d+): *(\\d+) ([IVDWEF])/(.+) ]\\R(.*)"
 
-wtap_open_return_val logcat_text_open(wtap *wth, int *err, gchar **err_info);
+wtap_open_return_val logcat_text_open(wtap *wth, int *err, char **err_info);
 
 #endif
 

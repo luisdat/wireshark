@@ -22,6 +22,7 @@
 #include "wsutil/ws_getopt.h"
 #include "wsutil/strtoi.h"
 #include "etw_message.h"
+#include "etw_ndiscap.h"
 
 #include <rpc.h>
 #include <winevt.h>
@@ -59,7 +60,7 @@ enum {
     OPT_LEVEL,
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
     { "p", ws_required_argument, NULL, OPT_PROVIDER},
     { "k", ws_required_argument, NULL, OPT_KEYWORD},
     { "l", ws_required_argument, NULL, OPT_LEVEL},
@@ -72,22 +73,20 @@ typedef struct _PROVIDER_FILTER {
     UCHAR Level;
 } PROVIDER_FILTER;
 
-char g_err_info[FILENAME_MAX] = { 0 };
+char g_err_info[FILENAME_MAX];
 int g_err = ERROR_SUCCESS;
-static wtap_dumper* g_pdh = NULL;
+static wtap_dumper* g_pdh;
 extern ULONGLONG g_num_events;
-static PROVIDER_FILTER g_provider_filters[32] = { 0 };
-static BOOL g_is_live_session = FALSE;
+static PROVIDER_FILTER g_provider_filters[32];
+static BOOL g_is_live_session;
 
 static void WINAPI event_callback(PEVENT_RECORD ev);
-void etw_dump_write_opn_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp);
-void etw_dump_write_ndiscap_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp);
-void etw_dump_write_general_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp);
-void etw_dump_write_event_head_only(PEVENT_RECORD ev, ULARGE_INTEGER timestamp);
-void wtap_etl_rec_dump(char* etl_record, ULONG total_packet_length, ULONG original_packet_length, unsigned int interface_id, BOOLEAN is_inbound, ULARGE_INTEGER timestamp, int pkt_encap, char* comment, unsigned short comment_length);
-wtap_dumper* etw_dump_open(const char* pcapng_filename, int* err, gchar** err_info);
+static void etw_dump_write_opn_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp);
+static void etw_dump_write_general_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp);
+static void etw_dump_write_event_raw(PEVENT_RECORD ev, ULARGE_INTEGER timestamp);
+static wtap_dumper* etw_dump_open(const char* pcapng_filename, int* err, char** err_info);
 
-DWORD GetPropertyValue(WCHAR* ProviderId, EVT_PUBLISHER_METADATA_PROPERTY_ID PropertyId, PEVT_VARIANT* Value)
+static DWORD GetPropertyValue(WCHAR* ProviderId, EVT_PUBLISHER_METADATA_PROPERTY_ID PropertyId, PEVT_VARIANT* Value)
 {
     BOOL bRet;
     DWORD err = ERROR_SUCCESS;
@@ -148,7 +147,7 @@ DWORD GetPropertyValue(WCHAR* ProviderId, EVT_PUBLISHER_METADATA_PROPERTY_ID Pro
     return ERROR_SUCCESS;
 }
 
-wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filename, const char* params, int* err, gchar** err_info)
+wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filename, const char* params, int* err, char** err_info)
 {
     EVENT_TRACE_LOGFILE log_file = { 0 };
     WCHAR w_etl_filename[FILENAME_MAX] = { 0 };
@@ -156,8 +155,9 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
 
     SUPER_EVENT_TRACE_PROPERTIES super_trace_properties = { 0 };
     super_trace_properties.prop.Wnode.BufferSize = sizeof(SUPER_EVENT_TRACE_PROPERTIES);
-    super_trace_properties.prop.Wnode.ClientContext = 2;
+    super_trace_properties.prop.Wnode.ClientContext = 2; // "System" Clock Type
     super_trace_properties.prop.Wnode.Flags = WNODE_FLAG_TRACED_GUID;
+    super_trace_properties.prop.BufferSize = 200;  // 200KB (like traceview)
     super_trace_properties.prop.LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
     super_trace_properties.prop.LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
     TRACEHANDLE traceControllerHandle = (TRACEHANDLE)INVALID_HANDLE_VALUE;
@@ -167,7 +167,7 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
     SecureZeroMemory(g_err_info, FILENAME_MAX);
     g_err = ERROR_SUCCESS;
     g_num_events = 0;
-    g_is_live_session = FALSE;
+    g_is_live_session = false;
 
     if (params)
     {
@@ -176,8 +176,11 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
         int provider_idx = 0;
         char** params_array = NULL;
         int params_array_num = 0;
+        char* endptr = NULL;
+        char* endptr_exp = NULL;
         WCHAR provider_id[FILENAME_MAX] = { 0 };
         ULONG convert_level = 0;
+        ULONG64 keyword = 0;
 
         params_array = g_strsplit(params, " ", -1);
         while (params_array[params_array_num])
@@ -207,6 +210,11 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
                         if (value->Type == EvtVarTypeGuid && value->GuidVal)
                         {
                             g_provider_filters[provider_idx].ProviderId = *(value->GuidVal);
+                            /*
+                             * Set default logging values (same as traceview.exe)
+                             */
+                            g_provider_filters[provider_idx].Keyword = 0xffffffffffffffffL;  // ANY
+                            g_provider_filters[provider_idx].Level = 5;  // ALL
                         }
                         else
                         {
@@ -231,6 +239,8 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
                 provider_idx++;
                 break;
             case OPT_KEYWORD:
+                endptr = ws_optarg + strlen(ws_optarg);
+                endptr_exp = endptr;
                 if (provider_idx == 0)
                 {
                     *err = ERROR_INVALID_PARAMETER;
@@ -238,15 +248,19 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
                     return WTAP_OPEN_ERROR;
                 }
 
-                g_provider_filters[provider_idx - 1].Keyword = _strtoui64(ws_optarg, NULL, 0);
-                if (!g_provider_filters[provider_idx - 1].Keyword)
+                keyword = _strtoui64(ws_optarg, &endptr, 0);
+                if (endptr != endptr_exp)
                 {
                     *err = ERROR_INVALID_PARAMETER;
                     *err_info = ws_strdup_printf("Keyword %s cannot be converted, err is 0x%x", ws_optarg, *err);
                     return WTAP_OPEN_ERROR;
                 }
+
+                g_provider_filters[provider_idx - 1].Keyword = keyword;
                 break;
             case OPT_LEVEL:
+                endptr = ws_optarg + strlen(ws_optarg);
+                endptr_exp = endptr;
                 if (provider_idx == 0)
                 {
                     *err = ERROR_INVALID_PARAMETER;
@@ -254,14 +268,14 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
                     return WTAP_OPEN_ERROR;
                 }
 
-                convert_level = strtoul(ws_optarg, NULL, 0);
+                convert_level = strtoul(ws_optarg, &endptr, 0);
                 if (convert_level > UCHAR_MAX)
                 {
                     *err = ERROR_INVALID_PARAMETER;
                     *err_info = ws_strdup_printf("Level %s is bigger than 0xff, err is 0x%x", ws_optarg, *err);
                     return WTAP_OPEN_ERROR;
                 }
-                if (!convert_level)
+                if (endptr != endptr_exp)
                 {
                     *err = ERROR_INVALID_PARAMETER;
                     *err_info = ws_strdup_printf("Level %s cannot be converted, err is 0x%x", ws_optarg, *err);
@@ -275,7 +289,7 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
         g_strfreev(params_array);
     }
 
-    /* do/while(FALSE) is used to jump out of loop so no complex nested if/else is needed */
+    /* do/while(false) is used to jump out of loop so no complex nested if/else is needed */
     do
     {
         /* Read ETW from an etl file */
@@ -296,7 +310,7 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
              */
             ControlTrace((TRACEHANDLE)NULL, LOGGER_NAME, &super_trace_properties.prop, EVENT_TRACE_CONTROL_STOP);
 
-            g_is_live_session = TRUE;
+            g_is_live_session = true;
 
             log_file.LoggerName = LOGGER_NAME;
             log_file.LogFileName = NULL;
@@ -322,11 +336,10 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
                 {
                     break;
                 }
-                *err = EnableTraceEx(
-                    &g_provider_filters[i].ProviderId,
-                    NULL,
+                *err = EnableTraceEx2(
                     traceControllerHandle,
-                    TRUE,
+                    &g_provider_filters[i].ProviderId,
+                    EVENT_CONTROL_CODE_ENABLE_PROVIDER,
                     g_provider_filters[i].Level,
                     g_provider_filters[i].Keyword,
                     0,
@@ -377,7 +390,7 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
             returnVal = WTAP_OPEN_NOT_MINE;
             break;
         }
-    } while (FALSE);
+    } while (false);
 
     if (trace_handle != INVALID_PROCESSTRACE_HANDLE)
     {
@@ -395,7 +408,7 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
         else
         {
             int err_ignore;
-            gchar* err_info_ignore = NULL;
+            char* err_info_ignore = NULL;
             if (!wtap_dump_close(g_pdh, NULL, &err_ignore, &err_info_ignore))
             {
                 returnVal = WTAP_OPEN_ERROR;
@@ -406,23 +419,23 @@ wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapng_filen
     return returnVal;
 }
 
-BOOL is_event_filtered_out(PEVENT_RECORD ev)
+static BOOL is_event_filtered_out(PEVENT_RECORD ev)
 {
     if (g_is_live_session)
     {
-        return FALSE;
+        return false;
     }
 
     if (IsEqualGUID(&g_provider_filters[0].ProviderId, &ZeroGuid))
     {
-        return FALSE;
+        return false;
     }
 
     for (int i = 0; i < ARRAYSIZE(g_provider_filters); i++)
     {
         if (IsEqualGUID(&g_provider_filters[i].ProviderId, &ev->EventHeader.ProviderId))
         {
-            return FALSE;
+            return false;
         }
         if (IsEqualGUID(&g_provider_filters[i].ProviderId, &ZeroGuid))
         {
@@ -430,7 +443,7 @@ BOOL is_event_filtered_out(PEVENT_RECORD ev)
         }
     }
 
-    return TRUE;
+    return true;
 }
 
 static void WINAPI event_callback(PEVENT_RECORD ev)
@@ -465,7 +478,7 @@ static void WINAPI event_callback(PEVENT_RECORD ev)
     }
 }
 
-wtap_dumper* etw_dump_open(const char* pcapng_filename, int* err, gchar** err_info)
+static wtap_dumper* etw_dump_open(const char* pcapng_filename, int* err, char** err_info)
 {
     wtap_dump_params params = { 0 };
     GArray* shb_hdrs = NULL;
@@ -477,13 +490,13 @@ wtap_dumper* etw_dump_open(const char* pcapng_filename, int* err, gchar** err_in
 
     wtap_dumper* pdh = NULL;
 
-    shb_hdrs = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
+    shb_hdrs = g_array_new(false, false, sizeof(wtap_block_t));
     shb_hdr = wtap_block_create(WTAP_BLOCK_SECTION);
     g_array_append_val(shb_hdrs, shb_hdr);
 
     /* In the future, may create multiple WTAP_BLOCK_IF_ID_AND_INFO separately for IP packet */
     idb_info = g_new(wtapng_iface_descriptions_t, 1);
-    idb_datas = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
+    idb_datas = g_array_new(false, false, sizeof(wtap_block_t));
     idb_data = wtap_block_create(WTAP_BLOCK_IF_ID_AND_INFO);
     descr_mand = (wtapng_if_descr_mandatory_t*)wtap_block_get_mandatory_data(idb_data);
     descr_mand->tsprecision = WTAP_TSPREC_USEC;
@@ -499,7 +512,7 @@ wtap_dumper* etw_dump_open(const char* pcapng_filename, int* err, gchar** err_in
     params.shb_hdrs = shb_hdrs;
     params.idb_inf = idb_info;
 
-    pdh = wtap_dump_open(pcapng_filename, wtap_pcapng_file_type_subtype(), WTAP_UNCOMPRESSED, &params, err, err_info);
+    pdh = wtap_dump_open(pcapng_filename, wtap_pcapng_file_type_subtype(), WS_FILE_UNCOMPRESSED, &params, err, err_info);
 
     if (shb_hdrs)
     {
@@ -518,7 +531,7 @@ wtap_dumper* etw_dump_open(const char* pcapng_filename, int* err, gchar** err_in
     return pdh;
 }
 
-ULONG wtap_etl_record_buffer_init(WTAP_ETL_RECORD** out_etl_record, PEVENT_RECORD ev, BOOLEAN include_user_data, WCHAR* message, WCHAR* provider_name)
+static ULONG wtap_etl_record_buffer_init(WTAP_ETL_RECORD** out_etl_record, PEVENT_RECORD ev, BOOLEAN include_user_data, WCHAR* message, WCHAR* provider_name)
 {
     ULONG total_packet_length = sizeof(WTAP_ETL_RECORD);
     WTAP_ETL_RECORD* etl_record = NULL;
@@ -584,7 +597,7 @@ void wtap_etl_add_interface(int pkt_encap, char* interface_name, unsigned short 
 {
     wtap_block_t idb_data;
     wtapng_if_descr_mandatory_t* descr_mand;
-    gchar* err_info;
+    char* err_info;
     int err;
 
     idb_data = wtap_block_create(WTAP_BLOCK_IF_ID_AND_INFO);
@@ -608,14 +621,14 @@ void wtap_etl_add_interface(int pkt_encap, char* interface_name, unsigned short 
 
 void wtap_etl_rec_dump(char* etl_record, ULONG total_packet_length, ULONG original_packet_length, unsigned int interface_id, BOOLEAN is_inbound, ULARGE_INTEGER timestamp, int pkt_encap, char* comment, unsigned short comment_length)
 {
-    gchar* err_info;
+    char* err_info;
     int err;
     wtap_rec rec = { 0 };
 
-    wtap_rec_init(&rec);
+    wtap_rec_init(&rec, 2048); // Appropriate size?
+    wtap_setup_packet_rec(&rec, pkt_encap);
     rec.rec_header.packet_header.caplen = total_packet_length;
     rec.rec_header.packet_header.len = original_packet_length;
-    rec.rec_header.packet_header.pkt_encap = pkt_encap;
     rec.rec_header.packet_header.interface_id = interface_id;
     rec.presence_flags = WTAP_HAS_INTERFACE_ID;
     rec.block = wtap_block_create(WTAP_BLOCK_PACKET);
@@ -628,7 +641,9 @@ void wtap_etl_rec_dump(char* etl_record, ULONG total_packet_length, ULONG origin
     rec.ts.nsecs = (int)(((timestamp.QuadPart % G_USEC_PER_SEC) * G_NSEC_PER_SEC) / G_USEC_PER_SEC);
 
     /* and save the packet */
-    if (!wtap_dump(g_pdh, &rec, (guint8*)etl_record, &err, &err_info)) {
+    ws_buffer_append(&rec.data, (uint8_t*)etl_record, total_packet_length);
+
+    if (!wtap_dump(g_pdh, &rec, &err, &err_info)) {
         g_err = err;
         sprintf_s(g_err_info, sizeof(g_err_info), "wtap_dump failed, %s", err_info);
         g_free(err_info);
@@ -642,28 +657,28 @@ void wtap_etl_rec_dump(char* etl_record, ULONG total_packet_length, ULONG origin
     wtap_rec_cleanup(&rec);
 }
 
-void etw_dump_write_opn_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
+static void etw_dump_write_opn_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
 {
     WTAP_ETL_RECORD* etl_record = NULL;
     ULONG total_packet_length = 0;
-    BOOLEAN is_inbound = FALSE;
+    BOOLEAN is_inbound = false;
     /* 0x80000000 mask the function to host message */
-    is_inbound = ((*(INT32*)(ev->UserData)) & 0x80000000) ? TRUE : FALSE;
-    total_packet_length = wtap_etl_record_buffer_init(&etl_record, ev, TRUE, NULL, NULL);
+    is_inbound = ((*(INT32*)(ev->UserData)) & 0x80000000) ? true : false;
+    total_packet_length = wtap_etl_record_buffer_init(&etl_record, ev, true, NULL, NULL);
     wtap_etl_rec_dump((char*)etl_record, total_packet_length, total_packet_length, 0, is_inbound, timestamp, WTAP_ENCAP_ETW, NULL, 0);
     g_free(etl_record);
 }
 
-void etw_dump_write_event_head_only(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
+static void etw_dump_write_event_raw(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
 {
     WTAP_ETL_RECORD* etl_record = NULL;
     ULONG total_packet_length = 0;
-    total_packet_length = wtap_etl_record_buffer_init(&etl_record, ev, FALSE, NULL, NULL);
-    wtap_etl_rec_dump((char*)etl_record, total_packet_length, total_packet_length, 0, FALSE, timestamp, WTAP_ENCAP_ETW, NULL, 0);
+    total_packet_length = wtap_etl_record_buffer_init(&etl_record, ev, true, NULL, NULL);
+    wtap_etl_rec_dump((char*)etl_record, total_packet_length, total_packet_length, 0, false, timestamp, WTAP_ENCAP_ETW, NULL, 0);
     g_free(etl_record);
 }
 
-void etw_dump_write_general_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
+static void etw_dump_write_general_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
 {
     PTRACE_EVENT_INFO pInfo = NULL;
     PBYTE pUserData = NULL;
@@ -677,7 +692,7 @@ void etw_dump_write_general_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
 
     WTAP_ETL_RECORD* etl_record = NULL;
     ULONG total_packet_length = 0;
-    BOOLEAN is_message_dumped = FALSE;
+    BOOLEAN is_message_dumped = false;
 
     do
     {
@@ -746,12 +761,12 @@ void etw_dump_write_general_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
 
         format_message(formatMessage, prop_arr, dwTopLevelPropertyCount, wszMessageBuffer, sizeof(wszMessageBuffer));
 
-        total_packet_length = wtap_etl_record_buffer_init(&etl_record, ev, FALSE, wszMessageBuffer, (WCHAR*)ADD_OFFSET_TO_POINTER(pInfo, pInfo->ProviderNameOffset));
-        wtap_etl_rec_dump((char*)etl_record, total_packet_length, total_packet_length, 0, FALSE, timestamp, WTAP_ENCAP_ETW, NULL, 0);
+        total_packet_length = wtap_etl_record_buffer_init(&etl_record, ev, false, wszMessageBuffer, (WCHAR*)ADD_OFFSET_TO_POINTER(pInfo, pInfo->ProviderNameOffset));
+        wtap_etl_rec_dump((char*)etl_record, total_packet_length, total_packet_length, 0, false, timestamp, WTAP_ENCAP_ETW, NULL, 0);
         g_free(etl_record);
 
-        is_message_dumped = TRUE;
-    } while (FALSE);
+        is_message_dumped = true;
+    } while (false);
 
     if (NULL != prop_arr)
     {
@@ -766,7 +781,7 @@ void etw_dump_write_general_event(PEVENT_RECORD ev, ULARGE_INTEGER timestamp)
 
     if (!is_message_dumped && g_include_undecidable_event)
     {
-        etw_dump_write_event_head_only(ev, timestamp);
+        etw_dump_write_event_raw(ev, timestamp);
     }
 }
 

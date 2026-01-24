@@ -1,4 +1,4 @@
--- 3GPP TS 36.413 V17.3.0 (2022-12)
+-- 3GPP TS 36.413 V19.1.0 (2025-12)
 -- 9.3.6	Constant Definitions
 -- **************************************************************
 --
@@ -100,6 +100,8 @@ id-UERadioCapabilityIDMapping				ProcedureCode ::= 63
 id-HandoverSuccess							ProcedureCode ::= 64
 id-eNBEarlyStatusTransfer					ProcedureCode ::= 65
 id-MMEEarlyStatusTransfer					ProcedureCode ::= 66
+id-S1Removal								ProcedureCode ::= 67
+
 
 -- **************************************************************
 --
@@ -535,5 +537,17 @@ id-E-RABToBeUpdatedItem								ProtocolIE-ID ::= 342
 id-SourceSNID										ProtocolIE-ID ::= 343
 id-LoggedMDTTrigger									ProtocolIE-ID ::= 344
 id-SensorMeasurementConfiguration					ProtocolIE-ID ::= 345
+id-M4ReportAmount									ProtocolIE-ID ::= 346
+id-M5ReportAmount									ProtocolIE-ID ::= 347
+id-M6ReportAmount									ProtocolIE-ID ::= 348
+id-M7ReportAmount									ProtocolIE-ID ::= 349
+id-TimeBasedHandoverInformation						ProtocolIE-ID ::= 350
+id-Bearers-SubjectToDLDiscarding-Item				ProtocolIE-ID ::= 351
+id-Bearers-SubjectToDLDiscardingList				ProtocolIE-ID ::= 352
+id-CoarseUELocationRequested						ProtocolIE-ID ::= 353
+id-CoarseUELocation									ProtocolIE-ID ::= 354
+id-TimeRefDistribution								ProtocolIE-ID ::= 355
+id-RequestedTNLInfo									ProtocolIE-ID ::= 356
+
 
 END

@@ -13,11 +13,13 @@
 #include "geometry_state_dialog.h"
 
 #include <config.h>
+
 #include <QList>
 #include <QHash>
 #include <QListWidgetItem>
 
-#include <glib.h>
+typedef struct interface_tag interface_t;
+typedef QList<interface_t *> InterfaceList;
 
 namespace Ui {
 class CompiledFilterOutput;
@@ -28,19 +30,18 @@ class CompiledFilterOutput : public GeometryStateDialog
     Q_OBJECT
 
 private:
-    QStringList intList_;
-    QString &compile_filter_;
+    InterfaceList intList_;
     Ui::CompiledFilterOutput *ui;
-    GMutex *pcap_compile_mtx;
     QHash<QString, QString> compile_results;
-    QListWidget *interface_list_;
     QPushButton *copy_bt_;
+    void setTitle();
 #ifdef HAVE_LIBPCAP
-    void compileFilter();
+    bool compileFilter(const interface_t *interface);
+    void compileFilters();
 #endif
 
 public:
-    explicit CompiledFilterOutput(QWidget *parent = 0, QStringList &intList = *new QStringList(), QString &filter = *new QString());
+    explicit CompiledFilterOutput(QWidget *parent = 0, InterfaceList &intList = *new InterfaceList());
 
     ~CompiledFilterOutput();
 

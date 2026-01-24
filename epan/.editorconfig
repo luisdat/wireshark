@@ -12,10 +12,6 @@ indent_size = tab
 indent_style = tab
 indent_size = tab
 
-[app_mem_usage.[ch]]
-indent_style = tab
-indent_size = tab
-
 [asn1.[ch]]
 indent_size = 2
 
@@ -41,6 +37,10 @@ indent_style = tab
 indent_size = tab
 
 [epan.[ch]]
+indent_style = tab
+indent_size = tab
+
+[exceptions.h]
 indent_style = tab
 indent_size = tab
 
@@ -70,10 +70,6 @@ indent_style = tab
 indent_size = tab
 
 [in_cksum.[ch]]
-indent_style = tab
-indent_size = tab
-
-[ipv4.[ch]]
 indent_style = tab
 indent_size = tab
 
@@ -116,6 +112,10 @@ indent_size = tab
 indent_style = tab
 indent_size = tab
 
+[stats_tree_priv.h]
+indent_style = tab
+indent_size = tab
+
 [t35.[ch]]
 indent_style = tab
 indent_size = tab
@@ -129,10 +129,6 @@ indent_style = tab
 indent_size = tab
 
 [timestats.[ch]]
-indent_style = tab
-indent_size = tab
-
-[to_str.c]
 indent_style = tab
 indent_size = tab
 

@@ -26,17 +26,20 @@
 void proto_register_discard(void);
 void proto_reg_handoff_discard(void);
 
-static int proto_discard = -1;
+static int proto_discard;
 
-static int hf_discard_data = -1;
-static int hf_discard_text = -1;
-static int hf_discard_md5_hash = -1;
-static int hf_discard_len = -1;
+static int hf_discard_data;
+static int hf_discard_text;
+static int hf_discard_md5_hash;
+static int hf_discard_len;
 
-static gboolean show_as_text = FALSE;
-static gboolean generate_md5_hash = FALSE;
+static bool show_as_text;
+static bool generate_md5_hash;
 
-static gint ett_discard = -1;
+static int ett_discard;
+
+dissector_handle_t discard_handle;
+dissector_handle_t wol_handle;
 
 /* dissect_discard - dissects discard packet data
  * tvb - tvbuff for packet data (IN)
@@ -48,8 +51,8 @@ dissect_discard(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* disse
 {
 	proto_tree* discard_tree;
 	proto_item* ti;
-	guint32 len;
-	guint32 cap_len;
+	uint32_t len;
+	uint32_t cap_len;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "DISCARD");
 
@@ -75,9 +78,9 @@ dissect_discard(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* disse
 	}
 
 	if (generate_md5_hash) {
-		const guint8 *cp;
-		guint8        digest[HASH_MD5_LENGTH];
-		const gchar  *digest_string;
+		const uint8_t *cp;
+		uint8_t       digest[HASH_MD5_LENGTH];
+		const char   *digest_string;
 
 		cp = tvb_get_ptr(tvb, 0, cap_len);
 
@@ -99,6 +102,19 @@ dissect_discard(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* disse
 	}
 
 	return cap_len;
+}
+
+static int
+dissect_discard_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+{
+	/* Wake On Lan is commonly used over UDP port 9 and has strong heuristics,
+	 * whereas the discard dissector never rejects a packet, so try WOL first.
+	 * Unfortunately "discard" still ends up in frame.protocols this way.
+	 */
+	if (wol_handle && call_dissector_only(wol_handle, tvb, pinfo, tree, data)) {
+		return tvb_captured_length(tvb);
+	}
+	return dissect_discard(tvb, pinfo, tree, data);
 }
 
 void
@@ -127,16 +143,13 @@ proto_register_discard(void)
 		},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_discard,
 	};
 
 	module_t *module_data;
 
-	proto_discard = proto_register_protocol(
-		"Discard Protocol",
-		"DISCARD",
-		"discard");
+	proto_discard = proto_register_protocol("Discard Protocol", "DISCARD", "discard");
 
 	proto_register_field_array(proto_discard, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
@@ -154,16 +167,17 @@ proto_register_discard(void)
 		"Generate MD5 hash",
 		"Whether or not MD5 hashes should be generated and shown for each payload.",
 		&generate_md5_hash);
+
+	discard_handle = register_dissector("discard", dissect_discard, proto_discard);
 }
 
 void
 proto_reg_handoff_discard(void)
 {
-	dissector_handle_t discard_handle;
-
-	discard_handle = create_dissector_handle(dissect_discard, proto_discard);
-	dissector_add_uint_with_preference("udp.port", DISCARD_PORT_UDP, discard_handle);
+	dissector_add_uint_with_preference("udp.port", DISCARD_PORT_UDP, create_dissector_handle(dissect_discard_udp, proto_discard));
 	dissector_add_uint_with_preference("tcp.port", DISCARD_PORT_TCP, discard_handle);
+
+	wol_handle = find_dissector_add_dependency("wol", proto_discard);
 }
 
 /*

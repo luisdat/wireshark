@@ -18,26 +18,28 @@
 void proto_register_fefd(void);
 void proto_reg_handoff_fefd(void);
 
+static dissector_handle_t fefd_handle;
+
 /* Offsets in TLV structure. */
 #define TLV_TYPE        0
 #define TLV_LENGTH      2
 
-static int proto_fefd = -1;
-static int hf_fefd_version = -1;
-static int hf_fefd_opcode = -1;
-static int hf_fefd_flags = -1;
-static int hf_fefd_flags_rt = -1;
-static int hf_fefd_flags_rsy = -1;
-static int hf_fefd_checksum = -1;
-static int hf_fefd_tlvtype = -1;
-static int hf_fefd_tlvlength = -1;
-static int hf_fefd_device_id = -1;
-static int hf_fefd_sent_through_interface = -1;
-static int hf_fefd_data = -1;
+static int proto_fefd;
+static int hf_fefd_version;
+static int hf_fefd_opcode;
+static int hf_fefd_flags;
+static int hf_fefd_flags_rt;
+static int hf_fefd_flags_rsy;
+static int hf_fefd_checksum;
+static int hf_fefd_tlvtype;
+static int hf_fefd_tlvlength;
+static int hf_fefd_device_id;
+static int hf_fefd_sent_through_interface;
+static int hf_fefd_data;
 
-static gint ett_fefd = -1;
-static gint ett_fefd_flags = -1;
-static gint ett_fefd_tlv = -1;
+static int ett_fefd;
+static int ett_fefd_flags;
+static int ett_fefd_tlv;
 
 #define TYPE_DEVICE_ID        0x0001
 #define TYPE_PORT_ID          0x0002
@@ -78,8 +80,8 @@ dissect_fefd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     proto_item *ti;
     proto_tree *fefd_tree = NULL;
     int         offset    = 0;
-    guint16     type;
-    guint16     length;
+    uint16_t    type;
+    uint16_t    length;
     proto_tree *tlv_tree;
     int         real_length;
     static int * const flags[] = {
@@ -143,14 +145,14 @@ dissect_fefd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
                 proto_tree_add_uint(tlv_tree, hf_fefd_tlvlength, tvb,
                                     offset + TLV_LENGTH, 2, length);
                 proto_tree_add_item(tlv_tree, hf_fefd_device_id, tvb, offset + 4,
-                                    length - 4, ENC_NA|ENC_ASCII);
+                                    length - 4, ENC_ASCII);
             }
             offset += length;
             break;
 
         case TYPE_PORT_ID:
             real_length = length;
-            if (tvb_get_guint8(tvb, offset + real_length) != 0x00) {
+            if (tvb_get_uint8(tvb, offset + real_length) != 0x00) {
                 /* The length in the TLV doesn't appear to be the
                    length of the TLV, as the byte just past it
                    isn't the first byte of a 2-byte big-endian
@@ -173,7 +175,7 @@ dissect_fefd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
                 proto_tree_add_uint(tlv_tree, hf_fefd_tlvlength, tvb,
                                     offset + TLV_LENGTH, 2, length);
                 proto_tree_add_item(tlv_tree, hf_fefd_sent_through_interface, tvb, offset + 4,
-                                    real_length - 4, ENC_NA|ENC_ASCII);
+                                    real_length - 4, ENC_ASCII);
             }
             offset += real_length;
             break;
@@ -186,7 +188,7 @@ dissect_fefd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         default:
             tlv_tree = proto_tree_add_subtree_format(fefd_tree, tvb, offset,
                                        length, ett_fefd_tlv, NULL, "Type: %s, length: %u",
-                                       val_to_str(type, type_vals, "Unknown (0x%04x)"),
+                                       val_to_str(pinfo->pool, type, type_vals, "Unknown (0x%04x)"),
                                        length);
             proto_tree_add_uint(tlv_tree, hf_fefd_tlvtype, tvb,
                                 offset + TLV_TYPE, 2, type);
@@ -255,7 +257,7 @@ proto_register_fefd(void)
             NULL, HFILL }},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_fefd,
         &ett_fefd_flags,
         &ett_fefd_tlv
@@ -264,14 +266,13 @@ proto_register_fefd(void)
     proto_fefd = proto_register_protocol("Far End Failure Detection", "FEFD", "fefd");
     proto_register_field_array(proto_fefd, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
+
+    fefd_handle = register_dissector("fefd", dissect_fefd, proto_fefd);
 }
 
 void
 proto_reg_handoff_fefd(void)
 {
-    dissector_handle_t fefd_handle;
-
-    fefd_handle = create_dissector_handle(dissect_fefd, proto_fefd);
     dissector_add_uint("llc.force10_pid", 0x0111, fefd_handle);
 }
 

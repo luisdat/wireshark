@@ -22,46 +22,48 @@
 void proto_register_fdp(void);
 void proto_reg_handoff_fdp(void);
 
-static int hf_llc_foundry_pid = -1;
+static dissector_handle_t fdp_handle;
 
-static int proto_fdp = -1;
+static int hf_llc_foundry_pid;
+
+static int proto_fdp;
 /* FDP header */
-static int hf_fdp_version = -1;
-static int hf_fdp_holdtime = -1;
-static int hf_fdp_checksum = -1;
+static int hf_fdp_version;
+static int hf_fdp_holdtime;
+static int hf_fdp_checksum;
 /* TLV header */
-static int hf_fdp_tlv_type = -1;
-static int hf_fdp_tlv_length = -1;
+static int hf_fdp_tlv_type;
+static int hf_fdp_tlv_length;
 /* Unknown element */
-static int hf_fdp_unknown = -1;
-static int hf_fdp_unknown_data = -1;
+static int hf_fdp_unknown;
+static int hf_fdp_unknown_data;
 /* Port Tag element */
-static int hf_fdp_tag = -1;
-static int hf_fdp_tag_native = -1;
-static int hf_fdp_tag_type = -1;
-static int hf_fdp_tag_unknown = -1;
+static int hf_fdp_tag;
+static int hf_fdp_tag_native;
+static int hf_fdp_tag_type;
+static int hf_fdp_tag_unknown;
 /* VLAN Bitmap */
-static int hf_fdp_vlanmap = -1;
-static int hf_fdp_vlanmap_vlan = -1;
+static int hf_fdp_vlanmap;
+static int hf_fdp_vlanmap_vlan;
 /* String element */
-static int hf_fdp_string = -1;
-static int hf_fdp_string_data = -1;
-static int hf_fdp_string_text = -1;
+static int hf_fdp_string;
+static int hf_fdp_string_data;
+static int hf_fdp_string_text;
 /* Net? element */
-static int hf_fdp_net = -1;
-static int hf_fdp_net_unknown = -1;
-static int hf_fdp_net_ip = -1;
-static int hf_fdp_net_iplength = -1;
+static int hf_fdp_net;
+static int hf_fdp_net_unknown;
+static int hf_fdp_net_ip;
+static int hf_fdp_net_iplength;
 
-static gint ett_fdp = -1;
-static gint ett_fdp_tlv_header = -1;
-static gint ett_fdp_unknown = -1;
-static gint ett_fdp_string = -1;
-static gint ett_fdp_net = -1;
-static gint ett_fdp_tag = -1;
-static gint ett_fdp_vlanmap = -1;
+static int ett_fdp;
+static int ett_fdp_tlv_header;
+static int ett_fdp_unknown;
+static int ett_fdp_string;
+static int ett_fdp_net;
+static int ett_fdp_tag;
+static int ett_fdp_vlanmap;
 
-static expert_field ei_fdp_tlv_length = EI_INIT;
+static expert_field ei_fdp_tlv_length;
 
 #define PROTO_SHORT_NAME "FDP"
 #define PROTO_LONG_NAME "Foundry Discovery Protocol"
@@ -100,8 +102,8 @@ static int
 dissect_tlv_header(tvbuff_t *tvb, packet_info *pinfo _U_, int offset, int length _U_, proto_tree *tree)
 {
 	proto_tree	*tlv_tree;
-	guint16		tlv_type;
-	guint16		tlv_length;
+	uint16_t		tlv_type;
+	uint16_t		tlv_length;
 
 	tlv_type = tvb_get_ntohs(tvb, offset);
 	tlv_length = tvb_get_ntohs(tvb, offset + 2);
@@ -109,7 +111,7 @@ dissect_tlv_header(tvbuff_t *tvb, packet_info *pinfo _U_, int offset, int length
 	tlv_tree = proto_tree_add_subtree_format(tree, tvb, offset, 4,
 		ett_fdp_tlv_header, NULL, "Length %d, type %d = %s",
 		tlv_length, tlv_type,
-		val_to_str(tlv_type, fdp_type_vals, "Unknown (%d)"));
+		val_to_str(pinfo->pool, tlv_type, fdp_type_vals, "Unknown (%d)"));
 
 	proto_tree_add_uint(tlv_tree, hf_fdp_tlv_type, tvb, offset, 2, tlv_type);
 	offset += 2;
@@ -125,7 +127,7 @@ dissect_string_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, pr
 {
 	proto_item	*string_item;
 	proto_tree	*string_tree;
-	const guint8	*string_value;
+	const char	*string_value;
 
 	string_item = proto_tree_add_protocol_format(tree, hf_fdp_string,
 		tvb, offset, length, "%s", type_string);
@@ -137,7 +139,7 @@ dissect_string_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, pr
 	length -= 4;
 
 	proto_tree_add_item(string_tree, hf_fdp_string_data, tvb, offset, length, ENC_NA);
-	proto_tree_add_item_ret_string(string_tree, hf_fdp_string_text, tvb, offset, length, ENC_ASCII|ENC_NA, pinfo->pool, &string_value);
+	proto_tree_add_item_ret_string(string_tree, hf_fdp_string_text, tvb, offset, length, ENC_ASCII|ENC_NA, pinfo->pool, (const uint8_t**)&string_value);
 	proto_item_append_text(string_item, ": \"%s\"",
 		format_text(pinfo->pool, string_value, strlen(string_value)));
 
@@ -169,7 +171,7 @@ dissect_net_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto
 	length -= 2;
 
 	while (length >= 4) {
-		proto_tree_add_item(net_tree, hf_fdp_net_ip, tvb, offset, 4, ENC_NA);
+		proto_tree_add_item(net_tree, hf_fdp_net_ip, tvb, offset, 4, ENC_BIG_ENDIAN);
 		offset += 4;
 		length -= 4;
 	}
@@ -180,8 +182,8 @@ dissect_vlanmap_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, p
 {
 	proto_item	*vlanmap_item;
 	proto_tree	*vlanmap_tree;
-	guint		vlan, voffset;
-	guint		bitoffset, byteoffset;
+	unsigned		vlan, voffset;
+	unsigned		bitoffset, byteoffset;
 
 	vlanmap_item = proto_tree_add_protocol_format(tree, hf_fdp_vlanmap,
 		tvb, offset, length, "VLAN-Map");
@@ -193,10 +195,10 @@ dissect_vlanmap_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, p
 	length -= 4;
 
 	voffset = 1;
-	for (vlan = 1; vlan <= (guint)length*8; vlan++) {
+	for (vlan = 1; vlan <= (unsigned)length*8; vlan++) {
 		byteoffset = (vlan - voffset) / 8;
 		bitoffset = (vlan - voffset) % 8;
-		if (tvb_get_guint8(tvb, offset + byteoffset) & (1 << bitoffset)) {
+		if (tvb_get_uint8(tvb, offset + byteoffset) & (1 << bitoffset)) {
 
 			proto_tree_add_uint(vlanmap_tree, hf_fdp_vlanmap_vlan, tvb,
 				offset + byteoffset, 1, vlan);
@@ -232,7 +234,7 @@ dissect_unknown_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, p
 {
 	proto_item	*unknown_item;
 	proto_tree	*unknown_tree;
-	guint16		tlv_type;
+	uint16_t		tlv_type;
 
 	tlv_type = tvb_get_ntohs(tvb, offset);
 
@@ -253,10 +255,10 @@ dissect_fdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item *ti;
 	proto_tree *fdp_tree = NULL;
-	gint offset = 0;
-	guint16 tlv_type;
-	guint16 tlv_length;
-	gint data_length;
+	int offset = 0;
+	uint16_t tlv_type;
+	uint16_t tlv_length;
+	int data_length;
 	const char *type_string;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_SHORT_NAME);
@@ -290,7 +292,7 @@ dissect_fdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 					"TLV with invalid length: %u", tlv_length);
 				break;
 			}
-			type_string = val_to_str(tlv_type, fdp_type_vals, "[%u]");
+			type_string = val_to_str(pinfo->pool, tlv_type, fdp_type_vals, "[%u]");
 			col_append_fstr(pinfo->cinfo, COL_INFO, " %s", type_string);
 
 			switch (tlv_type) {
@@ -422,7 +424,7 @@ proto_register_fdp(void)
 	  }
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_fdp,
 		&ett_fdp_tlv_header,
 		&ett_fdp_unknown,
@@ -446,14 +448,13 @@ proto_register_fdp(void)
 	expert_register_field_array(expert_fdp, ei, array_length(ei));
 
 	llc_add_oui(OUI_FOUNDRY, "llc.foundry_pid", "LLC Foundry OUI PID", oui_hf, proto_fdp);
+
+	fdp_handle = register_dissector("fdp", dissect_fdp, proto_fdp);
 }
 
 void
 proto_reg_handoff_fdp(void)
 {
-	dissector_handle_t fdp_handle;
-
-	fdp_handle = create_dissector_handle(dissect_fdp, proto_fdp);
 	dissector_add_uint("llc.foundry_pid", 0x2000, fdp_handle);
 }
 

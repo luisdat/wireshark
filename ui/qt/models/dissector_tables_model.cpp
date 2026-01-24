@@ -11,6 +11,7 @@
 #include <epan/ftypes/ftypes.h>
 #include <epan/packet.h>
 
+#include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/variant_pointer.h>
 #include "main_application.h"
 
@@ -22,7 +23,7 @@ static const char* HEURISTIC_TABLE_NAME = "Heuristic Tables";
 class IntegerTablesItem : public DissectorTablesItem
 {
 public:
-    IntegerTablesItem(unsigned int value, QString dissectorDescription, DissectorTablesItem* parent);
+    IntegerTablesItem(unsigned int value, ftenum_t type, int display, QString dissectorDescription, DissectorTablesItem* parent);
     virtual ~IntegerTablesItem();
 
     virtual bool lessThan(DissectorTablesItem &right) const;
@@ -52,10 +53,42 @@ bool DissectorTablesItem::lessThan(DissectorTablesItem &right) const
 }
 
 
-IntegerTablesItem::IntegerTablesItem(unsigned int value, QString dissectorDescription, DissectorTablesItem* parent)
-    : DissectorTablesItem(QString("%1").arg(value), dissectorDescription, parent)
+IntegerTablesItem::IntegerTablesItem(unsigned int value, ftenum_t type, int display, QString dissectorDescription, DissectorTablesItem* parent)
+    : DissectorTablesItem(QString(), dissectorDescription, parent)
     , value_(value)
 {
+    switch (display)
+    {
+        case BASE_OCT:
+            tableName_ = QStringLiteral("0%1").arg(value, 0, 8);
+            break;
+        case BASE_HEX:
+            int field_width;
+
+            switch (type)
+            {
+                case FT_UINT8:
+                    field_width = 2;
+                    break;
+                case FT_UINT16:
+                    field_width = 4;
+                    break;
+                case FT_UINT24:
+                    field_width = 6;
+                    break;
+                case FT_UINT32:
+                default:
+                    field_width = 8;
+                    break;
+            }
+
+            tableName_ = int_to_qstring(value, field_width, 16);
+            break;
+        case BASE_DEC:
+        default:
+            tableName_ = QString::number(value);
+            break;
+    }
 }
 
 IntegerTablesItem::~IntegerTablesItem()
@@ -75,16 +108,9 @@ bool IntegerTablesItem::lessThan(DissectorTablesItem &right) const
     return false;
 }
 
-
-
-
-
-
-
-
 DissectorTablesModel::DissectorTablesModel(QObject *parent) :
     QAbstractItemModel(parent),
-    root_(new DissectorTablesItem(QString("ROOT"), QString("ROOT"), NULL))
+    root_(new DissectorTablesItem(QStringLiteral("ROOT"), QStringLiteral("ROOT"), NULL))
 {
     populate();
 }
@@ -179,7 +205,7 @@ QVariant DissectorTablesModel::data(const QModelIndex &index, int role) const
     return QVariant();
 }
 
-static void gatherProtocolDecodes(const char *, ftenum_t selector_type, gpointer key, gpointer value, gpointer item_ptr)
+static void gatherProtocolDecodes(const char *short_name, ftenum_t selector_type, void *key, void *value, void *item_ptr)
 {
     DissectorTablesItem* pdl_ptr = (DissectorTablesItem*)item_ptr;
     if (pdl_ptr == NULL)
@@ -187,7 +213,8 @@ static void gatherProtocolDecodes(const char *, ftenum_t selector_type, gpointer
 
     dtbl_entry_t       *dtbl_entry = (dtbl_entry_t*)value;
     dissector_handle_t  handle = dtbl_entry_get_handle(dtbl_entry);
-    const QString dissector_description = dissector_handle_get_description(handle);
+    const QString       dissector_description = dissector_handle_get_description(handle);
+    int                 display = get_dissector_table_param(short_name);
     DissectorTablesItem *ti = NULL;
 
     switch (selector_type) {
@@ -195,7 +222,7 @@ static void gatherProtocolDecodes(const char *, ftenum_t selector_type, gpointer
     case FT_UINT16:
     case FT_UINT24:
     case FT_UINT32:
-        ti = new IntegerTablesItem(GPOINTER_TO_UINT(key), dissector_description, pdl_ptr);
+        ti = new IntegerTablesItem(GPOINTER_TO_UINT(key), selector_type, display, dissector_description, pdl_ptr);
         pdl_ptr->prependChild(ti);
         break;
 
@@ -225,7 +252,7 @@ struct tables_root
     DissectorTablesItem* string_table;
 };
 
-static void gatherTableNames(const char *short_name, const char *table_name, gpointer model_ptr)
+static void gatherTableNames(const char *short_name, const char *table_name, void *model_ptr)
 {
     struct tables_root* tables = (struct tables_root*)model_ptr;
     if (model_ptr == NULL)
@@ -262,7 +289,7 @@ static void gatherTableNames(const char *short_name, const char *table_name, gpo
     dissector_table_foreach(short_name, gatherProtocolDecodes, dt_ti);
 }
 
-static void gatherHeurProtocolDecodes(const char *, struct heur_dtbl_entry *dtbl_entry, gpointer list_ptr)
+static void gatherHeurProtocolDecodes(const char *, struct heur_dtbl_entry *dtbl_entry, void *list_ptr)
 {
     DissectorTablesItem* hdl_ptr = (DissectorTablesItem*)list_ptr;
     if (hdl_ptr == NULL)
@@ -272,20 +299,25 @@ static void gatherHeurProtocolDecodes(const char *, struct heur_dtbl_entry *dtbl
         QString longName = proto_get_protocol_long_name(dtbl_entry->protocol);
         QString heurDisplayName = dtbl_entry->display_name;
         if (! heurDisplayName.isEmpty())
-            longName.append(QString(" (%1)").arg(heurDisplayName));
+            longName.append(QStringLiteral(" (%1)").arg(heurDisplayName));
 
         DissectorTablesItem *heur = new DissectorTablesItem(longName, proto_get_protocol_short_name(dtbl_entry->protocol), hdl_ptr);
         hdl_ptr->prependChild(heur);
     }
 }
 
-static void gatherHeurTableNames(const char *table_name, heur_dissector_list *list, gpointer heur_tables)
+static void gatherHeurTableNames(const char *table_name, heur_dissector_list *list, void *heur_tables)
 {
     DissectorTablesItem* table = (DissectorTablesItem*)heur_tables;
     if (table == NULL)
         return;
 
-    DissectorTablesItem *heur = new DissectorTablesItem(table_name, QString(""), table);
+    QString desc_name = table_name;
+    if (list) {
+        const char *desc = heur_dissector_list_get_description(list);
+        if (desc) desc_name = desc;
+    }
+    DissectorTablesItem *heur = new DissectorTablesItem(desc_name, table_name, table);
     table->prependChild(heur);
 
     if (list) {
@@ -357,6 +389,7 @@ bool DissectorTablesProxyModel::lessThan(const QModelIndex &left, const QModelIn
     return false;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 bool DissectorTablesProxyModel::filterAcceptItem(DissectorTablesItem& item) const
 {
     if (filter_.isEmpty())
@@ -369,6 +402,7 @@ bool DissectorTablesProxyModel::filterAcceptItem(DissectorTablesItem& item) cons
     for (int child_row = 0; child_row < item.childCount(); child_row++)
     {
         child_item = item.child(child_row);
+        // We recurse here, but the tree is only three levels deep
         if ((child_item != NULL) && (filterAcceptItem(*child_item)))
             return true;
     }
@@ -391,8 +425,15 @@ bool DissectorTablesProxyModel::filterAcceptsRow(int sourceRow, const QModelInde
 
 void DissectorTablesProxyModel::setFilter(const QString& filter)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     filter_ = filter;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 void DissectorTablesProxyModel::adjustHeader(const QModelIndex &currentIndex)

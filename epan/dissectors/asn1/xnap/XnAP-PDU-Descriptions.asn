@@ -1,4 +1,4 @@
--- 3GPP TS 38.423 V17.3.0 (2022-12)
+-- 3GPP TS 38.423 V19.1.0 (2025-12)
 -- 9.3.3	Elementary Procedure Definitions
 -- **************************************************************
 --
@@ -86,6 +86,7 @@ FROM XnAP-CommonDataTypes
 	EarlyStatusTransfer,
 	FailureIndication,
 	HandoverReport,
+	SCGFailureIndication,
 	ResourceStatusRequest,
 	ResourceStatusResponse,
 	ResourceStatusFailure,
@@ -109,7 +110,28 @@ FROM XnAP-CommonDataTypes
 	CPCCancel,
 	PartialUEContextTransfer,
 	PartialUEContextTransferAcknowledge,
-	PartialUEContextTransferFailure
+	PartialUEContextTransferFailure,
+	RachIndication,
+	DataCollectionRequest,
+	DataCollectionResponse,
+	DataCollectionFailure,
+	DataCollectionUpdate,
+	ODSIB1ConfigurationProvisionRequest,
+	ODSIB1ConfigurationProvisionResponse,
+	ODSIB1ConfigurationProvisionFailure,
+	ODSIB1ConfigurationProvisionStatusUpdate,
+	LTMConfigurationUpdate,
+	LTMConfigurationUpdateAcknowledge,
+	LTMConfigurationUpdateFailure,
+	CSIRSCoordinationRequest,
+	CSIRSCoordinationResponse,
+	CellSwitchNotification,
+	TAInformationTransfer,
+	LTMCancel,
+	CLI-Indication
+
+
+
 
 
 FROM XnAP-PDU-Contents
@@ -148,6 +170,7 @@ FROM XnAP-PDU-Contents
 	id-earlyStatusTransfer,
 	id-failureIndication,
 	id-handoverReport,
+	id-scgFailureIndication,
 	id-resourceStatusReportingInitiation,
 	id-resourceStatusReporting,
 	id-mobilitySettingsChange,
@@ -162,7 +185,22 @@ FROM XnAP-PDU-Contents
 	id-iABResourceCoordination,
 	id-retrieveUEContextConfirm,
 	id-cPCCancel,
-	id-partialUEContextTransfer
+	id-partialUEContextTransfer,
+	id-rachIndication,
+	id-dataCollectionReportingInitiation,
+	id-dataCollectionReporting,
+	id-ODSIB1ConfigurationProvision,
+	id-ODSIB1ConfigurationProvisionStatusUpdate,
+	id-lTMConfigurationUpdate,
+	id-cSIRSCoordination,
+	id-cellSwitchNotification,
+	id-tAInformationTransfer,
+	id-lTMCancel,
+	id-cLI-Indication
+
+
+
+
 
 FROM XnAP-Constants;
 
@@ -250,7 +288,12 @@ XNAP-ELEMENTARY-PROCEDURES-CLASS-1 XNAP-ELEMENTARY-PROCEDURE ::= {
 	iABTransportMigrationManagement							|
 	iABTransportMigrationModification						|
 	iABResourceCoordination									|
-	partialUEContextTransfer								,
+	partialUEContextTransfer								|
+	dataCollectionReportingInitiation						|
+	oDSIB1ConfigurationProvision							|
+	lTMConfigurationUpdate									|
+	cSIRSCoordination										|
+	cLI-Indication,
 	...
 }
 
@@ -267,7 +310,7 @@ XNAP-ELEMENTARY-PROCEDURES-CLASS-2 XNAP-ELEMENTARY-PROCEDURE ::= {
 	privateMessage							|
 	notificationControl						|
 	activityNotification					|
-	secondaryRATDataUsageReport 			|
+	secondaryRATDataUsageReport				|
 	deactivateTrace							|
 	traceStart								|
 	handoverSuccess							|
@@ -275,15 +318,22 @@ XNAP-ELEMENTARY-PROCEDURES-CLASS-2 XNAP-ELEMENTARY-PROCEDURE ::= {
 	earlyStatusTransfer						|
 	failureIndication						|
 	handoverReport							|
+	scgFailureIndication					|
 	resourceStatusReporting					|
 	accessAndMobilityIndication				|
-	cellTrafficTrace							|
+	cellTrafficTrace						|
 	rANMulticastGroupPaging					|
 	scgFailureInformationReport				|
 	scgFailureTransfer						|
 	f1CTrafficTransfer						|
 	retrieveUEContextConfirm				|
-	cPCCancel								,
+	cPCCancel								|
+	rachIndication							|
+	dataCollectionReporting					|
+	oDSIB1ConfigurationProvisionStatusUpdate|
+	cellSwitchNotification					|
+	tAInformationTransfer					|
+	lTMCancel,
 	...
 
 }
@@ -555,6 +605,12 @@ handoverReport XNAP-ELEMENTARY-PROCEDURE ::= {
 	CRITICALITY				ignore
 }
 
+scgFailureIndication XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE		SCGFailureIndication
+	PROCEDURE CODE			id-scgFailureIndication
+	CRITICALITY				ignore
+}
+
 resourceStatusReportingInitiation	XNAP-ELEMENTARY-PROCEDURE ::= {
 	INITIATING MESSAGE				ResourceStatusRequest
 	SUCCESSFUL OUTCOME				ResourceStatusResponse
@@ -579,9 +635,9 @@ mobilitySettingsChange	XNAP-ELEMENTARY-PROCEDURE ::= {
 
 
 accessAndMobilityIndication XNAP-ELEMENTARY-PROCEDURE ::={
-	INITIATING MESSAGE 		AccessAndMobilityIndication
+	INITIATING MESSAGE		AccessAndMobilityIndication
 	PROCEDURE CODE			id-accessAndMobilityIndication
-	CRITICALITY 				ignore
+	CRITICALITY				ignore
 }
 
 cellTrafficTrace XNAP-ELEMENTARY-PROCEDURE ::= {
@@ -593,19 +649,19 @@ cellTrafficTrace XNAP-ELEMENTARY-PROCEDURE ::= {
 rANMulticastGroupPaging 	XNAP-ELEMENTARY-PROCEDURE ::={
 	INITIATING MESSAGE 		RANMulticastGroupPaging
 	PROCEDURE CODE			id-RANMulticastGroupPaging
-	CRITICALITY 			reject
+	CRITICALITY				reject
 }
 
 scgFailureInformationReport XNAP-ELEMENTARY-PROCEDURE ::={
 	INITIATING MESSAGE 		ScgFailureInformationReport
 	PROCEDURE CODE			id-scgFailureInformationReport
-	CRITICALITY 				ignore
+	CRITICALITY				ignore
 }
 
 scgFailureTransfer XNAP-ELEMENTARY-PROCEDURE ::={
-	INITIATING MESSAGE 		ScgFailureTransfer
+	INITIATING MESSAGE		ScgFailureTransfer
 	PROCEDURE CODE			id-scgFailureTransfer
-	CRITICALITY 				ignore
+	CRITICALITY				ignore
 }
 
 f1CTrafficTransfer			XNAP-ELEMENTARY-PROCEDURE ::= {
@@ -637,15 +693,91 @@ iABResourceCoordination XNAP-ELEMENTARY-PROCEDURE ::={
 }
 
 retrieveUEContextConfirm	XNAP-ELEMENTARY-PROCEDURE ::={
-	INITIATING MESSAGE 		RetrieveUEContextConfirm
+	INITIATING MESSAGE		RetrieveUEContextConfirm
 	PROCEDURE CODE			id-retrieveUEContextConfirm
-	CRITICALITY 				ignore
+	CRITICALITY				reject
 }
 
 cPCCancel XNAP-ELEMENTARY-PROCEDURE ::={
-	INITIATING MESSAGE 		CPCCancel
+	INITIATING MESSAGE		CPCCancel
 	PROCEDURE CODE			id-cPCCancel
-	CRITICALITY 			ignore
+	CRITICALITY				ignore
+}
+
+rachIndication XNAP-ELEMENTARY-PROCEDURE ::={
+	INITIATING MESSAGE		RachIndication
+	PROCEDURE CODE			id-rachIndication
+	CRITICALITY				ignore
+}
+
+dataCollectionReportingInitiation	XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE				DataCollectionRequest
+	SUCCESSFUL OUTCOME				DataCollectionResponse
+	UNSUCCESSFUL OUTCOME			DataCollectionFailure
+	PROCEDURE CODE					id-dataCollectionReportingInitiation
+	CRITICALITY						reject
+}
+
+dataCollectionReporting	XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE		DataCollectionUpdate
+	PROCEDURE CODE			id-dataCollectionReporting
+	CRITICALITY				ignore
+}
+
+oDSIB1ConfigurationProvision		XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE				ODSIB1ConfigurationProvisionRequest
+	SUCCESSFUL OUTCOME				ODSIB1ConfigurationProvisionResponse
+	UNSUCCESSFUL OUTCOME			ODSIB1ConfigurationProvisionFailure
+	PROCEDURE CODE					id-ODSIB1ConfigurationProvision
+	CRITICALITY						reject
+}
+
+oDSIB1ConfigurationProvisionStatusUpdate	XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE		ODSIB1ConfigurationProvisionStatusUpdate
+	PROCEDURE CODE			id-ODSIB1ConfigurationProvisionStatusUpdate
+	CRITICALITY				ignore
+}
+
+
+lTMConfigurationUpdate		XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE				LTMConfigurationUpdate
+	SUCCESSFUL OUTCOME				LTMConfigurationUpdateAcknowledge
+	UNSUCCESSFUL OUTCOME			LTMConfigurationUpdateFailure
+	PROCEDURE CODE					id-lTMConfigurationUpdate
+	CRITICALITY						reject
+}
+
+
+cSIRSCoordination			XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE				CSIRSCoordinationRequest
+	SUCCESSFUL OUTCOME				CSIRSCoordinationResponse
+	PROCEDURE CODE					id-cSIRSCoordination
+	CRITICALITY						reject
+}
+
+
+cellSwitchNotification		XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE				CellSwitchNotification
+	PROCEDURE CODE					id-cellSwitchNotification
+	CRITICALITY						ignore
+}
+
+tAInformationTransfer		XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE				TAInformationTransfer
+	PROCEDURE CODE					id-tAInformationTransfer
+	CRITICALITY						ignore
+}
+
+lTMCancel					XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE				LTMCancel
+	PROCEDURE CODE					id-lTMCancel
+	CRITICALITY						ignore
+}
+
+cLI-Indication	XNAP-ELEMENTARY-PROCEDURE ::= {
+	INITIATING MESSAGE		CLI-Indication
+	PROCEDURE CODE			id-cLI-Indication
+	CRITICALITY				ignore
 }
 
 

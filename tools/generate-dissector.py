@@ -95,7 +95,7 @@ def patch_makefile(args):
     if args.plugin:
         cmakefile = os.path.join(wsdir(), "CMakeLists.txt")
         patchline = "\t\tplugins/epan/" + args.protoabbrev
-        groupstart = "set(PLUGIN_SRC_DIRS"
+        groupstart = "set(WIRESHARK_PLUGIN_SRC_DIRS"
     else:
         cmakefile = os.path.join(wsdir(), "epan/dissectors/CMakeLists.txt")
         patchline = "\t${CMAKE_CURRENT_SOURCE_DIR}/packet-" + args.protoabbrev + ".c"
@@ -144,7 +144,7 @@ def print_header():
 def print_trailer(args):
     print("")
     print("The skeleton for the dissector of the " + args.protoshortname + " protocol has been generated.")
-    print("Please review/extend it to match your specific criterias.")
+    print("Please review/extend it to match your specific criteria.")
     print("")
 
 

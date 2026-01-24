@@ -44,12 +44,12 @@ typedef struct _extcap_option {
     char * optdesc;
 } extcap_option_t;
 
-static FILE *custom_log = NULL;
+static FILE *custom_log;
 
 /* used to inform to extcap application that end of application is requested */
-gboolean extcap_end_application = FALSE;
+bool extcap_end_application;
 /* graceful shutdown callback, can be null */
-void (*extcap_graceful_shutdown_cb)(void) = NULL;
+void (*extcap_graceful_shutdown_cb)(void);
 
 static void extcap_init_log_file(const char *filename);
 
@@ -62,12 +62,12 @@ static void extcap_exit_from_loop(int signo _U_)
 #endif /* _WIN32 */
 {
     ws_debug("Exiting from main loop by signal");
-    extcap_end_application = TRUE;
+    extcap_end_application = true;
     if (extcap_graceful_shutdown_cb != NULL) {
        extcap_graceful_shutdown_cb();
     }
 #ifdef _WIN32
-    return TRUE;
+    return true;
 #endif /* _WIN32 */
 }
 
@@ -93,39 +93,50 @@ void extcap_base_register_interface_ext(extcap_parameters * extcap,
     iface->dltname = g_strdup(dltname);
     iface->dltdescription = g_strdup(dltdescription);
 
-    extcap->interfaces = g_list_append(extcap->interfaces, (gpointer) iface);
+    extcap->interfaces = g_list_append(extcap->interfaces, (void *) iface);
 }
 
-gboolean extcap_base_register_graceful_shutdown_cb(extcap_parameters * extcap _U_, void (*callback)(void))
+bool extcap_base_register_graceful_shutdown_cb(extcap_parameters * extcap _U_, void (*callback)(void))
 {
 #ifndef _WIN32
     struct sigaction sig_handler = { .sa_handler = extcap_exit_from_loop };
 #endif
 
-    extcap_end_application = FALSE;
+    extcap_end_application = false;
     extcap_graceful_shutdown_cb = callback;
 #ifdef _WIN32
-    if (!SetConsoleCtrlHandler(extcap_exit_from_loop, TRUE)) {
+    /* This signal can be triggered if extcap is ran manually from a command prompt,
+     * but cannot be triggered by wireshark. On Windows, wireshark will therefore terminate
+     * the program when the user clicks "stop". Use postkill_cb to try and cleanup afterwards
+     * if needed.
+     */
+    if (!SetConsoleCtrlHandler(extcap_exit_from_loop, true)) {
             ws_warning("Can't set console handler");
-            return FALSE;
+            return false;
     }
 #else
     /* Catch signals to be able to cleanup config later */
     if (sigaction(SIGINT, &sig_handler, NULL)) {
             ws_warning("Can't set SIGINT signal handler");
-            return FALSE;
+            return false;
     }
     if (sigaction(SIGTERM, &sig_handler, NULL)) {
             ws_warning("Can't set SIGTERM signal handler");
-            return FALSE;
+            return false;
     }
     if (sigaction(SIGPIPE, &sig_handler, NULL)) {
             ws_warning("Can't set SIGPIPE signal handler");
-            return FALSE;
+            return false;
     }
 #endif /* _WIN32 */
 
-    return TRUE;
+    return true;
+}
+
+bool extcap_base_register_cleanup_postkill_cb(extcap_parameters* extcap _U_, void (*callback)(void))
+{
+    extcap->cleanup_postkill_cb = callback;
+    return true;
 }
 
 void extcap_base_set_util_info(extcap_parameters * extcap, const char * exename, const char * major,
@@ -164,11 +175,11 @@ void extcap_base_set_running_with(extcap_parameters * extcap, const char *fmt, .
     va_end(ap);
 }
 
-void extcap_log_init(const char *progname)
+void extcap_log_init(void)
 {
-    ws_log_init(progname, NULL);
+    ws_log_init(NULL, "Extcap Debug Console");
     /* extcaps cannot write debug information to parent on stderr. */
-    ws_log_console_writer_set_use_stdout(TRUE);
+    ws_log_console_writer_set_use_stdout(true);
     ws_noisy("Extcap log initialization finished");
 }
 
@@ -184,15 +195,16 @@ uint8_t extcap_base_parse_options(extcap_parameters * extcap, int result, char *
                 /* Invalid log level string. */
                 ret = 0;
             }
-            else if (level <= LOG_LEVEL_DEBUG) {
-                extcap->debug = TRUE;
-            }
+            extcap->debug = level;
             break;
         case EXTCAP_OPT_LOG_FILE:
             extcap_init_log_file(optargument);
             break;
         case EXTCAP_OPT_LIST_INTERFACES:
             extcap->do_list_interfaces = 1;
+            break;
+        case EXTCAP_OPT_CLEANUP_POSTKILL:
+            extcap->do_cleanup_postkill = 1;
             break;
         case EXTCAP_OPT_VERSION:
             extcap->ws_version = g_strdup(optargument);
@@ -206,6 +218,14 @@ uint8_t extcap_base_parse_options(extcap_parameters * extcap, int result, char *
             break;
         case EXTCAP_OPT_CONFIG:
             extcap->show_config = 1;
+            break;
+        case EXTCAP_OPT_CONFIG_OPTION_NAME:
+            extcap->show_config_option = 1;
+            extcap->config_option_name = g_strdup(optargument);
+            break;
+        case EXTCAP_OPT_CONFIG_OPTION_VALUE:
+            extcap->show_config_option = 1;
+            extcap->config_option_value = g_strdup(optargument);
             break;
         case EXTCAP_OPT_CAPTURE:
             extcap->capture = 1;
@@ -223,7 +243,7 @@ uint8_t extcap_base_parse_options(extcap_parameters * extcap, int result, char *
     return ret;
 }
 
-static void extcap_iface_print(gpointer data, gpointer userdata _U_)
+static void extcap_iface_print(void * data, void * userdata _U_)
 {
     extcap_interface * iface = (extcap_interface *)data;
 
@@ -234,7 +254,7 @@ static void extcap_iface_print(gpointer data, gpointer userdata _U_)
         printf ("\n");
 }
 
-static gint extcap_iface_compare(gconstpointer  a, gconstpointer  b)
+static int extcap_iface_compare(const void *   a, const void *   b)
 {
     const extcap_interface * iface_a = (const extcap_interface *)a;
 
@@ -249,7 +269,7 @@ static void extcap_print_version(extcap_parameters * extcap)
     printf("\n");
 }
 
-static gint extcap_iface_listall(extcap_parameters * extcap, uint8_t list_ifs)
+static int extcap_iface_listall(extcap_parameters * extcap, uint8_t list_ifs)
 {
     if (list_ifs) {
         if (g_list_length(extcap->interfaces) > 0) {
@@ -278,13 +298,17 @@ static gint extcap_iface_listall(extcap_parameters * extcap, uint8_t list_ifs)
 uint8_t extcap_base_handle_interface(extcap_parameters * extcap)
 {
     /* A fifo must be provided for capture */
-    if (extcap->capture && (extcap->fifo == NULL || strlen(extcap->fifo) <= 0)) {
+    if (extcap->capture && (extcap->fifo == NULL || strlen(extcap->fifo) == 0)) {
         extcap->capture = 0;
         ws_error("Extcap Error: No FIFO pipe provided");
         return 0;
     }
 
-    if (extcap->do_list_interfaces) {
+    if (extcap->do_cleanup_postkill) {
+        if (extcap->cleanup_postkill_cb != NULL)
+            extcap->cleanup_postkill_cb();
+        return 1;
+    } else if (extcap->do_list_interfaces) {
         return extcap_iface_listall(extcap, 1);
     } else if (extcap->do_version || extcap->do_list_dlts) {
         return extcap_iface_listall(extcap, 0);
@@ -293,7 +317,7 @@ uint8_t extcap_base_handle_interface(extcap_parameters * extcap)
     return 0;
 }
 
-static void extcap_iface_free(gpointer data)
+static void extcap_iface_free(void * data)
 {
     extcap_interface * iface = (extcap_interface *)data;
     g_free(iface->interface);
@@ -303,7 +327,7 @@ static void extcap_iface_free(gpointer data)
     g_free(iface);
 }
 
-static void extcap_help_option_free(gpointer option)
+static void extcap_help_option_free(void * option)
 {
     extcap_option_t* o = (extcap_option_t*)option;
     g_free(o->optname);
@@ -317,6 +341,7 @@ void extcap_base_cleanup(extcap_parameters ** extcap)
     g_free((*extcap)->exename);
     g_free((*extcap)->fifo);
     g_free((*extcap)->interface);
+    g_free((*extcap)->capture_filter);
     g_free((*extcap)->version);
     g_free((*extcap)->compiled_with);
     g_free((*extcap)->running_with);
@@ -328,7 +353,7 @@ void extcap_base_cleanup(extcap_parameters ** extcap)
     *extcap = NULL;
 }
 
-static void extcap_print_option(gpointer option, gpointer user_data _U_)
+static void extcap_print_option(void * option, void * user_data _U_)
 {
     extcap_option_t* o = (extcap_option_t*)option;
     printf("\t%s: %s\n", o->optname, o->optdesc);
@@ -376,6 +401,10 @@ void extcap_help_add_header(extcap_parameters * extcap, char * help_header)
     extcap_help_add_option(extcap, "--extcap-version", "print tool version");
     extcap_help_add_option(extcap, "--log-level", "Set the log level");
     extcap_help_add_option(extcap, "--log-file", "Set a log file to log messages in addition to the console");
+    if (extcap->cleanup_postkill_cb != NULL)
+    {
+        extcap_help_add_option(extcap, "--extcap-cleanup-postkill", "Perform a post-mortem cleanup if the process was killed.");
+    }
 }
 
 static void extcap_init_log_file(const char* filename)
@@ -411,6 +440,18 @@ void extcap_cmdline_debug(char** ar, const unsigned n)
         g_string_append_printf(cmdline, "%s ", ar[i]);
     ws_debug("%s", cmdline->str);
     g_string_free(cmdline, TRUE);
+}
+
+/*
+ * Report errors and warnings through ws_warning().
+ *
+ * Unfortunately, ws_warning() may be a macro, so we do it by calling
+ * ws_logv() with the appropriate arguments.
+ */
+void
+extcap_log_cmdarg_err(const char *msg_format, va_list ap)
+{
+    ws_logv(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_WARNING, msg_format, ap);
 }
 
 /*

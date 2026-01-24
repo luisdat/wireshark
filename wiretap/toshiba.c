@@ -7,12 +7,29 @@
  */
 
 #include "config.h"
-#include "wtap-int.h"
 #include "toshiba.h"
+#include "wtap_module.h"
 #include "file_wrappers.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+#include <wsutil/array.h>
+#include <wsutil/pint.h>
+
+/*
+ * Toshiba ISDN Router
+ *
+ * An under-documented command that the router supports in a telnet session
+ * is "snoop" (not related to the Solaris "snoop" command). If you give
+ * it the "dump" option (either by letting "snoop" query you for its next
+ * argument, or typing "snoop dump" on the command line), you'll get a hex
+ * dump of all packets across the router (except of your own telnet session
+ * -- good thinking Toshiba!). You can select a certain channel to sniff
+ * (LAN, B1, B2, D), but the default is all channels.  You save this hex
+ * dump to disk with 'script' or by 'telnet | tee'. Wiretap will read the
+ * ASCII hex dump and convert it to binary data.
+*/
 
 /* This module reads the output of the 'snoop' command in the Toshiba
  * TR-600 and TR-650 "Compact" ISDN Routers. You can telnet to the
@@ -47,7 +64,7 @@ Password:*******
 tr600>snoop dump b1
  Trace start?(on/off/dump/dtl)->dump
  IP Address?->b1
-B1 Port Filetering
+B1 Port Filtering
 Trace start(Dump Mode)...
 
 tr600>[No.1] 00:00:09.14 B1:1 Tx 207.193.26.136->151.164.1.8 DNS  SPORT=1028 LEN=38 CHKSUM=4FD4 ID=2390 Query RD QCNT=1 pow.zing.org?
@@ -80,20 +97,20 @@ OFFSET 0001-0203-0405-0607-0809-0A0B-0C0D-0E0F 0123456789ABCDEF LEN=222
 /* Magic text to check for toshiba-ness of file */
 static const char toshiba_hdr_magic[]  =
 { 'T', ' ', 'O', ' ', 'S', ' ', 'H', ' ', 'I', ' ', 'B', ' ', 'A' };
-#define TOSHIBA_HDR_MAGIC_SIZE  (sizeof toshiba_hdr_magic  / sizeof toshiba_hdr_magic[0])
+#define TOSHIBA_HDR_MAGIC_SIZE  array_length(toshiba_hdr_magic)
 
 /* Magic text for start of packet */
 static const char toshiba_rec_magic[]  = { '[', 'N', 'o', '.' };
-#define TOSHIBA_REC_MAGIC_SIZE  (sizeof toshiba_rec_magic  / sizeof toshiba_rec_magic[0])
+#define TOSHIBA_REC_MAGIC_SIZE  array_length(toshiba_rec_magic)
 
-static gboolean toshiba_read(wtap *wth, wtap_rec *rec, Buffer *buf,
-	int *err, gchar **err_info, gint64 *data_offset);
-static gboolean toshiba_seek_read(wtap *wth, gint64 seek_off,
-	wtap_rec *rec, Buffer *buf, int *err, gchar **err_info);
-static gboolean parse_single_hex_dump_line(char* rec, guint8 *buf,
-	guint byte_offset);
-static gboolean parse_toshiba_packet(FILE_T fh, wtap_rec *rec,
-	Buffer *buf, int *err, gchar **err_info);
+static bool toshiba_read(wtap *wth, wtap_rec *rec, int *err,
+	char **err_info, int64_t *data_offset);
+static bool toshiba_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+	int *err, char **err_info);
+static bool parse_single_hex_dump_line(char* rec, uint8_t *buf,
+	unsigned byte_offset);
+static bool parse_toshiba_packet(FILE_T fh, wtap_rec *rec, int *err,
+	char **err_info);
 
 static int toshiba_file_type_subtype = -1;
 
@@ -102,11 +119,11 @@ void register_toshiba(void);
 /* Seeks to the beginning of the next packet, and returns the
    byte offset.  Returns -1 on failure, and sets "*err" to the error
    and "*err_info" to null or an additional error string. */
-static gint64 toshiba_seek_next_packet(wtap *wth, int *err, gchar **err_info)
+static int64_t toshiba_seek_next_packet(wtap *wth, int *err, char **err_info)
 {
 	int byte;
-	guint level = 0;
-	gint64 cur_off;
+	unsigned level = 0;
+	int64_t cur_off;
 
 	while ((byte = file_getc(wth->fh)) != EOF) {
 		if (byte == toshiba_rec_magic[level]) {
@@ -136,14 +153,14 @@ static gint64 toshiba_seek_next_packet(wtap *wth, int *err, gchar **err_info)
 /* Look through the first part of a file to see if this is
  * a Toshiba trace file.
  *
- * Returns TRUE if it is, FALSE if it isn't or if we get an I/O error;
+ * Returns true if it is, false if it isn't or if we get an I/O error;
  * if we get an I/O error, "*err" will be set to a non-zero value and
  * "*err_info" will be set to null or an additional error string.
  */
-static gboolean toshiba_check_file_type(wtap *wth, int *err, gchar **err_info)
+static bool toshiba_check_file_type(wtap *wth, int *err, char **err_info)
 {
 	char	buf[TOSHIBA_LINE_LENGTH];
-	guint	i, reclen, level, line;
+	unsigned	i, reclen, level, line;
 	char	byte;
 
 	buf[TOSHIBA_LINE_LENGTH-1] = 0;
@@ -152,10 +169,10 @@ static gboolean toshiba_check_file_type(wtap *wth, int *err, gchar **err_info)
 		if (file_gets(buf, TOSHIBA_LINE_LENGTH, wth->fh) == NULL) {
 			/* EOF or error. */
 			*err = file_error(wth->fh, err_info);
-			return FALSE;
+			return false;
 		}
 
-		reclen = (guint) strlen(buf);
+		reclen = (unsigned) strlen(buf);
 		if (reclen < TOSHIBA_HDR_MAGIC_SIZE) {
 			continue;
 		}
@@ -166,7 +183,7 @@ static gboolean toshiba_check_file_type(wtap *wth, int *err, gchar **err_info)
 			if (byte == toshiba_hdr_magic[level]) {
 				level++;
 				if (level >= TOSHIBA_HDR_MAGIC_SIZE) {
-					return TRUE;
+					return true;
 				}
 			}
 			else {
@@ -175,11 +192,11 @@ static gboolean toshiba_check_file_type(wtap *wth, int *err, gchar **err_info)
 		}
 	}
 	*err = 0;
-	return FALSE;
+	return false;
 }
 
 
-wtap_open_return_val toshiba_open(wtap *wth, int *err, gchar **err_info)
+wtap_open_return_val toshiba_open(wtap *wth, int *err, char **err_info)
 {
 	/* Look for Toshiba header */
 	if (!toshiba_check_file_type(wth, err, err_info)) {
@@ -193,48 +210,46 @@ wtap_open_return_val toshiba_open(wtap *wth, int *err, gchar **err_info)
 	wth->snapshot_length = 0; /* not known */
 	wth->subtype_read = toshiba_read;
 	wth->subtype_seek_read = toshiba_seek_read;
-	wth->file_tsprec = WTAP_TSPREC_CSEC;
+	wth->file_tsprec = WTAP_TSPREC_10_MSEC;
 
 	return WTAP_OPEN_MINE;
 }
 
 /* Find the next packet and parse it; called from wtap_read(). */
-static gboolean toshiba_read(wtap *wth, wtap_rec *rec, Buffer *buf,
-    int *err, gchar **err_info, gint64 *data_offset)
+static bool toshiba_read(wtap *wth, wtap_rec *rec, int *err,
+	char **err_info, int64_t *data_offset)
 {
-	gint64	offset;
+	int64_t	offset;
 
 	/* Find the next packet */
 	offset = toshiba_seek_next_packet(wth, err, err_info);
 	if (offset < 1)
-		return FALSE;
+		return false;
 	*data_offset = offset;
 
 	/* Parse the packet */
-	return parse_toshiba_packet(wth->fh, rec, buf, err, err_info);
+	return parse_toshiba_packet(wth->fh, rec, err, err_info);
 }
 
 /* Used to read packets in random-access fashion */
-static gboolean
-toshiba_seek_read(wtap *wth, gint64 seek_off,
-	wtap_rec *rec, Buffer *buf,
-	int *err, gchar **err_info)
+static bool
+toshiba_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, int *err,
+	char **err_info)
 {
 	if (file_seek(wth->random_fh, seek_off - 1, SEEK_SET, err) == -1)
-		return FALSE;
+		return false;
 
-	if (!parse_toshiba_packet(wth->random_fh, rec, buf, err, err_info)) {
+	if (!parse_toshiba_packet(wth->random_fh, rec, err, err_info)) {
 		if (*err == 0)
 			*err = WTAP_ERR_SHORT_READ;
-		return FALSE;
+		return false;
 	}
-	return TRUE;
+	return true;
 }
 
 /* Parses a packet. */
-static gboolean
-parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
-    int *err, gchar **err_info)
+static bool
+parse_toshiba_packet(FILE_T fh, wtap_rec *rec, int *err, char **err_info)
 {
 	union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
 	char	line[TOSHIBA_LINE_LENGTH];
@@ -242,7 +257,7 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 	int	pkt_len, pktnum, hr, min, sec, csec;
 	char	channel[10], direction[10];
 	int	i, hex_lines;
-	guint8	*pd;
+	uint8_t	*pd;
 
 	/* Our file pointer should be on the line containing the
 	 * summary information for a packet. Read in that line and
@@ -253,7 +268,7 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 		if (*err == 0) {
 			*err = WTAP_ERR_SHORT_READ;
 		}
-		return FALSE;
+		return false;
 	}
 
 	/* Find text in line after "[No.". Limit the length of the
@@ -265,7 +280,7 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 	if (num_items_scanned != 7) {
 		*err = WTAP_ERR_BAD_FILE;
 		*err_info = g_strdup("toshiba: record header isn't valid");
-		return FALSE;
+		return false;
 	}
 
 	/* Scan lines until we find the OFFSET line. In a "telnet" trace,
@@ -283,7 +298,7 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 			if (*err == 0) {
 				*err = WTAP_ERR_SHORT_READ;
 			}
-			return FALSE;
+			return false;
 		}
 
 		/* Check for "OFFSET 0001-0203" at beginning of line */
@@ -295,25 +310,25 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 	if (num_items_scanned != 1) {
 		*err = WTAP_ERR_BAD_FILE;
 		*err_info = g_strdup("toshiba: OFFSET line doesn't have valid LEN item");
-		return FALSE;
+		return false;
 	}
 	if (pkt_len < 0) {
 		*err = WTAP_ERR_BAD_FILE;
 		*err_info = g_strdup("toshiba: packet header has a negative packet length");
-		return FALSE;
+		return false;
 	}
-	if ((guint)pkt_len > WTAP_MAX_PACKET_SIZE_STANDARD) {
+	if ((unsigned)pkt_len > WTAP_MAX_PACKET_SIZE_STANDARD) {
 		/*
 		 * Probably a corrupt capture file; don't blow up trying
 		 * to allocate space for an immensely-large packet.
 		 */
 		*err = WTAP_ERR_BAD_FILE;
 		*err_info = ws_strdup_printf("toshiba: File has %u-byte packet, bigger than maximum of %u",
-		    (guint)pkt_len, WTAP_MAX_PACKET_SIZE_STANDARD);
-		return FALSE;
+		    (unsigned)pkt_len, WTAP_MAX_PACKET_SIZE_STANDARD);
+		return false;
 	}
 
-	rec->rec_type = REC_TYPE_PACKET;
+	wtap_setup_packet_rec(rec, WTAP_ENCAP_UNKNOWN);
 	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
 	rec->ts.secs = hr * 3600 + min * 60 + sec;
@@ -325,7 +340,7 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 		case 'B':
 			rec->rec_header.packet_header.pkt_encap = WTAP_ENCAP_ISDN;
 			pseudo_header->isdn.uton = (direction[0] == 'T');
-			pseudo_header->isdn.channel = (guint8)
+			pseudo_header->isdn.channel = (uint8_t)
 			    strtol(&channel[1], NULL, 10);
 			break;
 
@@ -343,8 +358,8 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 	}
 
 	/* Make sure we have enough room for the packet */
-	ws_buffer_assure_space(buf, pkt_len);
-	pd = ws_buffer_start_ptr(buf);
+	ws_buffer_assure_space(&rec->data, pkt_len);
+	pd = ws_buffer_start_ptr(&rec->data);
 
 	/* Calculate the number of hex dump lines, each
 	 * containing 16 bytes of data */
@@ -356,15 +371,15 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
 			if (*err == 0) {
 				*err = WTAP_ERR_SHORT_READ;
 			}
-			return FALSE;
+			return false;
 		}
 		if (!parse_single_hex_dump_line(line, pd, i * 16)) {
 			*err = WTAP_ERR_BAD_FILE;
 			*err_info = g_strdup("toshiba: hex dump not valid");
-			return FALSE;
+			return false;
 		}
 	}
-	return TRUE;
+	return true;
 }
 
 /*
@@ -385,15 +400,15 @@ parse_toshiba_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
  *
  * In the process, we're going to write all over the string.
  *
- * Returns TRUE if good hex dump, FALSE if bad.
+ * Returns true if good hex dump, false if bad.
  */
-static gboolean
-parse_single_hex_dump_line(char* rec, guint8 *buf, guint byte_offset) {
+static bool
+parse_single_hex_dump_line(char* rec, uint8_t *buf, unsigned byte_offset) {
 
 	int		pos, i;
 	char		*s;
 	unsigned long	value;
-	guint16		word_value;
+	uint16_t		word_value;
 
 	/* Get the byte_offset directly from the record */
 	rec[4] = '\0';
@@ -401,7 +416,7 @@ parse_single_hex_dump_line(char* rec, guint8 *buf, guint byte_offset) {
 	value = strtoul(s, NULL, 16);
 
 	if (value != byte_offset) {
-		return FALSE;
+		return false;
 	}
 
 	/* Go through the substring representing the values and:
@@ -421,13 +436,12 @@ parse_single_hex_dump_line(char* rec, guint8 *buf, guint byte_offset) {
 	for (i = 0; i < 8; i++) {
 		rec[pos+4] = '\0';
 
-		word_value = (guint16) strtoul(&rec[pos], NULL, 16);
-		buf[byte_offset + i * 2 + 0] = (guint8) (word_value >> 8);
-		buf[byte_offset + i * 2 + 1] = (guint8) (word_value & 0x00ff);
+		word_value = (uint16_t) strtoul(&rec[pos], NULL, 16);
+		phtonu16(&buf[byte_offset + i * 2], word_value);
 		pos += 5;
 	}
 
-	return TRUE;
+	return true;
 }
 
 static const struct supported_block_type toshiba_blocks_supported[] = {
@@ -439,7 +453,7 @@ static const struct supported_block_type toshiba_blocks_supported[] = {
 
 static const struct file_type_subtype_info toshiba_info = {
 	"Toshiba Compact ISDN Router snoop", "toshiba", "txt", NULL,
-	FALSE, BLOCKS_SUPPORTED(toshiba_blocks_supported),
+	false, BLOCKS_SUPPORTED(toshiba_blocks_supported),
 	NULL, NULL, NULL
 };
 

@@ -55,14 +55,17 @@ bool ExpertInfoProxyModel::lessThan(const QModelIndex &source_left, const QModel
             checkPacketNumber = true;
             break;
         case colProxyGroup:
-            if (left_item->group() != right_item->group()) {
-                return (left_item->group() < right_item->group());
-            }
+            compare_ret = QString::compare(val_to_str_const(left_item->group(), expert_group_vals, "Unknown"),
+                                            val_to_str_const(right_item->group(), expert_group_vals, "Unknown"));
+            if (compare_ret < 0)
+                return true;
+            if (compare_ret > 0)
+                return false;
 
             checkPacketNumber = true;
             break;
         case colProxyProtocol:
-            compare_ret = left_item->protocol().compare(right_item->protocol());
+            compare_ret =  QString::compare(left_item->protocol(), right_item->protocol(), Qt::CaseInsensitive);
             if (compare_ret < 0)
                 return true;
             if (compare_ret > 0)
@@ -226,6 +229,32 @@ int ExpertInfoProxyModel::columnCount(const QModelIndex&) const
     return colProxyLast;
 }
 
+bool ExpertInfoProxyModel::hasChildren(const QModelIndex &parent) const
+{
+    QModelIndex source_parent = mapToSource(parent);
+    if (parent.isValid() && !source_parent.isValid())
+        return false;
+    if (!sourceModel()->hasChildren(source_parent))
+        return false;
+
+    if (sourceModel()->canFetchMore(source_parent))
+        return true; //we assume we might have children that can be fetched
+
+    // The base QSortFilterProxyModel::hasChildren creates a full mapping here,
+    // which can be reused by other functions, but does an expensive sort that
+    // isn't necessary just to see if there's children. When new expert infos
+    // get added to the model during tappping it invalidates that mapping, and
+    // don't want to keep calculating it.
+    // XXX - It might be ok to use the base function if we're not currently
+    // tapping.
+    for (int source_row = 0; source_row < sourceModel()->rowCount(source_parent); ++source_row) {
+        if (filterAcceptsRow(source_row, source_parent)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ExpertInfoProxyModel::filterAcceptItem(ExpertPacketItem& item) const
 {
     if (hidden_severities_.contains(item.severity()))
@@ -271,6 +300,9 @@ void ExpertInfoProxyModel::setSeverityMode(enum SeverityMode mode)
 
 void ExpertInfoProxyModel::setSeverityFilter(int severity, bool hide)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     if (hide)
     {
         hidden_severities_ << severity;
@@ -280,11 +312,23 @@ void ExpertInfoProxyModel::setSeverityFilter(int severity, bool hide)
         hidden_severities_.removeOne(severity);
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 void ExpertInfoProxyModel::setSummaryFilter(const QString &filter)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     textFilter_ = filter;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }

@@ -12,7 +12,7 @@
 #ifndef __PACKET_E212_H__
 #define __PACKET_E212_H__
 
-#include <epan/value_string.h>
+#include <wsutil/value_string.h>
 #include "ws_symbol_export.h"
 
 extern value_string_ext E212_codes_ext;
@@ -33,12 +33,14 @@ typedef enum {
     E212_5GSTAI,
     E212_GUMMEI,
     E212_GUAMI,
+    E212_SERV_NET,
 } e212_number_type_t;
 
-gchar* dissect_e212_mcc_mnc_wmem_packet_str(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, e212_number_type_t number_type, gboolean little_endian);
+char* dissect_e212_mcc_mnc_wmem_packet_str(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, e212_number_type_t number_type, bool little_endian);
+void add_assoc_imsi_item(tvbuff_t *tvb _U_, proto_tree *tree, const char* imsi_str);
 
 WS_DLL_PUBLIC
-int dissect_e212_mcc_mnc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, e212_number_type_t number_type, gboolean little_endian);
+int dissect_e212_mcc_mnc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, e212_number_type_t number_type, bool little_endian);
 
 WS_DLL_PUBLIC
 int dissect_e212_mcc_mnc_in_address(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset);
@@ -56,10 +58,14 @@ int dissect_e212_mcc_mnc_in_utf8_address(tvbuff_t *tvb, packet_info *pinfo _U_, 
  *
  * Note a tvbuff content of 0xf is considered a 'filler' and will end the
  * conversion.
+ *
+ * When skip_first is true, the high bit of the skipped nibble is treated as a odd/even indicator,
+ * according to Figure 10.5.4/3GPP TS 24.008 Mobile Identity information element
+ *
  * A wmem allocated string will be returned.
  */
 WS_DLL_PUBLIC
-const gchar * dissect_e212_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int length, gboolean skip_first);
+const char * dissect_e212_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int length, bool skip_first);
 
 /**
  *
@@ -70,7 +76,7 @@ const gchar * dissect_e212_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
  * The wmem allocated string will be returned.
  */
 WS_DLL_PUBLIC
-const gchar * dissect_e212_utf8_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int length);
+const char * dissect_e212_utf8_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int length);
 
 #endif /* __PACKET_E212_H__ */
 

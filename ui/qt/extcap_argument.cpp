@@ -38,6 +38,7 @@
 #include <epan/prefs-int.h>
 #include <wsutil/wslog.h>
 #include <ui/qt/utils/color_utils.h>
+#include <ui/qt/utils/qt_ui_utils.h>
 
 #include <extcap_parser.h>
 #include <extcap_argument_file.h>
@@ -67,7 +68,7 @@ QWidget * ExtArgTimestamp::createEditor(QWidget * parent)
     if (_argument->tooltip != NULL)
         tsBox->setToolTip(QString().fromUtf8(_argument->tooltip));
 
-    connect(tsBox, SIGNAL(dateTimeChanged(QDateTime)), SLOT(onDateTimeChanged(QDateTime)));
+    connect(tsBox, &QDateTimeEdit::dateTimeChanged, this, &ExtArgTimestamp::onDateTimeChanged);
 
     return tsBox;
 }
@@ -105,7 +106,7 @@ QString ExtArgTimestamp::prefValue()
 
 bool ExtArgTimestamp::isSetDefaultValueSupported()
 {
-    return TRUE;
+    return true;
 }
 
 void ExtArgTimestamp::setDefaultValue()
@@ -156,10 +157,14 @@ QWidget * ExtArgSelector::createEditor(QWidget * parent)
         reloadButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         boxSelection->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Preferred);
 
-        connect(reloadButton, SIGNAL(clicked()), this, SLOT(onReloadTriggered()));
+        connect(reloadButton, &QPushButton::clicked, this, &ExtArgSelector::onReloadTriggered);
     }
 
-    connect (boxSelection, SIGNAL(currentIndexChanged(int)), SLOT(onIntChanged(int)));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    connect (boxSelection, &QComboBox::currentIndexChanged, this, &ExtArgSelector::onIntChanged);
+#else
+    connect (boxSelection, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ExtArgSelector::onIntChanged);
+#endif
 
     editor->setLayout(layout);
 
@@ -210,7 +215,7 @@ bool ExtArgSelector::isValid()
 
     if (boxSelection)
     {
-        QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_text_invalid).name();
+        QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_filter_invalid_bg).name();
         QString cmbBoxStyle("QComboBox { background-color: %1; } ");
         boxSelection->setStyleSheet(cmbBoxStyle.arg(valid ? QString("") : lblInvalidColor));
     }
@@ -230,7 +235,7 @@ QString ExtArgSelector::value()
 
 bool ExtArgSelector::isSetDefaultValueSupported()
 {
-    return TRUE;
+    return true;
 }
 
 void ExtArgSelector::setDefaultValue()
@@ -313,6 +318,11 @@ void ExtArgEditSelector::setDefaultValue()
 ExtArgRadio::ExtArgRadio(extcap_arg * argument, QObject * parent) :
         ExtcapArgument(argument, parent), selectorGroup(0), callStrings(0) {}
 
+ExtArgRadio::~ExtArgRadio() {
+    if (callStrings != nullptr)
+        delete callStrings;
+}
+
 QWidget * ExtArgRadio::createEditor(QWidget * parent)
 {
     int count = 0;
@@ -337,7 +347,7 @@ QWidget * ExtArgRadio::createEditor(QWidget * parent)
             QString callString = (*iter).call();
             callStrings->append(callString);
 
-            connect(radio, SIGNAL(clicked(bool)), SLOT(onBoolChanged(bool)));
+            connect(radio, &QRadioButton::clicked, this, &ExtArgRadio::onBoolChanged);
             selectorGroup->addButton(radio, count);
 
             vrLayout->addWidget(radio);
@@ -386,7 +396,7 @@ bool ExtArgRadio::isValid()
 
     /* If nothing is selected, but a selection is required, the only thing that
      * can be marked is the label */
-    QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_text_invalid).name();
+    QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_filter_invalid_bg).name();
     _label->setStyleSheet (label_style.arg(valid ? QString("") : lblInvalidColor));
 
     return valid;
@@ -394,7 +404,7 @@ bool ExtArgRadio::isValid()
 
 bool ExtArgRadio::isSetDefaultValueSupported()
 {
-    return TRUE;
+    return true;
 }
 
 void ExtArgRadio::setDefaultValue()
@@ -429,6 +439,11 @@ void ExtArgRadio::setDefaultValue()
 ExtArgBool::ExtArgBool(extcap_arg * argument, QObject * parent) :
         ExtcapArgument(argument, parent), boolBox(0) {}
 
+QWidget * ExtArgBool::createLabel(QWidget * parent)
+{
+    return new QWidget(parent);
+}
+
 QWidget * ExtArgBool::createEditor(QWidget * parent)
 {
     bool state = defaultBool();
@@ -449,7 +464,11 @@ QWidget * ExtArgBool::createEditor(QWidget * parent)
 
     boolBox->setCheckState(state ? Qt::Checked : Qt::Unchecked);
 
-    connect (boolBox, SIGNAL(stateChanged(int)), SLOT(onIntChanged(int)));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    connect (boolBox, &QCheckBox::checkStateChanged, this, &ExtArgBool::onIntChanged);
+#else
+    connect (boolBox, &QCheckBox::stateChanged, this, &ExtArgBool::onIntChanged);
+#endif
 
     return boolBox;
 }
@@ -475,7 +494,7 @@ QString ExtArgBool::value()
 QString ExtArgBool::prefValue()
 {
     if (boolBox == NULL)
-        return QString("false");
+        return QStringLiteral("false");
     return QString(boolBox->checkState() == Qt::Checked ? "true" : "false");
 }
 
@@ -492,7 +511,7 @@ bool ExtArgBool::defaultBool()
 
     if (_argument)
     {
-        if (extcap_complex_get_bool(_argument->default_complex) == (gboolean)TRUE)
+        if (extcap_complex_get_bool(_argument->default_complex) == true)
             result = true;
     }
 
@@ -501,12 +520,12 @@ bool ExtArgBool::defaultBool()
 
 QString ExtArgBool::defaultValue()
 {
-    return defaultBool() ? QString("true") : QString("false");
+    return defaultBool() ? QStringLiteral("true") : QStringLiteral("false");
 }
 
 bool ExtArgBool::isSetDefaultValueSupported()
 {
-    return TRUE;
+    return true;
 }
 
 void ExtArgBool::setDefaultValue()
@@ -543,7 +562,7 @@ QWidget * ExtArgText::createEditor(QWidget * parent)
     if (_argument->arg_type == EXTCAP_ARG_PASSWORD)
         textBox->setEchoMode(QLineEdit::PasswordEchoOnEdit);
 
-    connect(textBox , SIGNAL(textChanged(QString)), SLOT(onStringChanged(QString)));
+    connect(textBox, &QLineEdit::textChanged, this, &ExtArgText::onStringChanged);
 
     return textBox;
 }
@@ -604,7 +623,7 @@ bool ExtArgText::isValid()
         }
     }
 
-    QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_text_invalid).name();
+    QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_filter_invalid_bg).name();
     QString txtStyle("QLineEdit { background-color: %1; } ");
     textBox->setStyleSheet(txtStyle.arg(valid ? QString("") : lblInvalidColor));
 
@@ -613,7 +632,7 @@ bool ExtArgText::isValid()
 
 bool ExtArgText::isSetDefaultValueSupported()
 {
-    return TRUE;
+    return true;
 }
 
 void ExtArgText::setDefaultValue()
@@ -649,14 +668,14 @@ QWidget * ExtArgNumber::createEditor(QWidget * parent)
                 val = extcap_complex_get_int(_argument->range_start);
             else if (_argument->arg_type == EXTCAP_ARG_UNSIGNED)
             {
-                guint tmp = extcap_complex_get_uint(_argument->range_start);
-                if (tmp > G_MAXINT)
+                unsigned tmp = extcap_complex_get_uint(_argument->range_start);
+                if (tmp > INT_MAX)
                 {
                     ws_log(LOG_DOMAIN_CAPTURE, LOG_LEVEL_DEBUG, "Defined value for range_start of %s exceeds valid integer range", _argument->call);
-                    val = G_MAXINT;
+                    val = INT_MAX;
                 }
                 else
-                    val = (gint)tmp;
+                    val = (int)tmp;
             }
 
             textValidator->setBottom(val);
@@ -674,14 +693,14 @@ QWidget * ExtArgNumber::createEditor(QWidget * parent)
                 val = extcap_complex_get_int(_argument->range_end);
             else if (_argument->arg_type == EXTCAP_ARG_UNSIGNED)
             {
-                guint tmp = extcap_complex_get_uint(_argument->range_end);
-                if (tmp > G_MAXINT)
+                unsigned tmp = extcap_complex_get_uint(_argument->range_end);
+                if (tmp > INT_MAX)
                 {
                     ws_log(LOG_DOMAIN_CAPTURE, LOG_LEVEL_DEBUG, "Defined value for range_end of %s exceeds valid integer range", _argument->call);
-                    val = G_MAXINT;
+                    val = INT_MAX;
                 }
                 else
-                    val = (gint)tmp;
+                    val = (int)tmp;
             }
 
             textValidator->setTop(val);
@@ -701,7 +720,7 @@ QWidget * ExtArgNumber::createEditor(QWidget * parent)
 
     textBox->setText(text.trimmed());
 
-    connect(textBox, SIGNAL(textChanged(QString)), SLOT(onStringChanged(QString)));
+    connect(textBox, &QLineEdit::textChanged, this, &ExtArgNumber::onStringChanged);
 
     return textBox;
 }
@@ -746,13 +765,13 @@ void ExtcapValue::setChildren(ExtcapValueList children)
 
 ExtcapArgument::ExtcapArgument(QObject *parent) :
         QObject(parent), _argument(0), _label(0), _number(0),
-        label_style(QString("QLabel { color: %1; }"))
+        label_style(QStringLiteral("QLabel { color: %1; }"))
 {
 }
 
 ExtcapArgument::ExtcapArgument(extcap_arg * argument, QObject *parent) :
         QObject(parent), _argument(argument), _label(0),
-        label_style(QString("QLabel { color: %1; }"))
+        label_style(QStringLiteral("QLabel { color: %1; }"))
 {
     _number = argument->arg_num;
 
@@ -766,7 +785,7 @@ ExtcapArgument::ExtcapArgument(extcap_arg * argument, QObject *parent) :
 
 ExtcapArgument::ExtcapArgument(const ExtcapArgument &obj) :
         QObject(obj.parent()), _argument(obj._argument), _label(0),
-        label_style(QString("QLabel { color: %1; }"))
+        label_style(QStringLiteral("QLabel { color: %1; }"))
 {
     _number = obj._argument->arg_num;
 
@@ -778,6 +797,7 @@ ExtcapArgument::ExtcapArgument(const ExtcapArgument &obj) :
     }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 ExtcapValueList ExtcapArgument::loadValues(QString parent)
 {
     if (_argument == 0 || _argument->values == 0)
@@ -802,9 +822,10 @@ ExtcapValueList ExtcapArgument::loadValues(QString parent)
             QString call = QString().fromUtf8(v->call);
 
             ExtcapValue element = ExtcapValue(display, call,
-                            v->enabled == (gboolean)TRUE, v->is_default == (gboolean)TRUE);
+                            v->enabled == true, v->is_default == true);
 
             if (!call.isEmpty())
+                // We recurse here, but the tree is only two levels deep
                 element.setChildren(this->loadValues(call));
 
             elements.append(element);
@@ -834,6 +855,7 @@ bool ExtcapArgument::reloadValues()
 }
 
 ExtcapArgument::~ExtcapArgument() {
+    extcap_free_arg(_argument);
 }
 
 QWidget * ExtcapArgument::createLabel(QWidget * parent)
@@ -841,7 +863,7 @@ QWidget * ExtcapArgument::createLabel(QWidget * parent)
     if (_argument == 0 || _argument->display == 0)
         return 0;
 
-    QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_text_invalid).name();
+    QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_filter_invalid_bg).name();
 
     QString text = QString().fromUtf8(_argument->display);
 
@@ -902,9 +924,9 @@ QString ExtcapArgument::defaultValue()
 {
     if (_argument != 0 && _argument->default_complex != 0)
     {
-        gchar * str = extcap_get_complex_as_string(_argument->default_complex);
-        if (str != 0)
-            return QString(str);
+        char * str = extcap_get_complex_as_string(_argument->default_complex);
+        if (str != nullptr)
+            return gchar_free_to_qstring(str);
     }
     return QString();
 }
@@ -922,14 +944,27 @@ int ExtcapArgument::argNr() const
     return _number;
 }
 
-QString ExtcapArgument::prefKey(const QString & device_name)
+QString ExtcapArgument::prefKey(const QString & device_name,
+    const QString & option_name, const QString & option_value)
 {
-    struct preference * pref = NULL;
+    pref_t * pref = NULL;
+    QString id;
 
     if (_argument == 0 || ! _argument->save)
         return QString();
 
-    pref = extcap_pref_for_argument(device_name.toStdString().c_str(), _argument);
+    id = device_name;
+    /* If we are doing a sub-option: append an ID to the interface name */
+    if (!option_name.isEmpty())
+    {
+        /* Remove all illegal characters from option value */
+        QRegularExpression regex("[^a-z0-9._]");
+        QStringList option_uid = { "", option_name, option_value.toLower().replace(regex, "") };
+
+        id.append(option_uid.join("_"));
+    }
+
+    pref = extcap_pref_for_argument(id.toStdString().c_str(), _argument);
     if (pref != NULL)
         return QString(prefs_get_name(pref));
 
@@ -941,7 +976,15 @@ bool ExtcapArgument::isRequired()
     if (_argument != NULL)
         return _argument->is_required;
 
-    return FALSE;
+    return false;
+}
+
+bool ExtcapArgument::isSufficient()
+{
+    if (_argument != NULL)
+        return _argument->is_sufficient;
+
+    return false;
 }
 
 bool ExtcapArgument::reload()
@@ -957,7 +1000,7 @@ bool ExtcapArgument::fileExists()
     if (_argument != NULL)
         return _argument->fileexists;
 
-    return FALSE;
+    return false;
 }
 
 bool ExtcapArgument::isDefault()
@@ -992,6 +1035,8 @@ ExtcapArgument * ExtcapArgument::create(extcap_arg * argument, QObject *parent)
         result = new ExtcapArgumentFileSelection(argument, parent);
     else if (argument->arg_type == EXTCAP_ARG_MULTICHECK)
         result = new ExtArgMultiSelect(argument, parent);
+    else if (argument->arg_type == EXTCAP_ARG_TABLE)
+        result = new ExtArgTable(argument, parent);
     else if (argument->arg_type == EXTCAP_ARG_TIMESTAMP)
         result = new ExtArgTimestamp(argument, parent);
     else
@@ -1022,7 +1067,7 @@ void ExtcapArgument::onBoolChanged(bool)
 
 bool ExtcapArgument::isSetDefaultValueSupported()
 {
-    return FALSE;
+    return false;
 }
 
 void ExtcapArgument::setDefaultValue()

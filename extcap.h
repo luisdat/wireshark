@@ -35,6 +35,8 @@
 #define EXTCAP_CONTROL_OUT_PREFIX "wireshark_control_ws_to_ext"
 
 #define EXTCAP_ARGUMENT_CONFIG                  "--extcap-config"
+#define EXTCAP_ARGUMENT_CONFIG_OPTION_NAME      "--extcap-config-option-name"
+#define EXTCAP_ARGUMENT_CONFIG_OPTION_VALUE     "--extcap-config-option-value"
 #define EXTCAP_ARGUMENT_RELOAD_OPTION           "--extcap-reload-option"
 #define EXTCAP_ARGUMENT_LIST_INTERFACES         "--extcap-interfaces"
 #define EXTCAP_ARGUMENT_INTERFACE               "--extcap-interface"
@@ -44,14 +46,15 @@
 #define EXTCAP_ARGUMENT_RUN_CAPTURE             "--capture"
 #define EXTCAP_ARGUMENT_CAPTURE_FILTER          "--extcap-capture-filter"
 #define EXTCAP_ARGUMENT_RUN_PIPE                "--fifo"
+#define EXTCAP_ARGUMENT_CLEANUP_POSTKILL        "--extcap-cleanup-postkill"
 #define EXTCAP_ARGUMENT_CONTROL_IN              "--extcap-control-in"
 #define EXTCAP_ARGUMENT_CONTROL_OUT             "--extcap-control-out"
 
 typedef struct _extcap_info {
-    gchar * basename;
-    gchar * full_path;
-    gchar * version;
-    gchar * help;
+    char * basename;
+    char * full_path;
+    char * version;
+    char * help;
 
     GList * interfaces;
 } extcap_info;
@@ -61,6 +64,16 @@ typedef enum {
     EXTCAP_FILTER_VALID,
     EXTCAP_FILTER_INVALID
 } extcap_filter_status;
+
+typedef enum {
+    EXTCAP_ARGUMENT_SUFFICIENT_NOTSET,
+    EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED,
+    EXTCAP_ARGUMENT_SUFFICIENT_OK
+} extcap_argument_sufficient;
+
+typedef void (*extcap_plugin_description_callback)(const char *, const char *,
+                                                  const char *, const char *,
+                                                  void *);
 
 struct _extcap_arg;
 
@@ -83,17 +96,16 @@ extcap_register_preferences(void);
  * @return The interface capabilities on success, NULL on failure.
  */
 if_capabilities_t *
-extcap_get_if_dlts(const gchar * ifname, char ** err_str);
+extcap_get_if_dlts(const char * ifname, char ** err_str);
 
 /**
  * Append a list of all extcap capture interfaces to the specified list.
  * Initializes the extcap interface list if that hasn't already been done.
  * @param list An existing GList of if_info_t.
- * @param err_str Set to NULL on success, error description on failure.
  * @return An updated list on success, an unchanged list on failure.
  */
 GList *
-append_extcap_interface_list(GList *list, char **err_str);
+append_extcap_interface_list(GList *list);
 
 /**
  * Retrieves information about an extcap executable.
@@ -102,7 +114,7 @@ append_extcap_interface_list(GList *list, char **err_str);
  * @return The extcap information on success, NULL on failure.
  */
 extcap_info *
-extcap_get_tool_info(const gchar * toolname);
+extcap_get_tool_info(const char * toolname);
 
 /**
  * Retrieves information about an extcap interface.
@@ -111,7 +123,7 @@ extcap_get_tool_info(const gchar * toolname);
  * @return The extcap information on success, NULL on failure.
  */
 extcap_info *
-extcap_get_tool_by_ifname(const gchar *ifname);
+extcap_get_tool_by_ifname(const char *ifname);
 
 /**
  * Retrieves help information for an extcap interface.
@@ -119,7 +131,7 @@ extcap_get_tool_by_ifname(const gchar *ifname);
  * @param ifname The extcap interface name.
  * @return A help string on success or NULL on failure.
  */
-gchar *
+char *
 extcap_get_help_for_ifname(const char *ifname);
 
 /**
@@ -135,7 +147,7 @@ extcap_clear_interfaces(void);
  * @param callback_data Data to be passed to the callback routine.
  */
 void
-extcap_get_descriptions(plugin_description_callback callback, void *callback_data);
+extcap_get_descriptions(extcap_plugin_description_callback callback, void *callback_data);
 
 /**
  * Print information about all available extcap executables.
@@ -152,6 +164,15 @@ extcap_dump_all(void);
  */
 GList *
 extcap_get_if_configuration(const char * ifname);
+
+/**
+ * Returns the sub-configuration for a given argument name, or an
+ * empty list, if no configuration has been found.
+ * Initializes the extcap interface list if that hasn't already been done.
+ * @param ifname The interface name.
+ */
+GList*
+extcap_get_if_configuration_option(const char* ifname, const char* argname, const char* argvalue);
 
 /**
  * Returns the configuration values for the given argument, or an
@@ -172,61 +193,61 @@ extcap_get_if_configuration_values(const char * ifname, const char * argname, GH
  * @return Filter check status.
  */
 extcap_filter_status
-extcap_verify_capture_filter(const char *ifname, const char *filter, gchar **err_str);
+extcap_verify_capture_filter(const char *ifname, const char *filter, char **err_str);
 
 /**
  * Frees the memory from extcap_get_if_configuration.
  * @param list The list returned by extcap_get_if_configuration.
- * @param free_args TRUE if all arguments in the list must be freed too or FALSE
+ * @param free_args true if all arguments in the list must be freed too or false
  * if the ownership of the arguments is taken by the caller.
  */
 void
-extcap_free_if_configuration(GList *list, gboolean free_args);
+extcap_free_if_configuration(GList *list, bool free_args);
 
 /**
  * Checks to see if an interface has configurable options.
  * Initializes the extcap interface list if that hasn't already been done.
  * @param ifname Interface to check.
  */
-gboolean
+bool
 extcap_has_configuration(const char * ifname);
 
 /**
  * Checks if an interface has configurable options and if all are configured.
- * Returns TRUE when the extcap interface has
+ * Returns true when the extcap interface has
  * configurable options that required modification. (For example, when an
  * argument is required but empty.)
  * Initializes the extcap interface list if that hasn't already been done.
  * @param ifname Interface to check.
  */
-gboolean
+bool
 extcap_requires_configuration(const char * ifname);
 
 /**
  * Checks to see if the interface has an associated toolbar.
  * Initializes the extcap interface list if that hasn't already been done.
  * @param ifname Interface to check.
- * @return TRUE if the interface has a toolbar, FALSE otherwise.
+ * @return true if the interface has a toolbar, false otherwise.
  */
-gboolean
+bool
 extcap_has_toolbar(const char *ifname);
 
 #ifdef HAVE_LIBPCAP
 /**
  * Cleanup after capture session.
  * @param cap_session Capture session.
- * @return TRUE if session can be stopped, FALSE if there are remaining tasks.
+ * @return true if session can be stopped, false if there are remaining tasks.
  */
-gboolean
+bool
 extcap_session_stop(capture_session *cap_session);
 
 /**
  * Initializes each extcap interface with the supplied capture session.
  * Initializes the extcap interface list if that hasn't already been done.
  * @param cap_session Capture session.
- * @return TRUE on success, FALSE on failure.
+ * @return true on success, false on failure.
  */
-gboolean
+bool
 extcap_init_interfaces(capture_session *cap_session);
 #endif /* HAVE_LIBPCAP */
 
@@ -245,8 +266,8 @@ extcap_request_stop(capture_session *cap_session);
  * @param arg The command line argument to check.
  * @return The associated preference on success, NULL on failure.
  */
-struct preference *
-extcap_pref_for_argument(const gchar *ifname, struct _extcap_arg * arg);
+pref_t *
+extcap_pref_for_argument(const char *ifname, struct _extcap_arg * arg);
 
 /**
  * Clean up global extcap stuff on program exit.

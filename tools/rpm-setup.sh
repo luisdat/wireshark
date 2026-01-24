@@ -16,10 +16,10 @@ set -e -u -o pipefail
 function print_usage() {
 	printf "\nUtility to setup a rpm-based system for Wireshark Development.\n"
 	printf "The basic usage installs the needed software\n\n"
-	printf "Usage: $0 [--install-optional] [...other options...]\n"
+	printf "Usage: %s [--install-optional] [...other options...]\n" "$0"
 	printf "\t--install-optional: install optional software as well\n"
 	printf "\t--install-rpm-deps: install packages required to build the .rpm file\n"
-	printf "\\t--install-qt5-deps: force installation of packages required to use Qt5\\n"
+	printf "\\t--install-qt5-deps: force installation of packages required to use Qt5 (not recommended)\\n"
 	printf "\\t--install-qt6-deps: force installation of packages required to use Qt6\\n"
 	printf "\\t--install-all: install everything\\n"
 	printf "\t[other]: other options are passed as-is to the package manager\n"
@@ -65,42 +65,47 @@ for arg; do
 done
 
 # Check if the user is root
-if [ $(id -u) -ne 0 ]
+if [ "$(id -u)" -ne 0 ]
 then
 	echo "You must be root."
 	exit 1
 fi
 
-BASIC_LIST="cmake \
-	gcc \
-	gcc-c++ \
-	flex \
-	python3 \
-	desktop-file-utils \
-	git \
-	glib2-devel \
-	libpcap-devel \
-	pcre2-devel \
-	zlib-devel \
-	libgcrypt-devel"
+BASIC_LIST="
+	cmake
+	desktop-file-utils
+	flex
+	gcc
+	gcc-c++
+	git
+	glib2-devel
+	libgcrypt-devel
+	libpcap-devel
+	libxml2-devel
+	pcre2-devel
+	python3
+	"
 
-ADDITIONAL_LIST="libcap-devel \
-	libssh-devel \
-	krb5-devel \
-	perl-Parse-Yapp \
-	snappy-devel \
-	minizip-devel \
-	lz4 \
-	libxml2-devel \
-	perl \
-	spandsp-devel \
-	systemd-devel"
+ADDITIONAL_LIST="
+	krb5-devel
+	libcap-devel
+	libssh-devel
+	lz4
+	perl
+	perl-Parse-Yapp
+	python3-pytest
+	python3-pytest-xdist
+	snappy-devel
+	spandsp-devel
+	systemd-devel
+	xxhash-devel
+	"
 
 # Uncomment to add PNG compression utilities used by compress-pngs:
-# ADDITIONAL_LIST="$ADDITIONAL_LIST \
-#	advancecomp \
-#	optipng \
-#	oxipng \
+# ADDITIONAL_LIST="$ADDITIONAL_LIST
+#	advancecomp
+#	optipng
+#	oxipng
 #	pngcrush"
 
 # XXX
@@ -113,7 +118,7 @@ for PM in zypper dnf yum ''; do
 	fi
 done
 
-if [ -z $PM ]
+if [ -z "$PM" ]
 then
 	echo "No package managers found, exiting"
 	exit 1
@@ -140,6 +145,7 @@ add_package() {
 	local list="$1" pkgname="$2"
 
 	# fail if the package is not known
+	# shellcheck disable=SC2086
 	$PM $PM_SEARCH "$pkgname" &> /dev/null || return 1
 
 	# package is found, append it to list
@@ -148,10 +154,11 @@ add_package() {
 
 # Adds packages $2-$n to list variable $1 if all the packages are found
 add_packages() {
-	local list="$1" pkgnames="${@:2}"
+	local list="$1" pkgnames="${*:2}"
 
 	# fail if any package is not known
 	for pkgname in $pkgnames; do
+		# shellcheck disable=SC2086
 		$PM $PM_SEARCH "$pkgname" &> /dev/null || return 1
 	done
 
@@ -162,20 +169,14 @@ add_packages() {
 add_package BASIC_LIST glib2 || add_package BASIC_LIST libglib-2_0-0 ||
 echo "Required package glib2|libglib-2_0-0 is unavailable" >&2
 
-# lua51, lua51-devel: OpenSUSE Leap 42.3 (lua would be fine too, as it installs lua52), OpenSUSE Leap 15.0 (lua installs lua53, so it wouldn't work)
-# compat-lua, compat-lua-devel: Fedora 28, Fedora 29, CentOS 8
-# lua, lua-devel: CentOS 7
-add_package BASIC_LIST lua51-devel || add_package BASIC_LIST compat-lua-devel || add_package BASIC_LIST lua-devel ||
-echo "Required package lua51-devel|compat-lua-devel|lua-devel is unavailable" >&2
-
-add_package BASIC_LIST lua51 || add_package BASIC_LIST compat-lua || add_package BASIC_LIST lua ||
-echo "Required package lua51|compat-lua|lua is unavailable" >&2
+add_package BASIC_LIST lua-devel || add_package BASIC_LIST lua54-devel || add_package BASIC_LIST lua53-devel ||
+echo "Required package lua-devel|lua54-devel|lua53-devel is unavailable" >&2
 
 add_package BASIC_LIST libpcap || add_package BASIC_LIST libpcap1 ||
 echo "Required package libpcap|libpcap1 is unavailable" >&2
 
-add_package BASIC_LIST zlib || add_package BASIC_LIST libz1 ||
-echo "Required package zlib|libz1 is unavailable" >&2
+add_package BASIC_LIST zlib-ng-compat-devel || add_package BASIC_LIST zlib-devel ||
+echo "Optional package zlib-ng-compat-devel|zlib-devel is unavailable" >&2
 
 add_package BASIC_LIST c-ares-devel || add_package BASIC_LIST libcares-devel ||
 echo "Required package c-ares-devel|libcares-devel is unavailable" >&2
@@ -185,13 +186,9 @@ echo "Required package speexdsp-devel|speex-devel is unavailable" >&2
 
 if [ $HAVE_ADD_QT -eq 0 ]
 then
-	# Try to select Qt version from distro
-	test -e /etc/os-release && os_release='/etc/os-release' || os_release='/usr/lib/os-release'
-	# shellcheck disable=SC1090
-	. "${os_release}"
-
-	# Fedora 35 or later
-	if [ "${ID:-linux}" = "fedora" ] && [ "${VERSION_ID:-0}" -ge "35" ]; then
+	# The user didn't select a Qt version. Select Qt 6 if it's available, otherwise Qt 5.
+	# shellcheck disable=SC2086
+	if $PM $PM_SEARCH qt6-qtbase-devel 2&> /dev/null || $PM $PM_SEARCH qt6-base-devel 2&> /dev/null ; then
 		echo "Installing Qt6."
 		ADD_QT6=1
 	else
@@ -213,36 +210,62 @@ then
 	# OpenSUSE additionally has a separate Qt5PrintSupport package.
 	add_package BASIC_LIST qt5-qtmultimedia-devel ||
 	add_packages BASIC_LIST libqt5-qtmultimedia-devel libQt5PrintSupport-devel ||
-	echo "Required Qt5 Mutlimedia and/or Qt5 Print Support is unavailable" >&2
+	echo "Required Qt5 Multimedia and/or Qt5 Print Support is unavailable" >&2
 
-	# This in only required on OpenSUSE
+	# This is only required on OpenSUSE
 	add_package BASIC_LIST libqt5-qtsvg-devel ||
 	echo "Required OpenSUSE package libqt5-qtsvg-devel is unavailable. Not required for other distributions." >&2
 
-	# This in only required on OpenSUSE
+	# This is only required on OpenSUSE
 	add_package BASIC_LIST libQt5Concurrent-devel ||
 	echo "Required OpenSUSE package libQt5Concurrent-devel is unavailable. Not required for other distributions." >&2
+
+	# This is only required on OpenSUSE
+	add_package ADDITIONAL_LIST libQt5DBus-devel ||
+	echo "Optional OpenSUSE package libQt5DBus-devel is unavailable. Not required for other distributions." >&2
+
+	add_package ADDITIONAL_LIST qt5-qtimageformats ||
+	add_package ADDITIONAL_LIST libqt5-qtimageformats ||
+	echo "Optional Qt5 Image Formats is unavailable" >&2
 fi
 
 if [ $ADD_QT6 -ne 0 ]
 then
-	# Fedora Qt6 packages required from a minimal installation
-	QT6_LIST=(qt6-qtbase-devel
-			qt6-qttools-devel
-			qt6-qt5compat-devel
-			qt6-qtmultimedia-devel
-			libxkbcommon-devel)
+	# See CMakeLists.txt in the root directory for a list of
+	# Qt6 modules required for a minimal installation
+	# Base and Multimedia pull in most of the other required modules
+	# RH/Fedora and SUSE use slightly different pkg names for modules
+	QT6_LIST=(base
+			tools
+			multimedia)
 
-	for pkg in ${QT6_LIST[@]}
+	for module in "${QT6_LIST[@]}"
 	do
-		add_package BASIC_LIST "$pkg" ||
-		echo "Qt6 dependency $pkg is unavailable" >&2
+		add_package BASIC_LIST "qt6-qt${module}-devel" ||
+		add_package BASIC_LIST "qt6-${module}-devel" ||
+		echo "Required Qt6 Module $module is unavailable" >&2
 	done
+
+	# qt6-linguist: RHEL, Fedora
+	# qt6-linguist-devel: OpenSUSE
+	add_package BASIC_LIST qt6-linguist ||
+	add_package BASIC_LIST qt6-linguist-devel ||
+	echo "Required Qt6 module LinguistTools is unavailable" >&2
+
+	add_package BASIC_LIST qt6-qt5compat-devel ||
+	echo "Required Qt6 module Qt5Compat is unavailable"
+
+	add_package BASIC_LIST libxkbcommon-devel ||
+	echo "Required Qt6 dependency libxkbcommon-devel is unavailable"
+
+	add_package ADDITIONAL_LIST qt6-qtimageformats ||
+	add_package ADDITIONAL_LIST qt6-imageformats ||
+	echo "Optional Qt6 module Image Formats is unavailable" >&2
 fi
 
 # This in only required on OpenSUSE
 add_packages BASIC_LIST hicolor-icon-theme xdg-utils ||
-echo "Required OpenSUSE packages hicolor-icon-theme and xdg-utils are unavailable. Not required for other distirbutions." >&2
+echo "Required OpenSUSE packages hicolor-icon-theme and xdg-utils are unavailable. Not required for other distributions." >&2
 
 # This in only required (and available) on OpenSUSE
 add_package BASIC_LIST update-desktop-files ||
@@ -287,10 +310,13 @@ echo "Optional package ninja|ninja-build is unavailable" >&2
 add_package ADDITIONAL_LIST libxslt || add_package ADDITIONAL_LIST libxslt1 ||
 echo "Optional package libxslt|libxslt1 is unavailable" >&2
 
+add_package ADDITIONAL_LIST docbook-style-xsl || add_package ADDITIONAL_LIST docbook-xsl-stylesheets ||
+echo "Optional package docbook-style-xsl|docbook-xsl-stylesheets is unavailable" >&2
+
 add_package ADDITIONAL_LIST brotli-devel || add_packages ADDITIONAL_LIST libbrotli-devel libbrotlidec1 ||
 echo "Optional packages brotli-devel|libbrotli-devel is unavailable" >&2
 
-add_package ADDITIONAL_LIST libnl3-devel || add_package ADDITIONAL_LIST libnl-devel ||
+add_package ADDITIONAL_LIST libnl3-devel ||
 echo "Optional package libnl3-devel|libnl-devel are unavailable" >&2
 
 add_package ADDITIONAL_LIST ilbc-devel ||
@@ -303,6 +329,9 @@ echo "Optional package opus-devel|libopus-devel is unavailable" >&2
 
 add_package ADDITIONAL_LIST bcg729-devel ||
 echo "Optional package bcg729-devel is unavailable" >&2
+
+add_package ADDITIONAL_LIST minizip-ng-compat-devel || add_package ADDITIONAL_LIST minizip-devel ||
+echo "Optional package minizip-ng-compat-devel|minizip-devel is unavailable" >&2
 
 # RHEL 8 / CentOS 8 are missing the -devel packages for sbc and libsmi due to
 # RH deciding not to ship all -devel packages.
@@ -317,6 +346,12 @@ echo "Optional package sbc-devel is unavailable"
 add_package ADDITIONAL_LIST libsmi-devel ||
 echo "Optional package libsmi-devel is unavailable"
 
+add_package ADDITIONAL_LIST opencore-amr-devel ||
+echo "Optional package opencore-amr-devel is unavailable" >&2
+
+add_package ADDITIONAL_LIST softhsm ||
+echo "Optional package softhsm is unavailable" >&2
+
 ACTUAL_LIST=$BASIC_LIST
 
 # Now arrange for optional support libraries
@@ -330,7 +365,8 @@ then
 	ACTUAL_LIST="$ACTUAL_LIST $RPMDEPS_LIST"
 fi
 
-$PM $PM_OPT install $ACTUAL_LIST $OPTIONS
+# shellcheck disable=SC2086
+$PM $PM_OPT install $OPTIONS $ACTUAL_LIST
 
 if [ $ADDITIONAL -eq 0 ]
 then

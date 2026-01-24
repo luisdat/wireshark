@@ -27,15 +27,15 @@ set_target_properties(writecap PROPERTIES
 	FOLDER "Libs"
 )
 
-#
-# Editor modelines  -  https://www.wireshark.org/tools/modelines.html
-#
-# Local variables:
-# c-basic-offset: 8
-# tab-width: 8
-# indent-tabs-mode: t
-# End:
-#
-# vi: set shiftwidth=8 tabstop=8 noexpandtab:
-# :indentSize=8:tabSize=8:noTabs=false:
-#
+target_compile_definitions(writecap
+	PRIVATE
+		# Necessary to avoid C4273 inconsistent DLL linkage on MSVC
+		ENABLE_STATIC
+)
+
+target_link_libraries(writecap
+	PRIVATE
+		${GMODULE2_LIBRARIES}
+		${WIN_WS2_32_LIBRARY}
+		wsutil
+)

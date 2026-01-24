@@ -28,32 +28,32 @@ void proto_register_mp4ves(void);
 void proto_reg_handoff_mp4ves(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_mp4ves	= -1;
+static int proto_mp4ves;
 
-static int hf_mp4ves_config = -1;
-static int hf_mp4ves_start_code_prefix = -1;
-static int hf_mp4ves_start_code = -1;
-static int hf_mp4ves_vop_coding_type = -1;
-static int hf_mp4ves_profile_and_level_indication = -1;
-static int hf_mp4ves_is_visual_object_identifier = -1;
-static int hf_mp4ves_visual_object_type = -1;
-static int hf_mp4ves_video_signal_type = -1;
-static int hf_mp4ves_stuffing = -1;
-static int hf_mp4ves_video_object_type_indication = -1;
-static int hf_mp4ves_random_accessible_vol = -1;
-static int hf_mp4ves_is_object_layer_identifier = -1;
-static int hf_mp4ves_aspect_ratio_info = -1;
-static int hf_mp4ves_vol_control_parameters = -1;
-static int hf_mp4ves_video_object_layer_shape = -1;
-static int hf_mp4ves_user_data = -1;
-static int hf_mp4ves_data = -1;
+static int hf_mp4ves_config;
+static int hf_mp4ves_start_code_prefix;
+static int hf_mp4ves_start_code;
+static int hf_mp4ves_vop_coding_type;
+static int hf_mp4ves_profile_and_level_indication;
+static int hf_mp4ves_is_visual_object_identifier;
+static int hf_mp4ves_visual_object_type;
+static int hf_mp4ves_video_signal_type;
+static int hf_mp4ves_stuffing;
+static int hf_mp4ves_video_object_type_indication;
+static int hf_mp4ves_random_accessible_vol;
+static int hf_mp4ves_is_object_layer_identifier;
+static int hf_mp4ves_aspect_ratio_info;
+static int hf_mp4ves_vol_control_parameters;
+static int hf_mp4ves_video_object_layer_shape;
+static int hf_mp4ves_user_data;
+static int hf_mp4ves_data;
 
 /* Initialize the subtree pointers */
-static int ett_mp4ves = -1;
-static int ett_mp4ves_config = -1;
+static int ett_mp4ves;
+static int ett_mp4ves_config;
 
-static expert_field ei_mp4ves_config_too_short = EI_INIT;
-static expert_field ei_mp4ves_not_dissected_bits = EI_INIT;
+static expert_field ei_mp4ves_config_too_short;
+static expert_field ei_mp4ves_not_dissected_bits;
 
 static dissector_handle_t mp4ves_name_handle;
 
@@ -246,10 +246,10 @@ static const value_string mp4ves_video_object_type_indication_vals[] = {
 	{ 0,	NULL }
 };
 /* 6.2.2.1 User data */
-static int
-dissect_mp4ves_user_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int bit_offset)
+static unsigned
+dissect_mp4ves_user_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned bit_offset)
 {
-	int start_bit_offset;
+	unsigned start_bit_offset;
 
 	/* user_data_start_code */
 	proto_tree_add_bits_item(tree, hf_mp4ves_start_code_prefix, tvb, bit_offset, 24, ENC_BIG_ENDIAN);
@@ -273,11 +273,11 @@ while (!bytealigned())
 one_bit
 }
 */
-static int
-dissect_mp4ves_next_start_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int bit_offset)
+static unsigned
+dissect_mp4ves_next_start_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned bit_offset)
 {
-	guint8 zero_bit;
-	int start_bit_offset;
+	uint8_t zero_bit;
+	unsigned start_bit_offset;
 
 	start_bit_offset = bit_offset;
 
@@ -316,10 +316,10 @@ video_signal_type() {
 }
 #endif
 
-static int
-dissect_mp4ves_visual_object_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int bit_offset)
+static unsigned
+dissect_mp4ves_visual_object_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned bit_offset)
 {
-	guint8 video_signal_type, colour_description;
+	uint8_t video_signal_type, colour_description;
 
 	video_signal_type = tvb_get_bits8(tvb,bit_offset,1);
 	proto_tree_add_bits_item(tree, hf_mp4ves_video_signal_type, tvb, bit_offset, 1, ENC_BIG_ENDIAN);
@@ -380,13 +380,13 @@ static const value_string mp4ves_video_object_layer_shape_vals[] = {
 	{ 0,	NULL }
 };
 
-static int
-dissect_mp4ves_VideoObjectLayer(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int bit_offset)
+static unsigned
+dissect_mp4ves_VideoObjectLayer(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned bit_offset)
 {
-	guint32 dword;
-	int current_bit_offset;
-	guint8 octet, is_object_layer_identifier, aspect_ratio_info, vol_control_parameters, vbv_parameters;
-	guint8 video_object_layer_shape, video_object_layer_verid = 0;
+	uint32_t dword;
+	unsigned current_bit_offset;
+	uint8_t octet, is_object_layer_identifier, aspect_ratio_info, vol_control_parameters, vbv_parameters;
+	uint8_t video_object_layer_shape, video_object_layer_verid = 0;
 
 	/* if(next_bits() == video_object_layer_start_code) { */
 	dword = tvb_get_bits32(tvb,bit_offset, 24, ENC_BIG_ENDIAN);
@@ -529,12 +529,12 @@ VisualObject() {
 		next_start_code()
 }
 */
-static int
-dissect_mp4ves_VisualObject(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int bit_offset)
+static unsigned
+dissect_mp4ves_VisualObject(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned bit_offset)
 {
-	guint8 is_visual_object_identifier, visual_object_type;
-	guint32 dword;
-	guint8 octet;
+	uint8_t is_visual_object_identifier, visual_object_type;
+	uint32_t dword;
+	uint8_t octet;
 
 	is_visual_object_identifier = tvb_get_bits8(tvb,bit_offset,1);
 	proto_tree_add_bits_item(tree, hf_mp4ves_is_visual_object_identifier, tvb, bit_offset, 1, ENC_BIG_ENDIAN);
@@ -584,7 +584,7 @@ dissect_mp4ves_VisualObject(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		proto_tree_add_bits_item(tree, hf_mp4ves_start_code, tvb, bit_offset, 8, ENC_BIG_ENDIAN);
 		bit_offset+= 8;
 		if(tvb_reported_length_remaining(tvb,(bit_offset>>3))<=0){
-			proto_tree_add_expert(tree, pinfo, &ei_mp4ves_config_too_short, tvb, 0, -1);
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_mp4ves_config_too_short, tvb, 0);
 			return -1;
 		}
 		/*
@@ -596,10 +596,10 @@ dissect_mp4ves_VisualObject(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	return bit_offset;
 }
 
-static int
-dissect_mp4ves_VisualObjectSequence(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int bit_offset)
+static unsigned
+dissect_mp4ves_VisualObjectSequence(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned bit_offset)
 {
-	guint32 dword;
+	uint32_t dword;
 
 	/*VisualObjectSequence() {
 	do {
@@ -671,10 +671,10 @@ dissect_mp4ves_config(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void*
 static int
 dissect_mp4ves(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	int bit_offset = 0;
+	unsigned bit_offset = 0;
 	proto_item *item;
 	proto_tree *mp4ves_tree;
-	guint32 dword;
+	uint32_t dword;
 
 	/* Make entries in Protocol column and Info column on summary display */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "MP4V-ES");
@@ -777,9 +777,9 @@ dissect_mp4ves(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 static int
 dissect_mp4ves_par_profile(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree _U_, void *data)
 {
-	int offset = 0;
-	guint16 lvl;
-	const gchar *p = NULL;
+	unsigned offset = 0;
+	uint16_t lvl;
+	const char *p = NULL;
 	asn1_ctx_t *actx;
 
 	/* Reject the packet if data is NULL */
@@ -799,9 +799,9 @@ dissect_mp4ves_par_profile(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 static int
 dissect_mp4ves_par_video_object_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree _U_, void *data)
 {
-	int offset = 0;
-	guint16 lvl;
-	const gchar *p = NULL;
+	unsigned offset = 0;
+	uint16_t lvl;
+	const char *p = NULL;
 	asn1_ctx_t *actx;
 
 	/* Reject the packet if data is NULL */
@@ -836,8 +836,8 @@ dissect_mp4ves_par_decoderConfigurationInformation(tvbuff_t *tvb, packet_info *p
 }
 
 typedef struct _mp4ves_capability_t {
-	const gchar *id;
-	const gchar *name;
+	const char *id;
+	const char *name;
 	dissector_t content_pdu;
 } mp4ves_capability_t;
 
@@ -851,7 +851,7 @@ static mp4ves_capability_t mp4ves_capability_tab[] = {
 	{ NULL, NULL, NULL },
 };
 
-static mp4ves_capability_t *find_cap(const gchar *id) {
+static mp4ves_capability_t *find_cap(const char *id) {
 	mp4ves_capability_t *ftr = NULL;
 	mp4ves_capability_t *f;
 
@@ -981,7 +981,7 @@ proto_register_mp4ves(void)
 	};
 
 /* Setup protocol subtree array */
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_mp4ves,
 		&ett_mp4ves_config,
 	};

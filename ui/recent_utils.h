@@ -17,10 +17,6 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/* Add a new recent capture filename to the "Recent Files" submenu
-   (duplicates will be ignored) */
-extern void add_menu_recent_capture_file(const gchar *cf_name);
-
 /** Write all recent capture filenames to the user's recent file.
  * @param rf recent file
  */
@@ -37,7 +33,7 @@ extern void cfilter_combo_recent_write_all(FILE *rf);
  *
  * @param dftext the filter string
  */
-extern gboolean dfilter_combo_add_recent(const gchar *dftext);
+extern bool dfilter_combo_add_recent(const char *dftext);
 
 /** Write all non-empty display filters (until maximum count)
  *  of the combo box GList to the user's recent file.

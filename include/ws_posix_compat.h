@@ -14,20 +14,20 @@
 #include <stdint.h>
 #include <limits.h>
 
-#if !defined(SSIZE_MAX) && !defined(HAVE_SSIZE_T)
-#if defined(_WIN64)
+#if !defined(HAVE_SSIZE_T)
+#if defined(_WIN32)
+#ifdef __MINGW32__
+#include <basetsd.h>
+#else
+#include <BaseTsd.h>
+#endif
 
-typedef int64_t ssize_t;
+typedef SSIZE_T ssize_t;
+#if !defined(SSIZE_MAX)
+#define SSIZE_MAX ((SSIZE_T)(SIZE_MAX >> 1))
+#endif /* !SSIZE_MAX */
 
-#define SSIZE_MAX INT64_MAX
-
-#else /* !_WIN64 */
-
-typedef signed long int ssize_t;
-
-#define SSIZE_MAX LONG_MAX
-
-#endif /* _WIN64 */
-#endif /* !SSIZE_MAX && !HAVE_SSIZE_T */
+#endif /* _WIN32 */
+#endif /* !HAVE_SSIZE_T */
 
 #endif /* __POSIX_COMPAT_H__ */

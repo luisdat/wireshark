@@ -23,13 +23,16 @@
 #define EAPOL_ANNOUNCEMENT_SPECIFIC  7
 #define EAPOL_ANNOUNCEMENT_REQUEST   8
 
-extern int proto_eapol;
+/* EAPOL Key Descriptor types */
+#define EAPOL_RC4_KEY           1 /* RC4 - deprecated */
+#define EAPOL_RSN_KEY           2 /* 802.11i - "work in progress" */
+#define EAPOL_WPA_KEY           254
 
 #define EAPOL_KEY_FRAME_KEY 0
 typedef struct {
-  guint len;
-  guint8 type; /* eapol.keydes.type */
-  guint8 *data;
+  unsigned len;
+  uint8_t type; /* eapol.keydes.type */
+  uint8_t *data;
 } proto_eapol_key_frame_t;
 
 #endif /* __PACKET_EAPOL_H__ */

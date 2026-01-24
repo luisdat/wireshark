@@ -26,35 +26,35 @@
 void proto_register_vsock(void);
 void proto_reg_handoff_vsock(void);
 
-static int proto_vsock = -1;
+static int proto_vsock;
 static int vsock_address_type = -1;
 static dissector_handle_t vsock_handle;
 
 /* Generic header related fields */
-static int hf_vsock_src_cid = -1;
-static int hf_vsock_src_port = -1;
-static int hf_vsock_dst_cid = -1;
-static int hf_vsock_dst_port = -1;
-static int hf_vsock_op = -1;
-static int hf_vsock_t = -1;
-static int hf_vsock_t_len = -1;
-static int hf_vsock_reserved = -1;
-static int hf_vsock_payload = -1;
+static int hf_vsock_src_cid;
+static int hf_vsock_src_port;
+static int hf_vsock_dst_cid;
+static int hf_vsock_dst_port;
+static int hf_vsock_op;
+static int hf_vsock_t;
+static int hf_vsock_t_len;
+static int hf_vsock_reserved;
+static int hf_vsock_payload;
 
 /* Virtio related fields */
-static int hf_virtio_src_cid = -1;
-static int hf_virtio_dst_cid = -1;
-static int hf_virtio_src_port = -1;
-static int hf_virtio_dst_port = -1;
-static int hf_virtio_len = -1;
-static int hf_virtio_type = -1;
-static int hf_virtio_op = -1;
-static int hf_virtio_flags = -1;
-static int hf_virtio_buf_alloc = -1;
-static int hf_virtio_fwd_cnt = -1;
+static int hf_virtio_src_cid;
+static int hf_virtio_dst_cid;
+static int hf_virtio_src_port;
+static int hf_virtio_dst_port;
+static int hf_virtio_len;
+static int hf_virtio_type;
+static int hf_virtio_op;
+static int hf_virtio_flags;
+static int hf_virtio_buf_alloc;
+static int hf_virtio_fwd_cnt;
 
-static gint ett_vsock = -1;
-static gint ett_virtio = -1;
+static int ett_vsock;
+static int ett_virtio;
 
 static const value_string af_vsockmon_op_names[] = {
     { 0, "Unknown" },
@@ -97,14 +97,14 @@ static const value_string virtio_vsock_op_names[] = {
 
 #define VSOCK_MIN_LENGTH 32
 
-static int vsock_addr_to_str(const address* addr, gchar *buf, int buf_len)
+static int vsock_addr_to_str(const address* addr, char *buf, int buf_len)
 {
-    const guint8 *addrp = (const guint8 *)addr->data;
+    const uint8_t *addrp = (const uint8_t *)addr->data;
 
-    if(pletoh64(&addrp[0])==2){
+    if(pletohu64(&addrp[0])==2){
         (void) g_strlcpy(buf, "host", buf_len);
     } else {
-        snprintf(buf, buf_len, "%" PRIu64, pletoh64(&addrp[0]));
+        snprintf(buf, buf_len, "%" PRIu64, pletohu64(&addrp[0]));
     }
 
     return (int)(strlen(buf)+1);
@@ -123,9 +123,10 @@ dissect_vsock(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_item *ti, *virtio_ti;
     proto_tree *vsock_tree, *virtio_tree;
 
-    guint32 t_len, payload_len, virtio_buf_alloc, op, type,
+    uint32_t t_len, payload_len, virtio_buf_alloc, op, type,
             virtio_fwd_cnt, virtio_op, virtio_type;
-    guint16 payload_offset = 0, offset = 0;
+    uint16_t payload_offset = 0, offset = 0;
+    char *op_name, *t_name;
 
     if (tvb_reported_length(tvb) < VSOCK_MIN_LENGTH)
         return 0;
@@ -166,15 +167,13 @@ dissect_vsock(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     payload_offset = offset + t_len;
 
+    op_name = val_to_str(pinfo->pool, op, af_vsockmon_op_names, "Unknown (%d)");
+    t_name = val_to_str(pinfo->pool, type, af_vsockmon_t_names, "Unknown (%d)");
     /* Append summary information to top tree */
-    proto_item_append_text(ti, ", Op: %s, Transport: %s",
-            val_to_str(op, af_vsockmon_op_names, "Unknown (%d)"),
-            val_to_str(type, af_vsockmon_t_names, "Unknown (%d)"));
+    proto_item_append_text(ti, ", Op: %s, Transport: %s", op_name, t_name);
 
     /* Fill columns */
-    col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] %s",
-            val_to_str(op, af_vsockmon_op_names, "Unknown (%d)"),
-            val_to_str(type, af_vsockmon_t_names, "Unknown (%d)"));
+    col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] %s", op_name, t_name);
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "vSocket");
 
     /* Create subtree if there is transport information */
@@ -213,8 +212,8 @@ dissect_vsock(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
             /* Append virtio information */
             col_append_fstr(pinfo->cinfo, COL_INFO, ": %s, Op: %s, Buf alloc: %u, Fwd cnt: %u",
-                    val_to_str(virtio_type, virtio_vsock_type_names, "Unknown (%d)"),
-                    val_to_str(virtio_op, virtio_vsock_op_names, "Unknown (%d)"),
+                    val_to_str(pinfo->pool, virtio_type, virtio_vsock_type_names, "Unknown (%d)"),
+                    val_to_str(pinfo->pool, virtio_op, virtio_vsock_op_names, "Unknown (%d)"),
                     virtio_buf_alloc, virtio_fwd_cnt);
             break;
     }
@@ -291,7 +290,7 @@ proto_register_vsock(void)
             {"Fwd cnt", "vsock.virtio.fwd_cnt", FT_UINT32, BASE_DEC, NULL,
                 0x0, NULL, HFILL }}
     };
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_vsock,
         &ett_virtio
     };

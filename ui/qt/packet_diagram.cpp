@@ -169,7 +169,7 @@ public:
         updateLayout();
 
         if (finfo_->isValid()) {
-            setToolTip(QString("%1 (%2) = %3")
+            setToolTip(QStringLiteral("%1 (%2) = %3")
                        .arg(finfo_->headerInfo().name)
                        .arg(finfo_->headerInfo().abbreviation)
                        .arg(finfo_->toString()));
@@ -251,8 +251,12 @@ public:
         }
         paintLabel(painter, label, scaled_tr_);
 
-        if (layout_->showFields()) {
-            label = finfo_->toString();
+        if (layout_->showFields() && finfo_->headerInfo().type != FT_NONE) {
+            if (representation_.isEmpty()) {
+                label = finfo_->toString();
+            } else {
+                label = representation_;
+            }
             paintLabel(painter, label, scaled_tr_.adjusted(0, scaled_tr_.height(), 0, scaled_tr_.height()));
         }
     }
@@ -322,19 +326,11 @@ private:
         QFontMetrics fm = QFontMetrics(layout_->regularFont());
 
         painter->setFont(layout_->regularFont());
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
         int label_w = fm.horizontalAdvance(label);
-#else
-        int label_w = fm.width(label);
-#endif
         if (label_w > label_rect.width()) {
             painter->setFont(layout_->smallFont());
             fm = QFontMetrics(layout_->smallFont());
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
             label_w = fm.horizontalAdvance(label);
-#else
-            label_w = fm.width(label);
-#endif
             if (label_w > label_rect.width()) {
                 // XXX Use parent+ItemClipsChildrenToShape or setScale instead?
                 label = fm.elidedText(label, Qt::ElideRight, label_rect.width());
@@ -379,6 +375,8 @@ void PacketDiagram::setRootNode(proto_node *root_node)
     // useful in our case because it gives us a cheap way to retain our
     // scroll position between packets.
     scene()->clear();
+    viewport()->update();
+
     selected_field_ = nullptr;
     y_pos_ = 0;
 
@@ -399,7 +397,7 @@ void PacketDiagram::setRootNode(proto_node *root_node)
         kids.next();
 
         // Exclude all ("Frame") and nothing
-        if (tl_node->finfo->start == 0 && tl_node->finfo->length == (int) tvb_captured_length(cap_file_->edt->tvb)) {
+        if (tl_node == root_node->first_child) {
             continue;
         }
         if (tl_node->finfo->length < 1) {
@@ -475,6 +473,9 @@ void PacketDiagram::contextMenuEvent(QContextMenuEvent *event)
     action->setChecked(layout_->showFields());
     connect(action, &QAction::toggled, this, &PacketDiagram::showFieldsToggled);
 
+    action = ctx_menu->addAction(tr("Refresh"));
+    connect(action, &QAction::triggered, this, &PacketDiagram::resetScene);
+
     ctx_menu->addSeparator();
 
     action = ctx_menu->addAction(tr("Save Diagram As…"));
@@ -493,7 +494,7 @@ void PacketDiagram::contextMenuEvent(QContextMenuEvent *event)
 
 void PacketDiagram::connectToMainWindow()
 {
-    MainWindow *main_window = qobject_cast<MainWindow *>(mainApp->mainWindow());
+    MainWindow *main_window = mainApp->mainWindow();
     if (!main_window) {
         return;
     }
@@ -527,7 +528,7 @@ void PacketDiagram::resetScene(bool reset_root)
         delete scene();
     }
     viewport()->update();
-    QGraphicsScene *new_scene = new QGraphicsScene();
+    QGraphicsScene *new_scene = new QGraphicsScene(this);
     setScene(new_scene);
     connect(new_scene, &QGraphicsScene::selectionChanged, this, &PacketDiagram::sceneSelectionChanged);
     setRootNode(reset_root ? nullptr : root_node_);
@@ -564,11 +565,7 @@ void PacketDiagram::addDiagram(proto_node *tl_node)
     qreal y_bottom = y_pos_ + bit_width;
     QGraphicsItem *tl_item = scene()->addLine(x, y_bottom, x + diag_w, y_bottom);
     QFontMetrics sfm = QFontMetrics(layout_->smallFont());
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     int space_w = sfm.horizontalAdvance(' ');
-#else
-    int space_w = sfm.width(' ');
-#endif
 #ifdef Q_OS_WIN
     // t_item->boundingRect() has a pixel of space on the left on my (gcc)
     // Windows VM.
@@ -763,7 +760,7 @@ void PacketDiagram::showFieldsToggled(bool checked)
 void PacketDiagram::saveAsTriggered()
 {
     QString file_name, extension;
-    QDir path(mainApp->lastOpenDir());
+    QDir path(mainApp->openDialogInitialDir());
     QString png_filter = tr("Portable Network Graphics (*.png)");
     QString bmp_filter = tr("Windows Bitmap (*.bmp)");
     // Gaze upon my beautiful graph with lossy artifacts!

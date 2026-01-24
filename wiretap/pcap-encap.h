@@ -13,8 +13,8 @@
 #ifndef __W_PCAP_ENCAP_H__
 #define __W_PCAP_ENCAP_H__
 
-#include <glib.h>
-#include <wiretap/wtap.h>
+#include "wtap.h"
+#include "ws_symbol_export.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +22,7 @@ extern "C" {
 
 WS_DLL_PUBLIC int wtap_pcap_encap_to_wtap_encap(int encap);
 int wtap_wtap_encap_to_pcap_encap(int encap);
-WS_DLL_PUBLIC gboolean wtap_encap_requires_phdr(int encap);
+WS_DLL_PUBLIC bool wtap_encap_requires_phdr(int encap);
 
 #ifdef __cplusplus
 }

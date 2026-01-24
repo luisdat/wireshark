@@ -24,14 +24,14 @@ void proto_register_h248_dot2(void);
 #define PSNAME "H248_2"
 #define PFNAME "h248.2"
 
-static int proto_h248_2 = -1;
+static int proto_h248_2;
 
-/* static int hf_h248_2_dtone_evt = -1; */
-static int hf_h248_2_dtone_dtt_obs_evt = -1;
-static int hf_h248_2_dtone_dtt_obs_evt_val = -1;
+/* static int hf_h248_2_dtone_evt; */
+static int hf_h248_2_dtone_dtt_obs_evt;
+static int hf_h248_2_dtone_dtt_obs_evt_val;
 
-static gint ett_h248_2 = -1;
-static gint ett_h248_2_dtone_dtt_obs_evt = -1;
+static int ett_h248_2;
+static int ett_h248_2_dtone_dtt_obs_evt;
 
 
 static const value_string hf_h248_2_dtone_dtt_obs_evt_val_values[] = {
@@ -71,7 +71,7 @@ static const value_string hf_h248_2_dtone_dtt_obs_evt_val_values[] = {
     { 0, NULL }
 };
 
-static h248_pkg_param_t h248_2_dtone_dtt_obs_evt_params[] = {
+static const h248_pkg_param_t h248_2_dtone_dtt_obs_evt_params[] = {
     { 0x0001, &hf_h248_2_dtone_dtt_obs_evt_val, h248_param_ber_integer, NULL },
     { 0, NULL, NULL, NULL}
 };
@@ -83,7 +83,7 @@ static const value_string h248_2_ctype_events_vals[] = {
     { 0, NULL }
 };
 
-static h248_pkg_evt_t h248_pkg_generic_cause_evts[] = {
+static const h248_pkg_evt_t h248_pkg_generic_cause_evts[] = {
     { 0x0001, &hf_h248_2_dtone_dtt_obs_evt, &ett_h248_2_dtone_dtt_obs_evt, h248_2_dtone_dtt_obs_evt_params, h248_2_ctype_events_vals},
     { 0, NULL, NULL, NULL, NULL}
 };
@@ -129,7 +129,7 @@ void proto_register_h248_dot2(void) {
 
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_h248_2,
         &ett_h248_2_dtone_dtt_obs_evt,
     };

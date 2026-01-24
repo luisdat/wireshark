@@ -36,38 +36,38 @@
 void proto_register_pop(void);
 void proto_reg_handoff_pop(void);
 
-static int proto_pop = -1;
+static int proto_pop;
 
-static int credentials_tap = -1;
+static int credentials_tap;
 
-static int hf_pop_response = -1;
-static int hf_pop_response_indicator = -1;
-static int hf_pop_response_description = -1;
-static int hf_pop_response_data = -1;
+static int hf_pop_response;
+static int hf_pop_response_indicator;
+static int hf_pop_response_description;
+static int hf_pop_response_data;
 
-static int hf_pop_request = -1;
-static int hf_pop_request_command = -1;
-static int hf_pop_request_parameter = -1;
-static int hf_pop_request_data = -1;
+static int hf_pop_request;
+static int hf_pop_request_command;
+static int hf_pop_request_parameter;
+static int hf_pop_request_data;
 
-static int hf_pop_data_fragments = -1;
-static int hf_pop_data_fragment = -1;
-static int hf_pop_data_fragment_overlap = -1;
-static int hf_pop_data_fragment_overlap_conflicts = -1;
-static int hf_pop_data_fragment_multiple_tails = -1;
-static int hf_pop_data_fragment_too_long_fragment = -1;
-static int hf_pop_data_fragment_error = -1;
-static int hf_pop_data_fragment_count = -1;
-static int hf_pop_data_reassembled_in = -1;
-static int hf_pop_data_reassembled_length = -1;
+static int hf_pop_data_fragments;
+static int hf_pop_data_fragment;
+static int hf_pop_data_fragment_overlap;
+static int hf_pop_data_fragment_overlap_conflicts;
+static int hf_pop_data_fragment_multiple_tails;
+static int hf_pop_data_fragment_too_long_fragment;
+static int hf_pop_data_fragment_error;
+static int hf_pop_data_fragment_count;
+static int hf_pop_data_reassembled_in;
+static int hf_pop_data_reassembled_length;
 
-static expert_field ei_pop_resp_tot_len_invalid = EI_INIT;
+static expert_field ei_pop_resp_tot_len_invalid;
 
-static gint ett_pop = -1;
-static gint ett_pop_reqresp = -1;
+static int ett_pop;
+static int ett_pop_reqresp;
 
-static gint ett_pop_data_fragment = -1;
-static gint ett_pop_data_fragments = -1;
+static int ett_pop_data_fragment;
+static int ett_pop_data_fragments;
 
 static dissector_handle_t pop_handle;
 static dissector_handle_t imf_handle;
@@ -77,7 +77,7 @@ static dissector_handle_t tls_handle;
 #define TCP_PORT_SSL_POP        995
 
 /* desegmentation of POP command and response lines */
-static gboolean pop_data_desegment = TRUE;
+static bool pop_data_desegment = true;
 
 static reassembly_table pop_data_reassembly_table;
 
@@ -104,52 +104,52 @@ static const fragment_items pop_data_frag_items = {
   "DATA fragments"
 };
 
-struct pop_proto_data {
-  guint16 conversation_id;
-  gboolean more_frags;
-};
-
-struct pop_data_val {
-  gboolean msg_request;
-  guint32 msg_read_len;  /* Length of RETR message read so far */
-  guint32 msg_tot_len;   /* Total length of RETR message */
-  gboolean stls_request;  /* Received STLS request */
-  gchar* username;
-  guint username_num;
-};
-
 typedef enum {
   pop_arg_type_unknown,
   pop_arg_type_username,
   pop_arg_type_password
 } pop_arg_type_t;
 
-static gboolean response_is_continuation(const guchar *data);
+struct pop_proto_data {
+  uint16_t conversation_id;
+  bool more_frags;
+  bool ei_tot_len_invalid;
+  pop_arg_type_t arg_type;
+};
+
+struct pop_data_val {
+  bool msg_request;
+  uint32_t msg_read_len;  /* Length of RETR message read so far */
+  uint32_t msg_tot_len;   /* Total length of RETR message */
+  bool stls_request;  /* Received STLS request */
+  char* username;
+  unsigned username_num;
+};
+
+static bool response_is_continuation(const char *data);
 
 static int
 dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
   struct pop_proto_data  *frame_data_p;
-  gboolean               is_request;
-  gboolean               is_continuation;
+  bool                   is_request;
+  bool                   is_continuation;
   proto_tree             *pop_tree, *reqresp_tree;
   proto_item             *ti;
-  gint                   offset = 0;
-  guchar                 *line;
-  gint                   next_offset;
+  int                    offset = 0;
+  unsigned char          *line;
+  int                    next_offset;
   int                    linelen;
   int                    tokenlen;
-  const guchar           *next_token;
-  fragment_head          *frag_msg = NULL;
-  tvbuff_t               *next_tvb = NULL;
-  conversation_t         *conversation = NULL;
-  struct pop_data_val    *data_val = NULL;
-  gint                   length_remaining;
+  const unsigned char    *next_token;
+  fragment_head          *frag_msg;
+  tvbuff_t               *next_tvb;
+  conversation_t         *conversation;
+  struct pop_data_val    *data_val;
+  int                    length_remaining;
   pop_arg_type_t         pop_arg_type = pop_arg_type_unknown;
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "POP");
-
-  frame_data_p = (struct pop_proto_data *)p_get_proto_data(wmem_file_scope(), pinfo, proto_pop, 0);
 
   conversation = find_or_create_conversation(pinfo);
   data_val = (struct pop_data_val *)conversation_get_proto_data(conversation, proto_pop);
@@ -166,17 +166,17 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   /*
    * Find the end of the first line.
    */
-  linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, FALSE);
-  line = (guchar*)wmem_alloc(pinfo->pool, linelen+1);
+  linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+  line = (unsigned char*)wmem_alloc(pinfo->pool, linelen+1);
   tvb_memcpy(tvb, line, offset, linelen);
   line[linelen] = '\0';
 
   if (pinfo->match_uint == pinfo->destport) {
-    is_request = TRUE;
-    is_continuation = FALSE;
+    is_request = true;
+    is_continuation = false;
   } else {
-    is_request = FALSE;
-    is_continuation = response_is_continuation(line);
+    is_request = false;
+    is_continuation = response_is_continuation((const char*)line);
   }
 
   /*
@@ -192,7 +192,7 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   }
   else
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s: %s", is_request ? "C" : "S",
-                   format_text(pinfo->pool, line, linelen));
+                   format_text(pinfo->pool, (char*)line, linelen));
 
   ti = proto_tree_add_item(tree, proto_pop, tvb, offset, -1, ENC_NA);
   pop_tree = proto_item_add_subtree(ti, ett_pop);
@@ -201,16 +201,19 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     if (pop_data_desegment) {
 
-      if (!frame_data_p) {
+      if (!PINFO_FD_VISITED(pinfo)) {
 
         data_val->msg_read_len += tvb_reported_length(tvb);
 
-        frame_data_p = wmem_new(wmem_file_scope(), struct pop_proto_data);
+        frame_data_p = wmem_new0(wmem_file_scope(), struct pop_proto_data);
 
         frame_data_p->conversation_id = conversation->conv_index;
         frame_data_p->more_frags = data_val->msg_read_len < data_val->msg_tot_len;
 
         p_add_proto_data(wmem_file_scope(), pinfo, proto_pop, 0, frame_data_p);
+      } else {
+          frame_data_p = (struct pop_proto_data *)p_get_proto_data(wmem_file_scope(), pinfo, proto_pop, 0);
+          DISSECTOR_ASSERT(frame_data_p);
       }
 
       frag_msg = fragment_add_seq_next(&pop_data_reassembly_table, tvb, 0,
@@ -230,15 +233,15 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         if (imf_handle)
           call_dissector(imf_handle, next_tvb, pinfo, tree);
 
-        if (data_val) {
+        if (!PINFO_FD_VISITED(pinfo)) {
           /* we have read everything - reset */
 
           data_val->msg_read_len = 0;
           data_val->msg_tot_len = 0;
         }
-        pinfo->fragmented = FALSE;
+        pinfo->fragmented = false;
       } else {
-        pinfo->fragmented = TRUE;
+        pinfo->fragmented = true;
       }
 
     } else {
@@ -277,50 +280,69 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                             hf_pop_response_indicator,
                         tvb, offset, tokenlen, ENC_ASCII|ENC_NA);
 
-    if (data_val) {
+    if (!PINFO_FD_VISITED(pinfo)) {
       if (is_request) {
         /* see if this is RETR or TOP command */
-        if (g_ascii_strncasecmp(line, "RETR", 4) == 0 ||
-           g_ascii_strncasecmp(line, "TOP", 3) == 0)
+        if (g_ascii_strncasecmp((char*)line, "RETR", 4) == 0 ||
+           g_ascii_strncasecmp((char*)line, "TOP", 3) == 0)
           /* the next response will tell us how many bytes */
-          data_val->msg_request = TRUE;
+          data_val->msg_request = true;
 
-        if (g_ascii_strncasecmp(line, "STLS", 4) == 0) {
-          data_val->stls_request = TRUE;
+        if (g_ascii_strncasecmp((char*)line, "STLS", 4) == 0) {
+          data_val->stls_request = true;
         }
 
-        if (g_ascii_strncasecmp(line, "USER", 4) == 0) {
+        if (g_ascii_strncasecmp((char*)line, "USER", 4) == 0) {
           pop_arg_type = pop_arg_type_username;
         }
 
-        if (g_ascii_strncasecmp(line, "PASS", 4) == 0) {
+        if (g_ascii_strncasecmp((char*)line, "PASS", 4) == 0) {
           pop_arg_type = pop_arg_type_password;
+        }
+
+        if (pop_arg_type != pop_arg_type_unknown) {
+          /* store info for subsequent pass */
+          frame_data_p = wmem_new0(wmem_file_scope(), struct pop_proto_data);
+          frame_data_p->arg_type = pop_arg_type;
+          p_add_proto_data(wmem_file_scope(), pinfo, proto_pop, 0, frame_data_p);
         }
       } else {
         if (data_val->msg_request) {
           /* this is a response to a RETR or TOP command */
 
-          if (g_ascii_strncasecmp(line, "+OK ", 4) == 0 && linelen > 4) {
+          if (g_ascii_strncasecmp((char*)line, "+OK ", 4) == 0 && linelen > 4) {
             /* the message will be sent - work out how many bytes */
             data_val->msg_read_len = 0;
             data_val->msg_tot_len = 0;
-            if (sscanf(line, "%*s %u %*s", &data_val->msg_tot_len) != 1)
+            if (sscanf((char*)line, "%*s %u %*s", &data_val->msg_tot_len) != 1) {
               expert_add_info(pinfo, ti, &ei_pop_resp_tot_len_invalid);
+              /* store expect info presence to add it to the tree during subsequent pass */
+              frame_data_p = wmem_new0(wmem_file_scope(), struct pop_proto_data);
+              frame_data_p->ei_tot_len_invalid = true;
+              p_add_proto_data(wmem_file_scope(), pinfo, proto_pop, 0, frame_data_p);
+            }
           }
-          data_val->msg_request = FALSE;
+          data_val->msg_request = false;
         }
 
         if (data_val->stls_request) {
-          if (g_ascii_strncasecmp(line, "+OK ", 4) == 0) {
+          if (g_ascii_strncasecmp((char*)line, "+OK ", 4) == 0) {
               /* This is the last non-TLS frame. */
               ssl_starttls_ack(tls_handle, pinfo, pop_handle);
           }
-          data_val->stls_request = FALSE;
+          data_val->stls_request = false;
         }
+      }
+    } else {
+      frame_data_p = (struct pop_proto_data *)p_get_proto_data(wmem_file_scope(), pinfo, proto_pop, 0);
+      if (frame_data_p) {
+        pop_arg_type = frame_data_p->arg_type;
+        if (frame_data_p->ei_tot_len_invalid)
+          expert_add_info(pinfo, ti, &ei_pop_resp_tot_len_invalid);
       }
     }
 
-    offset += (gint) (next_token - line);
+    offset += (int) (next_token - line);
     linelen -= (int) (next_token - line);
   }
 
@@ -339,7 +361,7 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     switch (pop_arg_type) {
       case pop_arg_type_username:
         if (!data_val->username && linelen > 0) {
-          data_val->username = tvb_get_string_enc(wmem_file_scope(), tvb, offset, linelen, ENC_NA|ENC_ASCII);;
+          data_val->username = (char*)tvb_get_string_enc(wmem_file_scope(), tvb, offset, linelen, ENC_NA|ENC_ASCII);
           data_val->username_num = pinfo->num;
         }
         break;
@@ -367,7 +389,7 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     /*
      * Find the end of the line.
      */
-    tvb_find_line_end(tvb, offset, -1, &next_offset, FALSE);
+    tvb_find_line_end(tvb, offset, -1, &next_offset, false);
 
     /*
      * Put this line.
@@ -385,15 +407,15 @@ dissect_pop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   return tvb_captured_length(tvb);
 }
 
-static gboolean response_is_continuation(const guchar *data)
+static bool response_is_continuation(const char *data)
 {
   if (strncmp(data, "+OK", strlen("+OK")) == 0)
-    return FALSE;
+    return false;
 
   if (strncmp(data, "-ERR", strlen("-ERR")) == 0)
-    return FALSE;
+    return false;
 
-  return TRUE;
+  return true;
 }
 
 void
@@ -467,7 +489,7 @@ proto_register_pop(void)
       "Length must be a string containing an integer", EXPFILL }}
   };
 
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_pop,
     &ett_pop_reqresp,
     &ett_pop_data_fragment,

@@ -220,31 +220,31 @@ static const value_string sm_pdu_type_value[] = {
 
 
 /* Initialize the protocol and registered fields */
-static int proto_sm = -1;
+static int proto_sm;
 
-static int hf_sm_sm_msg_type = -1;
-static int hf_sm_protocol = -1;
-static int hf_sm_msg_id = -1;
-static int hf_sm_msg_type = -1;
-static int hf_sm_channel = -1;
-static int hf_sm_bearer = -1;
-static int hf_sm_len = -1;
-static int hf_sm_ip_addr = -1;
-static int hf_sm_context = -1;
-static int hf_sm_eisup_msg_id = -1;
-static int hf_sm_tag = -1;
-static int hf_sm_alignment_type = -1;
-static int hf_sm_backhaul_reason_code = -1;
-static int hf_sm_backhaul_event_code = -1;
-static int hf_sm_backhaul_cause_code = -1;
-static int hf_sm_linkdown_cause_code = -1;
-static int hf_sm_retrieval_type = -1;
-static int hf_sm_lsc_state_type = -1;
-static int hf_sm_stat_request_type = -1;
-static int hf_sm_bsn_num = -1;
+static int hf_sm_sm_msg_type;
+static int hf_sm_protocol;
+static int hf_sm_msg_id;
+static int hf_sm_msg_type;
+static int hf_sm_channel;
+static int hf_sm_bearer;
+static int hf_sm_len;
+static int hf_sm_ip_addr;
+static int hf_sm_context;
+static int hf_sm_eisup_msg_id;
+static int hf_sm_tag;
+static int hf_sm_alignment_type;
+static int hf_sm_backhaul_reason_code;
+static int hf_sm_backhaul_event_code;
+static int hf_sm_backhaul_cause_code;
+static int hf_sm_linkdown_cause_code;
+static int hf_sm_retrieval_type;
+static int hf_sm_lsc_state_type;
+static int hf_sm_stat_request_type;
+static int hf_sm_bsn_num;
 
 /* Initialize the subtree pointers */
-static gint ett_sm = -1;
+static int ett_sm;
 
 static dissector_handle_t sdp_handle;
 static dissector_handle_t mtp3_handle;
@@ -257,12 +257,12 @@ dissect_sm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     proto_item *ti;
     proto_tree *sm_tree;
     tvbuff_t   *next_tvb      = NULL;
-    guint32     sm_message_type;
-    guint32     bh_event_code = 0;
-    guint16     protocol;
-    guint16     msg_type      = 0;
-    guint16     length;
-    guint16     tag;
+    uint32_t    sm_message_type;
+    uint32_t    bh_event_code = 0;
+    uint16_t    protocol;
+    uint16_t    msg_type      = 0;
+    uint16_t    length;
+    uint16_t    tag;
     int         offset        = 0;
 
     sm_message_type = tvb_get_ntohl(tvb,offset);
@@ -280,8 +280,7 @@ dissect_sm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     offset = offset + 4;
     if (sm_message_type ==  MESSAGE_TYPE_PDU) {
-        proto_tree_add_item(sm_tree, hf_sm_protocol, tvb, offset, 2, ENC_BIG_ENDIAN);
-        protocol = tvb_get_ntohs(tvb,offset);
+        proto_tree_add_item_ret_uint16(sm_tree, hf_sm_protocol, tvb, offset, 2, ENC_BIG_ENDIAN, &protocol);
         offset = offset + 2;
         switch(protocol){
         /* start case RUDP BSM v.1  ---------------------------------------------------------- */
@@ -298,8 +297,7 @@ dissect_sm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             offset = offset + 2;
             proto_tree_add_item(sm_tree, hf_sm_bearer, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset = offset +2;
-            proto_tree_add_item(sm_tree, hf_sm_len, tvb, offset, 2, ENC_BIG_ENDIAN);
-            length = tvb_get_ntohs(tvb,offset);
+            proto_tree_add_item_ret_uint16(sm_tree, hf_sm_len, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
             offset = offset +2;
             proto_item_set_len(ti, 16);
 
@@ -331,7 +329,7 @@ dissect_sm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
             break;
         case SM_PROTOCOL_X101:
-            /* XXX Reverse enginered so this may not be correct!!!
+            /* XXX Reverse engineered so this may not be correct!!!
              * EISUP - used between Cisco HSI and Cisco PGW devices,
              * uses RUDP with default port number 8003.
              * Protocol stack is RUDP->Cisco SM->SDP.
@@ -574,7 +572,7 @@ proto_register_sm(void)
     };
 
 /* Setup protocol subtree array */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_sm,
     };
 

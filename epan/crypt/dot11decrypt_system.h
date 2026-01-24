@@ -13,13 +13,6 @@
 /*	Constant definitions						*/
 
 /*	General definitions						*/
-#ifndef	TRUE
-#define	TRUE	1
-#endif
-#ifndef	FALSE
-#define	FALSE	0
-#endif
-
 #define	DOT11DECRYPT_RET_SUCCESS                      0
 #define	DOT11DECRYPT_RET_UNSUCCESS                    1
 
@@ -35,8 +28,8 @@
 
 /*	Decryption algorithms fields size definition (bytes)		*/
 #define	DOT11DECRYPT_WPA_NONCE_LEN		         32
-#define	DOT11DECRYPT_WPA_PTK_MAX_LEN			 88	/* TKIP 48, CCMP 64, GCMP-256 88 bytes */
-#define	DOT11DECRYPT_WPA_MICKEY_MAX_LEN			 24
+#define	DOT11DECRYPT_WPA_PTK_MAX_LEN			 96	/* TKIP 48, AKM 18/24/25 96 */
+#define	DOT11DECRYPT_WPA_MICKEY_MAX_LEN			 32
 
 #define	DOT11DECRYPT_WEP_128_KEY_LEN	         16	/* 128 bits	*/
 
@@ -49,7 +42,7 @@
 #define DOT11DECRYPT_TK_LEN                           16
 
 /* Max length of capture data						*/
-#define	DOT11DECRYPT_MAX_CAPLEN			8192
+#define	DOT11DECRYPT_MAX_CAPLEN			(12 * 1024)
 
 #define	DOT11DECRYPT_WEP_IVLEN	3       /* 24bit */
 #define	DOT11DECRYPT_WEP_KIDLEN	1       /* 1 octet */
@@ -80,12 +73,16 @@
 #define	DOT11DECRYPT_TKIP_HEADER	DOT11DECRYPT_RSNA_HEADER
 #define	DOT11DECRYPT_TKIP_TRAILER	DOT11DECRYPT_TKIP_MICLEN + DOT11DECRYPT_WEP_ICV
 
-#define	DOT11DECRYPT_CRC_LEN	4
+#define DOT11DECRYPT_RSNA_MIN_TRAILER 8
+
+#define DOT11DECRYPT_MAX_MLO_LINKS 3 // Is there actually any device supporting this many links?
 
 /************************************************************************/
 /*      File includes                                                   */
 
-#include "dot11decrypt_interop.h"
+#include <stdint.h>
+#include <stdbool.h>
+
 #include "dot11decrypt_user.h"
 #include "ws_symbol_export.h"
 
@@ -96,8 +93,8 @@
 /*	Type definitions						*/
 
 typedef struct _DOT11DECRYPT_SEC_ASSOCIATION_ID {
-	UCHAR bssid[DOT11DECRYPT_MAC_LEN];
-	UCHAR sta[DOT11DECRYPT_MAC_LEN];
+	unsigned char bssid[DOT11DECRYPT_MAC_LEN];
+	unsigned char sta[DOT11DECRYPT_MAC_LEN];
 } DOT11DECRYPT_SEC_ASSOCIATION_ID, *PDOT11DECRYPT_SEC_ASSOCIATION_ID;
 
 typedef struct _DOT11DECRYPT_SEC_ASSOCIATION {
@@ -108,19 +105,35 @@ typedef struct _DOT11DECRYPT_SEC_ASSOCIATION {
 
 	DOT11DECRYPT_SEC_ASSOCIATION_ID saId;
 	DOT11DECRYPT_KEY_ITEM *key;
-	UINT8 handshake;
-	UINT8 validKey;
+	uint8_t handshake;
+	uint8_t validKey;
 
 	struct {
-		UINT8 key_ver;		/* Key descriptor version	*/
-		UCHAR nonce[DOT11DECRYPT_WPA_NONCE_LEN];
+		uint8_t key_ver;		/* Key descriptor version	*/
+		unsigned char nonce[DOT11DECRYPT_WPA_NONCE_LEN];
 		/* used to derive PTK, ANonce stored, SNonce taken	*/
 		/* the 2nd packet of the 4W handshake			*/
-		INT akm;
-		INT cipher;
-		INT tmp_group_cipher; /* Keep between HS msg 2 and 3 */
-		UCHAR ptk[DOT11DECRYPT_WPA_PTK_MAX_LEN]; /* session key used in decryption algorithm */
-	    INT ptk_len;
+		int akm;
+		int cipher;
+		int tmp_group_cipher; /* Keep between HS msg 2 and 3 */
+		int pmk_len;
+		unsigned char ptk[DOT11DECRYPT_WPA_PTK_MAX_LEN]; /* session key used in decryption algorithm */
+		int ptk_len;
+
+		/* MLD info */
+		uint8_t mld : 1; /* 1 if both STA and AP MLD MAC set */
+		uint8_t ap_mld_mac_set : 1;
+		uint8_t sta_mld_mac_set : 1;
+		uint8_t ap_mld_mac[DOT11DECRYPT_MAC_LEN];
+		uint8_t sta_mld_mac[DOT11DECRYPT_MAC_LEN];
+		struct DOT11DECRYPT_MLO_LINK_INFO {
+		        uint8_t id_set : 1;
+		        uint8_t sta_mac_set : 1;
+		        uint8_t ap_mac_set : 1;
+			uint8_t id : 4;
+			uint8_t sta_mac[DOT11DECRYPT_MAC_LEN];
+			uint8_t ap_mac[DOT11DECRYPT_MAC_LEN];
+		} mlo_links[DOT11DECRYPT_MAX_MLO_LINKS];
 	} wpa;
 
 
@@ -130,7 +143,7 @@ typedef struct _DOT11DECRYPT_CONTEXT {
 	GHashTable *sa_hash;
 	DOT11DECRYPT_KEY_ITEM keys[DOT11DECRYPT_MAX_KEYS_NR];
 	size_t keys_nr;
-	CHAR pkt_ssid[DOT11DECRYPT_WPA_SSID_MAX_LEN];
+	uint8_t pkt_ssid[DOT11DECRYPT_WPA_SSID_MAX_LEN];
 	size_t pkt_ssid_len;
 } DOT11DECRYPT_CONTEXT, *PDOT11DECRYPT_CONTEXT;
 
@@ -145,57 +158,72 @@ typedef enum _DOT11DECRYPT_HS_MSG_TYPE {
 } DOT11DECRYPT_HS_MSG_TYPE;
 
 typedef struct _DOT11DECRYPT_FTE {
-	guint8 *mic;
-	guint8 mic_len;
-	guint8 *anonce;
-	guint8 *snonce;
-	guint8 *r0kh_id;
-	guint8 r0kh_id_len;
-	guint8 *r1kh_id;
-	guint8 r1kh_id_len;
+	uint8_t *mic;
+	uint8_t mic_len;
+	uint8_t *anonce;
+	uint8_t *snonce;
+	uint8_t *r0kh_id;
+	uint8_t r0kh_id_len;
+	uint8_t *r1kh_id;
+	uint8_t r1kh_id_len;
 } DOT11DECRYPT_FTE, *PDOT11DECRYPT_FTE;
 
 typedef struct _DOT11DECRYPT_EAPOL_PARSED {
 	DOT11DECRYPT_HS_MSG_TYPE msg_type;
-	guint16 len;
-	guint8 key_type;
-	guint8 key_version;
-	guint16 key_len;
-	guint8 *key_iv;
-	guint8 *key_data;
-	guint16 key_data_len;
-	guint8 group_cipher;
-	guint8 cipher;
-	guint8 akm;
-	guint8 *nonce;
-	guint8 *mic;
-	guint16 mic_len;
-	guint8 *gtk;
-	guint16 gtk_len;
+	uint16_t len;
+	uint8_t key_type;
+	uint8_t key_version;
+	uint16_t key_len;
+	uint8_t *key_iv;
+	uint8_t *key_data;
+	uint16_t key_data_len;
+	uint8_t group_cipher;
+	uint8_t cipher;
+	uint8_t akm;
+	uint8_t *nonce;
+	uint8_t *mic;
+	uint16_t mic_len;
+	uint8_t *gtk;
+	uint16_t gtk_len;
+	uint8_t *mld_mac;
+
+	uint8_t mlo_link_count;
+	struct DOT11DECRYPT_EAPOL_PARSED_MLO_LINK {
+		uint8_t id;
+		uint8_t *mac;
+	} mlo_link[DOT11DECRYPT_MAX_MLO_LINKS];
+
+	uint8_t mlo_gtk_count;
+	struct DOT11DECRYPT_EAPOL_PARSED_MLO_GTK {
+		uint8_t link_id;
+		uint8_t *key;
+		uint8_t len;
+	} mlo_gtk[DOT11DECRYPT_MAX_MLO_LINKS];
 
 	/* For fast bss transition akms */
-	guint8 *mdid;
+	uint8_t *mdid;
 	DOT11DECRYPT_FTE fte;
 } DOT11DECRYPT_EAPOL_PARSED, *PDOT11DECRYPT_EAPOL_PARSED;
 
 typedef struct _DOT11DECRYPT_ASSOC_PARSED
 {
-	guint8 frame_subtype;
-	guint8 group_cipher;
-	guint8 cipher;
-	guint8 akm;
-	guint8 *mdid;
+	uint8_t frame_subtype;
+	uint8_t group_cipher;
+	uint8_t cipher;
+	uint8_t akm;
+	uint8_t *mdid;
 	DOT11DECRYPT_FTE fte;
-	guint8* rsne_tag;
-	guint8* mde_tag;
-	guint8* fte_tag;
-	guint8* rde_tag;
-	guint8 *gtk;
-	guint16 gtk_len;
-	guint16 gtk_subelem_key_len;
-	guint8 bssid[DOT11DECRYPT_MAC_LEN];
-	guint8 sa[DOT11DECRYPT_MAC_LEN];
-	guint8 da[DOT11DECRYPT_MAC_LEN];
+	uint8_t* rsne_tag;
+	uint8_t* rsnxe_tag;
+	uint8_t* mde_tag;
+	uint8_t* fte_tag;
+	uint8_t* rde_tag;
+	uint8_t *gtk;
+	uint16_t gtk_len;
+	uint16_t gtk_subelem_key_len;
+	uint8_t bssid[DOT11DECRYPT_MAC_LEN];
+	uint8_t sa[DOT11DECRYPT_MAC_LEN];
+	uint8_t da[DOT11DECRYPT_MAC_LEN];
 } DOT11DECRYPT_ASSOC_PARSED, *PDOT11DECRYPT_ASSOC_PARSED;
 
 /************************************************************************/
@@ -244,13 +272,13 @@ extern "C" {
  *  management functions on the same context.
  */
 
-extern INT Dot11DecryptDecryptPacket(
+extern int Dot11DecryptDecryptPacket(
 	PDOT11DECRYPT_CONTEXT ctx,
-	const guint8 *data,
-	const guint data_off,
-	const guint data_len,
-	UCHAR *decrypt_data,
-	guint32 *decrypt_len,
+	const uint8_t *data,
+	const unsigned data_off,
+	const unsigned data_len,
+	unsigned char *decrypt_data,
+	uint32_t *decrypt_len,
 	PDOT11DECRYPT_KEY_ITEM key)
 	;
 
@@ -273,12 +301,12 @@ extern INT Dot11DecryptDecryptPacket(
  * - DOT11DECRYPT_RET_UNSUCCESS: Generic unspecified error (decrypt_data
  *   and decrypt_length will be not modified).
  */
-extern INT
+extern int
 Dot11DecryptDecryptKeyData(PDOT11DECRYPT_CONTEXT ctx,
                            PDOT11DECRYPT_EAPOL_PARSED eapol_parsed,
-                           const UCHAR bssid[DOT11DECRYPT_MAC_LEN],
-                           const UCHAR sta[DOT11DECRYPT_MAC_LEN],
-                           UCHAR *decrypted_data, guint *decrypted_len,
+                           const unsigned char bssid[DOT11DECRYPT_MAC_LEN],
+                           const unsigned char sta[DOT11DECRYPT_MAC_LEN],
+                           unsigned char *decrypted_data, unsigned *decrypted_len,
                            PDOT11DECRYPT_KEY_ITEM key)
 	;
 
@@ -307,13 +335,13 @@ Dot11DecryptDecryptKeyData(PDOT11DECRYPT_CONTEXT ctx,
  * This function is not thread-safe when used in parallel with context
  *  management functions on the same context.
  */
-extern INT Dot11DecryptScanEapolForKeys(
+extern int Dot11DecryptScanEapolForKeys(
     PDOT11DECRYPT_CONTEXT ctx,
     PDOT11DECRYPT_EAPOL_PARSED eapol_parsed,
-    const guint8 *eapol_raw,
-    const guint tot_len,
-    const UCHAR bssid[DOT11DECRYPT_MAC_LEN],
-    const UCHAR sta[DOT11DECRYPT_MAC_LEN])
+    const uint8_t *eapol_raw,
+    const unsigned tot_len,
+    const unsigned char bssid[DOT11DECRYPT_MAC_LEN],
+    const unsigned char sta[DOT11DECRYPT_MAC_LEN])
 	;
 
 /**
@@ -335,11 +363,11 @@ extern INT Dot11DecryptScanEapolForKeys(
  * - DOT11DECRYPT_RET_NO_VALID_HANDSHAKE: The association is invalid or no matching
  *   key for decryption was found.
  */
-gint
+int
 Dot11DecryptScanFtAssocForKeys(
     const PDOT11DECRYPT_CONTEXT ctx,
     const PDOT11DECRYPT_ASSOC_PARSED assoc_parsed,
-    guint8 *decrypted_gtk, size_t *decrypted_len,
+    uint8_t *decrypted_gtk, size_t *decrypted_len,
     DOT11DECRYPT_KEY_ITEM* used_key);
 
 /**
@@ -355,10 +383,10 @@ Dot11DecryptScanFtAssocForKeys(
  *   and key information extracted.
  * - DOT11DECRYPT_RET_NO_VALID_HANDSHAKE: No keys extracted
  */
-extern INT Dot11DecryptScanTdlsForKeys(
+extern int Dot11DecryptScanTdlsForKeys(
     PDOT11DECRYPT_CONTEXT ctx,
-    const guint8 *data,
-    const guint tot_len)
+    const uint8_t *data,
+    const unsigned tot_len)
 	;
 
 /**
@@ -370,16 +398,16 @@ extern INT Dot11DecryptScanTdlsForKeys(
  * @return length in bytes of KCK/KEK/TK
  */
 int
-Dot11DecryptGetKCK(const PDOT11DECRYPT_KEY_ITEM key, const guint8 **kck);
+Dot11DecryptGetKCK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **kck);
 
 int
-Dot11DecryptGetKEK(const PDOT11DECRYPT_KEY_ITEM key, const guint8 **kek);
+Dot11DecryptGetKEK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **kek);
 
 int
-Dot11DecryptGetTK(const PDOT11DECRYPT_KEY_ITEM key, const guint8 **tk);
+Dot11DecryptGetTK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **tk);
 
 int
-Dot11DecryptGetGTK(const PDOT11DECRYPT_KEY_ITEM key, const guint8 **gtk);
+Dot11DecryptGetGTK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **gtk);
 
 /**
  * It sets a new keys collection to use during packet processing.
@@ -402,7 +430,7 @@ Dot11DecryptGetGTK(const PDOT11DECRYPT_KEY_ITEM key, const guint8 **gtk);
  * management functions and the packet process function on the same
  * context.
  */
-extern INT Dot11DecryptSetKeys(
+extern int Dot11DecryptSetKeys(
 	PDOT11DECRYPT_CONTEXT ctx,
 	DOT11DECRYPT_KEY_ITEM keys[],
 	const size_t keys_nr)
@@ -420,9 +448,9 @@ extern INT Dot11DecryptSetKeys(
  *   DOT11DECRYPT_RET_UNSUCCESS: The has not been set, e.g. the length was
  *   too long.
  */
-INT Dot11DecryptSetLastSSID(
+int Dot11DecryptSetLastSSID(
         PDOT11DECRYPT_CONTEXT ctx,
-        CHAR *pkt_ssid,
+        char *pkt_ssid,
         size_t pkt_ssid_len)
 	;
 
@@ -440,7 +468,7 @@ INT Dot11DecryptSetLastSSID(
  * management functions and the packet process function on the same context.
  */
 WS_DLL_PUBLIC
-INT Dot11DecryptInitContext(
+int Dot11DecryptInitContext(
         PDOT11DECRYPT_CONTEXT ctx)
 	;
 
@@ -457,7 +485,7 @@ INT Dot11DecryptInitContext(
  * context.
  */
 WS_DLL_PUBLIC
-INT Dot11DecryptDestroyContext(
+int Dot11DecryptDestroyContext(
 	PDOT11DECRYPT_CONTEXT ctx)
 	;
 

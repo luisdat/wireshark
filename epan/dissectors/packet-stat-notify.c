@@ -17,21 +17,21 @@
 void proto_register_statnotify(void);
 void proto_reg_handoff_statnotify(void);
 
-static int proto_statnotify = -1;
-static int hf_statnotify_procedure_v1 = -1;
-static int hf_statnotify_name = -1;
-static int hf_statnotify_state = -1;
-static int hf_statnotify_priv = -1;
+static int proto_statnotify;
+static int hf_statnotify_procedure_v1;
+static int hf_statnotify_name;
+static int hf_statnotify_state;
+static int hf_statnotify_priv;
 
-static gint ett_statnotify = -1;
+static int ett_statnotify;
 
 
 static int
-dissect_statnotify_mon(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_statnotify_mon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-	offset = dissect_rpc_string(tvb,tree,hf_statnotify_name,offset,NULL);
+	offset = dissect_rpc_string(tvb,pinfo,tree,hf_statnotify_name,offset,NULL);
 
 	offset = dissect_rpc_uint32(tvb,tree,hf_statnotify_state,offset);
 
@@ -80,7 +80,7 @@ proto_register_statnotify(void)
 			NULL, 0, "Client supplied opaque data", HFILL }},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_statnotify,
 	};
 

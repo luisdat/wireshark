@@ -10,7 +10,7 @@
 #ifndef __PACKET_NETLINK_H__
 #define __PACKET_NETLINK_H__
 
-#include <epan/value_string.h>
+#include <wsutil/value_string.h>
 
 /* from <include/uapi/linux/netlink.h> prefixed with WS_ */
 enum {
@@ -91,21 +91,22 @@ enum ws_nfproto {
 };
 extern const value_string nfproto_family_vals[];
 extern const value_string netfilter_hooks_vals[];
+extern const value_string nfq_ctinfo_vals[];
 
 #define PACKET_NETLINK_MAGIC 0x4A5ACCCE
 
 struct packet_netlink_data {
-	guint32 magic; /* PACKET_NETLINK_MAGIC */
+	uint32_t magic; /* PACKET_NETLINK_MAGIC */
 
 	int encoding;
-	guint16 type;
+	uint16_t type;
 };
 
 /**
  * Dissects the Netlink message header (struct nlmsghdr). The "hfi_type" field
  * is added for the "nlmsg_type" field and returned into pi_type.
  */
-int dissect_netlink_header(tvbuff_t *tvb, proto_tree *tree, int offset, int encoding, int hf_type, proto_item **pi_type);
+int dissect_netlink_header(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int offset, int encoding, int hf_type, proto_item **pi_type);
 
 typedef int netlink_attributes_cb_t(tvbuff_t *tvb, void *data, struct packet_netlink_data *nl_data, proto_tree *tree, int nla_type, int offset, int len);
 
@@ -136,7 +137,7 @@ typedef struct {
 	proto_tree     *genl_tree;
 
 	/* fields from genlmsghdr */
-	guint8 	        cmd; /* Command number */
+	uint8_t 	        cmd; /* Command number */
 
 	/* XXX This should contain a family version number as well. */
 } genl_info_t;

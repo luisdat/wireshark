@@ -23,30 +23,30 @@
 #include <epan/ptvcursor.h>
 void proto_register_hdcp(void);
 
-static int proto_hdcp  = -1;
+static int proto_hdcp;
 
 static wmem_tree_t *transactions;
 
-static gint ett_hdcp = -1;
+static int ett_hdcp;
 
-static int hf_hdcp_reg = -1;
-static int hf_hdcp_resp_in = -1;
-static int hf_hdcp_resp_to = -1;
-static int hf_hdcp_a_ksv = -1;
-static int hf_hdcp_b_ksv = -1;
-static int hf_hdcp_an = -1;
-static int hf_hdcp_hdmi_reserved = -1;
-static int hf_hdcp_repeater = -1;
-static int hf_hdcp_ksv_fifo = -1;
-static int hf_hdcp_fast_trans = -1;
-static int hf_hdcp_features = -1;
-static int hf_hdcp_fast_reauth = -1;
-static int hf_hdcp_hdmi_mode = -1;
-static int hf_hdcp_max_casc_exc = -1;
-static int hf_hdcp_depth = -1;
-static int hf_hdcp_max_devs_exc = -1;
-static int hf_hdcp_downstream = -1;
-static int hf_hdcp_link_vfy = -1;
+static int hf_hdcp_reg;
+static int hf_hdcp_resp_in;
+static int hf_hdcp_resp_to;
+static int hf_hdcp_a_ksv;
+static int hf_hdcp_b_ksv;
+static int hf_hdcp_an;
+static int hf_hdcp_hdmi_reserved;
+static int hf_hdcp_repeater;
+static int hf_hdcp_ksv_fifo;
+static int hf_hdcp_fast_trans;
+static int hf_hdcp_features;
+static int hf_hdcp_fast_reauth;
+static int hf_hdcp_hdmi_mode;
+static int hf_hdcp_max_casc_exc;
+static int hf_hdcp_depth;
+static int hf_hdcp_max_devs_exc;
+static int hf_hdcp_downstream;
+static int hf_hdcp_link_vfy;
 
 #define REG_BKSV    0x0
 #define REG_AKSV    0x10
@@ -55,9 +55,9 @@ static int hf_hdcp_link_vfy = -1;
 #define REG_BSTATUS 0x41
 
 typedef struct _hdcp_transaction_t {
-    guint32 rqst_frame;
-    guint32 resp_frame;
-    guint8 rqst_type;
+    uint32_t rqst_frame;
+    uint32_t resp_frame;
+    uint8_t rqst_type;
 } hdcp_transaction_t;
 
 static const value_string hdcp_reg[] = {
@@ -76,13 +76,13 @@ static const value_string hdcp_reg[] = {
 static int
 dissect_hdcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    guint8 reg;
+    uint8_t reg;
     proto_item *pi;
     ptvcursor_t *cursor;
     proto_tree *hdcp_tree;
     hdcp_transaction_t *hdcp_trans;
     proto_item *it;
-    guint64 a_ksv, b_ksv;
+    uint64_t a_ksv, b_ksv;
 
     /* XXX check if the packet is really HDCP? */
 
@@ -98,7 +98,7 @@ dissect_hdcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     if (pinfo->p2p_dir==P2P_DIR_SENT) {
         /* transmitter sends data to the receiver */
 
-        reg = tvb_get_guint8(tvb, ptvcursor_current_offset(cursor));
+        reg = tvb_get_uint8(tvb, ptvcursor_current_offset(cursor));
         /* all values in HDCP are little endian */
         ptvcursor_add(cursor, hf_hdcp_reg, 1, ENC_LITTLE_ENDIAN);
 
@@ -106,7 +106,7 @@ dissect_hdcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                     ptvcursor_current_offset(cursor)) == 0) {
             /* transmitter requests the content of a register */
             col_append_sep_fstr(pinfo->cinfo, COL_INFO, NULL, "request %s",
-                    val_to_str(reg, hdcp_reg, "unknown (0x%x)"));
+                    val_to_str(pinfo->pool, reg, hdcp_reg, "unknown (0x%x)"));
 
             if (PINFO_FD_VISITED(pinfo)) {
                 /* we've already dissected the receiver's response */
@@ -138,7 +138,7 @@ dissect_hdcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
         else {
             /* transmitter actually sends protocol data */
             col_append_sep_fstr(pinfo->cinfo, COL_INFO, NULL, "send %s",
-                    val_to_str(reg, hdcp_reg, "unknown (0x%x)"));
+                    val_to_str(pinfo->pool, reg, hdcp_reg, "unknown (0x%x)"));
             switch (reg) {
                 case REG_AKSV:
                     a_ksv = tvb_get_letoh40(tvb,
@@ -245,10 +245,10 @@ proto_register_hdcp(void)
             { "Register offset", "hdcp.reg", FT_UINT8, BASE_HEX,
                 VALS(hdcp_reg), 0, NULL, HFILL } },
         { &hf_hdcp_resp_in,
-            { "Response In", "hdcp.resp_in", FT_FRAMENUM, BASE_NONE, NULL, 0x0,
+            { "Response In", "hdcp.resp_in", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
                 "The response to this request is in this frame", HFILL }},
         { &hf_hdcp_resp_to,
-            { "Response To", "hdcp.resp_to", FT_FRAMENUM, BASE_NONE, NULL, 0x0,
+            { "Response To", "hdcp.resp_to", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
                 "This is the response to the request in this frame", HFILL }},
         { &hf_hdcp_a_ksv,
             { "Transmitter's key selection vector", "hdcp.a_ksv", FT_UINT40,
@@ -297,13 +297,12 @@ proto_register_hdcp(void)
                 FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } }
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_hdcp
     };
 
 
-    proto_hdcp = proto_register_protocol(
-            "High bandwidth Digital Content Protection", "HDCP", "hdcp");
+    proto_hdcp = proto_register_protocol("High bandwidth Digital Content Protection", "HDCP", "hdcp");
 
     proto_register_field_array(proto_hdcp, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));

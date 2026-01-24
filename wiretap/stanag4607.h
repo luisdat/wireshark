@@ -9,10 +9,8 @@
 #ifndef __STANAG_4607_H__
 #define __STANAG_4607_H__
 
-#include <glib.h>
-#include <wiretap/wtap.h>
-#include "ws_symbol_export.h"
+#include "wtap.h"
 
-wtap_open_return_val stanag4607_open(wtap *wth, int *err, gchar **err_info);
+wtap_open_return_val stanag4607_open(wtap *wth, int *err, char **err_info);
 
 #endif

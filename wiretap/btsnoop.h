@@ -8,9 +8,9 @@
 
 #ifndef __W_BTSNOOP_H__
 #define __W_BTSNOOP_H__
-#include <glib.h>
-#include "ws_symbol_export.h"
 
-wtap_open_return_val btsnoop_open(wtap *wth, int *err, gchar **err_info);
+#include "wtap.h"
+
+wtap_open_return_val btsnoop_open(wtap *wth, int *err, char **err_info);
 
 #endif

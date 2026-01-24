@@ -18,6 +18,7 @@ ExpertPacketItem::ExpertPacketItem(const expert_info_t& expert_info, column_info
     group_(expert_info.group),
     severity_(expert_info.severity),
     hf_id_(expert_info.hf_index),
+    row_(0),
     protocol_(expert_info.protocol),
     summary_(expert_info.summary),
     parentItem_(parent)
@@ -39,12 +40,12 @@ ExpertPacketItem::~ExpertPacketItem()
 
 QString ExpertPacketItem::groupKey(bool group_by_summary, int severity, int group, QString protocol, int expert_hf)
 {
-    QString key = QString("%1|%2|%3")
+    QString key = QStringLiteral("%1|%2|%3")
             .arg(severity)
             .arg(group)
             .arg(protocol);
     if (group_by_summary) {
-        key += QString("|%1").arg(expert_hf);
+        key += QStringLiteral("|%1").arg(expert_hf);
     }
     return key;
 }
@@ -55,6 +56,8 @@ QString ExpertPacketItem::groupKey(bool group_by_summary) {
 
 void ExpertPacketItem::appendChild(ExpertPacketItem* child, QString hash)
 {
+    // childItems_ is only appended to, so this row never changes.
+    child->row_ = static_cast<int>(childItems_.size());
     childItems_.append(child);
     hashChild_[hash] = child;
 }
@@ -76,10 +79,7 @@ int ExpertPacketItem::childCount() const
 
 int ExpertPacketItem::row() const
 {
-    if (parentItem_)
-        return static_cast<int>(parentItem_->childItems_.indexOf(const_cast<ExpertPacketItem*>(this)));
-
-    return 0;
+    return row_;
 }
 
 ExpertPacketItem* ExpertPacketItem::parentItem()
@@ -118,7 +118,7 @@ ExpertPacketItem* ExpertInfoModel::createRootItem()
 {
     static const char* rootName = "ROOT";
 DIAG_OFF_CAST_AWAY_CONST
-    static expert_info_t root_expert = { 0, -1, -1, -1, rootName, (gchar*)rootName, NULL };
+    static expert_info_t root_expert = { 0, -1, -1, -1, rootName, (char*)rootName, NULL };
 DIAG_ON_CAST_AWAY_CONST
 
     return new ExpertPacketItem(root_expert, NULL, NULL);
@@ -355,8 +355,8 @@ int ExpertInfoModel::columnCount(const QModelIndex&) const
 
 void ExpertInfoModel::addExpertInfo(const struct expert_info_s& expert_info)
 {
-    QString groupKey = ExpertPacketItem::groupKey(FALSE, expert_info.severity, expert_info.group, QString(expert_info.protocol), expert_info.hf_index);
-    QString summaryKey = ExpertPacketItem::groupKey(TRUE, expert_info.severity, expert_info.group, QString(expert_info.protocol), expert_info.hf_index);
+    QString groupKey = ExpertPacketItem::groupKey(false, expert_info.severity, expert_info.group, QString(expert_info.protocol), expert_info.hf_index);
+    QString summaryKey = ExpertPacketItem::groupKey(true, expert_info.severity, expert_info.group, QString(expert_info.protocol), expert_info.hf_index);
 
     ExpertPacketItem* expert_root = root_->child(groupKey);
     if (expert_root == NULL) {

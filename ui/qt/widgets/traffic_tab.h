@@ -12,10 +12,9 @@
 
 #include "config.h"
 
-#include <glib.h>
-
 #include <ui/qt/models/atap_data_model.h>
 #include <ui/qt/filter_action.h>
+#include <ui/qt/widgets/traffic_tree.h>
 #include <ui/qt/widgets/detachable_tabwidget.h>
 #include <ui/qt/widgets/traffic_types_list.h>
 
@@ -94,7 +93,7 @@ public:
      *
      * @see ATapModelCallback
      */
-    void setProtocolInfo(QString tableName, TrafficTypesList * trafficList, GList ** recentColumnList, ATapModelCallback createModel);
+    void setProtocolInfo(QString tableName, TrafficTypesList * trafficList, GList ** recentList, GList ** recentColumnList, ATapModelCallback createModel);
 
     /**
      * @brief Set the Delegate object for the tab. It will apply for all
@@ -186,11 +185,29 @@ public:
     QVariant currentItemData(int role = Qt::DisplayRole);
 
     /**
+     * @brief Return the number of currently selected items in the currently
+     * displayed treeview.
+     *
+     * @param role the role to be used, defaults to Qt::DisplayRole
+     * @return qlonglong the number of selected items
+     */
+    qlonglong countSelectedItems(int role = Qt::DisplayRole);
+
+    /**
+     * @brief Return a list of IOGraph related data, for the currently selected
+     * index or indexes in the currently displayed treeview.
+     *
+     * @return QList of IOGraph related data expressed in QVariant types
+     */
+    QList<QList<QVariant> > selectedItemsIOGData();
+
+    /**
      * @brief Use nanosecond timestamps if requested
      *
      * @param useNSTime use nanosecond timestamps if required and requested
      */
     void useNanosecondTimestamps(bool useNSTime);
+    ATapDataModel * dataModelForTabIndex(int tabIdx = -1);
 
 public slots:
 
@@ -200,12 +217,14 @@ public slots:
      * @param absolute true if absolute time should be used
      */
     void useAbsoluteTime(bool absolute);
+    void limitToDisplayFilter(bool limit);
+    void setMachineReadable(bool machine);
 
     void setOpenTabs(QList<int> protocols);
 
 signals:
     void filterAction(QString filter, FilterAction::Action action, FilterAction::ActionType type);
-    void tabDataChanged(int idx);
+    void tabDataChanged(int idx, int selcounter);
     void retapRequired();
     void disablingTaps();
     void tabsChanged(QList<int> protocols);
@@ -221,26 +240,33 @@ private:
     QMap<int, int> _tabs;
     ATapModelCallback _createModel;
     ATapCreateDelegate _createDelegate;
+    GList ** _recentList;
     GList ** _recentColumnList;
 
     bool _disableTaps;
     bool _nameResolution;
+    bool _absoluteTime;
+    bool _limitToDisplayFilter;
+    bool _nanoseconds;
+    bool _machineReadable;
 
     QTreeView * createTree(int protoId);
-    ATapDataModel * modelForTabIndex(int tabIdx = -1);
-    ATapDataModel * modelForWidget(QWidget * widget);
+    TrafficDataFilterProxy * modelForTabIndex(int tabIdx = -1);
+    TrafficDataFilterProxy * modelForWidget(QWidget * widget);
+    ATapDataModel * dataModelForWidget(QWidget * widget);
 
     void insertProtoTab(int protoId, bool emitSignals = true);
     void removeProtoTab(int protoId, bool emitSignals = true);
 
 #ifdef HAVE_MAXMINDDB
-    bool writeGeoIPMapFile(QFile * fp, bool json_only, ATapDataModel * dataModel);
+    bool writeGeoIPMapFile(QFile * fp, bool json_only, TrafficDataFilterProxy * model);
 #endif
 
 private slots:
     void modelReset();
 
     void doCurrentIndexChange(const QModelIndex & cur, const QModelIndex & prev);
+    void doSelectionChange(const QItemSelection &selected, const QItemSelection &deselected);
 };
 
 #endif // TRAFFIC_TAB_H

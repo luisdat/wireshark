@@ -3,7 +3,7 @@
 # make-pci-ids - Creates a file containing PCI IDs.
 # It use the databases from
 # https://github.com/pciutils/pciids/raw/master/pci.ids
-# to create our file epan/dissectors/pci-ids.c
+# to create our file epan/dissectors/data-ncsi.c
 #
 # Wireshark - Network traffic analyzer
 #
@@ -15,9 +15,12 @@
 
 import string
 import sys
-import urllib.request, urllib.error, urllib.parse
+import urllib.request
+import urllib.error
+import urllib.parse
 
-OUTPUT_FILE = "epan/pci-ids.c"
+OUTPUT_SOURCE_FILE = "epan/dissectors/data-ncsi.c"
+OUTPUT_HEADER_FILE = "epan/dissectors/data-ncsi.h"
 
 MIN_VENDOR_COUNT = 2250 # 2261 on 2021-11-01
 MIN_DEVICE_COUNT = 33000 # 33724 on 2021-11-01
@@ -33,71 +36,49 @@ CODE_PREFIX = """\
  */
 
 #include <config.h>
-#include \"pci-ids.h\"
+
+#include <stddef.h>
+#include <stdlib.h>
+
+#include "wsutil/array.h"
+
+#include "data-ncsi.h"
 
 typedef struct
 {
-  guint16 vid;
-  guint16 did;
-  guint16 svid;
-  guint16 ssid;
-  gchar *name;
+  uint16_t vid;
+  uint16_t did;
+  uint16_t svid;
+  uint16_t ssid;
+  const char *name;
 
 } pci_id_t;
 
 typedef struct
 {
-  guint16 vid;
-  guint16 count;
-  pci_id_t *ids_ptr;
+  uint16_t vid;
+  uint16_t count;
+  pci_id_t const *ids_ptr;
 
 } pci_vid_index_t;
 
 """
 
 CODE_POSTFIX = """
-static pci_vid_index_t *get_vid_index(guint16 vid)
+static int vid_search(const void *key, const void *tbl_entry)
 {
-    guint32 start_index = 0;
-    guint32 end_index = 0;
-    guint32 idx = 0;
-
-    end_index = sizeof(pci_vid_index)/sizeof(pci_vid_index[0]);
-
-    while(start_index != end_index)
-    {
-        if(end_index - start_index == 1)
-        {
-            if(pci_vid_index[start_index].vid == vid)
-                return &pci_vid_index[start_index];
-
-            break;
-        }
-
-        idx = (start_index + end_index)/2;
-
-        if(pci_vid_index[idx].vid < vid)
-            start_index = idx;
-        else
-        if(pci_vid_index[idx].vid > vid)
-            end_index = idx;
-        else
-            return &pci_vid_index[idx];
-
-    }
-
-    return NULL;
-
+    return (int)*(const uint16_t *)key -
+           (int)((const pci_vid_index_t *)tbl_entry)->vid;
 }
 
-const char *pci_id_str(guint16 vid, guint16 did, guint16 svid, guint16 ssid)
+const char *pci_id_str(uint16_t vid, uint16_t did, uint16_t svid, uint16_t ssid)
 {
     unsigned int i;
-    static char *not_found = \"Not found\";
-    pci_vid_index_t *index_ptr;
-    pci_id_t *ids_ptr;
+    static const char *not_found = \"Not found\";
+    pci_vid_index_t const *index_ptr;
+    pci_id_t const *ids_ptr;
 
-    index_ptr = get_vid_index(vid);
+    index_ptr = bsearch(&vid, pci_vid_index, array_length(pci_vid_index), sizeof pci_vid_index[0], vid_search);
 
     if(index_ptr == NULL)
         return not_found;
@@ -114,6 +95,21 @@ const char *pci_id_str(guint16 vid, guint16 did, guint16 svid, guint16 ssid)
 }
 """
 
+HEADER_CODE = """\
+/** @file
+ *
+ *
+ * By Caleb Chiu <caleb.chiu@macnica.com>
+ * Copyright 2019
+ *
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
+#include <stdint.h>
+
+extern const char *pci_id_str(uint16_t vid, uint16_t did, uint16_t svid, uint16_t ssid);
+"""
 
 id_list=[]
 count_list=[]
@@ -181,7 +177,7 @@ def main():
                 did = -1
                 svid = -1
                 ssid = -1
-                out_lines += "pci_id_t pci_vid_%04X[] = {\n" % (vid)
+                out_lines += "static pci_id_t const pci_vid_%04X[] = {\n" % (vid)
                 out_lines += "{0x%04X, 0xFFFF, 0xFFFF, 0xFFFF, \"%s(0x%04X)\"},\n" % (vid, words[1].strip(), vid)
                 id_list.append(vid)
                 continue
@@ -224,7 +220,7 @@ def main():
     out_lines += "}; /* pci_vid_%04X[] */\n" % (vid)
     count_list.append(entries)
 
-    out_lines += "\npci_vid_index_t pci_vid_index[] = {\n"
+    out_lines += "\nstatic pci_vid_index_t const pci_vid_index[] = {\n"
 
     vendor_count = len(id_list)
     device_count = 0
@@ -237,13 +233,16 @@ def main():
     out_lines += CODE_POSTFIX
 
     if vendor_count < MIN_VENDOR_COUNT:
-        exit_msg(f'Too view vendors. Wanted {MIN_VENDOR_COUNT}, got {vendor_count}.')
+        exit_msg(f'Too few vendors. Wanted {MIN_VENDOR_COUNT}, got {vendor_count}.')
 
     if device_count < MIN_DEVICE_COUNT:
-        exit_msg(f'Too view devices. Wanted {MIN_DEVICE_COUNT}, got {device_count}.')
+        exit_msg(f'Too few devices. Wanted {MIN_DEVICE_COUNT}, got {device_count}.')
 
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as pci_ids_f:
+    with open(OUTPUT_SOURCE_FILE, "w", encoding="utf-8") as pci_ids_f:
         pci_ids_f.write(out_lines)
+
+    with open(OUTPUT_HEADER_FILE, "w", encoding="utf-8") as pci_ids_f:
+        pci_ids_f.write(HEADER_CODE)
 
 if __name__ == '__main__':
     main()

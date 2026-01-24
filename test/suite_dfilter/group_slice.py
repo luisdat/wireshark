@@ -2,13 +2,10 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import unittest
-import fixtures
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
-@fixtures.uses_fixtures
-class case_range(unittest.TestCase):
+class TestDfilterRange:
     trace_file = "ipx_rip.pcap"
 
     def test_slice_1_pos(self, checkDFilterCount):
@@ -31,7 +28,7 @@ class case_range(unittest.TestCase):
         dfilter = "ipx.src.node[1] == 0xbb"
         checkDFilterCount(dfilter, 0)
 
-    def test_slice_2_pos(self, checkDFilterCount):
+    def test_slice_2_pos2(self, checkDFilterCount):
         dfilter = "ipx.src.node[3:2] == a3:e3"
         checkDFilterCount(dfilter, 1)
 
@@ -45,7 +42,8 @@ class case_range(unittest.TestCase):
 
     def test_slice_unparsed_1(self, checkDFilterFail):
         dfilter = "frame == b[1]"
-        checkDFilterFail(dfilter, "Range is not supported for entity")
+        error = '"b" is not a valid protocol or protocol field'
+        checkDFilterFail(dfilter, error)
 
     def test_slice_func_1(self, checkDFilterSucceed):
         dfilter = "string(ipx.src.node)[3:2] == \"cc:dd\""

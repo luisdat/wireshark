@@ -21,7 +21,6 @@
 
 // Strongest to weakest
 #define HASH_SIZE_SHA256 32
-#define HASH_SIZE_RMD160 20
 #define HASH_SIZE_SHA1   20
 
 #define HASH_BUF_SIZE (1024 * 1024)
@@ -107,14 +106,14 @@ void
 summary_fill_in(capture_file *cf, summary_tally *st)
 {
     frame_data    *first_frame, *cur_frame;
-    guint32        framenum;
+    uint32_t       framenum;
     iface_summary_info iface;
-    guint i;
+    unsigned i;
     wtapng_iface_descriptions_t* idb_info;
     wtap_block_t wtapng_if_descr;
     wtapng_if_descr_mandatory_t *wtapng_if_descr_mand;
     wtap_block_t if_stats;
-    guint64 isb_ifdrop;
+    uint64_t isb_ifdrop;
     char* if_string;
     if_filter_opt_t if_filter;
 
@@ -124,26 +123,33 @@ summary_fill_in(capture_file *cf, summary_tally *st)
     size_t hash_bytes;
 
     st->packet_count_ts = 0;
-    st->start_time = 0;
-    st->stop_time = 0;
+    st->start_time = DBL_MAX;
+    st->stop_time = DBL_MIN;
     st->bytes = 0;
     st->filtered_count = 0;
     st->filtered_count_ts = 0;
-    st->filtered_start = 0;
+    st->filtered_start = DBL_MAX;
     st->filtered_stop = 0;
     st->filtered_bytes = 0;
     st->marked_count = 0;
     st->marked_count_ts = 0;
-    st->marked_start = 0;
+    st->marked_start = DBL_MAX;
     st->marked_stop = 0;
     st->marked_bytes = 0;
     st->ignored_count = 0;
 
+    const nstime_t *cap_start = cap_file_provider_get_start_ts(&(cf->provider));
+    const nstime_t *cap_end = cap_file_provider_get_end_ts(&(cf->provider));
+    st->cap_start_time = (cap_start == NULL || nstime_is_unset(cap_start)) ? DBL_MAX : nstime_to_sec(cap_start);
+    st->cap_end_time = (cap_end == NULL || nstime_is_unset(cap_end)) ? DBL_MIN : nstime_to_sec(cap_end);
+
     /* initialize the tally */
     if (cf->count != 0) {
         first_frame = frame_data_sequence_find(cf->provider.frames, 1);
-        st->start_time = nstime_to_sec(&first_frame->abs_ts);
-        st->stop_time = nstime_to_sec(&first_frame->abs_ts);
+        if (first_frame->has_ts) {
+            st->start_time = nstime_to_sec(&first_frame->abs_ts);
+            st->stop_time = nstime_to_sec(&first_frame->abs_ts);
+        }
 
         for (framenum = 1; framenum <= cf->count; framenum++) {
             cur_frame = frame_data_sequence_find(cf->provider.frames, framenum);
@@ -165,7 +171,7 @@ summary_fill_in(capture_file *cf, summary_tally *st)
     st->drops = cf->drops;
     st->dfilter = cf->dfilter;
 
-    st->ifaces  = g_array_new(FALSE, FALSE, sizeof(iface_summary_info));
+    st->ifaces  = g_array_new(false, false, sizeof(iface_summary_info));
     idb_info = wtap_file_get_idb_info(cf->provider.wth);
     for (i = 0; i < idb_info->interface_data->len; i++) {
         wtapng_if_descr = g_array_index(idb_info->interface_data, wtap_block_t, i);
@@ -190,7 +196,7 @@ summary_fill_in(capture_file *cf, summary_tally *st)
         } else {
             iface.descr = NULL;
         }
-        iface.drops_known = FALSE;
+        iface.drops_known = false;
         iface.drops = 0;
         iface.snap = wtapng_if_descr_mand->snap_len;
         iface.encap_type = wtapng_if_descr_mand->wtap_encap;
@@ -199,7 +205,7 @@ summary_fill_in(capture_file *cf, summary_tally *st)
             /* dumpcap only writes one ISB, only handle that for now */
             if_stats = g_array_index(wtapng_if_descr_mand->interface_statistics, wtap_block_t, 0);
             if (wtap_block_get_uint64_option_value(if_stats, OPT_ISB_IFDROP, &isb_ifdrop) == WTAP_OPTTYPE_SUCCESS) {
-                iface.drops_known = TRUE;
+                iface.drops_known = true;
                 iface.drops = isb_ifdrop;
             }
             /* XXX: this doesn't get used, and might need to be g_strdup'ed when it does */
@@ -213,12 +219,10 @@ summary_fill_in(capture_file *cf, summary_tally *st)
     g_free(idb_info);
 
     (void) g_strlcpy(st->file_sha256, "<unknown>", HASH_STR_SIZE);
-    (void) g_strlcpy(st->file_rmd160, "<unknown>", HASH_STR_SIZE);
     (void) g_strlcpy(st->file_sha1, "<unknown>", HASH_STR_SIZE);
 
     gcry_md_open(&hd, GCRY_MD_SHA256, 0);
     if (hd) {
-        gcry_md_enable(hd, GCRY_MD_RMD160);
         gcry_md_enable(hd, GCRY_MD_SHA1);
     }
     hash_buf = (char *)g_malloc(HASH_BUF_SIZE);
@@ -230,7 +234,6 @@ summary_fill_in(capture_file *cf, summary_tally *st)
         }
         gcry_md_final(hd);
         hash_to_str(gcry_md_read(hd, GCRY_MD_SHA256), HASH_SIZE_SHA256, st->file_sha256);
-        hash_to_str(gcry_md_read(hd, GCRY_MD_RMD160), HASH_SIZE_RMD160, st->file_rmd160);
         hash_to_str(gcry_md_read(hd, GCRY_MD_SHA1), HASH_SIZE_SHA1, st->file_sha1);
     }
     if (fh) fclose(fh);
@@ -244,7 +247,7 @@ summary_fill_in_capture(capture_file *cf,capture_options *capture_opts, summary_
 {
     iface_summary_info iface;
     interface_t *device;
-    guint i;
+    unsigned i;
 
     if (st->ifaces->len == 0) {
         /*

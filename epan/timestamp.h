@@ -13,6 +13,8 @@
 
 #include "ws_symbol_export.h"
 
+#include <wsutil/nstime.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
@@ -21,7 +23,8 @@ extern "C" {
  * Type of time-stamp shown in the summary display.
  */
 typedef enum {
-	TS_RELATIVE,            /* Since start of capture */
+	TS_RELATIVE,            /* Since first captured frame */
+	TS_RELATIVE_CAP,        /* Since start of capture */
 	TS_ABSOLUTE,		/* Local absolute time, without date */
 	TS_ABSOLUTE_WITH_YMD,	/* Local absolute time, with date in YYYY-MM-DD form */
 	TS_ABSOLUTE_WITH_YDOY,	/* Local absolute time, with date in YYYY DOY form */
@@ -40,13 +43,23 @@ typedef enum {
 } ts_type;
 
 typedef enum {
-	TS_PREC_AUTO,
-	TS_PREC_FIXED_SEC,
-	TS_PREC_FIXED_DSEC,
-	TS_PREC_FIXED_CSEC,
-	TS_PREC_FIXED_MSEC,
-	TS_PREC_FIXED_USEC,
-	TS_PREC_FIXED_NSEC
+	TS_PREC_AUTO           = -1,	/* Use what the capture file specifies */
+	TS_PREC_FIXED_SEC      = WS_TSPREC_SEC,
+	TS_PREC_FIXED_100_MSEC = WS_TSPREC_100_MSEC,
+	TS_PREC_FIXED_10_MSEC  = WS_TSPREC_10_MSEC,
+	TS_PREC_FIXED_MSEC     = WS_TSPREC_MSEC,
+	TS_PREC_FIXED_100_USEC = WS_TSPREC_100_USEC,
+	TS_PREC_FIXED_10_USEC  = WS_TSPREC_10_USEC,
+	TS_PREC_FIXED_USEC     = WS_TSPREC_USEC,
+	TS_PREC_FIXED_100_NSEC = WS_TSPREC_100_NSEC,
+	TS_PREC_FIXED_10_NSEC  = WS_TSPREC_10_NSEC,
+	TS_PREC_FIXED_NSEC     = WS_TSPREC_NSEC,
+
+/*
+ * Special value used for the command-line setting in Wireshark, to indicate
+ * that no value has been set from the command line.
+ */
+	TS_PREC_NOT_SET    = -2
 } ts_precision;
 
 typedef enum {

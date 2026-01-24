@@ -8,25 +8,19 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include <glib.h>
-
 #include <wsutil/filesystem.h>
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/wireshark_mime_data.h>
 #include <ui/qt/models/filter_list_model.h>
 #include <ui/qt/models/profile_model.h>
+#include <app/application_flavor.h>
 
 #include <QFile>
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QDir>
 #include <QMimeData>
-
-/*
- * Old filter file name.
- */
-#define FILTER_FILE_NAME      "filters"
 
 /*
  * Capture filter file name.
@@ -37,6 +31,11 @@
  * Display filter file name.
  */
 #define DFILTER_FILE_NAME     "dfilters"
+
+/*
+ * Display filter macros file name.
+ */
+#define DMACROS_FILE_NAME     "dmacros"
 
 FilterListModel::FilterListModel(QObject * parent) :
     QAbstractListModel(parent),
@@ -56,14 +55,19 @@ void FilterListModel::reload()
 {
     storage.clear();
 
-    const char * cfile = (type_ == FilterListModel::Capture) ? CFILTER_FILE_NAME : DFILTER_FILE_NAME;
+    const char *cfile;
+
+    switch (type_) {
+        case FilterListModel::Capture: cfile = CFILTER_FILE_NAME; break;
+        case FilterListModel::Display: cfile = DFILTER_FILE_NAME; break;
+        case FilterListModel::DisplayMacro: cfile = DMACROS_FILE_NAME; break;
+        default: ws_assert_not_reached();
+    }
 
     /* Try personal config file first */
-    QString fileName = gchar_free_to_qstring(get_persconffile_path(cfile, TRUE));
+    QString fileName = gchar_free_to_qstring(get_persconffile_path(cfile, true, application_configuration_environment_prefix()));
     if (fileName.length() <= 0 || ! QFileInfo::exists(fileName))
-        fileName = gchar_free_to_qstring(get_persconffile_path(FILTER_FILE_NAME, TRUE));
-    if (fileName.length() <= 0 || ! QFileInfo::exists(fileName))
-        fileName = gchar_free_to_qstring(get_datafile_path(cfile));
+        fileName = gchar_free_to_qstring(get_datafile_path(cfile, application_configuration_environment_prefix()));
     if (fileName.length() <= 0 || ! QFileInfo::exists(fileName))
         return;
 
@@ -80,7 +84,7 @@ void FilterListModel::reload()
         /* Filter out lines that do not contain content:
         *  - Starting with # is a comment
         *  - Does not start with a quoted string
-        */ 
+        */
         if (data.startsWith("#") || ! data.trimmed().startsWith("\""))
             continue;
 
@@ -125,10 +129,16 @@ QVariant FilterListModel::headerData(int section, Qt::Orientation orientation, i
     {
         switch (section) {
             case ColumnName:
-                return tr("Filter Name");
+                if (type_ == DisplayMacro)
+                    return tr("Macro Name");
+                else
+                    return tr("Filter Name");
                 break;
             case ColumnExpression:
-                return tr("Filter Expression");
+                if (type_ == DisplayMacro)
+                    return tr("Macro Expression");
+                else
+                    return tr("Filter Expression");
                 break;
         }
     }
@@ -184,7 +194,7 @@ QModelIndex FilterListModel::addFilter(QString name, QString expression)
         return QModelIndex();
 
     beginInsertRows(QModelIndex(), rowCount(), rowCount());
-    storage << QString("%1\n%2").arg(name).arg(expression);
+    storage << QStringLiteral("%1\n%2").arg(name).arg(expression);
     endInsertRows();
 
     return index(rowCount() - 1, 0);
@@ -197,7 +207,7 @@ QModelIndex FilterListModel::findByName(QString name)
 
     for (int cnt = 0; cnt < rowCount(); cnt++)
     {
-        if (storage.at(cnt).startsWith(QString("%1\n").arg(name)))
+        if (storage.at(cnt).startsWith(QStringLiteral("%1\n").arg(name)))
             return index(cnt, 0);
     }
 
@@ -211,7 +221,7 @@ QModelIndex FilterListModel::findByExpression(QString expression)
 
     for (int cnt = 0; cnt < rowCount(); cnt++)
     {
-        if (storage.at(cnt).endsWith(QString("\n%1").arg(expression)))
+        if (storage.at(cnt).endsWith(QStringLiteral("\n%1").arg(expression)))
             return index(cnt, 0);
     }
 
@@ -230,9 +240,17 @@ void FilterListModel::removeFilter(QModelIndex idx)
 
 void FilterListModel::saveList()
 {
-    QString filename = (type_ == FilterListModel::Capture) ? CFILTER_FILE_NAME : DFILTER_FILE_NAME;
+    const char *cfile;
+    QString filename;
 
-    filename = QString("%1%2%3").arg(ProfileModel::activeProfilePath()).arg("/").arg(filename);
+    switch (type_) {
+        case Capture: cfile = CFILTER_FILE_NAME; break;
+        case Display: cfile = DFILTER_FILE_NAME; break;
+        case DisplayMacro: cfile = DMACROS_FILE_NAME; break;
+        default: ws_assert_not_reached();
+    }
+
+    filename = QStringLiteral("%1%2%3").arg(ProfileModel::activeProfilePath()).arg("/").arg(cfile);
     QFile file(filename);
 
     if (! file.open(QIODevice::WriteOnly | QIODevice::Text))
@@ -241,14 +259,10 @@ void FilterListModel::saveList()
     QTextStream out(&file);
     for (int row = 0; row < rowCount(); row++)
     {
-        QString line = QString("\"%1\"").arg(index(row, ColumnName).data().toString().trimmed());
-        line.append(QString(" %1").arg(index(row, ColumnExpression).data().toString()));
+        QString line = QStringLiteral("\"%1\"").arg(index(row, ColumnName).data().toString().trimmed());
+        line.append(QStringLiteral(" %1").arg(index(row, ColumnExpression).data().toString()));
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
         out << line << Qt::endl;
-#else
-        out << line << endl;
-#endif
     }
 
     file.close();

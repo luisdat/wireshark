@@ -21,6 +21,7 @@
 #include <epan/asn1.h>
 #include <epan/expert.h>
 #include <epan/strutil.h>
+#include <epan/crc32-tvb.h>
 #include "packet-tls.h"
 #include "packet-t124.h"
 #include "packet-rdp.h"
@@ -34,410 +35,509 @@ void proto_reg_handoff_rdp(void);
 
 static heur_dissector_list_t rdp_heur_subdissector_list;
 
-int proto_rdp = -1;
+int proto_rdp;
 
 static dissector_handle_t drdynvc_handle;
+static dissector_handle_t rail_handle;
+static dissector_handle_t cliprdr_handle;
+static dissector_handle_t snd_handle;
+static dissector_handle_t rdpdr_handle;
+static dissector_handle_t conctrl_handle;
 
-static int ett_rdp = -1;
+static int ett_rdp;
 
-static int ett_negReq_flags = -1;
-static int ett_requestedProtocols = -1;
+static int ett_negReq_flags;
+static int ett_requestedProtocols;
 
-static int ett_negRsp_flags = -1;
-static int ett_selectedProtocol = -1;
+static int ett_negRsp_flags;
+static int ett_selectedProtocol;
 
-static int ett_rdp_SendData = -1;
-static int ett_rdp_MessageData = -1;
+static int ett_rdp_SendData;
+static int ett_rdp_MessageData;
 
-static int ett_rdp_ClientData = -1;
-static int ett_rdp_clientCoreData = -1;
-static int ett_rdp_clientSecurityData = -1;
-static int ett_rdp_clientNetworkData = -1;
-static int ett_rdp_clientClusterData = -1;
-static int ett_rdp_clientMonitorData = -1;
-static int ett_rdp_clientMonitorDefData = -1;
-static int ett_rdp_clientMsgChannelData = -1;
-static int ett_rdp_clientMonitorExData = -1;
-static int ett_rdp_clientMultiTransportData = -1;
-static int ett_rdp_clientUnknownData = -1;
-static int ett_rdp_ServerData = -1;
-static int ett_rdp_serverCoreData = -1;
-static int ett_rdp_serverSecurityData = -1;
-static int ett_rdp_serverNetworkData = -1;
-static int ett_rdp_serverMsgChannelData = -1;
-static int ett_rdp_serverMultiTransportData = -1;
-static int ett_rdp_serverUnknownData = -1;
-static int ett_rdp_channelIdArray = -1;
-static int ett_rdp_securityExchangePDU = -1;
-static int ett_rdp_clientInfoPDU = -1;
-static int ett_rdp_validClientLicenseData = -1;
-static int ett_rdp_shareControlHeader = -1;
-static int ett_rdp_pduType = -1;
-static int ett_rdp_flags = -1;
-static int ett_rdp_compressedType = -1;
-static int ett_rdp_mapFlags = -1;
-static int ett_rdp_options = -1;
-static int ett_rdp_channelDefArray = -1;
-static int ett_rdp_channelDef = -1;
-static int ett_rdp_channelPDUHeader = -1;
-static int ett_rdp_channelFlags = -1;
-static int ett_rdp_capabilitySet = -1;
+static int ett_rdp_ClientData;
+static int ett_rdp_clientCoreData;
+static int ett_rdp_clientSecurityData;
+static int ett_rdp_clientNetworkData;
+static int ett_rdp_clientClusterData;
+static int ett_rdp_clientClusterFlags;
+static int ett_rdp_clientMonitorData;
+static int ett_rdp_clientMonitorDefData;
+static int ett_rdp_clientMsgChannelData;
+static int ett_rdp_clientMonitorExData;
+static int ett_rdp_clientMultiTransportData;
+static int ett_rdp_clientUnknownData;
+static int ett_rdp_ServerData;
+static int ett_rdp_serverCoreData;
+static int ett_rdp_serverSecurityData;
+static int ett_rdp_serverNetworkData;
+static int ett_rdp_serverMsgChannelData;
+static int ett_rdp_serverMultiTransportData;
+static int ett_rdp_serverUnknownData;
+static int ett_rdp_channelIdArray;
+static int ett_rdp_securityExchangePDU;
+static int ett_rdp_clientInfoPDU;
+static int ett_rdp_validClientLicenseData;
+static int ett_rdp_shareControlHeader;
+static int ett_rdp_pduType;
+static int ett_rdp_flags;
+static int ett_rdp_compressedType;
+static int ett_rdp_mapFlags;
+static int ett_rdp_options;
+static int ett_rdp_channelDefArray;
+static int ett_rdp_channelDef;
+static int ett_rdp_channelPDUHeader;
+static int ett_rdp_channelFlags;
+static int ett_rdp_capabilitySet;
+static int ett_rdp_capa_general;
+static int ett_rdp_capa_rail;
 
-static int ett_rdp_StandardDate = -1;
-static int ett_rdp_DaylightDate = -1;
-static int ett_rdp_clientTimeZone = -1;
-static int ett_rdp_mt_req = -1;
-static int ett_rdp_mt_rsp = -1;
-static int ett_rdp_heartbeat = -1;
+static int ett_rdp_StandardDate;
+static int ett_rdp_DaylightDate;
+static int ett_rdp_clientTimeZone;
+static int ett_rdp_mt_req;
+static int ett_rdp_mt_rsp;
+static int ett_rdp_heartbeat;
 
-static int ett_rdp_fastpath = -1;
-static int ett_rdp_fastpath_header = -1;
-static int ett_rdp_fastpath_scancode_flags = -1;
-static int ett_rdp_fastpath_mouse_flags = -1;
-static int ett_rdp_fastpath_mousex_flags = -1;
-static int ett_rdp_fastpath_compression = -1;
+static int ett_rdp_fastpath;
+static int ett_rdp_fastpath_header;
+static int ett_rdp_fastpath_scancode_flags;
+static int ett_rdp_fastpath_mouse_flags;
+static int ett_rdp_fastpath_mousex_flags;
+static int ett_rdp_fastpath_relmouse_flags;
+static int ett_rdp_fastpath_compression;
 
-static expert_field ei_rdp_neg_len_invalid = EI_INIT;
-static expert_field ei_rdp_not_correlation_info = EI_INIT;
+static expert_field ei_rdp_neg_len_invalid;
+static expert_field ei_rdp_not_correlation_info;
 
-static int hf_rdp_rt_cookie = -1;
-static int hf_rdp_neg_type = -1;
-static int hf_rdp_negReq_flags = -1;
-static int hf_rdp_negReq_flag_restricted_admin_mode_req = -1;
-static int hf_rdp_negReq_flag_correlation_info_present = -1;
-static int hf_rdp_neg_length = -1;
-static int hf_rdp_requestedProtocols = -1;
-static int hf_rdp_requestedProtocols_flag_ssl = -1;
-static int hf_rdp_requestedProtocols_flag_hybrid = -1;
-static int hf_rdp_requestedProtocols_flag_rdstls = -1;
-static int hf_rdp_requestedProtocols_flag_hybrid_ex = -1;
+static int hf_rdp_rt_cookie;
+static int hf_rdp_neg_type;
+static int hf_rdp_negReq_flags;
+static int hf_rdp_negReq_flag_restricted_admin_mode_req;
+static int hf_rdp_negReq_flag_redirected_auth_req;
+static int hf_rdp_negReq_flag_correlation_info_present;
+static int hf_rdp_neg_length;
+static int hf_rdp_requestedProtocols;
+static int hf_rdp_requestedProtocols_flag_ssl;
+static int hf_rdp_requestedProtocols_flag_hybrid;
+static int hf_rdp_requestedProtocols_flag_rdstls;
+static int hf_rdp_requestedProtocols_flag_hybrid_ex;
+static int hf_rdp_requestedProtocols_flag_rdsaad;
 static int hf_rdp_correlationInfo_flags;
-static int hf_rdp_correlationId = -1;
-static int hf_rdp_correlationInfo_reserved = -1;
-static int hf_rdp_negRsp_flags = -1;
-static int hf_rdp_negRsp_flag_extended_client_data_supported = -1;
-static int hf_rdp_negRsp_flag_dynvc_gfx_protocol_supported = -1;
-static int hf_rdp_negRsp_flag_restricted_admin_mode_supported = -1;
-static int hf_rdp_negRsp_flag_restricted_authentication_mode_supported = -1;
-static int hf_rdp_selectedProtocol = -1;
-static int hf_rdp_negFailure_failureCode = -1;
+static int hf_rdp_correlationId;
+static int hf_rdp_correlationInfo_reserved;
+static int hf_rdp_negRsp_flags;
+static int hf_rdp_negRsp_flag_extended_client_data_supported;
+static int hf_rdp_negRsp_flag_dynvc_gfx_protocol_supported;
+static int hf_rdp_negRsp_flag_restricted_admin_mode_supported;
+static int hf_rdp_negRsp_flag_restricted_authentication_mode_supported;
+static int hf_rdp_selectedProtocol;
+static int hf_rdp_negFailure_failureCode;
 
-static int hf_rdp_ClientData = -1;
-static int hf_rdp_SendData = -1;
-static int hf_rdp_MessageData = -1;
-static int hf_rdp_clientCoreData = -1;
-static int hf_rdp_clientSecurityData = -1;
-static int hf_rdp_clientNetworkData = -1;
-static int hf_rdp_clientClusterData = -1;
-static int hf_rdp_clientMonitorData = -1;
-static int hf_rdp_clientMonitorDefData = -1;
-static int hf_rdp_clientMsgChannelData = -1;
-static int hf_rdp_clientMonitorExData = -1;
-static int hf_rdp_clientMultiTransportData = -1;
-static int hf_rdp_clientUnknownData = -1;
-static int hf_rdp_ServerData = -1;
-static int hf_rdp_serverCoreData = -1;
-static int hf_rdp_serverSecurityData = -1;
-static int hf_rdp_serverNetworkData = -1;
-static int hf_rdp_serverMsgChannelData = -1;
-static int hf_rdp_serverMultiTransportData = -1;
-static int hf_rdp_serverUnknownData = -1;
+static int hf_rdp_ClientData;
+static int hf_rdp_SendData;
+static int hf_rdp_MessageData;
+static int hf_rdp_clientCoreData;
+static int hf_rdp_clientSecurityData;
+static int hf_rdp_clientNetworkData;
+static int hf_rdp_clientClusterData;
+static int hf_rdp_clientMonitorData;
+static int hf_rdp_clientMonitorDefData;
+static int hf_rdp_clientMsgChannelData;
+static int hf_rdp_clientMonitorExData;
+static int hf_rdp_clientMultiTransportData;
+static int hf_rdp_clientUnknownData;
+static int hf_rdp_ServerData;
+static int hf_rdp_serverCoreData;
+static int hf_rdp_serverSecurityData;
+static int hf_rdp_serverNetworkData;
+static int hf_rdp_serverMsgChannelData;
+static int hf_rdp_serverMultiTransportData;
+static int hf_rdp_serverUnknownData;
 
-static int hf_rdp_securityExchangePDU = -1;
-static int hf_rdp_clientInfoPDU = -1;
-static int hf_rdp_validClientLicenseData = -1;
+static int hf_rdp_rdstls_version;
+static int hf_rdp_rdstls_pduType;
+static int hf_rdp_rdstls_dataTypeCapabilities;
+static int hf_rdp_rdstls_supportedVersions;
+static int hf_rdp_rdstls_dataTypeAuthReq;
+static int hf_rdp_rdstls_redirectionGuidLen;
+static int hf_rdp_rdstls_redirectionGuid;
+static int hf_rdp_rdstls_usernameLen;
+static int hf_rdp_rdstls_username;
+static int hf_rdp_rdstls_domainLen;
+static int hf_rdp_rdstls_domain;
+static int hf_rdp_rdstls_passwordLen;
+static int hf_rdp_rdstls_password;
+static int hf_rdp_rdstls_sessionId;
+static int hf_rdp_rdstls_autoReconnectCookieLen;
+static int hf_rdp_rdstls_autoReconnectCookie;
+static int hf_rdp_rdstls_dataTypeAuthResp;
+static int hf_rdp_rdstls_resultCode;
 
-static int hf_rdp_headerType = -1;
-static int hf_rdp_headerLength = -1;
-static int hf_rdp_versionMajor = -1;
-static int hf_rdp_versionMinor = -1;
-static int hf_rdp_desktopWidth = -1;
-static int hf_rdp_desktopHeight = -1;
-static int hf_rdp_colorDepth = -1;
-static int hf_rdp_SASSequence = -1;
-static int hf_rdp_keyboardLayout = -1;
-static int hf_rdp_clientBuild = -1;
-static int hf_rdp_clientName = -1;
-static int hf_rdp_keyboardType = -1;
-static int hf_rdp_keyboardSubType = -1;
-static int hf_rdp_keyboardFunctionKey = -1;
-static int hf_rdp_imeFileName = -1;
-static int hf_rdp_postBeta2ColorDepth = -1;
-static int hf_rdp_clientProductId = -1;
-static int hf_rdp_serialNumber = -1;
-static int hf_rdp_highColorDepth = -1;
-static int hf_rdp_supportedColorDepths = -1;
-static int hf_rdp_earlyCapabilityFlags = -1;
-static int hf_rdp_clientDigProductId = -1;
-static int hf_rdp_connectionType = -1;
-static int hf_rdp_pad1octet = -1;
-static int hf_rdp_serverSelectedProtocol = -1;
 
-static int hf_rdp_encryptionMethods = -1;
-static int hf_rdp_extEncryptionMethods = -1;
-static int hf_rdp_cluster_flags = -1;
-static int hf_rdp_redirectedSessionId = -1;
-static int hf_rdp_msgChannelFlags = -1;
-static int hf_rdp_msgChannelId = -1;
-static int hf_rdp_monitorFlags = -1;
-static int hf_rdp_monitorExFlags = -1;
-static int hf_rdp_monitorAttributeSize = -1;
-static int hf_rdp_monitorCount = -1;
-static int hf_rdp_multiTransportFlags = -1;
+static int hf_rdp_securityExchangePDU;
+static int hf_rdp_clientInfoPDU;
+static int hf_rdp_validClientLicenseData;
 
-static int hf_rdp_monitorDefLeft = -1;
-static int hf_rdp_monitorDefTop = -1;
-static int hf_rdp_monitorDefRight = -1;
-static int hf_rdp_monitorDefBottom = -1;
-static int hf_rdp_monitorDefFlags = -1;
+static int hf_rdp_headerType;
+static int hf_rdp_headerLength;
+static int hf_rdp_versionMajor;
+static int hf_rdp_versionMinor;
+static int hf_rdp_desktopWidth;
+static int hf_rdp_desktopHeight;
+static int hf_rdp_colorDepth;
+static int hf_rdp_SASSequence;
+static int hf_rdp_keyboardLayout;
+static int hf_rdp_clientBuild;
+static int hf_rdp_clientName;
+static int hf_rdp_keyboardType;
+static int hf_rdp_keyboardSubType;
+static int hf_rdp_keyboardFunctionKey;
+static int hf_rdp_imeFileName;
+static int hf_rdp_postBeta2ColorDepth;
+static int hf_rdp_clientProductId;
+static int hf_rdp_serialNumber;
+static int hf_rdp_highColorDepth;
+static int hf_rdp_supportedColorDepths;
+static int hf_rdp_earlyCapabilityFlags;
+static int hf_rdp_clientDigProductId;
+static int hf_rdp_connectionType;
+static int hf_rdp_pad1octet;
+static int hf_rdp_serverSelectedProtocol;
 
-static int hf_rdp_encryptionMethod = -1;
-static int hf_rdp_encryptionLevel  = -1;
-static int hf_rdp_serverRandomLen  = -1;
-static int hf_rdp_serverCertLen  = -1;
-static int hf_rdp_serverRandom = -1;
-static int hf_rdp_serverCertificate = -1;
-static int hf_rdp_clientRequestedProtocols = -1;
-static int hf_rdp_MCSChannelId = -1;
-static int hf_rdp_channelCount = -1;
-static int hf_rdp_channelIdArray = -1;
-static int hf_rdp_Pad = -1;
-static int hf_rdp_length = -1;
-static int hf_rdp_encryptedClientRandom = -1;
-static int hf_rdp_dataSignature = -1;
-static int hf_rdp_fipsLength = -1;
-static int hf_rdp_fipsVersion = -1;
-static int hf_rdp_padlen = -1;
-static int hf_rdp_flags = -1;
-static int hf_rdp_flagsPkt = -1;
-static int hf_rdp_flagsEncrypt = -1;
-static int hf_rdp_flagsResetSeqno = -1;
-static int hf_rdp_flagsIgnoreSeqno = -1;
-static int hf_rdp_flagsLicenseEncrypt = -1;
-static int hf_rdp_flagsSecureChecksum = -1;
-static int hf_rdp_flagsFlagsHiValid = -1;
-static int hf_rdp_flagsAutodetectReq = -1;
-static int hf_rdp_flagsAutodetectResp = -1;
-static int hf_rdp_flagsHeartbeat = -1;
-static int hf_rdp_flagsTransportReq = -1;
-static int hf_rdp_flagsTransportResp = -1;
-static int hf_rdp_heartbeat_reserved = -1;
-static int hf_rdp_heartbeat_period = -1;
-static int hf_rdp_heartbeat_count1 = -1;
-static int hf_rdp_heartbeat_count2 = -1;
-static int hf_rdp_bandwidth_header_len = -1;
-static int hf_rdp_bandwidth_header_type = -1;
-static int hf_rdp_bandwidth_seqnumber = -1;
-static int hf_rdp_bandwidth_reqtype = -1;
-static int hf_rdp_bandwidth_resptype = -1;
-static int hf_rdp_bandwidth_measure_payload_len = -1;
-static int hf_rdp_bandwidth_measure_payload_data = -1;
-static int hf_rdp_network_characteristics_basertt = -1;
-static int hf_rdp_network_characteristics_bandwidth = -1;
-static int hf_rdp_network_characteristics_averagertt = -1;
-static int hf_rdp_rtt_measure_time_delta = -1;
-static int hf_rdp_rtt_measure_time_bytecount = -1;
-static int hf_rdp_mt_req_requestId = -1;
-static int hf_rdp_mt_req_protocol = -1;
-static int hf_rdp_mt_req_reserved = -1;
-static int hf_rdp_mt_req_securityCookie = -1;
-static int hf_rdp_mt_rsp_requestId = -1;
-static int hf_rdp_mt_rsp_hrResponse = -1;
-static int hf_rdp_flagsHi = -1;
-static int hf_rdp_codePage = -1;
-static int hf_rdp_optionFlags = -1;
-static int hf_rdp_cbDomain = -1;
-static int hf_rdp_cbUserName = -1;
-static int hf_rdp_cbPassword = -1;
-static int hf_rdp_cbAlternateShell = -1;
-static int hf_rdp_cbWorkingDir = -1;
-static int hf_rdp_cbClientAddress = -1;
-static int hf_rdp_cbClientDir = -1;
-static int hf_rdp_cbAutoReconnectLen = -1;
-static int hf_rdp_domain = -1;
-static int hf_rdp_userName = -1;
-static int hf_rdp_password = -1;
-static int hf_rdp_alternateShell = -1;
-static int hf_rdp_workingDir = -1;
-static int hf_rdp_clientAddressFamily = -1;
-static int hf_rdp_clientAddress = -1;
-static int hf_rdp_clientDir = -1;
-static int hf_rdp_clientTimeZone = -1;
-static int hf_rdp_clientSessionId = -1;
-static int hf_rdp_performanceFlags = -1;
-static int hf_rdp_autoReconnectCookie = -1;
-static int hf_rdp_reserved1 = -1;
-static int hf_rdp_reserved2 = -1;
-static int hf_rdp_bMsgType = -1;
-static int hf_rdp_bVersion = -1;
-static int hf_rdp_wMsgSize = -1;
-static int hf_rdp_wBlobType = -1;
-static int hf_rdp_wBlobLen = -1;
-static int hf_rdp_blobData = -1;
-static int hf_rdp_shareControlHeader = -1;
-static int hf_rdp_totalLength = -1;
-static int hf_rdp_pduType = -1;
-static int hf_rdp_pduTypeType = -1;
-static int hf_rdp_pduTypeVersionLow = -1;
-static int hf_rdp_pduTypeVersionHigh = -1;
-static int hf_rdp_pduSource = -1;
+static int hf_rdp_encryptionMethods;
+static int hf_rdp_extEncryptionMethods;
+static int hf_rdp_cluster_flags;
+static int hf_rdp_cluster_redirectionSupported;
+static int hf_rdp_cluster_sessionIdValid;
+static int hf_rdp_cluster_redirectionVersion;
+static int hf_rdp_cluster_redirectedSmartcard;
+static int hf_rdp_redirectedSessionId;
+static int hf_rdp_msgChannelFlags;
+static int hf_rdp_msgChannelId;
+static int hf_rdp_monitorFlags;
+static int hf_rdp_monitorExFlags;
+static int hf_rdp_monitorAttributeSize;
+static int hf_rdp_monitorCount;
+static int hf_rdp_multiTransportFlags;
 
-static int hf_rdp_shareId = -1;
-static int hf_rdp_pad1 = -1;
-static int hf_rdp_streamId = -1;
-static int hf_rdp_uncompressedLength = -1;
-static int hf_rdp_pduType2 = -1;
-static int hf_rdp_compressedType = -1;
-static int hf_rdp_compressedTypeType = -1;
-static int hf_rdp_compressedTypeCompressed = -1;
-static int hf_rdp_compressedTypeAtFront = -1;
-static int hf_rdp_compressedTypeFlushed = -1;
-static int hf_rdp_compressedLength = -1;
-static int hf_rdp_wErrorCode = -1;
-static int hf_rdp_wStateTransition = -1;
-static int hf_rdp_numberEntries = -1;
-static int hf_rdp_totalNumberEntries = -1;
-static int hf_rdp_mapFlags = -1;
-static int hf_rdp_fontMapFirst = -1;
-static int hf_rdp_fontMapLast = -1;
+static int hf_rdp_monitorDefLeft;
+static int hf_rdp_monitorDefTop;
+static int hf_rdp_monitorDefRight;
+static int hf_rdp_monitorDefBottom;
+static int hf_rdp_monitorDefFlags;
+
+static int hf_rdp_encryptionMethod;
+static int hf_rdp_encryptionLevel;
+static int hf_rdp_serverRandomLen;
+static int hf_rdp_serverCertLen;
+static int hf_rdp_serverRandom;
+static int hf_rdp_serverCertificate;
+static int hf_rdp_clientRequestedProtocols;
+static int hf_rdp_MCSChannelId;
+static int hf_rdp_channelCount;
+static int hf_rdp_channelIdArray;
+static int hf_rdp_Pad;
+static int hf_rdp_length;
+static int hf_rdp_encryptedClientRandom;
+static int hf_rdp_dataSignature;
+static int hf_rdp_fipsLength;
+static int hf_rdp_fipsVersion;
+static int hf_rdp_padlen;
+static int hf_rdp_flags;
+static int hf_rdp_flagsPkt;
+static int hf_rdp_flagsEncrypt;
+static int hf_rdp_flagsResetSeqno;
+static int hf_rdp_flagsIgnoreSeqno;
+static int hf_rdp_flagsLicenseEncrypt;
+static int hf_rdp_flagsSecureChecksum;
+static int hf_rdp_flagsFlagsHiValid;
+static int hf_rdp_flagsAutodetectReq;
+static int hf_rdp_flagsAutodetectResp;
+static int hf_rdp_flagsHeartbeat;
+static int hf_rdp_flagsTransportReq;
+static int hf_rdp_flagsTransportResp;
+static int hf_rdp_heartbeat_reserved;
+static int hf_rdp_heartbeat_period;
+static int hf_rdp_heartbeat_count1;
+static int hf_rdp_heartbeat_count2;
+static int hf_rdp_bandwidth_header_len;
+static int hf_rdp_bandwidth_header_type;
+static int hf_rdp_bandwidth_seqnumber;
+static int hf_rdp_bandwidth_reqtype;
+static int hf_rdp_bandwidth_resptype;
+static int hf_rdp_bandwidth_measure_payload_len;
+static int hf_rdp_bandwidth_measure_payload_data;
+static int hf_rdp_network_characteristics_basertt;
+static int hf_rdp_network_characteristics_bandwidth;
+static int hf_rdp_network_characteristics_averagertt;
+static int hf_rdp_rtt_measure_time_delta;
+static int hf_rdp_rtt_measure_time_bytecount;
+static int hf_rdp_mt_req_requestId;
+static int hf_rdp_mt_req_protocol;
+static int hf_rdp_mt_req_reserved;
+static int hf_rdp_mt_req_securityCookie;
+static int hf_rdp_mt_rsp_requestId;
+static int hf_rdp_mt_rsp_hrResponse;
+static int hf_rdp_flagsHi;
+static int hf_rdp_codePage;
+static int hf_rdp_optionFlags;
+static int hf_rdp_flagsInfoMouse;
+static int hf_rdp_flagsDisableCtrlAltDel;
+static int hf_rdp_flagsAutoLogon;
+static int hf_rdp_flagsUnicode;
+static int hf_rdp_flagsMaximizeShell;
+static int hf_rdp_flagsLogonNotify;
+static int hf_rdp_flagsCompression;
+static int hf_rdp_flagsCompressionType;
+static int hf_rdp_flagsEnableWindowsKey;
+static int hf_rdp_flagsRemoteConsoleAudio;
+static int hf_rdp_flagsForceEncryptedCsPdu;
+static int hf_rdp_flagsRail;
+static int hf_rdp_flagsLogonErrors;
+static int hf_rdp_flagsHasWheel;
+static int hf_rdp_flagsPasswordIsScPin;
+static int hf_rdp_flagsNoAudioPlayback;
+static int hf_rdp_flagsUsingSavedCreds;
+static int hf_rdp_flagsAudioCapture;
+static int hf_rdp_flagsVideoDisable;
+static int hf_rdp_flagsReserved1;
+static int hf_rdp_flagsReserved2;
+static int hf_rdp_flagsHidefRailSupported;
+static int hf_rdp_cbDomain;
+static int hf_rdp_cbUserName;
+static int hf_rdp_cbPassword;
+static int hf_rdp_cbAlternateShell;
+static int hf_rdp_cbWorkingDir;
+static int hf_rdp_cbClientAddress;
+static int hf_rdp_cbClientDir;
+static int hf_rdp_cbAutoReconnectLen;
+static int hf_rdp_domain;
+static int hf_rdp_userName;
+static int hf_rdp_password;
+static int hf_rdp_alternateShell;
+static int hf_rdp_workingDir;
+static int hf_rdp_clientAddressFamily;
+static int hf_rdp_clientAddress;
+static int hf_rdp_clientDir;
+static int hf_rdp_clientTimeZone;
+static int hf_rdp_clientSessionId;
+static int hf_rdp_performanceFlags;
+static int hf_rdp_autoReconnectCookie;
+static int hf_rdp_reserved1;
+static int hf_rdp_reserved2;
+static int hf_rdp_cbDynamicDSTTimeZoneKeyName;
+static int hf_rdp_dynamicDSTTimeZoneKeyName;
+static int hf_rdp_dynamicDaylightTimeDisabled;
+
+static int hf_rdp_bMsgType;
+static int hf_rdp_bVersion;
+static int hf_rdp_wMsgSize;
+static int hf_rdp_wBlobType;
+static int hf_rdp_wBlobLen;
+static int hf_rdp_blobData;
+static int hf_rdp_shareControlHeader;
+static int hf_rdp_totalLength;
+static int hf_rdp_pduType;
+static int hf_rdp_pduTypeType;
+static int hf_rdp_pduTypeVersionLow;
+static int hf_rdp_pduTypeVersionHigh;
+static int hf_rdp_pduSource;
+
+static int hf_rdp_shareId;
+static int hf_rdp_pad1;
+static int hf_rdp_streamId;
+static int hf_rdp_uncompressedLength;
+static int hf_rdp_pduType2;
+static int hf_rdp_compressedType;
+static int hf_rdp_compressedTypeType;
+static int hf_rdp_compressedTypeCompressed;
+static int hf_rdp_compressedTypeAtFront;
+static int hf_rdp_compressedTypeFlushed;
+static int hf_rdp_compressedLength;
+static int hf_rdp_wErrorCode;
+static int hf_rdp_wStateTransition;
+static int hf_rdp_numberEntries;
+static int hf_rdp_totalNumberEntries;
+static int hf_rdp_mapFlags;
+static int hf_rdp_fontMapFirst;
+static int hf_rdp_fontMapLast;
 
 /* Control */
-static int hf_rdp_action = -1;
-static int hf_rdp_grantId = -1;
-static int hf_rdp_controlId = -1;
+static int hf_rdp_action;
+static int hf_rdp_grantId;
+static int hf_rdp_controlId;
 
 /* Synchronize */
-static int hf_rdp_messageType = -1;
-static int hf_rdp_targetUser = -1;
+static int hf_rdp_messageType;
+static int hf_rdp_targetUser;
 
 /* BitmapCache Persistent List */
-static int hf_rdp_numEntriesCache0 = -1;
-static int hf_rdp_numEntriesCache1 = -1;
-static int hf_rdp_numEntriesCache2 = -1;
-static int hf_rdp_numEntriesCache3 = -1;
-static int hf_rdp_numEntriesCache4 = -1;
-static int hf_rdp_totalEntriesCache0 = -1;
-static int hf_rdp_totalEntriesCache1 = -1;
-static int hf_rdp_totalEntriesCache2 = -1;
-static int hf_rdp_totalEntriesCache3 = -1;
-static int hf_rdp_totalEntriesCache4 = -1;
-static int hf_rdp_bBitMask = -1;
-static int hf_rdp_Pad2 = -1;
-static int hf_rdp_Pad3 = -1;
+static int hf_rdp_numEntriesCache0;
+static int hf_rdp_numEntriesCache1;
+static int hf_rdp_numEntriesCache2;
+static int hf_rdp_numEntriesCache3;
+static int hf_rdp_numEntriesCache4;
+static int hf_rdp_totalEntriesCache0;
+static int hf_rdp_totalEntriesCache1;
+static int hf_rdp_totalEntriesCache2;
+static int hf_rdp_totalEntriesCache3;
+static int hf_rdp_totalEntriesCache4;
+static int hf_rdp_bBitMask;
+static int hf_rdp_Pad2;
+static int hf_rdp_Pad3;
+
+static int hf_rdp_statusInfo_status;
 
 /* BitmapCache Persistent List Entry */
-/* static int hf_rdp_Key1 = -1; */
-/* static int hf_rdp_Key2 = -1; */
+/* static int hf_rdp_Key1; */
+/* static int hf_rdp_Key2; */
 
 /* FontList */
 #if 0
-static int hf_rdp_numberFonts = -1;
-static int hf_rdp_totalNumFonts = -1;
-static int hf_rdp_listFlags = -1;
+static int hf_rdp_numberFonts;
+static int hf_rdp_totalNumFonts;
+static int hf_rdp_listFlags;
 #endif
-static int hf_rdp_entrySize = -1;
+static int hf_rdp_entrySize;
 
 /* Confirm Active PDU */
-static int hf_rdp_originatorId = -1;
-static int hf_rdp_lengthSourceDescriptor = -1;
-static int hf_rdp_lengthCombinedCapabilities = -1;
-static int hf_rdp_sourceDescriptor = -1;
-static int hf_rdp_numberCapabilities = -1;
-static int hf_rdp_pad2Octets = -1;
-static int hf_rdp_capabilitySet = -1;
-static int hf_rdp_capabilitySetType = -1;
-static int hf_rdp_lengthCapability = -1;
-static int hf_rdp_capabilityData = -1;
-static int hf_rdp_sessionId = -1;
+static int hf_rdp_originatorId;
+static int hf_rdp_lengthSourceDescriptor;
+static int hf_rdp_lengthCombinedCapabilities;
+static int hf_rdp_sourceDescriptor;
+static int hf_rdp_numberCapabilities;
+static int hf_rdp_pad2Octets;
+static int hf_rdp_capabilitySet;
+static int hf_rdp_capabilitySetType;
+static int hf_rdp_lengthCapability;
+static int hf_rdp_capabilityData;
+static int hf_rdp_capaGen_fastpathflag_supported;
+static int hf_rdp_capaGen_no_bitmap_comp_hdr;
+static int hf_rdp_capaGen_long_credentials;
+static int hf_rdp_capaGen_autoreconnect;
+static int hf_rdp_capaGen_encsaltedchecksum;
+static int hf_rdp_capaGen_osMajorType;
+static int hf_rdp_capaGen_osMinorType;
+static int hf_rdp_capaGen_protocolVersion;
+static int hf_rdp_capaGen_pad2octets;
+static int hf_rdp_capaGen_compressionTypes;
+static int hf_rdp_capaGen_extraFlags;
+static int hf_rdp_capaGen_updateCapaFlag;
+static int hf_rdp_capaGen_remoteUnshareFlags;
+static int hf_rdp_capaGen_compressionLevel;
+static int hf_rdp_capaGen_refreshRect;
+static int hf_rdp_capaGen_suppressOutput;
+static int hf_rdp_capaRail_supportedLevel;
+static int hf_rdp_capaRail_flag_supported;
+static int hf_rdp_capaRail_flag_dockedlangbar;
+static int hf_rdp_capaRail_flag_shellintegration;
+static int hf_rdp_capaRail_flag_lang_ime_sync;
+static int hf_rdp_capaRail_flag_server_to_client_ime_sync;
+static int hf_rdp_capaRail_flag_hide_minimized;
+static int hf_rdp_capaRail_flag_windows_cloaking;
+static int hf_rdp_capaRail_flag_handshakeex;
+static int hf_rdp_sessionId;
 
-/* static int hf_rdp_unknownData = -1; */
-static int hf_rdp_notYetImplemented = -1;
-static int hf_rdp_encrypted = -1;
-/* static int hf_rdp_compressed = -1; */
+/* static int hf_rdp_unknownData; */
+static int hf_rdp_notYetImplemented;
+static int hf_rdp_encrypted;
+/* static int hf_rdp_compressed; */
 
-static int hf_rdp_channelDefArray = -1;
-static int hf_rdp_channelDef = -1;
-static int hf_rdp_name = -1;
-static int hf_rdp_options = -1;
-static int hf_rdp_optionsInitialized = -1;
-static int hf_rdp_optionsEncryptRDP = -1;
-static int hf_rdp_optionsEncryptSC = -1;
-static int hf_rdp_optionsEncryptCS = -1;
-static int hf_rdp_optionsPriHigh = -1;
-static int hf_rdp_optionsPriMed = -1;
-static int hf_rdp_optionsPriLow = -1;
-static int hf_rdp_optionsCompressRDP = -1;
-static int hf_rdp_optionsCompress = -1;
-static int hf_rdp_optionsShowProtocol= -1;
-static int hf_rdp_optionsRemoteControlPersistent = -1;
+static int hf_rdp_channelDefArray;
+static int hf_rdp_channelDef;
+static int hf_rdp_name;
+static int hf_rdp_options;
+static int hf_rdp_optionsInitialized;
+static int hf_rdp_optionsEncryptRDP;
+static int hf_rdp_optionsEncryptSC;
+static int hf_rdp_optionsEncryptCS;
+static int hf_rdp_optionsPriHigh;
+static int hf_rdp_optionsPriMed;
+static int hf_rdp_optionsPriLow;
+static int hf_rdp_optionsCompressRDP;
+static int hf_rdp_optionsCompress;
+static int hf_rdp_optionsShowProtocol;
+static int hf_rdp_optionsRemoteControlPersistent;
+static int hf_rdp_channelId;
 
-static int hf_rdp_channelPDUHeader = -1;
-static int hf_rdp_channelFlags = -1;
-static int hf_rdp_channelFlagFirst = -1;
-static int hf_rdp_channelFlagLast = -1;
-static int hf_rdp_channelFlagShowProtocol = -1;
-static int hf_rdp_channelFlagSuspend = -1;
-static int hf_rdp_channelFlagResume = -1;
-static int hf_rdp_channelPacketCompressed = -1;
-static int hf_rdp_channelPacketAtFront = -1;
-static int hf_rdp_channelPacketFlushed = -1;
-static int hf_rdp_channelPacketCompressionType = -1;
-static int hf_rdp_virtualChannelData = -1;
+static int hf_rdp_channelPDUHeader;
+static int hf_rdp_channelFlags;
+static int hf_rdp_channelFlagFirst;
+static int hf_rdp_channelFlagLast;
+static int hf_rdp_channelFlagShowProtocol;
+static int hf_rdp_channelFlagSuspend;
+static int hf_rdp_channelFlagResume;
+static int hf_rdp_channelPacketCompressed;
+static int hf_rdp_channelPacketAtFront;
+static int hf_rdp_channelPacketFlushed;
+static int hf_rdp_channelPacketCompressionType;
+static int hf_rdp_virtualChannelData;
 
-static int hf_rdp_pointerFlags = -1;
-static int hf_rdp_pointerFlags_move = -1;
-static int hf_rdp_pointerFlags_down = -1;
-static int hf_rdp_pointerFlags_button1 = -1;
-static int hf_rdp_pointerFlags_button2 = -1;
-static int hf_rdp_pointerFlags_button3 = -1;
-static int hf_rdp_pointerFlags_wheel_rotation = -1;
-static int hf_rdp_pointerFlags_wheel_neg = -1;
-static int hf_rdp_pointerFlags_wheel = -1;
-static int hf_rdp_pointerFlags_hwheel = -1;
-static int hf_rdp_pointer_xpos = -1;
-static int hf_rdp_pointer_ypos = -1;
+static int hf_rdp_pointerFlags;
+static int hf_rdp_pointerFlags_move;
+static int hf_rdp_pointerFlags_down;
+static int hf_rdp_pointerFlags_button1;
+static int hf_rdp_pointerFlags_button2;
+static int hf_rdp_pointerFlags_button3;
+static int hf_rdp_pointerFlags_wheel_rotation;
+static int hf_rdp_pointerFlags_wheel_neg;
+static int hf_rdp_pointerFlags_wheel;
+static int hf_rdp_pointerFlags_hwheel;
+static int hf_rdp_pointer_xpos;
+static int hf_rdp_pointer_ypos;
 
-static int hf_rdp_pointerxFlags = -1;
-static int hf_rdp_pointerxFlags_down = -1;
-static int hf_rdp_pointerxFlags_button1 = -1;
-static int hf_rdp_pointerxFlags_button2 = -1;
-static int hf_rdp_pointerx_xpos = -1;
-static int hf_rdp_pointerx_ypos = -1;
+static int hf_rdp_pointerxFlags;
+static int hf_rdp_pointerxFlags_down;
+static int hf_rdp_pointerxFlags_button1;
+static int hf_rdp_pointerxFlags_button2;
+static int hf_rdp_pointerx_xpos;
+static int hf_rdp_pointerx_ypos;
 
 
-static int hf_rdp_fastpathHeader = -1;
-static int hf_rdp_fastpathAction = -1;
-static int hf_rdp_fastpathFlags = -1;
-static int hf_rdp_fastpathClientNumEvents = -1;
-static int hf_rdp_fastpathServerReserved = -1;
+static int hf_rdp_fastpathHeader;
+static int hf_rdp_fastpathAction;
+static int hf_rdp_fastpathFlags;
+static int hf_rdp_fastpathClientNumEvents;
+static int hf_rdp_fastpathServerReserved;
 
-static int hf_rdp_fastpathPDULength = -1;
-static int hf_rdp_fastpathServerCompressionType = -1;
-static int hf_rdp_fastpathServerCompressionType_compressed = -1;
-static int hf_rdp_fastpathServerCompressionType_atfront = -1;
-static int hf_rdp_fastpathServerCompressionType_flushed = -1;
-static int hf_rdp_fastpathServerCompressionFlags = -1;
+static int hf_rdp_fastpathPDULength;
+static int hf_rdp_fastpathServerCompressionType;
+static int hf_rdp_fastpathServerCompressionType_compressed;
+static int hf_rdp_fastpathServerCompressionType_atfront;
+static int hf_rdp_fastpathServerCompressionType_flushed;
+static int hf_rdp_fastpathServerCompressionFlags;
 
-static int hf_rdp_fastpathServerUpdateCode = -1;
-static int hf_rdp_fastpathServerFragmentation = -1;
-static int hf_rdp_fastpathServerCompression = -1;
-static int hf_rdp_fastpathServerSize = -1;
+static int hf_rdp_fastpathServerUpdateCode;
+static int hf_rdp_fastpathServerFragmentation;
+static int hf_rdp_fastpathServerCompression;
+static int hf_rdp_fastpathServerSize;
 
-static int hf_rdp_fastpathInputHeader = -1;
-static int hf_rdp_fastpathClientNumEvents2 = -1;
-static int hf_rdp_fastpathClientEventCode = -1;
-static int hf_rdp_fastpathClientFlags = -1;
-static int hf_rdp_fastpathScancodeRelease = -1;
-static int hf_rdp_fastpathScancodeExtended = -1;
-static int hf_rdp_fastpathScancodeExtended1 = -1;
-static int hf_rdp_fastpathScancodeKeyCode = -1;
-static int hf_rdp_fastpathSyncScrollLock = -1;
-static int hf_rdp_fastpathSyncNumLock = -1;
-static int hf_rdp_fastpathSyncCapsLock = -1;
-static int hf_rdp_fastpathSyncKanaLock = -1;
-static int hf_rdp_fastpathQoeTimestamp = -1;
-static int hf_rdp_fastpathUnicodeFlagsRelease = -1;
-static int hf_rdp_fastpathUnicodeCode = -1;
+static int hf_rdp_fastpathInputHeader;
+static int hf_rdp_fastpathClientNumEvents2;
+static int hf_rdp_fastpathClientEventCode;
+static int hf_rdp_fastpathClientFlags;
+static int hf_rdp_fastpathScancodeRelease;
+static int hf_rdp_fastpathScancodeExtended;
+static int hf_rdp_fastpathScancodeExtended1;
+static int hf_rdp_fastpathScancodeKeyCode;
+static int hf_rdp_fastpathSyncScrollLock;
+static int hf_rdp_fastpathSyncNumLock;
+static int hf_rdp_fastpathSyncCapsLock;
+static int hf_rdp_fastpathSyncKanaLock;
+static int hf_rdp_fastpathQoeTimestamp;
+static int hf_rdp_fastpathUnicodeFlagsRelease;
+static int hf_rdp_fastpathUnicodeCode;
+static int hf_rdp_fastpathRelMouseFlags;
+static int hf_rdp_fastpathRelMouseFlags_Move;
+static int hf_rdp_fastpathRelMouseFlags_Down;
+static int hf_rdp_fastpathRelMouseFlags_Button1;
+static int hf_rdp_fastpathRelMouseFlags_Button2;
+static int hf_rdp_fastpathRelMouseFlags_Button3;
+static int hf_rdp_fastpathRelMouseFlags_XButton1;
+static int hf_rdp_fastpathRelMouseFlags_XButton2;
+static int hf_rdp_fastpathRelMouseDeltaX;
+static int hf_rdp_fastpathRelMouseDeltaY;
 
 static int * const fastpath_clientHeader_flags[] = {
 	&hf_rdp_fastpathAction,
@@ -495,6 +595,17 @@ static int * const ts_pointerx_flags[] = {
 	NULL
 };
 
+static int * const ts_relpointer_flags[] = {
+	&hf_rdp_fastpathRelMouseFlags_Move,
+	&hf_rdp_fastpathRelMouseFlags_Down,
+	&hf_rdp_fastpathRelMouseFlags_Button1,
+	&hf_rdp_fastpathRelMouseFlags_Button2,
+	&hf_rdp_fastpathRelMouseFlags_Button3,
+	&hf_rdp_fastpathRelMouseFlags_XButton1,
+	&hf_rdp_fastpathRelMouseFlags_XButton2,
+	NULL
+};
+
 static int * const fastpath_serverHeader_flags[] = {
 	&hf_rdp_fastpathAction,
 	&hf_rdp_fastpathServerReserved,
@@ -511,22 +622,22 @@ static int * const fastpath_servercompression_flags[] = {
 };
 
 
-static int hf_rdp_wYear = -1;
-static int hf_rdp_wMonth = -1;
-static int hf_rdp_wDayOfWeek = -1;
-static int hf_rdp_wDay = -1;
-static int hf_rdp_wHour = -1;
-static int hf_rdp_wMinute = -1;
-static int hf_rdp_wSecond = -1;
-static int hf_rdp_wMilliseconds = -1;
+static int hf_rdp_wYear;
+static int hf_rdp_wMonth;
+static int hf_rdp_wDayOfWeek;
+static int hf_rdp_wDay;
+static int hf_rdp_wHour;
+static int hf_rdp_wMinute;
+static int hf_rdp_wSecond;
+static int hf_rdp_wMilliseconds;
 
-static int hf_rdp_Bias = -1;
-static int hf_rdp_StandardName = -1;
-static int hf_rdp_StandardDate = -1;
-static int hf_rdp_StandardBias = -1;
-static int hf_rdp_DaylightName = -1;
-static int hf_rdp_DaylightDate = -1;
-static int hf_rdp_DaylightBias = -1;
+static int hf_rdp_Bias;
+static int hf_rdp_StandardName;
+static int hf_rdp_StandardDate;
+static int hf_rdp_StandardBias;
+static int hf_rdp_DaylightName;
+static int hf_rdp_DaylightDate;
+static int hf_rdp_DaylightBias;
 
 #define TYPE_RDP_NEG_REQ          0x01
 #define TYPE_RDP_NEG_RSP          0x02
@@ -541,7 +652,9 @@ static const value_string neg_type_vals[] = {
   { 0, NULL }
 };
 
+
 #define RESTRICTED_ADMIN_MODE_REQUIRED 0x01
+#define REDIRECTED_AUTH_REQUIRED       0x02
 #define CORRELATION_INFO_PRESENT       0x08
 
 static const value_string failure_code_vals[] = {
@@ -551,6 +664,16 @@ static const value_string failure_code_vals[] = {
   { 0x00000004, "Inconsistent flags" },
   { 0x00000005, "Server requires Enhanced RDP Security with CredSSP" },
   { 0x00000006, "Server requires Enhanced RDP Security with TLS and certificate-based client authentication" },
+  { 0, NULL }
+};
+
+static const value_string redirectionVersions_vals[] = {
+  { 0x00, "Version 1" },
+  { 0x01, "Version 2" },
+  { 0x02, "Version 3" },
+  { 0x03, "Version 4" },
+  { 0x04, "Version 5" },
+  { 0x05, "Version 6" },
   { 0, NULL }
 };
 
@@ -737,6 +860,7 @@ static const value_string failure_code_vals[] = {
 #define CAPSTYPE_LARGE_POINTER               0x001B
 #define CAPSTYPE_SURFACE_COMMANDS            0x001C
 #define CAPSTYPE_BITMAP_CODECS               0x001D
+#define CAPSTYPE_FRAME_ACKNOWLEDGE           0x001E
 
 
 #define CHANNEL_OPTION_INITIALIZED               0x80000000
@@ -763,10 +887,10 @@ static const value_string failure_code_vals[] = {
 
 typedef struct rdp_field_info_t {
   const int *pfield;
-  gint32   fixedLength;
-  guint32 *variableLength;
+  int32_t  fixedLength;
+  uint32_t *variableLength;
   int      offsetOrTree;
-  guint32  flags;
+  uint32_t flags;
   const struct rdp_field_info_t *subfields;
 } rdp_field_info_t;
 
@@ -776,6 +900,33 @@ typedef struct rdp_field_info_t {
 #define FI_VARLEN(_hf, _length_) { _hf_, 0, &_length_, 0, 0, NULL }
 #define FI_SUBTREE(_hf_, _len_, _ett_, _sf_) { _hf_, _len_, NULL, _ett_, RDP_FI_SUBTREE, _sf_ }
 #define FI_TERMINATOR {NULL, 0, NULL, 0, 0, NULL}
+
+static const value_string rdp_rdstls_pduTypes_vals[] = {
+  { 0x0001, "RDSTLS capabilities" },
+  { 0x0002, "RDSTLS authReq" },
+  { 0x0004, "RDSTLS authResp" },
+  { 0, NULL }
+};
+
+static const value_string rdp_rdstls_authDataTypes_vals[] = {
+  { 0x0001, "PASSWORD_CREDS" },
+  { 0x0002, "AUTORECONNECT_COOKIE" },
+  { 0x0003, "FEDAUTH_TOKEN"},
+  { 0x0004, "LogonCert" },
+  { 0, NULL }
+};
+
+static const value_string rdp_rdstls_result_vals[] = {
+  { 0x00000000, "Success" },
+  { 0x00000005, "Access denied" },
+  { 0x0000052e, "Logon failure"},
+  { 0x00000530, "Invalid logon hours" },
+  { 0x00000532, "Password expired" },
+  { 0x00000533, "Account disabled" },
+  { 0x00000773, "Password must change" },
+  { 0x00000775, "Account locked out" },
+  { 0, NULL }
+};
 
 static const value_string rdp_headerType_vals[] = {
   { CS_CORE,           "clientCoreData" },
@@ -836,11 +987,12 @@ static const value_string rdp_connectionType_vals[] = {
 };
 
 static const value_string rdp_selectedProtocol_vals[] = {
-  {   0x0, "Standard RDP Security" },
-  {   0x1, "TLS 1.0, 1.1 or 1.2" },
-  {   0x2, "CredSSP" },
-  {   0x4, "RDSTLS protocol" },
-  {   0x8, "CredSSP with Early User Authorization Result PDU" },
+  {   0x00, "Standard RDP Security" },
+  {   0x01, "TLS 1.0, 1.1 or 1.2" },
+  {   0x02, "CredSSP" },
+  {   0x04, "RDSTLS protocol" },
+  {   0x08, "CredSSP with Early User Authorization Result PDU" },
+  {   0x10, "RDS AAD Auth security" },
   {   0x0, NULL},
 };
 
@@ -924,6 +1076,19 @@ static const value_string rdp_fastpath_action_vals[] = {
 };
 
 
+static const value_string serverstatus_vals[] = {
+	{0x00000401, "TS_STATUS_FINDING_DESTINATION"},
+	{0x00000402, "TS_STATUS_LOADING_DESTINATION"},
+	{0x00000403, "TS_STATUS_BRINGING_SESSION_ONLINE"},
+	{0x00000404, "TS_STATUS_REDIRECTING_TO_DESTINATION"},
+	{0x00000501, "TS_STATUS_VM_LOADING"},
+	{0x00000502, "TS_STATUS_VM_WAKING"},
+	{0x00000503, "TS_STATUS_VM_STARTING"},
+	{0x00000504, "TS_STATUS_VM_STARTING_MONITORING"},
+	{0x00000505, "TS_STATUS_VM_RETRYING_MONITORING"},
+	{ 0, NULL},
+};
+
 enum {
 	TYPE_ID_AUTODETECT_REQUEST = 0x00,
 	TYPE_ID_AUTODETECT_RESPONSE = 0x01
@@ -987,6 +1152,7 @@ enum {
 	FASTPATH_INPUT_EVENT_MOUSEX = 0x2,
 	FASTPATH_INPUT_EVENT_SYNC = 0x3,
 	FASTPATH_INPUT_EVENT_UNICODE = 0x4,
+	FASTPATH_INPUT_EVENT_RELMOUSE = 0x5,
 	FASTPATH_INPUT_EVENT_QOE_TIMESTAMP = 0x6
 };
 
@@ -996,6 +1162,7 @@ static const value_string rdp_fastpath_client_event_vals[] = {
 	{ FASTPATH_INPUT_EVENT_MOUSEX, "MouseEx" },
 	{ FASTPATH_INPUT_EVENT_SYNC, "Sync" },
 	{ FASTPATH_INPUT_EVENT_UNICODE, "Unicode" },
+	{ FASTPATH_INPUT_EVENT_RELMOUSE, "RelMouse" },
 	{ FASTPATH_INPUT_EVENT_QOE_TIMESTAMP, "QUOE Timestamp"},
 	{ 0, NULL},
 };
@@ -1136,6 +1303,7 @@ static const value_string rdp_capabilityType_vals[] = {
   { CAPSTYPE_LARGE_POINTER,              "Large Pointer" },
   { CAPSTYPE_SURFACE_COMMANDS,           "Surface Commands" },
   { CAPSTYPE_BITMAP_CODECS,              "Bitmap Codecs" },
+  { CAPSTYPE_FRAME_ACKNOWLEDGE,          "Frame acknowledge" },
   {0, NULL },
 };
 
@@ -1185,11 +1353,9 @@ static const value_string rdp_wMonth_vals[] = {
 static wmem_map_t *rdp_transport_links;
 
 typedef struct {
-	address serverAddr;
-	guint16 serverPort;
-	gboolean reliable;
-	guint32 requestId;
-	guint8 securityCookie[16];
+	bool reliable;
+	uint32_t requestId;
+	uint8_t securityCookie[16];
 
 } rdp_transports_key_t;
 
@@ -1201,15 +1367,14 @@ typedef struct {
 } rdp_transports_link_t;
 
 
-static guint
-rdp_udp_conversation_hash(gconstpointer k)
+static unsigned
+rdp_udp_conversation_hash(const void *k)
 {
-	guint h;
-	gint i;
+	unsigned h;
+	int i;
 	const rdp_transports_key_t *key = (const rdp_transports_key_t *)k;
 
-	h = key->serverPort + key->reliable + key->requestId;
-	h = add_address_to_hash(h, &key->serverAddr);
+	h = key->reliable + key->requestId;
 	for (i = 0; i < 16; i++)
 		h += key->securityCookie[i];
 
@@ -1217,16 +1382,14 @@ rdp_udp_conversation_hash(gconstpointer k)
 }
 
 static gboolean
-rdp_udp_conversation_equal_matched(gconstpointer k1, gconstpointer k2)
+rdp_udp_conversation_equal_matched(const void *k1, const void *k2)
 {
 	const rdp_transports_key_t *key1 = (const rdp_transports_key_t *)k1;
 	const rdp_transports_key_t *key2 = (const rdp_transports_key_t *)k2;
 
-	return addresses_equal(&key1->serverAddr, &key2->serverAddr) &&
-			(key1->serverPort == key2->serverPort) &&
-			(key1->reliable == key2->reliable) &&
-			(key1->requestId == key2->requestId) &&
-			memcmp(key1->securityCookie, key2->securityCookie, 16) == 0;
+	return 	(key1->reliable == key2->reliable) &&
+		(key1->requestId == key2->requestId) &&
+		memcmp(key1->securityCookie, key2->securityCookie, 16) == 0;
 }
 
 /*
@@ -1253,6 +1416,7 @@ rdp_get_conversation_data(packet_info *pinfo)
     rdp_info->encryptionLevel  = 0;
     rdp_info->licenseAgreed    = 0;
     rdp_info->maxChannels      = 0;
+    rdp_info->isRdstls         = false;
     memset(&rdp_info->serverAddr, 0, sizeof(rdp_info->serverAddr));
 
     conversation_add_proto_data(conversation, proto_rdp, rdp_info);
@@ -1262,15 +1426,19 @@ rdp_get_conversation_data(packet_info *pinfo)
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_rdp_fields(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, const rdp_field_info_t *fields, int totlen)
 {
   const rdp_field_info_t *c;
-  gint              len;
+  int               len;
   int               base_offset = offset;
-  guint32           info_flags = 0;
-  guint             encoding;
+  uint32_t          info_flags = 0;
+  unsigned          encoding;
 
-  while (((c = fields++)->pfield) != NULL) {
+  increment_dissection_depth(pinfo);
+
+  for ( ; fields->pfield != NULL; fields++) {
+    c = fields;
     if ((c->fixedLength == 0) && (c->variableLength)) {
       len = *(c->variableLength);
     } else {
@@ -1279,7 +1447,7 @@ dissect_rdp_fields(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tr
       if ((c->variableLength) && (c->fixedLength <= 4)) {
         switch (c->fixedLength) {
         case 1:
-          *(c->variableLength) = tvb_get_guint8(tvb, offset);
+          *(c->variableLength) = tvb_get_uint8(tvb, offset);
           break;
         case 2:
           *(c->variableLength) = tvb_get_letohs(tvb, offset);
@@ -1339,6 +1507,7 @@ dissect_rdp_fields(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tr
               /* XXX: err if > totlen ??          */
   }
 
+  decrement_dissection_depth(pinfo);
   return offset;
 }
 
@@ -1386,15 +1555,19 @@ find_known_channel_by_name(const char *name) {
 		return RDP_CHANNEL_SOUND;
 	if (g_ascii_strcasecmp(name, "cliprdr") == 0)
 		return RDP_CHANNEL_CLIPBOARD;
+	if (g_ascii_strcasecmp(name, "rail") == 0)
+		return RDP_CHANNEL_RAIL;
+	if (g_ascii_strcasecmp(name, "conctrl") == 0)
+		return RDP_CHANNEL_CONCTRL;
 	return RDP_CHANNEL_UNKNOWN;
 }
 
 static int
-dissect_rdp_clientNetworkData(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, guint length, rdp_conv_info_t *rdp_info)
+dissect_rdp_clientNetworkData(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, unsigned length, rdp_conv_info_t *rdp_info)
 {
   proto_tree *next_tree;
   proto_item *pi;
-  guint32     channelCount = 0;
+  uint32_t    channelCount = 0;
 
   rdp_field_info_t net_fields[] = {
     {&hf_rdp_headerType,             2, NULL, 0, 0, NULL },
@@ -1421,10 +1594,6 @@ dissect_rdp_clientNetworkData(tvbuff_t *tvb, int offset, packet_info *pinfo, pro
     FI_SUBTREE(&hf_rdp_options, 4, ett_rdp_options, option_fields),
     FI_TERMINATOR
   };
-  rdp_field_info_t def_fields[] = {
-    FI_SUBTREE(&hf_rdp_channelDef, 12, ett_rdp_channelDef, channel_fields),
-    FI_TERMINATOR
-  };
 
   pi        = proto_tree_add_item(tree, hf_rdp_clientNetworkData, tvb, offset, length, ENC_NA);
   next_tree = proto_item_add_subtree(pi, ett_rdp_clientNetworkData);
@@ -1432,25 +1601,37 @@ dissect_rdp_clientNetworkData(tvbuff_t *tvb, int offset, packet_info *pinfo, pro
   offset = dissect_rdp_fields(tvb, offset, pinfo, next_tree, net_fields, 0);
 
   if (channelCount > 0) {
-    guint i;
+    unsigned i;
     pi        = proto_tree_add_item(next_tree, hf_rdp_channelDefArray, tvb, offset, channelCount * 12, ENC_NA);
     next_tree = proto_item_add_subtree(pi, ett_rdp_channelDefArray);
 
     if (rdp_info)
       rdp_info->maxChannels = MIN(channelCount, RDP_MAX_CHANNELS);
 
-	for (i = 0; i < MIN(channelCount, RDP_MAX_CHANNELS); i++) {
-		if (rdp_info) {
-			rdp_channel_def_t *channel = &rdp_info->staticChannels[i];
-			channel->value = -1; /* unset */
-			channel->strptr = tvb_get_string_enc(wmem_file_scope(), tvb,
-					offset, 8, ENC_ASCII);
-			channel->channelType = find_known_channel_by_name(
-					channel->strptr);
-		}
-		offset = dissect_rdp_fields(tvb, offset, pinfo, next_tree,
-				def_fields, 0);
-	}
+    for (i = 0; i < MIN(channelCount, RDP_MAX_CHANNELS); i++) {
+      rdp_channel_def_t *channel = NULL;
+
+      if (rdp_info)
+         channel = &rdp_info->staticChannels[i];
+
+      if (!PINFO_FD_VISITED(pinfo) && channel) {
+        channel->value = -1; /* unset */
+        channel->strptr = (char*)tvb_get_string_enc(wmem_file_scope(), tvb, offset, 8, ENC_ASCII);
+        channel->channelType = find_known_channel_by_name(channel->strptr);
+        channel->chunks_cs = wmem_multimap_new(wmem_file_scope(), g_direct_hash, g_direct_equal);
+        channel->chunks_sc = wmem_multimap_new(wmem_file_scope(), g_direct_hash, g_direct_equal);
+      }
+
+      char *channelName = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, 8, ENC_ASCII);
+
+      proto_tree *channel_tree = proto_tree_add_subtree_format(next_tree, tvb, offset, 12, ett_rdp_channelDef, NULL, "channel %s", channelName);
+      if (channel)
+          proto_item_set_generated(
+               proto_tree_add_int(channel_tree, hf_rdp_channelId, tvb, offset, 2, channel->value)
+          );
+
+      offset = dissect_rdp_fields(tvb, offset, pinfo, channel_tree, channel_fields, 0);
+    }
 
     if (rdp_info) {
       /* value_strings are normally terminated with a {0, NULL} entry */
@@ -1463,9 +1644,9 @@ dissect_rdp_clientNetworkData(tvbuff_t *tvb, int offset, packet_info *pinfo, pro
 }
 
 static int
-dissect_rdp_basicSecurityHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, guint32 *flags_ptr) {
+dissect_rdp_basicSecurityHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, uint32_t *flags_ptr) {
 
-  guint32 flags = 0;
+  uint32_t flags = 0;
 
   rdp_field_info_t secFlags_fields[] = {
     {&hf_rdp_flagsPkt,           2, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
@@ -1494,7 +1675,7 @@ dissect_rdp_basicSecurityHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, p
 
 
 static int
-dissect_rdp_securityHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, rdp_conv_info_t *rdp_info, gboolean alwaysBasic, guint32 *flags_ptr) {
+dissect_rdp_securityHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, rdp_conv_info_t *rdp_info, bool alwaysBasic, uint32_t *flags_ptr) {
 
   rdp_field_info_t fips_fields[] = {
     {&hf_rdp_fipsLength,        2, NULL, 0, 0, NULL },
@@ -1529,10 +1710,10 @@ dissect_rdp_securityHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_
   return offset;
 }
 
-static rdp_channel_def_t* find_channel(packet_info *pinfo, guint16 channelId) {
+static rdp_channel_def_t* find_channel(packet_info *pinfo, uint16_t channelId) {
 	conversation_t *conversation;
 	rdp_conv_info_t *rdp_info;
-	guint8 i;
+	uint8_t i;
 
 	conversation = find_or_create_conversation(pinfo);
 	if (!conversation)
@@ -1549,26 +1730,37 @@ static rdp_channel_def_t* find_channel(packet_info *pinfo, guint16 channelId) {
 	return NULL;
 }
 
-static rdp_known_channel_t
-find_channel_type(packet_info *pinfo, guint16 channelId) {
-	rdp_channel_def_t* channel = find_channel(pinfo, channelId);
-	if (!channel)
-		return RDP_CHANNEL_UNKNOWN;
 
-	return channel->channelType;
+static bool
+rdp_isServerAddressTarget(packet_info *pinfo)
+{
+	conversation_t *conv;
+	rdp_conv_info_t *rdp_info;
+
+	conv = find_conversation_pinfo(pinfo, 0);
+	if (!conv)
+		return false;
+
+	rdp_info = (rdp_conv_info_t *)conversation_get_proto_data(conv, proto_rdp);
+	if (rdp_info) {
+		rdp_server_address_t *server = &rdp_info->serverAddr;
+		return addresses_equal(&server->addr, &pinfo->dst) && (pinfo->destport == server->port);
+	}
+
+	return false;
 }
 
 
 static int
 dissect_rdp_channelPDU(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
-  rdp_known_channel_t channelType;
-  guint32 length = 0;
-  tvbuff_t *subtvb;
-  guint32 compressed;
+  uint32_t length = 0;
+  uint32_t compressed = 0;
+  uint32_t first = 0;
+  uint32_t last = 0;
 
   rdp_field_info_t flag_fields[] = {
-    {&hf_rdp_channelFlagFirst,        4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
-    {&hf_rdp_channelFlagLast,         4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+    {&hf_rdp_channelFlagFirst,        4, &first, 0, RDP_FI_NOINCOFFSET, NULL },
+    {&hf_rdp_channelFlagLast,         4, &last, 0, RDP_FI_NOINCOFFSET, NULL },
     {&hf_rdp_channelFlagShowProtocol, 4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
     {&hf_rdp_channelFlagSuspend,      4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
     {&hf_rdp_channelFlagResume,       4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
@@ -1587,35 +1779,113 @@ dissect_rdp_channelPDU(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
 
   rdp_field_info_t channelPDU_fields[] =   {
     FI_SUBTREE(&hf_rdp_channelPDUHeader, 8, ett_rdp_channelPDUHeader, channel_fields),
-    FI_FIXEDLEN(&hf_rdp_virtualChannelData, -1),
     FI_TERMINATOR
   };
 
 
-  channelType = find_channel_type(pinfo, t124_get_last_channelId());
-  switch (channelType) {
-  case RDP_CHANNEL_DRDYNVC:
-	  channelPDU_fields[1].pfield = NULL;
-	  break;
-  default:
-	  break;
-  }
-
   /* length is the uncompressed length, and the PDU may be compressed */
   offset = dissect_rdp_fields(tvb, offset, pinfo, tree, channelPDU_fields, 0);
 
-  if (compressed & CHANNEL_PACKET_COMPRESSED) {
+  first = !!(first & CHANNEL_FLAG_FIRST);
+  last = !!(last & CHANNEL_FLAG_LAST);
+  compressed = !!(compressed & CHANNEL_PACKET_COMPRESSED);
+
+  if (compressed) {
 	  dissect_rdp_nyi(tvb, offset, pinfo, tree, "Compressed channel PDU not implemented");
 	  return offset;
   }
 
-  switch (channelType) {
-  case RDP_CHANNEL_DRDYNVC:
-	  subtvb = tvb_new_subset_length(tvb, offset, length);
-	  offset += call_dissector(drdynvc_handle, subtvb, pinfo, tree);
-	  break;
-  default:
-	  break;
+  rdp_channel_def_t* channel = find_channel(pinfo, t124_get_last_channelId());
+  if (channel)
+  {
+	  rdp_channel_pdu_chunk_t *chunk = NULL;
+	  uint32_t payloadLen = tvb_captured_length_remaining(tvb, offset);
+	  uint32_t key = crc32_ccitt_tvb_offset(tvb, offset, payloadLen);
+	  bool packetToServer = rdp_isServerAddressTarget(pinfo);
+	  wmem_multimap_t *chunksMap = packetToServer ? channel->chunks_cs : channel->chunks_sc;
+
+	  if (!PINFO_FD_VISITED(pinfo)) {
+		  rdp_channel_packet_context_t *context = packetToServer ? &channel->current_cs : &channel->current_sc;
+
+		  chunk = wmem_alloc(wmem_file_scope(), sizeof(*chunk));
+		  chunk->tvb = NULL;
+		  chunk->endFrame = 0;
+
+		  if (first) {
+			  context->packetLen = context->pendingLen = length;
+			  context->currentPayload = wmem_array_sized_new(wmem_file_scope(), 1, length);
+			  context->chunks = wmem_array_new(wmem_file_scope(), sizeof(rdp_channel_pdu_chunk_t *));
+			  context->startFrame = pinfo->num;
+		  }
+
+		  chunk->startFrame = context->startFrame;
+		  wmem_array_append(context->currentPayload, tvb_get_ptr(tvb, offset, payloadLen), payloadLen);
+		  context->pendingLen -= payloadLen;
+		  wmem_array_append(context->chunks, &chunk, 1);
+
+		  if (last) {
+			  if (context->pendingLen) {
+				  printf("%d: ooups context->pendingLen=%d\n", pinfo->num, context->pendingLen);
+			  }
+
+			  chunk->reassembled = !first;
+			  chunk->tvb = tvb_new_real_data(wmem_array_get_raw(context->currentPayload), context->packetLen, context->packetLen);
+
+			  for (unsigned i = 0; i < wmem_array_get_count(context->chunks); i++) {
+				  rdp_channel_pdu_chunk_t *c = *(rdp_channel_pdu_chunk_t**) wmem_array_index(context->chunks, i);
+				  c->endFrame = pinfo->num;
+			  }
+
+			  wmem_destroy_array(context->chunks);
+			  context->chunks = wmem_array_new(wmem_file_scope(), sizeof(rdp_channel_pdu_chunk_t *));
+		  }
+
+		  wmem_multimap_insert32(chunksMap, GUINT_TO_POINTER(key), pinfo->num, chunk);
+	  } else {
+		  chunk = (rdp_channel_pdu_chunk_t *)wmem_multimap_lookup32(chunksMap, GUINT_TO_POINTER(key), pinfo->num);
+	  }
+
+	  if (chunk && chunk->tvb) {
+		  tvbuff_t *showTvb;
+		  if (chunk->reassembled) {
+			  showTvb = chunk->tvb;
+			  add_new_data_source(pinfo, chunk->tvb, "Reassembled channel PDUs");
+		  } else {
+			  showTvb = tvb_new_subset_length(tvb, offset, length);
+		  }
+
+		  switch (channel->channelType) {
+			  case RDP_CHANNEL_DRDYNVC:
+				  offset += call_dissector(drdynvc_handle, showTvb, pinfo, tree);
+				  break;
+			  case RDP_CHANNEL_RAIL:
+				  offset += call_dissector(rail_handle, showTvb, pinfo, tree);
+				  break;
+			  case RDP_CHANNEL_CLIPBOARD:
+				  offset += call_dissector(cliprdr_handle, showTvb, pinfo, tree);
+				  break;
+			  case RDP_CHANNEL_SOUND:
+				  offset += call_dissector(snd_handle, showTvb, pinfo, tree);
+				  break;
+			  case RDP_CHANNEL_DISK:
+				  offset += call_dissector(rdpdr_handle, showTvb, pinfo, tree);
+				  break;
+			  case RDP_CHANNEL_CONCTRL:
+				  offset += call_dissector(conctrl_handle, showTvb, pinfo, tree);
+				  break;
+			  default: {
+				  col_append_sep_fstr(pinfo->cinfo, COL_INFO, ",", " channel=%s", channel->strptr);
+				  proto_tree_add_item(tree, hf_rdp_virtualChannelData, showTvb, 0, length, ENC_NA);
+				  break;
+			  }
+		  }
+	  } else {
+		  col_append_sep_fstr(pinfo->cinfo, COL_INFO, ",", "Virtual Channel PDU %s", channel->strptr);
+		  proto_tree_add_item(tree, hf_rdp_virtualChannelData, tvb, offset, -1, ENC_NA);
+	  }
+  } else {
+	  col_append_sep_fstr(pinfo->cinfo, COL_INFO, ",", "Virtual Channel PDU %d", t124_get_last_channelId());
+	  proto_tree_add_item(tree, hf_rdp_virtualChannelData, tvb, offset, -1, ENC_NA);
   }
 
   return offset;
@@ -1623,9 +1893,9 @@ dissect_rdp_channelPDU(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
 
 static int
 dissect_rdp_shareDataHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
-  guint32 pduType2 = 0;
-  guint32 compressedType;
-  guint32 action = 0;
+  uint32_t pduType2 = 0;
+  uint32_t compressedType;
+  uint32_t action = 0;
 
   rdp_field_info_t compressed_fields[] =   {
     {&hf_rdp_compressedTypeType, 1, &compressedType, 0, RDP_FI_NOINCOFFSET, NULL },
@@ -1682,6 +1952,11 @@ dissect_rdp_shareDataHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto
     {&hf_rdp_Pad2,               1, NULL, 0, 0, NULL },
     {&hf_rdp_Pad3,               2, NULL, 0, 0, NULL },
     FI_TERMINATOR
+  };
+
+  rdp_field_info_t serverStatusInfo_fields[] = {
+	{&hf_rdp_statusInfo_status,   4, NULL, 0, 0, NULL },
+	FI_TERMINATOR
   };
 
   const rdp_field_info_t *fields;
@@ -1742,6 +2017,7 @@ dissect_rdp_shareDataHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto
   case PDUTYPE2_ARC_STATUS_PDU:
     break;
   case PDUTYPE2_STATUS_INFO_PDU:
+	  fields = serverStatusInfo_fields;
     break;
   case PDUTYPE2_MONITOR_LAYOUT_PDU:
     break;
@@ -1761,25 +2037,89 @@ dissect_rdp_shareDataHeader(tvbuff_t *tvb, int offset, packet_info *pinfo, proto
   return offset;
 }
 
+
 static int
-dissect_rdp_capabilitySets(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, guint32 numberCapabilities) {
-  guint   i;
-  guint32 lengthCapability;
+dissect_rdp_capabilitySets(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, uint32_t numberCapabilities) {
+  unsigned   i;
+  uint32_t lengthCapability = 0;
+  uint32_t capabilityType = 0;
 
   rdp_field_info_t cs_fields[] = {
-    {&hf_rdp_capabilitySetType, 2, NULL, 0, 0, NULL },
+    {&hf_rdp_capabilitySetType, 2, &capabilityType, 0, 0, NULL },
     {&hf_rdp_lengthCapability, 2, &lengthCapability, -4, 0, NULL },
     {&hf_rdp_capabilityData, 0, &lengthCapability, 0, 0, NULL },
     FI_TERMINATOR
   };
 
-  rdp_field_info_t set_fields[] = {
-    FI_SUBTREE(&hf_rdp_capabilitySet, 0, ett_rdp_capabilitySet, cs_fields),
-    FI_TERMINATOR
+  rdp_field_info_t railFlags_fields[] = {
+      {&hf_rdp_capaRail_flag_supported, 		4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaRail_flag_dockedlangbar,     4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaRail_flag_shellintegration,  4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaRail_flag_lang_ime_sync,   	4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaRail_flag_server_to_client_ime_sync, 4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaRail_flag_hide_minimized, 	4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaRail_flag_windows_cloaking,  4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaRail_flag_handshakeex,  		4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      FI_TERMINATOR
+   };
+
+  rdp_field_info_t cs_rail[] = {
+	{&hf_rdp_capabilitySetType, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_lengthCapability, 2, NULL, 0, 0, NULL },
+	FI_SUBTREE(&hf_rdp_capaRail_supportedLevel, 4, ett_rdp_capa_rail, railFlags_fields),
+	FI_TERMINATOR
+  };
+
+  rdp_field_info_t gen_extraFlags_fields[] = {
+      {&hf_rdp_capaGen_fastpathflag_supported, 2, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaGen_no_bitmap_comp_hdr, 2, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaGen_long_credentials, 2, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaGen_autoreconnect, 2, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_capaGen_encsaltedchecksum, 2, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+      FI_TERMINATOR
+  };
+
+  rdp_field_info_t cs_general[] = {
+	{&hf_rdp_capabilitySetType, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_lengthCapability, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_osMajorType, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_osMinorType, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_protocolVersion, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_pad2octets, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_compressionTypes, 2, NULL, 0, 0, NULL },
+	FI_SUBTREE(&hf_rdp_capaGen_extraFlags, 2, ett_rdp_capa_general, gen_extraFlags_fields),
+	{&hf_rdp_capaGen_updateCapaFlag, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_remoteUnshareFlags, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_compressionLevel, 2, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_refreshRect, 1, NULL, 0, 0, NULL },
+	{&hf_rdp_capaGen_suppressOutput, 1, NULL, 0, 0, NULL },
+	FI_TERMINATOR
   };
 
   for (i = 0; i < numberCapabilities; i++) {
-    offset = dissect_rdp_fields(tvb, offset, pinfo, tree, set_fields, 0);
+	  proto_item *capaItem;
+	  proto_tree *capaTree;
+	  rdp_field_info_t *targetFields;
+	  capabilityType = tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN);
+	  lengthCapability = tvb_get_uint16(tvb, offset + 2, ENC_LITTLE_ENDIAN);
+
+	  capaItem = proto_tree_add_item(tree, hf_rdp_capabilitySet, tvb, offset, lengthCapability, ENC_NA);
+	  proto_item_set_text(capaItem, "%s", val_to_str_const(capabilityType, rdp_capabilityType_vals, "<unknown capability>"));
+	  capaTree = proto_item_add_subtree(capaItem, ett_rdp_capabilitySet);
+
+	  switch (capabilityType) {
+	  case CAPSTYPE_GENERAL:
+		  targetFields = cs_general;
+		  break;
+	  case CAPSTYPE_RAIL:
+		  targetFields = cs_rail;
+		  break;
+	  default:
+		  targetFields = cs_fields;
+		  break;
+	  }
+
+	  offset = dissect_rdp_fields(tvb, offset, pinfo, capaTree, targetFields, 0);
   }
 
   return offset;
@@ -1788,8 +2128,8 @@ dissect_rdp_capabilitySets(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_
 static int
 dissect_rdp_demandActivePDU(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
 
-  guint32 lengthSourceDescriptor;
-  guint32 numberCapabilities = 0;
+  uint32_t lengthSourceDescriptor;
+  uint32_t numberCapabilities = 0;
 
   rdp_field_info_t fields[] = {
     {&hf_rdp_shareId,                    4, NULL, 0, 0, NULL },
@@ -1817,8 +2157,8 @@ dissect_rdp_demandActivePDU(tvbuff_t *tvb, int offset, packet_info *pinfo, proto
 static int
 dissect_rdp_confirmActivePDU(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
 
-  guint32 lengthSourceDescriptor;
-  guint32 numberCapabilities = 0;
+  uint32_t lengthSourceDescriptor;
+  uint32_t numberCapabilities = 0;
 
   rdp_field_info_t fields[] = {
     {&hf_rdp_shareId,                    4, NULL, 0, 0, NULL },
@@ -1855,10 +2195,10 @@ dissect_rdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree)
 }
 
 
-gint
-dissect_rdp_bandwidth_req(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree, gboolean to_server)
+int
+dissect_rdp_bandwidth_req(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, bool to_server)
 {
-	guint16 payloadLength;
+	uint16_t payloadLength;
 	rdp_field_info_t bandwidth_fields[] = {
 		{&hf_rdp_bandwidth_header_len,   1, NULL  , 0, 0, NULL },
 		{&hf_rdp_bandwidth_header_type,  1, NULL  , 0, 0, NULL },
@@ -1866,8 +2206,8 @@ dissect_rdp_bandwidth_req(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_
 		{&hf_rdp_bandwidth_reqtype,  	 2, NULL  , 0, 0, NULL },
 		FI_TERMINATOR
 	};
-	guint8 typeId = tvb_get_guint8(tvb, offset + 1);
-	guint16 reqRespType = tvb_get_guint16(tvb, offset + 4, ENC_LITTLE_ENDIAN);
+	uint8_t typeId = tvb_get_uint8(tvb, offset + 1);
+	uint16_t reqRespType = tvb_get_uint16(tvb, offset + 4, ENC_LITTLE_ENDIAN);
 
 	if (typeId == TYPE_ID_AUTODETECT_RESPONSE)
 		bandwidth_fields[3].pfield = &hf_rdp_bandwidth_resptype;
@@ -1889,7 +2229,7 @@ dissect_rdp_bandwidth_req(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_
 
 		case 0x0002:
 			/* Bandwidth Measure Payload */
-			payloadLength = tvb_get_guint16(tvb, offset, ENC_LITTLE_ENDIAN);
+			payloadLength = tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN);
 			proto_tree_add_item(tree, hf_rdp_bandwidth_measure_payload_len, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 			offset += 2;
 
@@ -1902,7 +2242,7 @@ dissect_rdp_bandwidth_req(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_
 		case 0x0629:
 			/* Bandwidth Measure Stop */
 			if (reqRespType == 0x002B) {
-				payloadLength = tvb_get_guint16(tvb, offset, ENC_LITTLE_ENDIAN);
+				payloadLength = tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN);
 				proto_tree_add_item(tree, hf_rdp_bandwidth_measure_payload_len, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 				offset += 2;
 
@@ -1949,27 +2289,9 @@ dissect_rdp_bandwidth_req(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_
 	return offset;
 }
 
-static gboolean
-rdp_isServerAddressTarget(packet_info *pinfo)
-{
-	conversation_t *conv;
-	rdp_conv_info_t *rdp_info;
-
-	conv = find_conversation_pinfo(pinfo, 0);
-	if (!conv)
-		return FALSE;
-
-	rdp_info = (rdp_conv_info_t *)conversation_get_proto_data(conv, proto_rdp);
-	if (rdp_info) {
-		rdp_server_address_t *server = &rdp_info->serverAddr;
-		return addresses_equal(&server->addr, &pinfo->dst) && (pinfo->destport == server->port);
-	}
-
-	return FALSE;
-}
 
 void
-rdp_transport_set_udp_conversation(const address *serverAddr, guint16 serverPort, gboolean reliable, guint32 reqId, guint8 *cookie, conversation_t *conv)
+rdp_transport_set_udp_conversation(const packet_info *pinfo, bool reliable, uint32_t reqId, uint8_t *cookie, conversation_t *conv)
 {
 	rdp_transports_key_t key;
 	rdp_transports_link_t *transport_link;
@@ -1977,39 +2299,50 @@ rdp_transport_set_udp_conversation(const address *serverAddr, guint16 serverPort
 	key.reliable = reliable;
 	key.requestId = reqId;
 	memcpy(key.securityCookie, cookie, 16);
-	copy_address(&key.serverAddr, serverAddr);
-	key.serverPort = serverPort;
 
 	transport_link = (rdp_transports_link_t *)wmem_map_lookup(rdp_transport_links, &key);
 	if (!transport_link) {
+		printf("%d: strange, TCP conversation was not existing when adding UDP part\n", pinfo->num);
 		transport_link = wmem_new(wmem_file_scope(), rdp_transports_link_t);
 
 		memcpy(&transport_link->key, &key, sizeof(key));
-		copy_address_wmem(wmem_file_scope(), &key.serverAddr, serverAddr);
 	}
 
 	transport_link->udp_conversation = conv;
 }
 
-typedef struct {
-	conversation_t *udp;
-	conversation_t *result;
-} find_tcp_conversation_t;
 
-static void
-map_find_tcp_conversation_fn(rdp_transports_key_t *key _U_, rdp_transports_link_t *transport, find_tcp_conversation_t *criteria)
+static gboolean
+transport_link_find_from_udp(gpointer key _U_, gpointer value, gpointer user_data)
 {
-	if (criteria->udp == transport->udp_conversation)
-		criteria->result = transport->tcp_conversation;
+	rdp_transports_link_t *transportLink = (rdp_transports_link_t *)value;
+
+	return (transportLink->udp_conversation == user_data);
 }
 
 conversation_t *
 rdp_find_tcp_conversation_from_udp(conversation_t *udp)
 {
-	find_tcp_conversation_t criteria = { udp, NULL };
+	rdp_transports_link_t *transportLink = (rdp_transports_link_t *)wmem_map_find(rdp_transport_links, transport_link_find_from_udp, udp);
+	if (!transportLink)
+		return NULL;
 
-	wmem_map_foreach(rdp_transport_links, (GHFunc)map_find_tcp_conversation_fn, &criteria);
-	return criteria.result;
+	return transportLink->tcp_conversation;
+}
+
+conversation_t *
+rdp_find_main_conversation(const packet_info *pinfo)
+{
+	conversation_t *conversation = find_or_create_conversation(pinfo);
+
+	if (pinfo->ptype == PT_UDP) {
+		conversation = rdp_find_tcp_conversation_from_udp(conversation);
+		if (!conversation) {
+			printf("%d: unable to find TCP connection for UDP counterpart\n", pinfo->num);
+		}
+	}
+
+	return conversation;
 }
 
 static int
@@ -2017,7 +2350,7 @@ dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	proto_item *pi;
 	proto_tree *next_tree;
 	int offset = 0;
-	guint32 flags = 0;
+	uint32_t flags = 0;
 
 	rdp_field_info_t secFlags_fields[] = {
 		{&hf_rdp_flagsTransportReq,  2, NULL  , 0, RDP_FI_NOINCOFFSET, NULL },
@@ -2042,7 +2375,7 @@ dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	offset = dissect_rdp_fields(tvb, offset, pinfo, tree, se_fields, 0);
 
 	if (flags & SEC_TRANSPORT_REQ) {
-		guint16 reqProto;
+		uint16_t reqProto;
 		rdp_transports_key_t transport_key;
 		rdp_transports_link_t *transport_link;
 
@@ -2055,12 +2388,10 @@ dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 		};
 		col_append_sep_str(pinfo->cinfo, COL_INFO, " ",	"MultiTransportRequest");
 
-		reqProto = tvb_get_guint16(tvb, offset + 4, ENC_LITTLE_ENDIAN);
+		transport_key.requestId = tvb_get_uint32(tvb, offset, ENC_LITTLE_ENDIAN);
+		reqProto = tvb_get_uint16(tvb, offset + 4, ENC_LITTLE_ENDIAN);
 
 		transport_key.reliable = !!(reqProto & INITITATE_REQUEST_PROTOCOL_UDPFECR);
-		transport_key.requestId = tvb_get_guint32(tvb, offset, ENC_LITTLE_ENDIAN);
-		copy_address(&transport_key.serverAddr, &pinfo->src);
-		transport_key.serverPort = pinfo->srcport;
 		tvb_memcpy(tvb, transport_key.securityCookie, offset + 8, 16);
 
 		transport_link = (rdp_transports_link_t *)wmem_map_lookup(rdp_transport_links, &transport_key);
@@ -2068,7 +2399,6 @@ dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 			transport_link = wmem_new(wmem_file_scope(), rdp_transports_link_t);
 
 			memcpy(&transport_link->key, &transport_key, sizeof(transport_key));
-			copy_address_wmem(wmem_file_scope(), &transport_key.serverAddr, &pinfo->src);
 			transport_link->tcp_conversation = find_or_create_conversation(pinfo);
 
 			wmem_map_insert(rdp_transport_links, &transport_link->key , transport_link);
@@ -2128,11 +2458,11 @@ static int
 dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_) {
   proto_item      *pi;
   int              offset       = 0;
-  guint32          flags        = 0;
-  guint32          cbDomain, cbUserName, cbPassword, cbAlternateShell, cbWorkingDir,
-                   cbClientAddress, cbClientDir, cbAutoReconnectLen, wBlobLen, pduType = 0;
-  guint32          bMsgType = 0xffffffff;
-  guint32          encryptedLen = 0;
+  uint32_t         flags        = 0;
+  uint32_t         cbDomain, cbUserName, cbPassword, cbAlternateShell, cbWorkingDir,
+                   cbClientAddress, cbClientDir, cbAutoReconnectLen, wBlobLen, cbDynamicDSTTimeZoneKeyName, pduType = 0;
+  uint32_t         bMsgType = 0xffffffff;
+  uint32_t         encryptedLen = 0;
   conversation_t  *conversation;
   rdp_conv_info_t *rdp_info;
 
@@ -2176,9 +2506,36 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     FI_TERMINATOR,
   };
 
+  rdp_field_info_t optionsFlags_fields[] = {
+      {&hf_rdp_flagsInfoMouse, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsDisableCtrlAltDel, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsAutoLogon, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsUnicode, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsMaximizeShell, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsLogonNotify, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsCompression, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsCompressionType, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsEnableWindowsKey, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsRemoteConsoleAudio, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsForceEncryptedCsPdu, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsRail, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsLogonErrors, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsHasWheel, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsPasswordIsScPin, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsNoAudioPlayback, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsUsingSavedCreds, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsAudioCapture, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsVideoDisable, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsReserved1, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsReserved2, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+      {&hf_rdp_flagsHidefRailSupported, 4, &flags, 0, RDP_FI_NOINCOFFSET, NULL },
+
+      FI_TERMINATOR
+    };
+
   rdp_field_info_t ue_fields[] = {
     {&hf_rdp_codePage,           4, NULL, 0, 0, NULL },
-    {&hf_rdp_optionFlags,        4, NULL, 0, RDP_FI_INFO_FLAGS, NULL },
+    {&hf_rdp_optionFlags,        4, NULL, ett_rdp_clientTimeZone, RDP_FI_INFO_FLAGS|RDP_FI_SUBTREE, optionsFlags_fields },
     {&hf_rdp_cbDomain,           2, &cbDomain, 2, 0, NULL },
     {&hf_rdp_cbUserName,         2, &cbUserName, 2, 0, NULL },
     {&hf_rdp_cbPassword,         2, &cbPassword, 2, 0, NULL },
@@ -2201,6 +2558,9 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     {&hf_rdp_autoReconnectCookie,0, &cbAutoReconnectLen, 0, 0, NULL },
     {&hf_rdp_reserved1,          2, NULL, 0, 0, NULL },
     {&hf_rdp_reserved2,          2, NULL, 0, 0, NULL },
+    {&hf_rdp_cbDynamicDSTTimeZoneKeyName, 2, &cbDynamicDSTTimeZoneKeyName, 0, 0, NULL },
+    {&hf_rdp_dynamicDSTTimeZoneKeyName, 0, &cbDynamicDSTTimeZoneKeyName, 0, RDP_FI_STRING, NULL },
+    {&hf_rdp_dynamicDaylightTimeDisabled, 2, NULL, 0, 0, NULL },
     FI_TERMINATOR
   };
   rdp_field_info_t msg_fields[] = {
@@ -2257,7 +2617,7 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 
       /*offset=*/ dissect_rdp_fields(tvb, offset, pinfo, next_tree, se_fields, 0);
 
-      break;
+      return tvb_captured_length(tvb);
 
     case SEC_INFO_PKT:
       pi        = proto_tree_add_item(tree, hf_rdp_clientInfoPDU, tvb, offset, -1, ENC_NA);
@@ -2265,7 +2625,7 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 
       col_append_sep_str(pinfo->cinfo, COL_INFO, " ", "ClientInfo");
 
-      offset = dissect_rdp_securityHeader(tvb, offset, pinfo, next_tree, rdp_info, TRUE, NULL);
+      offset = dissect_rdp_securityHeader(tvb, offset, pinfo, next_tree, rdp_info, true, NULL);
 
       if (!(flags & SEC_ENCRYPT)) {
 
@@ -2274,13 +2634,13 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 
         /*offset =*/ dissect_rdp_encrypted(tvb, offset, pinfo, next_tree, NULL);
       }
-      break;
+      return tvb_captured_length(tvb);
 
     case SEC_LICENSE_PKT:
       pi        = proto_tree_add_item(tree, hf_rdp_validClientLicenseData, tvb, offset, -1, ENC_NA);
       next_tree = proto_item_add_subtree(pi, ett_rdp_validClientLicenseData);
 
-      offset = dissect_rdp_securityHeader(tvb, offset, pinfo, next_tree, rdp_info, TRUE, NULL);
+      offset = dissect_rdp_securityHeader(tvb, offset, pinfo, next_tree, rdp_info, true, NULL);
       if (!(flags & SEC_ENCRYPT)) {
 
         offset = dissect_rdp_fields(tvb, offset, pinfo, next_tree, msg_fields, 0);
@@ -2312,22 +2672,20 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
         /* XXX: we assume the license is agreed in this exchange */
         rdp_info->licenseAgreed = pinfo->num;
       }
-      break;
+      return tvb_captured_length(tvb);
 
     case SEC_REDIRECTION_PKT:
       /* NotYetImplemented */
-      break;
+      return tvb_captured_length(tvb);
 
     default:
       break;
     }
-
-    return tvb_captured_length(tvb);
   } /* licensing stage */
 
   if (rdp_info && (t124_get_last_channelId() == rdp_info->staticChannelId)) {
 
-    offset = dissect_rdp_securityHeader(tvb, offset, pinfo, tree, rdp_info, FALSE, &flags);
+    offset = dissect_rdp_securityHeader(tvb, offset, pinfo, tree, rdp_info, false, &flags);
 
     if (!(flags & SEC_ENCRYPT)) {
       proto_tree *next_tree;
@@ -2370,9 +2728,9 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
   } /* (rdp_info && (t124_get_last_channelId() == rdp_info->staticChannelId)) */
 
   /* Virtual Channel */
-  col_append_sep_str(pinfo->cinfo, COL_INFO, " ", "Virtual Channel PDU");
+  //col_append_sep_str(pinfo->cinfo, COL_INFO, ",", "Virtual Channel PDU");
 
-  offset = dissect_rdp_securityHeader(tvb, offset, pinfo, tree, rdp_info, FALSE, &flags);
+  offset = dissect_rdp_securityHeader(tvb, offset, pinfo, tree, rdp_info, false, &flags);
 
   if (!(flags & SEC_ENCRYPT))
     /*offset =*/ dissect_rdp_channelPDU(tvb, offset, pinfo, tree);
@@ -2385,7 +2743,7 @@ dissect_rdp_SendData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 static int
 dissect_rdp_monitor(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
 
-  guint32 monitorCount, i;
+  uint32_t monitorCount, i;
   proto_item *monitorDef_item;
   proto_tree *monitorDef_tree;
 
@@ -2422,8 +2780,8 @@ dissect_rdp_ClientData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
   int              offset    = 0;
   proto_item      *pi;
   proto_tree      *next_tree;
-  guint16          type;
-  guint            length;
+  uint16_t         type;
+  unsigned         length;
   rdp_conv_info_t *rdp_info;
 
   rdp_field_info_t header_fields[] = {
@@ -2471,10 +2829,19 @@ dissect_rdp_ClientData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     {&hf_rdp_extEncryptionMethods,   4, NULL, 0, 0, NULL },
     FI_TERMINATOR
   };
+
+  rdp_field_info_t secFlags_fields[] = {
+    {&hf_rdp_cluster_redirectionSupported,	4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+    {&hf_rdp_cluster_sessionIdValid, 		4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+    {&hf_rdp_cluster_redirectionVersion,	4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+    {&hf_rdp_cluster_redirectedSmartcard,	4, NULL, 0, RDP_FI_NOINCOFFSET, NULL },
+	FI_TERMINATOR
+  };
+
   rdp_field_info_t cluster_fields[] = {
     {&hf_rdp_headerType,             2, NULL, 0, 0, NULL },
     {&hf_rdp_headerLength,           2, NULL, 0, 0, NULL },
-    {&hf_rdp_cluster_flags,          4, NULL, 0, 0, NULL },
+	FI_SUBTREE(&hf_rdp_cluster_flags, 4, ett_rdp_clientClusterFlags, secFlags_fields),
     {&hf_rdp_redirectedSessionId,    4, NULL, 0, 0, NULL },
     FI_TERMINATOR
   };
@@ -2504,8 +2871,10 @@ dissect_rdp_ClientData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
   rdp_info = rdp_get_conversation_data(pinfo);
 
-  copy_address(&rdp_info->serverAddr.addr, &pinfo->dst);
-  rdp_info->serverAddr.port = pinfo->destport;
+  if (!rdp_info->serverAddr.port) {
+	  copy_address_wmem(wmem_file_scope(), &rdp_info->serverAddr.addr, &pinfo->dst);
+	  rdp_info->serverAddr.port = pinfo->destport;
+  }
 
   col_append_sep_str(pinfo->cinfo, COL_INFO, " ", "ClientData");
 
@@ -2592,16 +2961,17 @@ dissect_rdp_ServerData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
   int              offset           = 0;
   proto_item      *pi;
   proto_tree      *next_tree;
-  guint16          type;
-  guint            length;
-  guint32          serverRandomLen  = 0;
-  guint32          serverCertLen    = 0;
-  guint32          encryptionMethod = 0;
-  guint32          encryptionLevel  = 0;
-  guint32          channelCount     = 0;
-  guint32          channelId     = 0;
-  guint32          messageChannelId     = 0;
-  guint            i;
+  uint16_t         type;
+  unsigned         length;
+  uint32_t         serverRandomLen  = 0;
+  uint32_t         serverCertLen    = 0;
+  uint32_t         encryptionMethod = 0;
+  uint32_t         encryptionLevel  = 0;
+  uint32_t         channelCount     = 0;
+  uint32_t         mcsChannelId     = 0;
+  uint32_t         channelId     = 0;
+  uint32_t         messageChannelId     = 0;
+  unsigned         i;
   rdp_conv_info_t *rdp_info;
 
   rdp_field_info_t header_fields[] = {
@@ -2640,7 +3010,7 @@ dissect_rdp_ServerData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
   rdp_field_info_t sn_fields[] = {
     {&hf_rdp_headerType,               2, NULL, 0, 0, NULL },
     {&hf_rdp_headerLength,             2, NULL, 0, 0, NULL },
-    {&hf_rdp_MCSChannelId,             2, &channelId, 0, 0, NULL },
+    {&hf_rdp_MCSChannelId,             2, &mcsChannelId, 0, 0, NULL },
     {&hf_rdp_channelCount,             2, &channelCount, 0, 0, NULL },
     FI_TERMINATOR
   };
@@ -2699,7 +3069,7 @@ dissect_rdp_ServerData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
       break;
 
     case SC_SECURITY: {
-      gint lcl_offset;
+      int lcl_offset;
       pi         = proto_tree_add_item(tree, hf_rdp_serverSecurityData, tvb, offset, length, ENC_NA);
       next_tree  = proto_item_add_subtree(pi, ett_rdp_serverSecurityData);
 
@@ -2719,14 +3089,14 @@ dissect_rdp_ServerData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     }
 
     case SC_NET: {
-      gint lcl_offset;
+      int lcl_offset;
       pi        = proto_tree_add_item(tree, hf_rdp_serverNetworkData, tvb, offset, length, ENC_NA);
       next_tree = proto_item_add_subtree(pi, ett_rdp_serverNetworkData);
 
       lcl_offset = dissect_rdp_fields(tvb, offset, pinfo, next_tree, sn_fields, 0);
 
-      rdp_info->staticChannelId = channelId;
-      register_t124_sd_dissector(pinfo, channelId, dissect_rdp_SendData, proto_rdp);
+      rdp_info->staticChannelId = mcsChannelId;
+      register_t124_sd_dissector(pinfo, mcsChannelId, dissect_rdp_SendData, proto_rdp);
 
       if (channelCount > 0) {
         array_fields[0].fixedLength = channelCount * 2;
@@ -2736,8 +3106,9 @@ dissect_rdp_ServerData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
           next_tree = proto_item_add_subtree(next_tree->last_child, ett_rdp_channelIdArray);
         for (i = 0; i < channelCount; i++) {
           lcl_offset = dissect_rdp_fields(tvb, lcl_offset, pinfo, next_tree, channel_fields, 0);
-          if (i < RDP_MAX_CHANNELS)
+          if (i < RDP_MAX_CHANNELS) {
             rdp_info->staticChannels[i].value = channelId;
+          }
 
           /* register SendData on this for now */
           register_t124_sd_dissector(pinfo, channelId, dissect_rdp_SendData, proto_rdp);
@@ -2777,8 +3148,8 @@ dissect_rdp_ServerData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 /* Dissect extra data in a CR PDU */
 static int
 dissect_rdpCorrelationInfo(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
-  guint32 type;
-  guint32 length;
+  uint32_t type;
+  uint32_t length;
   proto_item *type_item, *length_item;
 
   type_item = proto_tree_add_item_ret_uint(tree, hf_rdp_neg_type, tvb, offset, 1, ENC_NA, &type);
@@ -2804,11 +3175,12 @@ dissect_rdpCorrelationInfo(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_
 
 static int
 dissect_rdpNegReq(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
-  guint64 flags;
-  guint32 length;
+  uint64_t flags;
+  uint32_t length;
   proto_item *length_item;
   static int * const flag_bits[] = {
     &hf_rdp_negReq_flag_restricted_admin_mode_req,
+    &hf_rdp_negReq_flag_redirected_auth_req,
     &hf_rdp_negReq_flag_correlation_info_present,
     NULL
   };
@@ -2817,8 +3189,14 @@ dissect_rdpNegReq(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tre
     &hf_rdp_requestedProtocols_flag_hybrid,
     &hf_rdp_requestedProtocols_flag_rdstls,
     &hf_rdp_requestedProtocols_flag_hybrid_ex,
+	&hf_rdp_requestedProtocols_flag_rdsaad,
     NULL
   };
+
+  rdp_conv_info_t *rdp_info = rdp_get_conversation_data(pinfo);
+
+  copy_address_wmem(wmem_file_scope(), &rdp_info->serverAddr.addr, &pinfo->dst);
+  rdp_info->serverAddr.port = pinfo->destport;
 
   col_append_str(pinfo->cinfo, COL_INFO, "Negotiate Request");
 
@@ -2847,25 +3225,27 @@ static int
 dissect_rdp_cr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
   int offset = 0;
-  gboolean have_cookie = FALSE;
-  gboolean have_rdpNegRequest = FALSE;
+  bool have_cookie = false;
+  bool have_rdpNegRequest = false;
   proto_item *item;
   proto_tree *tree;
-  gint linelen, next_offset;
-  const guint8 *stringval;
+  int linelen, next_offset;
+  const char *stringval;
   const char *sep = "";
 
   /*
    * routingToken or cookie?  Both begin with "Cookie: ".
    */
-  if (tvb_memeql(tvb, offset, (const guint8*)"Cookie: ", 8) == 0) {
+  if (tvb_memeql(tvb, offset, (const uint8_t*)"Cookie: ", 8) == 0 ||
+		  tvb_memeql(tvb, offset, (const uint8_t*)"tsv:", 4) == 0 ||
+		  tvb_memeql(tvb, offset, (const uint8_t*)"mth://", 6) == 0) {
     /* Looks like a routing token or cookie */
-    have_cookie = TRUE;
+    have_cookie = true;
   } else if (tvb_bytes_exist(tvb, offset, 4) &&
-             tvb_get_guint8(tvb, offset) == TYPE_RDP_NEG_REQ &&
+             tvb_get_uint8(tvb, offset) == TYPE_RDP_NEG_REQ &&
              tvb_get_letohs(tvb, offset + 2) == 8) {
     /* Looks like a Negotiate Request (TYPE_RDP_NEG_REQ, length 8) */
-    have_rdpNegRequest = TRUE;
+    have_rdpNegRequest = true;
   }
   if (!have_cookie && !have_rdpNegRequest) {
     /* Doesn't look like our data */
@@ -2880,11 +3260,11 @@ dissect_rdp_cr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void*
 
   if (have_cookie) {
     /* XXX - distinguish between routing token and cookie? */
-    linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, TRUE);
+    linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, true);
     proto_tree_add_item_ret_string(tree, hf_rdp_rt_cookie, tvb, offset,
                                    linelen, ENC_ASCII|ENC_NA,
-                                   pinfo->pool, &stringval);
-    offset = (linelen == -1) ? (gint)tvb_captured_length(tvb) : next_offset;
+                                   pinfo->pool, (const uint8_t**)&stringval);
+    offset = (linelen == -1) ? (int)tvb_captured_length(tvb) : next_offset;
     col_append_str(pinfo->cinfo, COL_INFO, format_text(pinfo->pool, stringval, strlen(stringval)));
     sep = ", ";
   }
@@ -2898,10 +3278,17 @@ dissect_rdp_cr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void*
   return offset; /* returns 0 if nothing was dissected, which is what we want */
 }
 
+static bool
+dissect_rdp_cr_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+{
+    return dissect_rdp_cr(tvb, pinfo, tree, data) > 0;
+}
+
 /* Dissect extra data in a CC PDU */
 static int
 dissect_rdpNegRsp(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
-  guint32 length;
+  uint32_t length;
+  uint32_t selectedProto;
   proto_item *length_item;
   static int * const flag_bits[] = {
     &hf_rdp_negRsp_flag_extended_client_data_supported,
@@ -2925,16 +3312,23 @@ dissect_rdpNegRsp(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tre
     expert_add_info_format(pinfo, length_item, &ei_rdp_neg_len_invalid, "RDP Negotiate Response length is %u, not 8", length);
     return offset;
   }
-  proto_tree_add_item(tree, hf_rdp_selectedProtocol, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+  proto_tree_add_item_ret_uint(tree, hf_rdp_selectedProtocol, tvb, offset, 4, ENC_LITTLE_ENDIAN, &selectedProto);
+  if (selectedProto == 0x00000004) {
+	  /* if it's RDSTLS auth then mark it as such so that we can try decoding RDSTLS
+	   * packets in the heuristic
+	   */
+	  rdp_conv_info_t *info = rdp_get_conversation_data(pinfo);
+	  info->isRdstls = true;
+  }
   offset += 4;
   return offset;
 }
 
 static int
 dissect_rdpNegFailure(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree) {
-  guint32 length;
+  uint32_t length;
   proto_item *length_item;
-  guint32 failureCode;
+  uint32_t failureCode;
 
   col_append_str(pinfo->cinfo, COL_INFO, "Negotiate Failure");
 
@@ -2951,7 +3345,7 @@ dissect_rdpNegFailure(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree 
   proto_tree_add_item_ret_uint(tree, hf_rdp_negFailure_failureCode, tvb, offset, 4, ENC_LITTLE_ENDIAN, &failureCode);
   offset += 4;
   col_append_fstr(pinfo->cinfo, COL_INFO, ", failureCode %s",
-                  val_to_str(failureCode, failure_code_vals, "Unknown (0x%08x)"));
+                  val_to_str(pinfo->pool, failureCode, failure_code_vals, "Unknown (0x%08x)"));
   return offset;
 }
 
@@ -2959,20 +3353,20 @@ static int
 dissect_rdp_cc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
   int offset = 0;
-  guint8 type;
-  guint16 length;
-  gboolean ours = FALSE;
+  uint8_t type;
+  uint16_t length;
+  bool ours = false;
   proto_item *item;
   proto_tree *tree;
 
   if (tvb_bytes_exist(tvb, offset, 4)) {
-    type = tvb_get_guint8(tvb, offset);
+    type = tvb_get_uint8(tvb, offset);
     length = tvb_get_letohs(tvb, offset + 2);
     if ((type == TYPE_RDP_NEG_RSP || type == TYPE_RDP_NEG_FAILURE) &&
         length == 8) {
       /* Looks like a Negotiate Response (TYPE_RDP_NEG_RSP, length 8)
-         or a Negotaiate Failure (TYPE_RDP_NEG_FAILURE, length 8) */
-      ours = TRUE;
+         or a Negotiate Failure (TYPE_RDP_NEG_FAILURE, length 8) */
+      ours = true;
     }
   }
   if (!ours) {
@@ -2999,38 +3393,44 @@ dissect_rdp_cc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void*
   return offset;
 }
 
-static gboolean
+static bool
+dissect_rdp_cc_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+{
+    return dissect_rdp_cc(tvb, pinfo, tree, data) > 0;
+}
+
+static bool
 dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
-  guint8 fp_hdr;
+  uint8_t fp_hdr;
   proto_item *item;
   proto_tree *tree;
-  guint16 pdu_length;
-  guint8 len_size = 1;
-  guint offset = 0;
-  guint32 flags, nevents, i;
-  gboolean client_to_server;
+  uint16_t pdu_length;
+  uint8_t len_size = 1;
+  unsigned offset = 0;
+  uint32_t flags, nevents, i;
+  bool client_to_server;
 
   if (tvb_captured_length(tvb) < 3)
-    return FALSE;
+    return false;
 
-  fp_hdr = tvb_get_guint8(tvb, 0);
+  fp_hdr = tvb_get_uint8(tvb, 0);
   if (fp_hdr & 0x3)
-    return FALSE;
+    return false;
 
-  pdu_length = tvb_get_guint8(tvb, 1);
+  pdu_length = tvb_get_uint8(tvb, 1);
   if (pdu_length == 0)
-    return FALSE;
+    return false;
 
   if (pdu_length & 0x80) {
     pdu_length &= ~(0x80);
     pdu_length = (pdu_length << 8);
-    pdu_length += tvb_get_guint8(tvb, 2);
+    pdu_length += tvb_get_uint8(tvb, 2);
     len_size = 2;
   }
 
   if (pdu_length != tvb_captured_length(tvb))
-    return FALSE;
+    return false;
 
   client_to_server = rdp_isServerAddressTarget(pinfo);
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "RDP");
@@ -3064,14 +3464,14 @@ dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	  }
 
 	  for (i = 0; i < nevents; i++) {
-		  guint8 flagsCode;
-		  guint8 eventCode;
-		  guint8 eventSize;
+		  uint8_t flagsCode;
+		  uint8_t eventCode;
+		  uint8_t eventSize;
 		  proto_tree *event_tree;
 		  const char *event_name;
 		  int * const *flagsList = fastpath_inputHeader_flags;
 
-		  flagsCode = tvb_get_guint8(tvb, offset);
+		  flagsCode = tvb_get_uint8(tvb, offset);
 		  eventCode = (flagsCode >> 5) & 0x07;
 
 		  switch (eventCode) {
@@ -3097,6 +3497,10 @@ dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 			  event_name = "Unicode";
 			  eventSize = 3;
 			  flagsList = fastpath_inputunicode_flags;
+			  break;
+		  case FASTPATH_INPUT_EVENT_RELMOUSE:
+			  event_name = "RelMouse";
+			  eventSize = 7;
 			  break;
 		  case FASTPATH_INPUT_EVENT_QOE_TIMESTAMP:
 			  event_name = "QoE timestamp";
@@ -3132,6 +3536,11 @@ dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 			  case FASTPATH_INPUT_EVENT_UNICODE:
 				  proto_tree_add_item(event_tree, hf_rdp_fastpathUnicodeCode, tvb, offset+1, 2, ENC_LITTLE_ENDIAN);
 				  break;
+			  case FASTPATH_INPUT_EVENT_RELMOUSE:
+				  proto_tree_add_bitmask(event_tree, tvb, offset+1, hf_rdp_fastpathRelMouseFlags, ett_rdp_fastpath_relmouse_flags, ts_relpointer_flags, ENC_LITTLE_ENDIAN);
+				  proto_tree_add_item(event_tree, hf_rdp_fastpathRelMouseDeltaX, tvb, offset+1+2, 2, ENC_LITTLE_ENDIAN);
+				  proto_tree_add_item(event_tree, hf_rdp_fastpathRelMouseDeltaY, tvb, offset+1+4, 2, ENC_LITTLE_ENDIAN);
+				  break;
 			  case FASTPATH_INPUT_EVENT_QOE_TIMESTAMP:
 				  proto_tree_add_item(event_tree, hf_rdp_fastpathQoeTimestamp, tvb, offset+1, 4, ENC_LITTLE_ENDIAN);
 				  break;
@@ -3141,17 +3550,17 @@ dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 		  offset += eventSize;
 	  }
   } else {
-	  while (offset < (guint)(pdu_length - 1)) {
-		  guint8 updateCode, flagsCode;
-		  guint8 frag, compression;
-		  guint64 compFlags;
-		  guint16 eventSize = 1;
-		  guint16 recordSize;
-		  guint tmp_offset = offset;
+	  while (offset < (unsigned)(pdu_length - 1)) {
+		  uint8_t updateCode, flagsCode;
+		  uint8_t frag, compression;
+		  uint64_t compFlags;
+		  uint16_t eventSize = 1;
+		  uint16_t recordSize;
+		  unsigned tmp_offset = offset;
 		  proto_tree *event_tree;
 		  const char *event_name;
 
-		  flagsCode = tvb_get_guint8(tvb, tmp_offset);
+		  flagsCode = tvb_get_uint8(tvb, tmp_offset);
 		  updateCode = (flagsCode & 0xf);
 		  frag = (flagsCode >> 4) & 0x03;
 		  compression = (flagsCode >> 6) & 0x03;
@@ -3162,7 +3571,7 @@ dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 			  tmp_offset++;
 			  eventSize++;
 		  }
-		  recordSize = tvb_get_guint16(tvb, tmp_offset, ENC_LITTLE_ENDIAN);
+		  recordSize = tvb_get_uint16(tvb, tmp_offset, ENC_LITTLE_ENDIAN);
 		  eventSize += recordSize;
 
 		  switch (updateCode) {
@@ -3263,17 +3672,156 @@ dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	  }
 
   }
-  return TRUE;
+  return true;
 }
 
-static gboolean
+static bool
+dissect_rdp_rdstls(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree _U_, void* data _U_)
+{
+	int pdu_length = 6;
+	int datatype_hf;
+	uint32_t cbRedirectionGuid = 0;
+	uint32_t cbUsername = 0;
+	uint32_t cbDomain = 0;
+	uint32_t cbPassword = 0;
+	uint32_t cbCookie = 0;
+
+	rdp_field_info_t passCred_fields[] = {
+		{&hf_rdp_rdstls_redirectionGuidLen, 2, &cbRedirectionGuid, 0, 0, NULL},
+		{&hf_rdp_rdstls_redirectionGuid,    0, &cbRedirectionGuid, 0, RDP_FI_STRING|RDP_FI_UNICODE, NULL },
+		{&hf_rdp_rdstls_usernameLen, 2, &cbUsername, 0, 0, NULL},
+		{&hf_rdp_rdstls_username,    0, &cbUsername, 0, RDP_FI_STRING|RDP_FI_UNICODE, NULL },
+		{&hf_rdp_rdstls_domainLen, 2, &cbDomain, 0, 0, NULL},
+		{&hf_rdp_rdstls_domain,    0, &cbDomain, 0, RDP_FI_STRING|RDP_FI_UNICODE, NULL },
+		{&hf_rdp_rdstls_passwordLen, 2, &cbPassword, 0, 0, NULL},
+		{&hf_rdp_rdstls_password,    0, &cbPassword, 0, 0, NULL },
+		FI_TERMINATOR,
+	};
+
+	rdp_field_info_t reconCookie_fields[] = {
+		{&hf_rdp_rdstls_sessionId, 4, NULL, 0, 0, NULL},
+		{&hf_rdp_rdstls_autoReconnectCookieLen, 2, &cbCookie, 0, 0, NULL},
+		{&hf_rdp_rdstls_autoReconnectCookie,    0, &cbCookie, 0, 0, NULL },
+		FI_TERMINATOR,
+	};
+	rdp_field_info_t *authReqFields = NULL;
+
+	/* this is called from heuristics so let's do some preliminary checks */
+	if (tvb_captured_length_remaining(tvb, 0) < 6)
+		return false;
+
+	uint16_t version = tvb_get_uint16(tvb, 0, ENC_LITTLE_ENDIAN);
+	if (version != 0x0001)
+		return false;
+
+	uint16_t pduType = tvb_get_uint16(tvb, 2, ENC_LITTLE_ENDIAN);
+	uint16_t dataType = tvb_get_uint16(tvb, 4, ENC_LITTLE_ENDIAN);
+	switch (pduType) {
+	case 1:
+		/* capabilities */
+
+		if (dataType != 1)
+			return false;
+
+		pdu_length += 2;
+		datatype_hf = hf_rdp_rdstls_dataTypeCapabilities;
+		break;
+	case 2: {
+		/* auth request */
+		unsigned nstrings;
+		int tmpOffset = 6;
+
+		datatype_hf = hf_rdp_rdstls_dataTypeAuthReq;
+		switch (dataType) {
+		case 1:
+			/* Authentication Request PDU with Password Credentials */
+			nstrings = 4;
+			authReqFields = passCred_fields;
+			break;
+		case 2:
+			/* Authentication Request PDU with Auto-Reconnect Cookie */
+
+			/* SessionId */
+			if(tvb_captured_length_remaining(tvb, tmpOffset) < 4)
+				return false;
+			tmpOffset += 4;
+
+			authReqFields = reconCookie_fields;
+			nstrings = 1;
+			break;
+		default:
+			return false;
+		}
+
+		for (unsigned i = 0; i < nstrings; i++) {
+			if(tvb_captured_length_remaining(tvb, tmpOffset) < 2)
+				return false;
+
+			unsigned tmpStringLength = tvb_get_uint16(tvb, tmpOffset, ENC_LITTLE_ENDIAN);
+			tmpOffset += 2;
+			if(tvb_captured_length_remaining(tvb, tmpOffset) < tmpStringLength)
+				return false;
+
+			pdu_length += 2 + tmpStringLength;
+			tmpOffset += tmpStringLength;
+		}
+		break;
+	}
+	case 4:
+		/* RDSTLS Authentication Response PDU */
+		if (dataType != 1)
+			return false;
+
+		pdu_length += 4;
+		datatype_hf = hf_rdp_rdstls_dataTypeAuthResp;
+		break;
+	default:
+		return false;
+	}
+
+	proto_item *item = proto_tree_add_item(parent_tree, proto_rdp, tvb, 0, pdu_length, ENC_NA);
+	proto_item *tree = proto_item_add_subtree(item, ett_rdp);
+
+	proto_tree_add_item(tree, hf_rdp_rdstls_version, tvb, 0, 2, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(tree, hf_rdp_rdstls_pduType, tvb, 2, 2, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(tree, datatype_hf, tvb, 4, 2, ENC_LITTLE_ENDIAN);
+
+	int offset = 6;
+	switch (pduType) {
+	case 1:
+		/* capabilities */
+		col_append_sep_str(pinfo->cinfo, COL_INFO, ",", "RDSTLS Capabilities");
+		proto_tree_add_item(tree, hf_rdp_rdstls_supportedVersions, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+		break;
+	case 2:
+		/* auth req */
+		col_append_sep_str(pinfo->cinfo, COL_INFO, ",", "RDSTLS AuthReq");
+		dissect_rdp_fields(tvb, offset, pinfo, tree, authReqFields, pdu_length-6);
+		break;
+	case 4:
+		/* auth resp */
+		col_append_sep_str(pinfo->cinfo, COL_INFO, ",", "RDSTLS AuthResp");
+		proto_tree_add_item(tree, hf_rdp_rdstls_resultCode, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+		break;
+	}
+	return true;
+}
+
+
+static bool
 dissect_rdp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_) {
     heur_dtbl_entry_t *hdtbl_entry;
+    rdp_conv_info_t *info;
 
     if (dissector_try_heuristic(rdp_heur_subdissector_list, tvb, pinfo, parent_tree,
                                 &hdtbl_entry, NULL)) {
-        return TRUE;
+        return true;
     }
+
+	info = rdp_get_conversation_data(pinfo);
+	if (info && info->isRdstls && dissect_rdp_rdstls(tvb, pinfo, parent_tree, NULL))
+		return true;
+
     return dissect_rdp_fastpath(tvb, pinfo, parent_tree, NULL);
 }
 
@@ -3307,6 +3855,10 @@ proto_register_rdp(void) {
       { "Restricted admin mode required", "rdp.negReq.flags.restricted_admin_mode_req",
         FT_BOOLEAN, 8, NULL, RESTRICTED_ADMIN_MODE_REQUIRED,
 	NULL, HFILL }},
+    { &hf_rdp_negReq_flag_redirected_auth_req,
+      { "Redirected Authentication required", "rdp.negReq.flags.redirected_auth_req",
+        FT_BOOLEAN, 8, NULL, REDIRECTED_AUTH_REQUIRED,
+	NULL, HFILL }},
     { &hf_rdp_negReq_flag_correlation_info_present,
       { "Correlation info present", "rdp.negReq.flags.correlation_info_present",
         FT_BOOLEAN, 8, NULL, CORRELATION_INFO_PRESENT,
@@ -3334,6 +3886,10 @@ proto_register_rdp(void) {
     { &hf_rdp_requestedProtocols_flag_hybrid_ex,
       { "CredSSP with Early User Authorization Result PDU supported", "rdp.negReq.requestedProtocols.hybrid_ex",
         FT_BOOLEAN, 32, NULL, 0x00000008,
+	NULL, HFILL }},
+    { &hf_rdp_requestedProtocols_flag_rdsaad,
+      { "RDSAAD supported", "rdp.negReq.requestedProtocols.rdsaad",
+        FT_BOOLEAN, 32, NULL, 0x00000010,
 	NULL, HFILL }},
     { &hf_rdp_correlationInfo_flags,
       { "Flags", "rdp.correlationInfo.flags",
@@ -3383,10 +3939,10 @@ proto_register_rdp(void) {
       { "SendData", "rdp.sendData",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
-	{ &hf_rdp_MessageData,
-	  { "MessageData", "rdp.messageData",
-		FT_NONE, BASE_NONE, NULL, 0,
-		NULL, HFILL }},
+    { &hf_rdp_MessageData,
+      { "MessageData", "rdp.messageData",
+            FT_NONE, BASE_NONE, NULL, 0,
+            NULL, HFILL }},
     { &hf_rdp_clientCoreData,
       { "clientCoreData", "rdp.client.coreData",
         FT_NONE, BASE_NONE, NULL, 0,
@@ -3403,6 +3959,22 @@ proto_register_rdp(void) {
       { "clientClusterData", "rdp.client.clusterData",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
+    { &hf_rdp_cluster_redirectionSupported,
+      { "redirectionSupported", "rdp.client.cluster.redirectionSupported",
+            FT_UINT32, BASE_DEC, NULL, 0x1,
+            NULL, HFILL }},
+    { &hf_rdp_cluster_sessionIdValid,
+      { "sessionIdValid", "rdp.client.cluster.sessionidvalid",
+            FT_UINT32, BASE_DEC, NULL, 0x2,
+            NULL, HFILL }},
+    { &hf_rdp_cluster_redirectionVersion,
+      { "SessionRedirectionVersion", "rdp.client.cluster.redirectionversion",
+            FT_UINT32, BASE_DEC, VALS(redirectionVersions_vals), 0x3C,
+            NULL, HFILL }},
+    { &hf_rdp_cluster_redirectedSmartcard,
+      { "redirectedSmartcard", "rdp.client.cluster.redirectedsmartcard",
+            FT_UINT32, BASE_DEC, NULL, 0x40,
+            NULL, HFILL }},
     { &hf_rdp_clientMonitorData,
       { "clientMonitorData", "rdp.client.monitorData",
         FT_NONE, BASE_NONE, NULL, 0,
@@ -3451,6 +4023,78 @@ proto_register_rdp(void) {
       { "serverMultiTransportData", "rdp.server.multiTransportData",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
+    { &hf_rdp_rdstls_version,
+      { "Version", "rdp.rdstls.version",
+            FT_UINT16, BASE_HEX, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_pduType,
+      { "Pdu type", "rdp.rdstls.pdutype",
+            FT_UINT16, BASE_HEX, VALS(rdp_rdstls_pduTypes_vals), 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_dataTypeCapabilities,
+      { "Data type", "rdp.rdstls.datatype",
+            FT_UINT16, BASE_HEX, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_supportedVersions,
+      { "Supported versions", "rdp.rdstls.supportedversions",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_dataTypeAuthReq,
+      { "Data type", "rdp.rdstls.datatype",
+            FT_UINT16, BASE_HEX, VALS(rdp_rdstls_authDataTypes_vals), 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_redirectionGuidLen,
+      { "redirectionGUID length", "rdp.rdstls.redirectionguidlen",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_redirectionGuid,
+      { "redirectionGUID", "rdp.rdstls.redirectionguid",
+            FT_STRINGZ, BASE_NONE, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_usernameLen,
+      { "Username length", "rdp.rdstls.usernamelen",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_username,
+      { "Username", "rdp.rdstls.username",
+            FT_STRINGZ, BASE_NONE, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_domainLen,
+      { "Domain length", "rdp.rdstls.domainlen",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_domain,
+      { "Domain", "rdp.rdstls.domain",
+            FT_STRINGZ, BASE_NONE, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_passwordLen,
+      { "Password length", "rdp.rdstls.passwordlen",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_password,
+      { "Password", "rdp.rdstls.password",
+            FT_BYTES, BASE_NONE, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_sessionId,
+      { "SessionId", "rdp.rdstls.sessionid",
+            FT_UINT32, BASE_HEX, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_autoReconnectCookieLen,
+      { "AutoReconnect cookie length", "rdp.rdstls.reconnectcookielen",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_autoReconnectCookie,
+      { "AutoReconnect cookie", "rdp.rdstls.reconnectcookie",
+            FT_BYTES, BASE_NONE, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_dataTypeAuthResp,
+      { "Data type", "rdp.rdstls.datatype",
+            FT_UINT16, BASE_HEX, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_rdstls_resultCode,
+      { "Result code", "rdp.rdstls.resultcode",
+            FT_UINT32, BASE_HEX, VALS(rdp_rdstls_result_vals), 0,
+            NULL, HFILL }},
     { &hf_rdp_serverUnknownData,
       { "serverUnknownData", "rdp.unknownData.server",
         FT_NONE, BASE_NONE, NULL, 0,
@@ -3549,7 +4193,7 @@ proto_register_rdp(void) {
         NULL, HFILL }},
     { &hf_rdp_earlyCapabilityFlags,
       { "earlyCapabilityFlags", "rdp.earlyCapabilityFlags",
-        FT_UINT16, BASE_DEC, NULL, 0,
+        FT_UINT16, BASE_HEX, NULL, 0,
         NULL, HFILL }},
     { &hf_rdp_clientDigProductId,
       { "clientDigProductId", "rdp.client.digProductId",
@@ -3569,11 +4213,11 @@ proto_register_rdp(void) {
         NULL, HFILL }},
     { &hf_rdp_encryptionMethods,
       { "encryptionMethods", "rdp.encryptionMethods",
-        FT_BYTES, BASE_NONE, NULL, 0,
+        FT_UINT32, BASE_HEX, NULL, 0,
         NULL, HFILL }},
     { &hf_rdp_extEncryptionMethods,
       { "extEncryptionMethods", "rdp.extEncryptionMethods",
-        FT_BYTES, BASE_NONE, NULL, 0,
+        FT_UINT32, BASE_HEX, NULL, 0,
         NULL, HFILL }},
     { &hf_rdp_cluster_flags,    /* ToDo: Display flags in detail */
       { "clusterFlags", "rdp.clusterFlags",
@@ -3711,26 +4355,26 @@ proto_register_rdp(void) {
       { "flagsHiValid", "rdp.flags.flagshivalid",
         FT_UINT16, BASE_HEX, NULL, SEC_FLAGSHI_VALID,
         NULL, HFILL }},
-	{ &hf_rdp_flagsAutodetectReq,
-	  { "autodetect request", "rdp.flags.autodetectreq",
-		FT_UINT16, BASE_HEX, NULL, SEC_AUTODETECT_REQ,
-		NULL, HFILL }},
-	{ &hf_rdp_flagsAutodetectResp,
-	  { "autodetect response", "rdp.flags.autodetectresp",
-		FT_UINT16, BASE_HEX, NULL, SEC_AUTODETECT_RSP,
-		NULL, HFILL }},
-	{ &hf_rdp_flagsHeartbeat,
-	  { "heartbeat", "rdp.flags.heartbeat",
-		FT_UINT16, BASE_HEX, NULL, SEC_HEARTBEAT,
-		NULL, HFILL }},
-	{ &hf_rdp_flagsTransportReq,
-	  { "multiTransport request", "rdp.flags.transportreq",
-		FT_UINT16, BASE_HEX, NULL, SEC_TRANSPORT_REQ,
-		NULL, HFILL }},
-	{ &hf_rdp_flagsTransportResp,
-	  { "transport response", "rdp.flags.transportrsp",
-		FT_UINT16, BASE_HEX, NULL, SEC_TRANSPORT_RSP,
-		NULL, HFILL }},
+    { &hf_rdp_flagsAutodetectReq,
+      { "autodetect request", "rdp.flags.autodetectreq",
+            FT_UINT16, BASE_HEX, NULL, SEC_AUTODETECT_REQ,
+            NULL, HFILL }},
+    { &hf_rdp_flagsAutodetectResp,
+      { "autodetect response", "rdp.flags.autodetectresp",
+            FT_UINT16, BASE_HEX, NULL, SEC_AUTODETECT_RSP,
+            NULL, HFILL }},
+    { &hf_rdp_flagsHeartbeat,
+      { "heartbeat", "rdp.flags.heartbeat",
+            FT_UINT16, BASE_HEX, NULL, SEC_HEARTBEAT,
+            NULL, HFILL }},
+    { &hf_rdp_flagsTransportReq,
+      { "multiTransport request", "rdp.flags.transportreq",
+            FT_UINT16, BASE_HEX, NULL, SEC_TRANSPORT_REQ,
+            NULL, HFILL }},
+    { &hf_rdp_flagsTransportResp,
+      { "transport response", "rdp.flags.transportrsp",
+            FT_UINT16, BASE_HEX, NULL, SEC_TRANSPORT_RSP,
+            NULL, HFILL }},
     { &hf_rdp_flagsHi,
       { "flagsHi", "rdp.flagsHi",
         FT_UINT16, BASE_HEX, NULL, 0,
@@ -3739,106 +4383,94 @@ proto_register_rdp(void) {
       { "length", "rdp.length",
         FT_UINT32, BASE_DEC, NULL, 0,
         NULL, HFILL }},
-	{ &hf_rdp_heartbeat_reserved,
-		{ "reserved", "rdp.heartbeat.reserved",
-		  FT_UINT8, BASE_HEX, NULL, 0,
-		  NULL, HFILL}},
-	{ &hf_rdp_heartbeat_period,
-		{ "Period", "rdp.heartbeat.period",
-		  FT_UINT8, BASE_DEC, NULL, 0,
-		  NULL, HFILL}},
-	{ &hf_rdp_heartbeat_count1,
-		{ "Count1", "rdp.heartbeat.count1",
-		  FT_UINT8, BASE_DEC, NULL, 0,
-		  NULL, HFILL}},
-	{ &hf_rdp_heartbeat_count2,
-		{ "Count2", "rdp.heartbeat.count2",
-		  FT_UINT8, BASE_DEC, NULL, 0,
-		  NULL, HFILL}},
-	{ &hf_rdp_bandwidth_header_len,
-		{ "HeaderLength", "rdp.bandwidth.headerlen",
-		  FT_UINT8, BASE_HEX, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_bandwidth_header_type,
-		{ "HeaderTypeId", "rdp.bandwidth.typeid",
-		  FT_UINT8, BASE_HEX, VALS(bandwidth_typeid_vals), 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_bandwidth_seqnumber,
-		{ "Sequence number", "rdp.bandwidth.sequencenumber",
-		  FT_UINT16, BASE_HEX, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_bandwidth_reqtype,
-		{ "Request type", "rdp.bandwidth.reqtype",
-		  FT_UINT16, BASE_HEX, VALS(bandwidth_request_vals), 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_bandwidth_resptype,
-		{ "Response type", "rdp.bandwidth.resptype",
-		  FT_UINT16, BASE_HEX, VALS(bandwidth_response_vals), 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_bandwidth_measure_payload_len,
-		{ "Payload length", "rdp.bandwidth.measure.len",
-		  FT_UINT16, BASE_DEC, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_bandwidth_measure_payload_data,
-		{ "Payload data", "rdp.bandwidth.measure.payload",
-		  FT_BYTES, BASE_NONE, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_network_characteristics_basertt,
-		{ "Base RTT", "rdp.networkcharacteristics.basertt",
-		  FT_UINT32, BASE_DEC, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_network_characteristics_bandwidth,
-		{ "Bandwidth", "rdp.networkcharacteristics.bandwidth",
-		  FT_UINT32, BASE_DEC, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_network_characteristics_averagertt,
-		{ "Average RTT", "rdp.networkcharacteristics.averagertt",
-		  FT_UINT32, BASE_DEC, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_rtt_measure_time_delta,
-		{ "Time delta", "rdp.rttmeasure.timedelta",
-		  FT_UINT32, BASE_DEC, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_rtt_measure_time_bytecount,
-		{ "Byte count", "rdp.rttmeasure.bytecount",
-		  FT_UINT32, BASE_DEC, NULL, 0,
-		  NULL, HFILL}
-	},
-	{ &hf_rdp_mt_req_requestId,
-	  { "Request id", "rdp.mtreq.requestid",
-	    FT_UINT32, BASE_HEX, NULL, 0,
-	    NULL, HFILL }},
-	{ &hf_rdp_mt_req_protocol,
-	  { "Protocol", "rdp.mtreq.protocol",
-		FT_UINT16, BASE_HEX, VALS(rdp_mt_protocol_vals), 0,
-		NULL, HFILL }},
-	{ &hf_rdp_mt_req_reserved,
-	  { "Reserved", "rdp.mtreq.reserved",
-		FT_UINT16, BASE_HEX, NULL, 0,
-		NULL, HFILL }},
-	{ &hf_rdp_mt_req_securityCookie,
-	  { "Security cookie", "rdp.mtreq.securitycookie",
-		FT_BYTES, BASE_NONE, NULL, 0,
-		NULL, HFILL }},
-	{ &hf_rdp_mt_rsp_requestId,
-	  { "Request id", "rdp.mtresp.requestid",
-		FT_UINT32, BASE_HEX, NULL, 0,
-		NULL, HFILL }},
-	{ &hf_rdp_mt_rsp_hrResponse,
-	  { "hrResponse", "rdp.mtresp.hrresponse",
-		FT_UINT32, BASE_HEX, VALS(rdp_mt_response_vals), 0,
-		NULL, HFILL }},
+    { &hf_rdp_heartbeat_reserved,
+      { "reserved", "rdp.heartbeat.reserved",
+        FT_UINT8, BASE_HEX, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_heartbeat_period,
+      { "Period", "rdp.heartbeat.period",
+        FT_UINT8, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_heartbeat_count1,
+      { "Count1", "rdp.heartbeat.count1",
+        FT_UINT8, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_heartbeat_count2,
+      { "Count2", "rdp.heartbeat.count2",
+        FT_UINT8, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_bandwidth_header_len,
+      { "HeaderLength", "rdp.bandwidth.headerlen",
+        FT_UINT8, BASE_HEX, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_bandwidth_header_type,
+      { "HeaderTypeId", "rdp.bandwidth.typeid",
+        FT_UINT8, BASE_HEX, VALS(bandwidth_typeid_vals), 0,
+        NULL, HFILL}},
+    { &hf_rdp_bandwidth_seqnumber,
+      { "Sequence number", "rdp.bandwidth.sequencenumber",
+        FT_UINT16, BASE_HEX, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_bandwidth_reqtype,
+      { "Request type", "rdp.bandwidth.reqtype",
+        FT_UINT16, BASE_HEX, VALS(bandwidth_request_vals), 0,
+        NULL, HFILL }},
+    { &hf_rdp_bandwidth_resptype,
+      { "Response type", "rdp.bandwidth.resptype",
+        FT_UINT16, BASE_HEX, VALS(bandwidth_response_vals), 0,
+        NULL, HFILL }},
+    { &hf_rdp_bandwidth_measure_payload_len,
+      { "Payload length", "rdp.bandwidth.measure.len",
+        FT_UINT16, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_bandwidth_measure_payload_data,
+      { "Payload data", "rdp.bandwidth.measure.payload",
+        FT_BYTES, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_network_characteristics_basertt,
+      { "Base RTT", "rdp.networkcharacteristics.basertt",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_network_characteristics_bandwidth,
+      { "Bandwidth", "rdp.networkcharacteristics.bandwidth",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_network_characteristics_averagertt,
+      { "Average RTT", "rdp.networkcharacteristics.averagertt",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_rtt_measure_time_delta,
+      { "Time delta", "rdp.rttmeasure.timedelta",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_rtt_measure_time_bytecount,
+      { "Byte count", "rdp.rttmeasure.bytecount",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_mt_req_requestId,
+      { "Request id", "rdp.mtreq.requestid",
+        FT_UINT32, BASE_HEX, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_mt_req_protocol,
+      { "Protocol", "rdp.mtreq.protocol",
+            FT_UINT16, BASE_HEX, VALS(rdp_mt_protocol_vals), 0,
+            NULL, HFILL }},
+    { &hf_rdp_mt_req_reserved,
+      { "Reserved", "rdp.mtreq.reserved",
+            FT_UINT16, BASE_HEX, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_mt_req_securityCookie,
+      { "Security cookie", "rdp.mtreq.securitycookie",
+            FT_BYTES, BASE_NONE, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_mt_rsp_requestId,
+      { "Request id", "rdp.mtresp.requestid",
+            FT_UINT32, BASE_HEX, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_mt_rsp_hrResponse,
+      { "hrResponse", "rdp.mtresp.hrresponse",
+            FT_UINT32, BASE_HEX, VALS(rdp_mt_response_vals), 0,
+            NULL, HFILL }},
     { &hf_rdp_encryptedClientRandom,
       { "encryptedClientRandom", "rdp.encryptedClientRandom",
         FT_BYTES, BASE_NONE, NULL, 0,
@@ -3867,6 +4499,94 @@ proto_register_rdp(void) {
       { "optionFlags", "rdp.optionFlags",
         FT_UINT32, BASE_HEX, NULL, 0,
         NULL, HFILL }},
+	{ &hf_rdp_flagsInfoMouse,
+	  { "MOUSE", "rdp.optionFlags.mouse",
+		FT_UINT32, BASE_HEX, NULL, 0x00000001,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsDisableCtrlAltDel,
+	  { "DISABLECTRLALTDEL", "rdp.optionFlags.disablectrlaltdel",
+		FT_UINT32, BASE_HEX, NULL, 0x00000002,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsAutoLogon,
+	  { "AUTOLOGON", "rdp.optionFlags.autologon",
+		FT_UINT32, BASE_HEX, NULL, 0x00000008,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsUnicode,
+	  { "UNICODE", "rdp.optionFlags.unicode",
+		FT_UINT32, BASE_HEX, NULL, 0x00000010,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsMaximizeShell,
+	  { "MAXIMIZESHELL", "rdp.optionFlags.maximizeshell",
+		FT_UINT32, BASE_HEX, NULL, 0x00000020,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsLogonNotify,
+	  { "LOGONNOTIFY", "rdp.optionFlags.logonnotify",
+		FT_UINT32, BASE_HEX, NULL, 0x00000040,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsCompression,
+	  { "COMPRESSION", "rdp.optionFlags.compression",
+		FT_UINT32, BASE_HEX, NULL, 0x00000080,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsCompressionType,
+	  { "COMPRESSION_TYPES", "rdp.optionFlags.compressiontypes",
+		FT_UINT32, BASE_HEX, NULL, 0x00001E00,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsEnableWindowsKey,
+	  { "ENABLEWINDOWSKEY", "rdp.optionFlags.enablewindowskey",
+		FT_UINT32, BASE_HEX, NULL, 0x00000100,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsRemoteConsoleAudio,
+	  { "REMOTECONSOLEAUDIO", "rdp.optionFlags.remoteconsoleaudio",
+		FT_UINT32, BASE_HEX, NULL, 0x00002000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsForceEncryptedCsPdu,
+	  { "FORCE_ENCRYPTED_CS_PDU", "rdp.optionFlags.forceencryptedcspdu",
+		FT_UINT32, BASE_HEX, NULL, 0x00004000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsRail,
+	  { "RAIL", "rdp.optionFlags.rail",
+		FT_UINT32, BASE_HEX, NULL, 0x00008000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsLogonErrors,
+	  { "LOGONERRORS", "rdp.optionFlags.logonerrors",
+		FT_UINT32, BASE_HEX, NULL, 0x00010000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsHasWheel,
+	  { "MOUSE_HAS_WHEEL", "rdp.optionFlags.mousehaswheel",
+		FT_UINT32, BASE_HEX, NULL, 0x00020000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsPasswordIsScPin,
+	  { "PASSWORD_IS_SC_PIN", "rdp.optionFlags.passwordisscpin",
+		FT_UINT32, BASE_HEX, NULL, 0x00040000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsNoAudioPlayback,
+	  { "NOAUDIOPLAYBACK", "rdp.optionFlags.noaudioplayback",
+		FT_UINT32, BASE_HEX, NULL, 0x00080000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsUsingSavedCreds,
+	  { "USING_SAVED_CREDS", "rdp.optionFlags.usingsavedcreds",
+		FT_UINT32, BASE_HEX, NULL, 0x00100000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsAudioCapture,
+	  { "AUDIOCAPTURE", "rdp.optionFlags.audiocapture",
+		FT_UINT32, BASE_HEX, NULL, 0x00200000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsVideoDisable,
+	  { "VIDEO_DISABLE", "rdp.optionFlags.videodisable",
+		FT_UINT32, BASE_HEX, NULL, 0x00400000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsReserved1,
+	  { "RESERVED1", "rdp.optionFlags.reserved1",
+		FT_UINT32, BASE_HEX, NULL, 0x00800000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsReserved2,
+	  { "RESERVED2", "rdp.optionFlags.reserved2",
+		FT_UINT32, BASE_HEX, NULL, 0x01000000,
+		NULL, HFILL }},
+	{ &hf_rdp_flagsHidefRailSupported,
+	  { "HIDEF_RAIL_SUPPORTED", "rdp.optionFlags.hidefrailsupported",
+		FT_UINT32, BASE_HEX, NULL, 0x02000000,
+		NULL, HFILL }},
     { &hf_rdp_cbDomain,
       { "cbDomain", "rdp.domain.length",
         FT_UINT16, BASE_DEC, NULL, 0,
@@ -3937,7 +4657,7 @@ proto_register_rdp(void) {
         NULL, HFILL }},
     { &hf_rdp_clientSessionId,
       { "clientSessionId", "rdp.client.sessionId",
-        FT_BYTES, BASE_NONE, NULL, 0,
+        FT_UINT32, BASE_HEX, NULL, 0,
         NULL, HFILL }},
     { &hf_rdp_performanceFlags,
       { "performanceFlags", "rdp.performanceFlags",
@@ -3955,6 +4675,18 @@ proto_register_rdp(void) {
       { "reserved2", "rdp.reserved2",
         FT_UINT16, BASE_HEX, NULL, 0,
         NULL, HFILL }},
+    { &hf_rdp_cbDynamicDSTTimeZoneKeyName,
+      { "cbDynamicDSTTimeZoneKeyName", "rdp.dynamicdsttimezone.length",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_dynamicDSTTimeZoneKeyName,
+      { "dynamicDSTTimeZoneKeyName", "rdp.dynamicdsttimezone",
+            FT_STRINGZ, BASE_NONE, NULL, 0,  /* null-terminated, count includes terminator */
+            NULL, HFILL }},
+    { &hf_rdp_dynamicDaylightTimeDisabled,
+      { "dynamicDaylightTimeDisabled", "rdp.dynamicdaylighttimedisabled",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
     { &hf_rdp_bMsgType,
       { "bMsgType", "rdp.bMsgType",
         FT_UINT8, BASE_HEX, VALS(rdp_bMsgType_vals), 0,
@@ -3991,206 +4723,244 @@ proto_register_rdp(void) {
       { "virtualChannelData", "rdp.virtualChannelData",
         FT_BYTES, BASE_NONE, NULL, 0,
         NULL, HFILL }},
-	{ &hf_rdp_pointerFlags,
-	  { "pointerFlags", "rdp.pointerflags",
-		FT_UINT16, BASE_HEX, NULL, 0,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_move,
-	  { "Move", "rdp.pointerflags.move",
-		FT_BOOLEAN, 16, NULL, 0x0800,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_down,
-	  { "Down", "rdp.pointerflags.down",
-		FT_BOOLEAN, 16, NULL, 0x8000,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_button1,
-	  { "Button1", "rdp.pointerflags.button1",
-		FT_BOOLEAN, 16, NULL, 0x1000,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_button2,
-	  { "Button2", "rdp.pointerflags.button2",
-		FT_BOOLEAN, 16, NULL, 0x2000,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_button3,
-	  { "Button3", "rdp.pointerflags.button3",
-		FT_BOOLEAN, 16, NULL, 0x4000,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_wheel_rotation,
-	  { "Wheel rotation", "rdp.pointerflags.wheelrotation",
-		FT_UINT16, BASE_DEC, NULL, 0x01ff,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_wheel_neg,
-	  { "Wheel negative", "rdp.pointerflags.wheelnegative",
-		FT_BOOLEAN, 16, NULL, 0x0100,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_wheel,
-	  { "Wheel", "rdp.pointerflags.wheel",
-		FT_BOOLEAN, 16, NULL, 0x0200,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerFlags_hwheel,
-	  { "Horizontal wheel", "rdp.pointerflags.hwheel",
-		FT_BOOLEAN, 16, NULL, 0x0400,
-		NULL, HFILL }},
-	{ &hf_rdp_pointer_xpos,
-	  { "xPos", "rdp.pointer.xpos",
-		FT_UINT16, BASE_DEC, NULL, 0x0,
-		NULL, HFILL }},
-	{ &hf_rdp_pointer_ypos,
-	  { "yPos", "rdp.pointer.ypos",
-		FT_UINT16, BASE_DEC, NULL, 0x0,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerxFlags,
-	  { "PointeFlags", "rdp.pointerxflags",
-		FT_UINT16, BASE_HEX, NULL, 0x0,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerxFlags_down,
-	  { "Down", "rdp.pointerxflags.down",
-		FT_BOOLEAN, 16, NULL, 0x8000,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerxFlags_button1,
-	  { "Button1", "rdp.pointerxflags.button1",
-		FT_BOOLEAN, 16, NULL, 0x0001,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerxFlags_button2,
-	  { "Button2", "rdp.pointerxflags.button2",
-		FT_BOOLEAN, 16, NULL, 0x0002,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerx_xpos,
-	  { "xPos", "rdp.pointerx.xpos",
-		FT_UINT16, BASE_DEC, NULL, 0x0,
-		NULL, HFILL }},
-	{ &hf_rdp_pointerx_ypos,
-	  { "yPos", "rdp.pointerx.ypos",
-		FT_UINT16, BASE_DEC, NULL, 0x0,
-		NULL, HFILL }},
-
-
-	{ &hf_rdp_fastpathHeader,
-	  { "Header", "rdp.fastpath.header",
-		FT_UINT8, BASE_HEX, NULL, 0x0,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathAction,
-	  { "Action", "rdp.fastpath.action",
-		FT_UINT8, BASE_DEC, VALS(rdp_fastpath_action_vals), 0x3,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathClientNumEvents,
-	  { "numEvents", "rdp.fastpath.numevents",
-		FT_UINT8, BASE_DEC, NULL, 0x3c,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathFlags,
-	  { "flags", "rdp.fastpath.flags",
-		FT_UINT8, BASE_DEC, NULL, 0xc0,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerReserved,
-	  { "Reserved", "rdp.fastpath.reserved",
-		FT_UINT8, BASE_HEX, NULL, 0x3c,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathPDULength,
-	  { "fastpathPDULength", "rdp.fastpathPDULength",
-		FT_UINT16, BASE_DEC, NULL, 0,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathClientNumEvents2,
-	  { "NumEvents2", "rdp.fastpath.numevents2",
-		FT_UINT8, BASE_DEC, NULL, 0x00,
-		NULL, HFILL }},
+    { &hf_rdp_pointerFlags,
+      { "pointerFlags", "rdp.pointerflags",
+            FT_UINT16, BASE_HEX, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_move,
+      { "Move", "rdp.pointerflags.move",
+            FT_BOOLEAN, 16, NULL, 0x0800,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_down,
+      { "Down", "rdp.pointerflags.down",
+            FT_BOOLEAN, 16, NULL, 0x8000,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_button1,
+      { "Button1", "rdp.pointerflags.button1",
+            FT_BOOLEAN, 16, NULL, 0x1000,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_button2,
+      { "Button2", "rdp.pointerflags.button2",
+            FT_BOOLEAN, 16, NULL, 0x2000,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_button3,
+      { "Button3", "rdp.pointerflags.button3",
+            FT_BOOLEAN, 16, NULL, 0x4000,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_wheel_rotation,
+      { "Wheel rotation", "rdp.pointerflags.wheelrotation",
+            FT_UINT16, BASE_DEC, NULL, 0x01ff,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_wheel_neg,
+      { "Wheel negative", "rdp.pointerflags.wheelnegative",
+            FT_BOOLEAN, 16, NULL, 0x0100,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_wheel,
+      { "Wheel", "rdp.pointerflags.wheel",
+            FT_BOOLEAN, 16, NULL, 0x0200,
+            NULL, HFILL }},
+    { &hf_rdp_pointerFlags_hwheel,
+      { "Horizontal wheel", "rdp.pointerflags.hwheel",
+            FT_BOOLEAN, 16, NULL, 0x0400,
+            NULL, HFILL }},
+    { &hf_rdp_pointer_xpos,
+      { "xPos", "rdp.pointer.xpos",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
+    { &hf_rdp_pointer_ypos,
+      { "yPos", "rdp.pointer.ypos",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
+    { &hf_rdp_pointerxFlags,
+      { "PointerFlags", "rdp.pointerxflags",
+            FT_UINT16, BASE_HEX, NULL, 0x0,
+            NULL, HFILL }},
+    { &hf_rdp_pointerxFlags_down,
+      { "Down", "rdp.pointerxflags.down",
+            FT_BOOLEAN, 16, NULL, 0x8000,
+            NULL, HFILL }},
+    { &hf_rdp_pointerxFlags_button1,
+      { "Button1", "rdp.pointerxflags.button1",
+            FT_BOOLEAN, 16, NULL, 0x0001,
+            NULL, HFILL }},
+    { &hf_rdp_pointerxFlags_button2,
+      { "Button2", "rdp.pointerxflags.button2",
+            FT_BOOLEAN, 16, NULL, 0x0002,
+            NULL, HFILL }},
+    { &hf_rdp_pointerx_xpos,
+      { "xPos", "rdp.pointerx.xpos",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
+    { &hf_rdp_pointerx_ypos,
+      { "yPos", "rdp.pointerx.ypos",
+            FT_UINT16, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathHeader,
+      { "Header", "rdp.fastpath.header",
+            FT_UINT8, BASE_HEX, NULL, 0x0,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathAction,
+      { "Action", "rdp.fastpath.action",
+            FT_UINT8, BASE_DEC, VALS(rdp_fastpath_action_vals), 0x3,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathClientNumEvents,
+      { "numEvents", "rdp.fastpath.numevents",
+            FT_UINT8, BASE_DEC, NULL, 0x3c,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathFlags,
+      { "flags", "rdp.fastpath.flags",
+            FT_UINT8, BASE_DEC, NULL, 0xc0,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerReserved,
+      { "Reserved", "rdp.fastpath.reserved",
+            FT_UINT8, BASE_HEX, NULL, 0x3c,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathPDULength,
+      { "fastpathPDULength", "rdp.fastpathPDULength",
+            FT_UINT16, BASE_DEC, NULL, 0,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathClientNumEvents2,
+      { "NumEvents2", "rdp.fastpath.numevents2",
+            FT_UINT8, BASE_DEC, NULL, 0x00,
+            NULL, HFILL }},
 #if 0
 	{ &hf_rdp_fastpathOutputHeader,
 	  { "fpOutputHeader", "rdp.fastpath.outputheader",
 		FT_UINT8, BASE_HEX, NULL, 0x00,
 		NULL, HFILL }},
 #endif
-	{ &hf_rdp_fastpathServerUpdateCode,
-	  { "Code", "rdp.fastpath.clienteventcode",
-		FT_UINT8, BASE_DEC, VALS(rdp_fastpath_server_event_vals), 0x0f,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerFragmentation,
-	  { "Fragmentation", "rdp.fastpath.serverfragmentation",
-		FT_UINT8, BASE_DEC, VALS(rdp_fastpath_server_fragmentation_vals), 0x30,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerCompression,
-	  { "Compression", "rdp.fastpath.servercompression",
-		FT_UINT8, BASE_HEX, NULL, 0xc0,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathInputHeader,
-	  { "EventHeaderCode", "rdp.fastpath.eventheader",
-		FT_UINT8, BASE_HEX, NULL, 0x0,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathClientEventCode,
-	  { "Code", "rdp.fastpath.clienteventcode",
-		FT_UINT8, BASE_DEC, VALS(rdp_fastpath_client_event_vals), 0xe0,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathClientFlags,
-	  { "Flags", "rdp.fastpath.eventflags",
-		FT_UINT8, BASE_DEC, NULL, 0x1f,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathScancodeRelease,
-	  { "Release", "rdp.fastpath.scancode.release",
-		FT_BOOLEAN, 8, NULL, 0x01,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathScancodeExtended,
-	  { "Extended", "rdp.fastpath.scancode.extended",
-		FT_BOOLEAN, 8, NULL, 0x02,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathScancodeExtended1,
-	  { "Extended1", "rdp.fastpath.scancode.extended1",
-		FT_BOOLEAN, 8, NULL, 0x04,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathScancodeKeyCode,
-	  { "KeyCode", "rdp.fastpath.scancode.keycode",
-		FT_UINT8, BASE_HEX, NULL, 0x00,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathSyncScrollLock,
-	  { "ScrollLock", "rdp.fastpath.sync.scrolllock",
-		FT_BOOLEAN, 8, NULL, 0x01,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathSyncNumLock,
-	  { "NumLock", "rdp.fastpath.sync.numlock",
-		FT_BOOLEAN, 8, NULL, 0x02,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathSyncCapsLock,
-	  { "CapsLock", "rdp.fastpath.sync.capslock",
-		FT_BOOLEAN, 8, NULL, 0x04,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathSyncKanaLock,
-	  { "ScrollLock", "rdp.fastpath.sync.kanalock",
-		FT_BOOLEAN, 8, NULL, 0x08,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathQoeTimestamp,
-	  { "Timestamp", "rdp.fastpath.qoe.timestamp",
-		FT_UINT32, BASE_HEX, NULL, 0x00,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathUnicodeFlagsRelease,
-	  { "Release", "rdp.fastpath.unicode.release",
-		FT_BOOLEAN, 5, NULL, 0x01,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathUnicodeCode,
-	  { "unicodeCode", "rdp.fastpath.unicode.code",
-		FT_UINT16, BASE_HEX, NULL, 0x00,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerCompressionType,
-	  { "CompressionType", "rdp.fastpath.server.compressiontype",
-		FT_UINT8, BASE_HEX, NULL, 0x00,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerCompressionType_compressed,
-	  { "Compressed", "rdp.fastpath.server.compressionflags.compressed",
-		FT_BOOLEAN, 8, NULL, PACKET_COMPRESSED,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerCompressionType_atfront,
-	  { "At front", "rdp.fastpath.server.compressionflags.atfront",
-		FT_BOOLEAN, 8, NULL, PACKET_AT_FRONT,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerCompressionType_flushed,
-	  { "At front", "rdp.fastpath.server.compressionflags.flushed",
-		FT_BOOLEAN, 8, NULL, PACKET_FLUSHED,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerCompressionFlags,
-	  { "CompressionFlags", "rdp.fastpath.server.compressionflags",
-		FT_UINT8, BASE_HEX, VALS(rdp_compressionType_vals), 0x0f,
-		NULL, HFILL }},
-	{ &hf_rdp_fastpathServerSize,
-	  { "Size", "rdp.fastpath.server.size",
-		FT_UINT16, BASE_DEC, NULL, 0x00,
-		NULL, HFILL }},
+    { &hf_rdp_fastpathServerUpdateCode,
+      { "Code", "rdp.fastpath.clienteventcode",
+            FT_UINT8, BASE_DEC, VALS(rdp_fastpath_server_event_vals), 0x0f,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerFragmentation,
+      { "Fragmentation", "rdp.fastpath.serverfragmentation",
+            FT_UINT8, BASE_DEC, VALS(rdp_fastpath_server_fragmentation_vals), 0x30,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerCompression,
+      { "Compression", "rdp.fastpath.servercompression",
+            FT_UINT8, BASE_HEX, NULL, 0xc0,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathInputHeader,
+      { "EventHeaderCode", "rdp.fastpath.eventheader",
+            FT_UINT8, BASE_HEX, NULL, 0x0,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathClientEventCode,
+      { "Code", "rdp.fastpath.clienteventcode",
+            FT_UINT8, BASE_DEC, VALS(rdp_fastpath_client_event_vals), 0xe0,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathClientFlags,
+      { "Flags", "rdp.fastpath.eventflags",
+            FT_UINT8, BASE_DEC, NULL, 0x1f,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathScancodeRelease,
+      { "Release", "rdp.fastpath.scancode.release",
+            FT_BOOLEAN, 8, NULL, 0x01,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathScancodeExtended,
+      { "Extended", "rdp.fastpath.scancode.extended",
+            FT_BOOLEAN, 8, NULL, 0x02,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathScancodeExtended1,
+      { "Extended1", "rdp.fastpath.scancode.extended1",
+            FT_BOOLEAN, 8, NULL, 0x04,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathScancodeKeyCode,
+      { "KeyCode", "rdp.fastpath.scancode.keycode",
+            FT_UINT8, BASE_HEX, NULL, 0x00,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathSyncScrollLock,
+      { "ScrollLock", "rdp.fastpath.sync.scrolllock",
+            FT_BOOLEAN, 8, NULL, 0x01,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathSyncNumLock,
+      { "NumLock", "rdp.fastpath.sync.numlock",
+            FT_BOOLEAN, 8, NULL, 0x02,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathSyncCapsLock,
+      { "CapsLock", "rdp.fastpath.sync.capslock",
+            FT_BOOLEAN, 8, NULL, 0x04,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathSyncKanaLock,
+      { "ScrollLock", "rdp.fastpath.sync.kanalock",
+            FT_BOOLEAN, 8, NULL, 0x08,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathQoeTimestamp,
+      { "Timestamp", "rdp.fastpath.qoe.timestamp",
+            FT_UINT32, BASE_HEX, NULL, 0x00,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathUnicodeFlagsRelease,
+      { "Release", "rdp.fastpath.unicode.release",
+            FT_BOOLEAN, 5, NULL, 0x01,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathUnicodeCode,
+      { "unicodeCode", "rdp.fastpath.unicode.code",
+            FT_UINT16, BASE_HEX, NULL, 0x00,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags,
+      { "Flags", "rdp.relmouse.flags",
+            FT_UINT16, BASE_HEX, NULL, 0x00,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags_Move,
+      { "Move", "rdp.relmouse.flags.move",
+            FT_UINT16, BASE_HEX, NULL, 0x0800,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags_Down,
+      { "Down", "rdp.relmouse.flags.down",
+            FT_UINT16, BASE_HEX, NULL, 0x8000,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags_Button1,
+      { "Button1", "rdp.relmouse.flags.button1",
+            FT_UINT16, BASE_HEX, NULL, 0x1000,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags_Button2,
+      { "Button2", "rdp.relmouse.flags.button2",
+            FT_UINT16, BASE_HEX, NULL, 0x2000,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags_Button3,
+      { "Button3", "rdp.relmouse.flags.button3",
+            FT_UINT16, BASE_HEX, NULL, 0x4000,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags_XButton1,
+      { "XButton1", "rdp.relmouse.flags.xbutton1",
+            FT_UINT16, BASE_HEX, NULL, 0x0001,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseFlags_XButton2,
+      { "XButton2", "rdp.relmouse.flags.xbutton2",
+            FT_UINT16, BASE_HEX, NULL, 0x0002,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseDeltaX,
+      { "deltaX", "rdp.relmouse.deltax",
+            FT_INT16, BASE_DEC, NULL, 0x00,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathRelMouseDeltaY,
+      { "deltaY", "rdp.relmouse.deltay",
+            FT_INT16, BASE_DEC, NULL, 0x00,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerCompressionType,
+      { "CompressionType", "rdp.fastpath.server.compressiontype",
+            FT_UINT8, BASE_HEX, NULL, 0x00,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerCompressionType_compressed,
+      { "Compressed", "rdp.fastpath.server.compressionflags.compressed",
+            FT_BOOLEAN, 8, NULL, PACKET_COMPRESSED,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerCompressionType_atfront,
+      { "At front", "rdp.fastpath.server.compressionflags.atfront",
+            FT_BOOLEAN, 8, NULL, PACKET_AT_FRONT,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerCompressionType_flushed,
+      { "Flushed", "rdp.fastpath.server.compressionflags.flushed",
+            FT_BOOLEAN, 8, NULL, PACKET_FLUSHED,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerCompressionFlags,
+      { "CompressionFlags", "rdp.fastpath.server.compressionflags",
+            FT_UINT8, BASE_HEX, VALS(rdp_compressionType_vals), 0x0f,
+            NULL, HFILL }},
+    { &hf_rdp_fastpathServerSize,
+      { "Size", "rdp.fastpath.server.size",
+            FT_UINT16, BASE_DEC, NULL, 0x00,
+            NULL, HFILL }},
     { &hf_rdp_totalLength,
       { "totalLength", "rdp.totalLength",
         FT_UINT16, BASE_DEC, NULL, 0,
@@ -4377,6 +5147,10 @@ proto_register_rdp(void) {
         FT_UINT32, BASE_HEX, NULL, 0,
         NULL, HFILL }},
 #endif
+    { &hf_rdp_statusInfo_status,
+      { "statusCode", "rdp.serverstatus.code",
+        FT_UINT32, BASE_HEX, VALS(serverstatus_vals), 0,
+        NULL, HFILL }},
     { &hf_rdp_originatorId,
       { "originatorId", "rdp.OriginatorId",
         FT_UINT32, BASE_DEC, NULL, 0,
@@ -4417,6 +5191,106 @@ proto_register_rdp(void) {
       { "capabilityData", "rdp.capabilityData",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
+    { &hf_rdp_capaGen_osMajorType,
+      { "Os major type", "rdp.capability.general.osmajortype",
+        FT_UINT16, BASE_HEX, NULL, 0,
+        NULL, HFILL }},
+    { &hf_rdp_capaGen_osMinorType,
+      { "Os minor type", "rdp.capability.general.osminortype",
+        FT_UINT16, BASE_HEX, NULL, 0,
+        NULL, HFILL }},
+	{ &hf_rdp_capaGen_protocolVersion,
+	  { "Protocol version", "rdp.capability.general.protocolversion",
+		FT_UINT16, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_pad2octets,
+	  { "pad2octetsA", "rdp.capability.general.pad2octetsa",
+		FT_UINT16, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_compressionTypes,
+	  { "Compression types", "rdp.capability.general.compressiontypes",
+		FT_UINT16, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_fastpathflag_supported,
+	  { "FASTPATH_OUTPUT_SUPPORTED", "rdp.capability.general.fastpathflagsupported",
+		FT_UINT16, BASE_HEX, NULL, 0x0001,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_no_bitmap_comp_hdr,
+	  { "NO_BITMAP_COMPRESSION_HDR", "rdp.capability.general.nobitmpacomphdr",
+		FT_UINT16, BASE_HEX, NULL, 0x0400,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_long_credentials,
+	  { "LONG_CREDENTIALS_SUPPORTED", "rdp.capability.general.longcredentials",
+		FT_UINT16, BASE_HEX, NULL, 0x0004,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_autoreconnect,
+	  { "AUTORECONNECT_SUPPORTED", "rdp.capability.general.autoreconnect",
+		FT_UINT16, BASE_HEX, NULL, 0x0008,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_encsaltedchecksum,
+	  { "ENC_SALTED_CHECKSUM", "rdp.capability.general.encsaltedchecksum",
+		FT_UINT16, BASE_HEX, NULL, 0x0010,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_extraFlags,
+	  { "Extra flags", "rdp.capability.general.extraflags",
+		FT_UINT16, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_updateCapaFlag,
+	  { "Update capability flag", "rdp.capability.general.updatecapaflag",
+		FT_UINT16, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_remoteUnshareFlags,
+	  { "Remote unshare flags", "rdp.capability.general.remoteunshareflags",
+		FT_UINT16, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_compressionLevel,
+	  { "Compression level", "rdp.capability.general.compressionlevel",
+		FT_UINT16, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_refreshRect,
+	  { "Refresh rect", "rdp.capability.general.refreshrect",
+		FT_UINT8, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaGen_suppressOutput,
+	  { "Suppress output", "rdp.capability.general.suppressoutput",
+		FT_UINT8, BASE_HEX, NULL, 0,
+		NULL, HFILL }},
+	{ &hf_rdp_capaRail_supportedLevel,
+	  { "RailSupportLevel", "rdp.capability.rail.supportlevel",
+			FT_UINT32, BASE_HEX, NULL, 0,
+			NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_supported,
+      { "TS_RAIL_LEVEL_SUPPORTED", "rdp.capability.rail.supported",
+            FT_UINT32, BASE_HEX, NULL, 0x00000001,
+            NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_dockedlangbar,
+      { "DOCKED_LANGBAR", "rdp.capability.rail.dockedlangbar",
+            FT_UINT32, BASE_HEX, NULL, 0x00000002,
+            NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_shellintegration,
+      { "SHELL_INTEGRATION", "rdp.capability.rail.shellintegration",
+            FT_UINT32, BASE_HEX, NULL, 0x00000004,
+            NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_lang_ime_sync,
+      { "LANGUAGE_IME_SYNC", "rdp.capability.rail.langimesync",
+            FT_UINT32, BASE_HEX, NULL, 0x00000008,
+            NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_server_to_client_ime_sync,
+      { "SERVER_TO_CLIENT_IME_SYNC", "rdp.capability.rail.servertoclientimesync",
+            FT_UINT32, BASE_HEX, NULL, 0x00000010,
+            NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_hide_minimized,
+      { "HIDE_MINIMIZED_APPS", "rdp.capability.rail.hideminimized",
+            FT_UINT32, BASE_HEX, NULL, 0x00000020,
+            NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_windows_cloaking,
+      { "WINDOW_CLOAKING", "rdp.capability.rail.windowcloaking",
+            FT_UINT32, BASE_HEX, NULL, 0x00000040,
+            NULL, HFILL }},
+    { &hf_rdp_capaRail_flag_handshakeex,
+      { "HANDSHAKE_EX", "rdp.capability.rail.handshakeex",
+            FT_UINT32, BASE_HEX, NULL, 0x00000080,
+            NULL, HFILL }},
 #if 0
     { &hf_rdp_unknownData,
       { "unknownData", "rdp.unknownData",
@@ -4534,9 +5408,12 @@ proto_register_rdp(void) {
         FT_UINT32, BASE_HEX, NULL, CHANNEL_PACKET_FLUSHED,
         NULL, HFILL }},
     { &hf_rdp_channelPacketCompressionType,
-      { "channelPacketCompresssionType", "rdp.channelPacket.compressionType",
+      { "channelPacketCompressionType", "rdp.channelPacket.compressionType",
         FT_UINT32, BASE_HEX, VALS(rdp_channelCompressionType_vals), ChannelCompressionTypeMask,
         NULL, HFILL }},
+    { &hf_rdp_channelId,
+      {"channelId", "rdp.channelid",
+       FT_INT16, BASE_DEC, NULL, 0, NULL, HFILL}},
     { &hf_rdp_wYear,
       { "wYear", "rdp.wYear",
         FT_UINT16, BASE_DEC, NULL, 0,
@@ -4600,7 +5477,7 @@ proto_register_rdp(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_rdp,
     &ett_negReq_flags,
     &ett_requestedProtocols,
@@ -4611,12 +5488,15 @@ proto_register_rdp(void) {
     &ett_rdp_SendData,
     &ett_rdp_MessageData,
     &ett_rdp_capabilitySet,
+    &ett_rdp_capa_general,
+    &ett_rdp_capa_rail,
     &ett_rdp_channelDef,
     &ett_rdp_channelDefArray,
     &ett_rdp_channelFlags,
     &ett_rdp_channelIdArray,
     &ett_rdp_channelPDUHeader,
     &ett_rdp_clientClusterData,
+    &ett_rdp_clientClusterFlags,
     &ett_rdp_clientCoreData,
     &ett_rdp_clientInfoPDU,
     &ett_rdp_clientMonitorData,
@@ -4628,9 +5508,9 @@ proto_register_rdp(void) {
     &ett_rdp_clientSecurityData,
     &ett_rdp_clientUnknownData,
     &ett_rdp_compressedType,
-	&ett_rdp_mt_req,
-	&ett_rdp_mt_rsp,
-	&ett_rdp_heartbeat,
+    &ett_rdp_mt_req,
+    &ett_rdp_mt_rsp,
+    &ett_rdp_heartbeat,
     &ett_rdp_flags,
     &ett_rdp_mapFlags,
     &ett_rdp_options,
@@ -4647,12 +5527,13 @@ proto_register_rdp(void) {
     &ett_rdp_StandardDate,
     &ett_rdp_DaylightDate,
     &ett_rdp_clientTimeZone,
-	&ett_rdp_fastpath,
-	&ett_rdp_fastpath_header,
-	&ett_rdp_fastpath_scancode_flags,
-	&ett_rdp_fastpath_mouse_flags,
-	&ett_rdp_fastpath_mousex_flags,
-	&ett_rdp_fastpath_compression,
+    &ett_rdp_fastpath,
+    &ett_rdp_fastpath_header,
+    &ett_rdp_fastpath_scancode_flags,
+    &ett_rdp_fastpath_mouse_flags,
+    &ett_rdp_fastpath_mousex_flags,
+    &ett_rdp_fastpath_relmouse_flags,
+    &ett_rdp_fastpath_compression,
   };
   static ei_register_info ei[] = {
      { &ei_rdp_neg_len_invalid, { "rdp.neg_len.invalid", PI_PROTOCOL, PI_ERROR, "Invalid length", EXPFILL }},
@@ -4680,21 +5561,29 @@ proto_register_rdp(void) {
             "The TCP ports used by the RDP protocol should be added to the TPKT preference \"TPKT TCP ports\", or by selecting \"TPKT\" as the \"Transport\" protocol in the \"Decode As\" dialog.",
             "RDP TCP Port preference moved information");
 
-  rdp_heur_subdissector_list = register_heur_dissector_list("rdp", proto_rdp);
+  rdp_heur_subdissector_list = register_heur_dissector_list_with_description("rdp", "RDP payload", proto_rdp);
 }
 
 void
 proto_reg_handoff_rdp(void)
 {
   drdynvc_handle = find_dissector("rdp_drdynvc");
+  rail_handle = find_dissector("rdp_rail");
+  cliprdr_handle = find_dissector("rdp_cliprdr");
+  snd_handle = find_dissector("rdp_snd");
+  rdpdr_handle = find_dissector("rdpdr");
+  conctrl_handle = find_dissector("rdp_conctrl");
 
-  heur_dissector_add("cotp_cr", dissect_rdp_cr, "RDP", "rdp_cr", proto_rdp, HEURISTIC_ENABLE);
-  heur_dissector_add("cotp_cc", dissect_rdp_cc, "RDP", "rdp_cc", proto_rdp, HEURISTIC_ENABLE);
+  heur_dissector_add("cotp_cr", dissect_rdp_cr_heur, "RDP", "rdp_cr", proto_rdp, HEURISTIC_ENABLE);
+  heur_dissector_add("cotp_cc", dissect_rdp_cc_heur, "RDP", "rdp_cc", proto_rdp, HEURISTIC_ENABLE);
 
   heur_dissector_add("tpkt", dissect_rdp_heur, "RDP", "rdp_fastpath", proto_rdp, HEURISTIC_ENABLE);
 
   register_t124_ns_dissector("Duca", dissect_rdp_ClientData, proto_rdp);
   register_t124_ns_dissector("McDn", dissect_rdp_ServerData, proto_rdp);
+
+  heur_dissector_add("tls", dissect_rdp_heur, "RDP over TLS", "rdp_tls", proto_rdp, HEURISTIC_ENABLE);
+  heur_dissector_add("ws", dissect_rdp_heur, "RDP over websocket", "rdp_ws", proto_rdp, HEURISTIC_ENABLE);
 }
 
 /*

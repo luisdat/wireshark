@@ -22,12 +22,12 @@
 #include <wsutil/unicode-utils.h>
 #include <wsutil/wslog.h>
 
-gboolean
-json_validate(const guint8 *buf, const size_t len)
+bool
+json_validate(const uint8_t *buf, const size_t len)
 {
-    gboolean ret = TRUE;
+    bool ret = true;
     /* We expect no more than 1024 tokens */
-    guint max_tokens = 1024;
+    unsigned max_tokens = 1024;
     jsmntok_t* t;
     jsmn_parser p;
     int rcode;
@@ -41,20 +41,25 @@ json_validate(const guint8 *buf, const size_t len)
      */
     if (len == 0) {
         ws_debug("JSON string is empty");
-        return FALSE;
+        return false;
     }
     if (buf[0] == '\0') {
         ws_debug("invalid character inside JSON string");
-        return FALSE;
+        return false;
     }
 
+    /*
+     * XXX - We create the token array and have jsmn_parse fill it in, only
+     * to free it. It might make more sense to pass in NULL for tokens, and
+     * for our sanity check just check that len isn't too big.
+     */
     t = g_new0(jsmntok_t, max_tokens);
 
     if (!t)
-        return FALSE;
+        return false;
 
     jsmn_init(&p);
-    rcode = jsmn_parse(&p, buf, len, t, max_tokens);
+    rcode = jsmn_parse(&p, (const char*)buf, len, t, max_tokens);
     if (rcode < 0) {
         switch (rcode) {
             case JSMN_ERROR_NOMEM:
@@ -71,7 +76,7 @@ json_validate(const guint8 *buf, const size_t len)
                 ws_debug("unexpected error");
                 break;
         }
-        ret = FALSE;
+        ret = false;
     }
 
     g_free(t);
@@ -87,7 +92,15 @@ json_parse(const char *buf, jsmntok_t *tokens, unsigned int max_tokens)
     return jsmn_parse(&p, buf, strlen(buf), tokens, max_tokens);
 }
 
-static
+int
+json_parse_len(const char *buf, size_t len, jsmntok_t *tokens, unsigned int max_tokens)
+{
+    jsmn_parser p;
+
+    jsmn_init(&p);
+    return jsmn_parse(&p, buf, len, tokens, max_tokens);
+}
+
 jsmntok_t *json_get_next_object(jsmntok_t *cur)
 {
     int i;
@@ -173,7 +186,7 @@ char *json_get_string(char *buf, jsmntok_t *parent, const char *name)
     return NULL;
 }
 
-gboolean json_get_double(char *buf, jsmntok_t *parent, const char *name, gdouble *val)
+bool json_get_double(char *buf, jsmntok_t *parent, const char *name, double *val)
 {
     int i;
     jsmntok_t *cur = parent+1;
@@ -186,15 +199,73 @@ gboolean json_get_double(char *buf, jsmntok_t *parent, const char *name, gdouble
             buf[(cur+1)->end] = '\0';
             *val = g_ascii_strtod(&buf[(cur+1)->start], NULL);
             if (errno != 0)
-                return FALSE;
-            return TRUE;
+                return false;
+            return true;
         }
         cur = json_get_next_object(cur);
     }
-    return FALSE;
+    return false;
 }
 
-gboolean
+bool json_get_int(char *buf, jsmntok_t *parent, const char *name, int64_t *val)
+{
+    int i;
+    jsmntok_t *cur = parent+1;
+
+    for (i = 0; i < parent->size; i++) {
+        if (cur->type == JSMN_STRING &&
+            !strncmp(&buf[cur->start], name, cur->end - cur->start)
+            && strlen(name) == (size_t)(cur->end - cur->start) &&
+            cur->size == 1 && (cur+1)->type == JSMN_PRIMITIVE) {
+            buf[(cur+1)->end] = '\0';
+            *val = g_ascii_strtoll(&buf[(cur+1)->start], NULL, 10);
+            if (errno != 0)
+                return false;
+            return true;
+        }
+        cur = json_get_next_object(cur);
+    }
+    return false;
+}
+
+bool json_get_boolean(char *buf, jsmntok_t *parent, const char *name, bool *val)
+{
+    int i;
+    size_t tok_len;
+    jsmntok_t *cur = parent+1;
+
+    for (i = 0; i < parent->size; i++) {
+        if (cur->type == JSMN_STRING &&
+            !strncmp(&buf[cur->start], name, cur->end - cur->start)
+            && strlen(name) == (size_t)(cur->end - cur->start) &&
+            cur->size == 1 && (cur+1)->type == JSMN_PRIMITIVE) {
+            /* JSMN_STRICT guarantees that a primitive starts with the
+             * correct character.
+             */
+            tok_len = (cur+1)->end - (cur+1)->start;
+            switch (buf[(cur+1)->start]) {
+            case 't':
+                if (tok_len == 4 && strncmp(&buf[(cur+1)->start], "true", tok_len) == 0) {
+                    *val = true;
+                    return true;
+                }
+                return false;
+            case 'f':
+                if (tok_len == 5 && strncmp(&buf[(cur+1)->start], "false", tok_len) == 0) {
+                    *val = false;
+                    return true;
+                }
+                return false;
+            default:
+                return false;
+            }
+        }
+        cur = json_get_next_object(cur);
+    }
+    return false;
+}
+
+bool
 json_decode_string_inplace(char *text)
 {
     const char *input = text;
@@ -230,7 +301,7 @@ json_decode_string_inplace(char *text)
 
                 case 'u':
                 {
-                    guint32 unicode_hex = 0;
+                    uint32_t unicode_hex = 0;
                     int k;
                     int bin;
 
@@ -240,16 +311,16 @@ json_decode_string_inplace(char *text)
                         ch = *input++;
                         bin = ws_xton(ch);
                         if (bin == -1)
-                            return FALSE;
+                            return false;
                         unicode_hex |= bin;
                     }
 
                     if ((IS_LEAD_SURROGATE(unicode_hex))) {
-                        guint16 lead_surrogate = unicode_hex;
-                        guint16 trail_surrogate = 0;
+                        uint16_t lead_surrogate = unicode_hex;
+                        uint16_t trail_surrogate = 0;
 
                         if (input[0] != '\\' || input[1] != 'u')
-                            return FALSE;
+                            return false;
                         input += 2;
 
                         for (k = 0; k < 4; k++) {
@@ -258,25 +329,25 @@ json_decode_string_inplace(char *text)
                             ch = *input++;
                             bin = ws_xton(ch);
                             if (bin == -1)
-                                return FALSE;
+                                return false;
                             trail_surrogate |= bin;
                         }
 
                         if ((!IS_TRAIL_SURROGATE(trail_surrogate)))
-                            return FALSE;
+                            return false;
 
                         unicode_hex = SURROGATE_VALUE(lead_surrogate,trail_surrogate);
 
                     } else if ((IS_TRAIL_SURROGATE(unicode_hex))) {
-                        return FALSE;
+                        return false;
                     }
 
                     if (!g_unichar_validate(unicode_hex))
-                        return FALSE;
+                        return false;
 
                     /* Don't allow NUL byte injection. */
                     if (unicode_hex == 0)
-                        return FALSE;
+                        return false;
 
                     /* \uXXXX => 6 bytes, and g_unichar_to_utf8() requires to have output buffer at least 6 bytes -> OK. */
                     k = g_unichar_to_utf8(unicode_hex, output);
@@ -285,7 +356,7 @@ json_decode_string_inplace(char *text)
                 }
 
                 default:
-                    return FALSE;
+                    return false;
             }
 
         } else {
@@ -295,7 +366,7 @@ json_decode_string_inplace(char *text)
     }
 
     *output = '\0';
-    return TRUE;
+    return true;
 }
 
 /*

@@ -13,6 +13,7 @@
 #include "main_window.h"
 #include "main_application.h"
 #include "ui/qt/widgets/wireshark_file_dialog.h"
+#include "ui/recent.h"
 
 #include "epan/strutil.h"
 
@@ -31,24 +32,33 @@
 
 // To do:
 // - Add show as custom protocol in a Packet Details view
-// - Use ByteViewText to ShowAsHexDump and supplementary view for custom protocol
+// - Use HexDataSourceView to ShowAsHexDump and supplementary view for custom protocol
 // - Handle large data blocks
+
+Q_DECLARE_METATYPE(bytes_show_type)
+Q_DECLARE_METATYPE(bytes_decode_type)
 
 ShowPacketBytesDialog::ShowPacketBytesDialog(QWidget &parent, CaptureFile &cf) :
     WiresharkDialog(parent, cf),
     ui(new Ui::ShowPacketBytesDialog),
-    finfo_(cf.capFile()->finfo_selected),
-    decode_as_(DecodeAsNone),
-    show_as_(ShowAsASCII),
     use_regex_find_(false)
 {
     ui->setupUi(this);
     loadGeometry(parent.width() * 2 / 3, parent.height() * 3 / 4);
 
-    QString field_name = QString("%1 (%2)").arg(finfo_->hfinfo->name, finfo_->hfinfo->abbrev);
+    // Create a new tvbuff with a copy of the data from the selected packet.
+    // This allows use the data after the selected packet is changed and
+    // after capture file is closed.
+    const field_info *finfo = cf.capFile()->finfo_selected;
+    uint8_t *bytes = (uint8_t *)tvb_memdup(NULL, finfo->ds_tvb, finfo->start, finfo->length);
+
+    tvb_ = tvb_new_real_data(bytes, finfo->length, finfo->length);
+    tvb_set_free_cb(tvb_, g_free);
+
+    QString field_name = QStringLiteral("%1 (%2)").arg(finfo->hfinfo->name, finfo->hfinfo->abbrev);
     setWindowSubtitle (field_name);
 
-    hint_label_ = tr("Frame %1, %2, %Ln byte(s).", "", finfo_->length)
+    hint_label_ = tr("Frame %1, %2, %Ln byte(s).", "", finfo->length)
                      .arg(cf.capFile()->current_frame->num)
                      .arg(field_name);
 
@@ -65,27 +75,30 @@ ShowPacketBytesDialog::ShowPacketBytesDialog(QWidget &parent, CaptureFile &cf) :
     ui->cbDecodeAs->addItem(tr("Percent-Encoding"), DecodeAsPercentEncoding);
     ui->cbDecodeAs->addItem(tr("Quoted-Printable"), DecodeAsQuotedPrintable);
     ui->cbDecodeAs->addItem(tr("ROT13"), DecodeAsROT13);
+    ui->cbDecodeAs->setCurrentIndex(ui->cbDecodeAs->findData(recent.gui_show_bytes_decode));
     ui->cbDecodeAs->blockSignals(false);
 
     ui->cbShowAs->blockSignals(true);
-    ui->cbShowAs->addItem(tr("ASCII"), ShowAsASCII);
-    ui->cbShowAs->addItem(tr("ASCII & Control"), ShowAsASCIIandControl);
-    ui->cbShowAs->addItem(tr("C Array"), ShowAsCArray);
-    ui->cbShowAs->addItem(tr("EBCDIC"), ShowAsEBCDIC);
-    ui->cbShowAs->addItem(tr("Hex Dump"), ShowAsHexDump);
-    ui->cbShowAs->addItem(tr("HTML"), ShowAsHTML);
-    ui->cbShowAs->addItem(tr("Image"), ShowAsImage);
-    ui->cbShowAs->addItem(tr("JSON"), ShowAsJson);
-    ui->cbShowAs->addItem(tr("Raw"), ShowAsRAW);
-    ui->cbShowAs->addItem(tr("Rust Array"), ShowAsRustArray);
+    ui->cbShowAs->addItem(tr("ASCII"), SHOW_ASCII);
+    ui->cbShowAs->addItem(tr("ASCII & Control"), SHOW_ASCII_CONTROL);
+    ui->cbShowAs->addItem(tr("C Array"), SHOW_CARRAY);
+    ui->cbShowAs->addItem(tr("EBCDIC"), SHOW_EBCDIC);
+    ui->cbShowAs->addItem(tr("Hex Dump"), SHOW_HEXDUMP);
+    ui->cbShowAs->addItem(tr("HTML"), SHOW_HTML);
+    ui->cbShowAs->addItem(tr("Image"), SHOW_IMAGE);
+    ui->cbShowAs->addItem(tr("JSON"), SHOW_JSON);
+    ui->cbShowAs->addItem(tr("Raw"), SHOW_RAW);
+    ui->cbShowAs->addItem(tr("Rust Array"), SHOW_RUSTARRAY);
     // UTF-8 is guaranteed to exist as a QTextCodec
-    ui->cbShowAs->addItem(tr("UTF-8"), ShowAsCodec);
-    ui->cbShowAs->addItem(tr("YAML"), ShowAsYAML);
-    ui->cbShowAs->setCurrentIndex(show_as_);
+    ui->cbShowAs->addItem(tr("UTF-8"), SHOW_CODEC);
+    ui->cbShowAs->addItem(tr("YAML"), SHOW_YAML);
+    ui->cbShowAs->setCurrentIndex(ui->cbShowAs->findData(recent.gui_show_bytes_show));
     ui->cbShowAs->blockSignals(false);
 
     ui->sbStart->setMinimum(0);
-    ui->sbEnd->setMaximum(finfo_->length - 1);
+    ui->sbEnd->setMaximum(tvb_reported_length(tvb_) - 1);
+
+    ui->tePacketBytes->setShowSelectedEnabled(enableShowSelected());
 
     print_button_ = ui->buttonBox->addButton(tr("Print"), QDialogButtonBox::ActionRole);
     connect(print_button_, SIGNAL(clicked()), this, SLOT(printBytes()));
@@ -98,12 +111,17 @@ ShowPacketBytesDialog::ShowPacketBytesDialog(QWidget &parent, CaptureFile &cf) :
 
     connect(ui->buttonBox, SIGNAL(helpRequested()), this, SLOT(helpButton()));
 
-    setStartAndEnd(0, (finfo_->length - 1));
+    // XXX - This shouldn't be created if finfo->length == 0 (see
+    // wireshark_main_window_slots and have_packet_bytes), but it might
+    // make sense and simplify some calculations to store the length /
+    // byte location past the end
+    setStartAndEnd(0, tvb_reported_length(tvb_) - 1);
     updateFieldBytes(true);
 }
 
 ShowPacketBytesDialog::~ShowPacketBytesDialog()
 {
+    tvb_free(tvb_);
     delete ui;
 }
 
@@ -113,10 +131,10 @@ void ShowPacketBytesDialog::addCodecs(const QMap<QString, QTextCodec *> &codecMa
     // Make the combobox respect max visible items?
     //ui->cbShowAs->setStyleSheet("QComboBox { combobox-popup: 0;}");
     ui->cbShowAs->insertSeparator(ui->cbShowAs->count());
-    for (const auto &codec : qAsConst(codecMap)) {
+    for (const auto &codec : codecMap) {
         // This is already placed in the menu and handled separately
         if (codec->name() != "US-ASCII" && codec->name() != "UTF-8")
-            ui->cbShowAs->addItem(tr(codec->name()), ShowAsCodec);
+            ui->cbShowAs->addItem(tr(codec->name()), SHOW_CODEC);
     }
     ui->cbShowAs->blockSignals(false);
 }
@@ -125,9 +143,9 @@ void ShowPacketBytesDialog::showSelected(int start, int end)
 {
     if (end == -1) {
         // end set to -1 means show all packet bytes
-        setStartAndEnd(0, (finfo_->length - 1));
+        setStartAndEnd(0, tvb_reported_length(tvb_) - 1);
     } else {
-        if (show_as_ == ShowAsRAW) {
+        if (recent.gui_show_bytes_show == SHOW_RAW) {
             start /= 2;
             end = (end + 1) / 2;
         }
@@ -160,12 +178,12 @@ bool ShowPacketBytesDialog::enableShowSelected()
     // - DecodeAs must not alter the number of bytes in the buffer
     // - ShowAs must show all bytes in the buffer
 
-    return (((decode_as_ == DecodeAsNone) ||
-             (decode_as_ == DecodeAsROT13)) &&
-            ((show_as_ == ShowAsASCII) ||
-             (show_as_ == ShowAsASCIIandControl) ||
-             (show_as_ == ShowAsEBCDIC) ||
-             (show_as_ == ShowAsRAW)));
+    return (((recent.gui_show_bytes_decode == DecodeAsNone) ||
+             (recent.gui_show_bytes_decode == DecodeAsROT13)) &&
+            ((recent.gui_show_bytes_show == SHOW_ASCII) ||
+             (recent.gui_show_bytes_show == SHOW_ASCII_CONTROL) ||
+             (recent.gui_show_bytes_show == SHOW_EBCDIC) ||
+             (recent.gui_show_bytes_show == SHOW_RAW)));
 }
 
 void ShowPacketBytesDialog::updateWidgets()
@@ -177,10 +195,14 @@ void ShowPacketBytesDialog::updateHintLabel()
 {
     QString hint = hint_label_;
 
-    if (start_ > 0 || end_ < (finfo_->length - 1)) {
+    if (start_ > 0 || end_ < (int)(tvb_reported_length(tvb_) - 1)) {
         hint.append(" <span style=\"color: red\">" +
-                    tr("Displaying %Ln byte(s).", "", end_ - start_ + 1) +
+                    tr("Using %Ln byte(s).", "", end_ - start_ + 1) +
                     "</span>");
+    }
+
+    if (!decode_as_name_.isEmpty()) {
+        hint.append(" " + tr("Decoded as %1.").arg(decode_as_name_));
     }
 
     ui->hintLabel->setText("<small><i>" + hint + "</i></small>");
@@ -191,7 +213,6 @@ void ShowPacketBytesDialog::on_sbStart_valueChanged(int value)
     start_ = value;
     ui->sbEnd->setMinimum(value);
 
-    updateHintLabel();
     updateFieldBytes();
 }
 
@@ -200,14 +221,13 @@ void ShowPacketBytesDialog::on_sbEnd_valueChanged(int value)
     end_ = value;
     ui->sbStart->setMaximum(value);
 
-    updateHintLabel();
     updateFieldBytes();
 }
 
 void ShowPacketBytesDialog::on_cbDecodeAs_currentIndexChanged(int idx)
 {
     if (idx < 0) return;
-    decode_as_ = static_cast<DecodeAsType>(ui->cbDecodeAs->itemData(idx).toInt());
+    recent.gui_show_bytes_decode = ui->cbDecodeAs->currentData().value<bytes_decode_type>();
 
     ui->tePacketBytes->setShowSelectedEnabled(enableShowSelected());
 
@@ -217,7 +237,7 @@ void ShowPacketBytesDialog::on_cbDecodeAs_currentIndexChanged(int idx)
 void ShowPacketBytesDialog::on_cbShowAs_currentIndexChanged(int idx)
 {
     if (idx < 0) return;
-    show_as_ = static_cast<ShowAsType>(ui->cbShowAs->itemData(idx).toInt());
+    recent.gui_show_bytes_show = ui->cbShowAs->currentData().value<bytes_show_type>();
 
     ui->tePacketBytes->setShowSelectedEnabled(enableShowSelected());
     ui->lFind->setEnabled(true);
@@ -239,20 +259,32 @@ void ShowPacketBytesDialog::useRegexFind(bool use_regex)
         ui->lFind->setText(tr("Find:"));
 }
 
+// This only calls itself with go_back false, so never recurses more than once.
+// NOLINTNEXTLINE(misc-no-recursion)
 void ShowPacketBytesDialog::findText(bool go_back)
 {
     if (ui->leFind->text().isEmpty()) return;
 
     bool found;
+
+    QTextDocument::FindFlags options;
+    if (ui->caseCheckBox->isChecked()) {
+        options |= QTextDocument::FindCaseSensitively;
+    }
     if (use_regex_find_) {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 13, 0))
+        // https://bugreports.qt.io/browse/QTBUG-88721
+        // QPlainTextEdit::find() searches case-insensitively unless
+        // QTextDocument::FindCaseSensitively is explicitly given.
+        // This *does* apply to QRegularExpression (overriding
+        // CaseInsensitiveOption), but not QRegExp.
+        //
+        // QRegularExpression and QRegExp do not support Perl's /i, but
+        // the former at least does support the mode modifiers (?i) and
+        // (?-i), which can override QTextDocument::FindCaseSensitively.
         QRegularExpression regex(ui->leFind->text(), QRegularExpression::UseUnicodePropertiesOption);
-#else
-        QRegExp regex(ui->leFind->text());
-#endif
-        found = ui->tePacketBytes->find(regex);
+        found = ui->tePacketBytes->find(regex, std::move(options));
     } else {
-        found = ui->tePacketBytes->find(ui->leFind->text());
+        found = ui->tePacketBytes->find(ui->leFind->text(), std::move(options));
     }
 
     if (found) {
@@ -275,9 +307,9 @@ void ShowPacketBytesDialog::printBytes()
 
 void ShowPacketBytesDialog::copyBytes()
 {
-    switch (show_as_) {
+    switch (recent.gui_show_bytes_show) {
 
-    case ShowAsASCII:
+    case SHOW_ASCII:
     {
         QByteArray ba(field_bytes_);
         sanitizeBuffer(ba, true);
@@ -285,26 +317,26 @@ void ShowPacketBytesDialog::copyBytes()
         break;
     }
 
-    case ShowAsASCIIandControl:
-    case ShowAsCArray:
-    case ShowAsRustArray:
-    case ShowAsEBCDIC:
-    case ShowAsHexDump:
-    case ShowAsJson:
-    case ShowAsRAW:
-    case ShowAsYAML:
+    case SHOW_ASCII_CONTROL:
+    case SHOW_CARRAY:
+    case SHOW_RUSTARRAY:
+    case SHOW_EBCDIC:
+    case SHOW_HEXDUMP:
+    case SHOW_JSON:
+    case SHOW_RAW:
+    case SHOW_YAML:
         mainApp->clipboard()->setText(ui->tePacketBytes->toPlainText());
         break;
 
-    case ShowAsHTML:
+    case SHOW_HTML:
         mainApp->clipboard()->setText(ui->tePacketBytes->toHtml());
         break;
 
-    case ShowAsImage:
+    case SHOW_IMAGE:
         mainApp->clipboard()->setImage(image_);
         break;
 
-    case ShowAsCodec:
+    case SHOW_CODEC:
         mainApp->clipboard()->setText(ui->tePacketBytes->toPlainText().toUtf8());
         break;
     }
@@ -318,28 +350,32 @@ void ShowPacketBytesDialog::saveAs()
         return;
 
     QFile::OpenMode open_mode = QFile::WriteOnly;
-    switch (show_as_) {
-    case ShowAsASCII:
-    case ShowAsASCIIandControl:
-    case ShowAsCArray:
-    case ShowAsRustArray:
+    switch (recent.gui_show_bytes_show) {
+    case SHOW_ASCII:
+    case SHOW_ASCII_CONTROL:
+    case SHOW_CARRAY:
+    case SHOW_RUSTARRAY:
+    case SHOW_EBCDIC:
     // We always save as UTF-8, so set text mode as we would for UTF-8
-    case ShowAsCodec:
-    case ShowAsHexDump:
-    case ShowAsJson:
-    case ShowAsYAML:
-    case ShowAsHTML:
+    case SHOW_CODEC:
+    case SHOW_HEXDUMP:
+    case SHOW_JSON:
+    case SHOW_YAML:
+    case SHOW_HTML:
         open_mode |= QFile::Text;
     default:
         break;
     }
 
     QFile file(file_name);
-    file.open(open_mode);
+    if (!file.open(open_mode)) {
+        // XXX - Warn?
+        return;
+    }
 
-    switch (show_as_) {
+    switch (recent.gui_show_bytes_show) {
 
-    case ShowAsASCII:
+    case SHOW_ASCII:
     {
         QByteArray ba(field_bytes_);
         sanitizeBuffer(ba, true);
@@ -347,39 +383,40 @@ void ShowPacketBytesDialog::saveAs()
         break;
     }
 
-    case ShowAsASCIIandControl:
-    case ShowAsCArray:
-    case ShowAsRustArray:
-    case ShowAsEBCDIC:
-    case ShowAsHexDump:
-    case ShowAsJson:
-    case ShowAsYAML:
+    case SHOW_ASCII_CONTROL:
+    case SHOW_CARRAY:
+    case SHOW_RUSTARRAY:
+    case SHOW_EBCDIC:
+    case SHOW_HEXDUMP:
+    case SHOW_JSON:
+    case SHOW_YAML:
     {
         QTextStream out(&file);
         out << ui->tePacketBytes->toPlainText();
         break;
     }
 
-    case ShowAsHTML:
+    case SHOW_HTML:
     {
         QTextStream out(&file);
         out << ui->tePacketBytes->toHtml();
         break;
     }
 
-    case ShowAsCodec:
+    case SHOW_CODEC:
     {
         QTextStream out(&file);
         out << ui->tePacketBytes->toPlainText().toUtf8();
         break;
     }
 
-    case ShowAsImage:
-    case ShowAsRAW:
+    case SHOW_IMAGE:
+    case SHOW_RAW:
         file.write(field_bytes_);
         break;
     }
 
+    // XXX - Check for failure and warn?
     file.close();
 }
 
@@ -510,7 +547,7 @@ void ShowPacketBytesDialog::symbolizeBuffer(QByteArray &ba)
     ba.replace((char)0x7f, symbol); // DEL
 }
 
-QByteArray ShowPacketBytesDialog::decodeQuotedPrintable(const guint8 *bytes, int length)
+QByteArray ShowPacketBytesDialog::decodeQuotedPrintable(const uint8_t *bytes, int length)
 {
     QByteArray ba;
 
@@ -538,7 +575,7 @@ QByteArray ShowPacketBytesDialog::decodeQuotedPrintable(const guint8 *bytes, int
 void ShowPacketBytesDialog::rot13(QByteArray &ba)
 {
     for (int i = 0; i < ba.length(); i++) {
-        gchar upper = g_ascii_toupper(ba[i]);
+        char upper = g_ascii_toupper(ba[i]);
         if (upper >= 'A' && upper <= 'M') ba[i] = ba[i] + 13;
         else if (upper >= 'N' && upper <= 'Z') ba[i] = ba[i] - 13;
     }
@@ -546,57 +583,72 @@ void ShowPacketBytesDialog::rot13(QByteArray &ba)
 
 void ShowPacketBytesDialog::updateFieldBytes(bool initialization)
 {
-    int start = finfo_->start + start_;
     int length = end_ - start_ + 1;
-    const guint8 *bytes;
-    gsize new_length = 0;
+    const uint8_t *bytes;
 
-    if (!finfo_->ds_tvb)
-        return;
+    decode_as_name_.clear();
 
-    switch (decode_as_) {
+    switch (recent.gui_show_bytes_decode) {
 
     case DecodeAsNone:
-        bytes = tvb_get_ptr(finfo_->ds_tvb, start, -1);
+        bytes = tvb_get_ptr(tvb_, start_, length);
         field_bytes_ = QByteArray((const char *)bytes, length);
         break;
 
     case DecodeAsBASE64:
     {
-        bytes = tvb_get_ptr(finfo_->ds_tvb, start, -1);
-        field_bytes_ = QByteArray((const char *)bytes, length);
-        if (field_bytes_.size() > 1) {
-            g_base64_decode_inplace(field_bytes_.data(), &new_length);
+        bytes = tvb_get_ptr(tvb_, start_, length);
+        QByteArray ba = QByteArray::fromRawData((const char *)bytes, length);
+        if (ba.contains('-') || ba.contains('_')) {
+            field_bytes_ = QByteArray::fromBase64(ba, QByteArray::Base64UrlEncoding);
+            decode_as_name_ = "base64url";
+        } else {
+            field_bytes_ = QByteArray::fromBase64(ba, QByteArray::Base64Encoding);
+            decode_as_name_ = "base64";
         }
-        field_bytes_.resize((int)new_length);
         break;
     }
 
     case DecodeAsCompressed:
     {
-        tvbuff *uncompr_tvb = tvb_uncompress(finfo_->ds_tvb, start, length);
-        if (uncompr_tvb) {
-            bytes = tvb_get_ptr(uncompr_tvb, 0, -1);
-            field_bytes_ = QByteArray((const char *)bytes, tvb_reported_length(uncompr_tvb));
-            tvb_free(uncompr_tvb);
-        } else {
+        static const QList<uncompress_list_t> tvb_uncompress_list = {
+            { "lz77", tvb_uncompress_lz77 },
+            { "lz77huff", tvb_uncompress_lz77huff },
+            { "lznt1", tvb_uncompress_lznt1 },
+            { "snappy", tvb_uncompress_snappy },
+            { "zlib", tvb_uncompress_zlib },
+            { "zstd", tvb_uncompress_zstd },
+        };
+        tvbuff_t *uncompr_tvb = NULL;
+
+        for (auto &tvb_uncompress : tvb_uncompress_list) {
+            uncompr_tvb = tvb_uncompress.function(tvb_, start_, length);
+            if (uncompr_tvb && tvb_captured_length(uncompr_tvb) > 0) {
+                bytes = tvb_get_ptr(uncompr_tvb, 0, tvb_captured_length(uncompr_tvb));
+                field_bytes_ = QByteArray((const char *)bytes, tvb_captured_length(uncompr_tvb));
+                decode_as_name_ = tr("compressed %1").arg(tvb_uncompress.name);
+                tvb_free(uncompr_tvb);
+                break;
+            }
+        }
+        if (!uncompr_tvb) {
             field_bytes_.clear();
         }
         break;
     }
 
     case DecodeAsHexDigits:
-        bytes = tvb_get_ptr(finfo_->ds_tvb, start, -1);
+        bytes = tvb_get_ptr(tvb_, start_, length);
         field_bytes_ = QByteArray::fromHex(QByteArray::fromRawData((const char *)bytes, length));
         break;
 
     case DecodeAsPercentEncoding:
     {
-        bytes = tvb_get_ptr(finfo_->ds_tvb, start, -1);
+        bytes = tvb_get_ptr(tvb_, start_, length);
 #if GLIB_CHECK_VERSION(2, 66, 0)
         GBytes *ba = g_uri_unescape_bytes((const char*)bytes, length, NULL, NULL);
         if (ba != NULL) {
-            gsize size;
+            size_t size;
             const char* data = (const char *)g_bytes_unref_to_data(ba, &size);
             field_bytes_ = QByteArray(data, (int)size);
         }
@@ -605,18 +657,18 @@ void ShowPacketBytesDialog::updateFieldBytes(bool initialization)
         if (uri_to_bytes((const char*)bytes, ba, length)) {
             field_bytes_ = QByteArray((const char *)ba->data, ba->len);
         }
-        g_byte_array_free(ba, TRUE);
+        g_byte_array_free(ba, true);
 #endif
         break;
     }
 
     case DecodeAsQuotedPrintable:
-        bytes = tvb_get_ptr(finfo_->ds_tvb, start, -1);
+        bytes = tvb_get_ptr(tvb_, start_, length);
         field_bytes_ = decodeQuotedPrintable(bytes, length);
         break;
 
     case DecodeAsROT13:
-        bytes = tvb_get_ptr(finfo_->ds_tvb, start, -1);
+        bytes = tvb_get_ptr(tvb_, start_, length);
         field_bytes_ = QByteArray((const char *)bytes, length);
         rot13(field_bytes_);
         break;
@@ -624,25 +676,26 @@ void ShowPacketBytesDialog::updateFieldBytes(bool initialization)
 
     // Try loading as image at startup
     if (initialization && image_.loadFromData(field_bytes_)) {
-        show_as_ = ShowAsImage;
+        recent.gui_show_bytes_show = SHOW_IMAGE;
         ui->cbShowAs->blockSignals(true);
-        ui->cbShowAs->setCurrentIndex(ShowAsImage);
+        ui->cbShowAs->setCurrentIndex(ui->cbShowAs->findData(SHOW_IMAGE));
         ui->cbShowAs->blockSignals(false);
     }
 
     updatePacketBytes();
+    updateHintLabel();
 }
 
 void ShowPacketBytesDialog::updatePacketBytes(void)
 {
-    static const gchar hexchars[16] = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
+    static const char hexchars[16] = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
 
     ui->tePacketBytes->clear();
     ui->tePacketBytes->setCurrentFont(mainApp->monospaceFont());
 
-    switch (show_as_) {
+    switch (recent.gui_show_bytes_show) {
 
-    case ShowAsASCII:
+    case SHOW_ASCII:
     {
         QByteArray ba(field_bytes_);
         sanitizeBuffer(ba, false);
@@ -651,7 +704,7 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         break;
     }
 
-    case ShowAsASCIIandControl:
+    case SHOW_ASCII_CONTROL:
     {
         QByteArray ba(field_bytes_);
         symbolizeBuffer(ba);
@@ -660,13 +713,13 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         break;
     }
 
-    case ShowAsCArray:
+    case SHOW_CARRAY:
     {
         int pos = 0, len = static_cast<int>(field_bytes_.length());
         QString text("char packet_bytes[] = {\n");
 
         while (pos < len) {
-            gchar hexbuf[256];
+            char hexbuf[256];
             char *cur = hexbuf;
             int i;
 
@@ -697,13 +750,13 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         break;
     }
 
-    case ShowAsRustArray:
+    case SHOW_RUSTARRAY:
     {
         int pos = 0, len = static_cast<int>(field_bytes_.length());
         QString text("let packet_bytes: [u8; _] = [\n");
 
         while (pos < len) {
-            gchar hexbuf[256];
+            char hexbuf[256];
             char *cur = hexbuf;
             int i;
 
@@ -734,7 +787,7 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         break;
     }
 
-    case ShowAsCodec:
+    case SHOW_CODEC:
     {
         // The QTextCodecs docs say that there's a flag to cause invalid
         // characters to be replaced with null. It's unclear what happens
@@ -748,17 +801,17 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         break;
     }
 
-    case ShowAsEBCDIC:
+    case SHOW_EBCDIC:
     {
         QByteArray ba(field_bytes_);
-        EBCDIC_to_ASCII((guint8*)ba.data(), static_cast<int>(ba.length()));
+        EBCDIC_to_ASCII((uint8_t*)ba.data(), static_cast<int>(ba.length()));
         sanitizeBuffer(ba, false);
         ui->tePacketBytes->setLineWrapMode(QTextEdit::WidgetWidth);
         ui->tePacketBytes->setPlainText(ba);
         break;
     }
 
-    case ShowAsHexDump:
+    case SHOW_HEXDUMP:
     {
         int pos = 0, len = static_cast<int>(field_bytes_.length());
         // Use 16-bit offset if there are <= 65536 bytes, 32-bit offset if there are more
@@ -810,12 +863,12 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         break;
     }
 
-    case ShowAsHTML:
+    case SHOW_HTML:
         ui->tePacketBytes->setLineWrapMode(QTextEdit::WidgetWidth);
         ui->tePacketBytes->setHtml(field_bytes_);
         break;
 
-    case ShowAsImage:
+    case SHOW_IMAGE:
     {
         ui->lFind->setEnabled(false);
         ui->leFind->setEnabled(false);
@@ -832,12 +885,12 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         break;
     }
 
-    case ShowAsJson:
+    case SHOW_JSON:
         ui->tePacketBytes->setLineWrapMode(QTextEdit::NoWrap);
         ui->tePacketBytes->setPlainText(QJsonDocument::fromJson(field_bytes_).toJson());
         break;
 
-    case ShowAsYAML:
+    case SHOW_YAML:
     {
         const int base64_raw_len = 57; // Encodes to 76 bytes, common in RFCs
         int pos = 0, len = static_cast<int>(field_bytes_.length());
@@ -864,34 +917,11 @@ DIAG_ON(stringop-overread)
         break;
     }
 
-    case ShowAsRAW:
+    case SHOW_RAW:
         ui->tePacketBytes->setLineWrapMode(QTextEdit::WidgetWidth);
         ui->tePacketBytes->setPlainText(field_bytes_.toHex());
         break;
     }
-}
-
-void ShowPacketBytesDialog::captureFileClosing()
-{
-    finfo_ = NULL;  // This will invalidate the source backend
-
-    WiresharkDialog::captureFileClosing();
-}
-
-void ShowPacketBytesDialog::captureFileClosed()
-{
-    // We have lost the source backend and must disable all functions
-    // for manipulating decoding and displayed range.
-
-    ui->tePacketBytes->setMenusEnabled(false);
-    ui->lDecodeAs->setEnabled(false);
-    ui->cbDecodeAs->setEnabled(false);
-    ui->lStart->setEnabled(false);
-    ui->sbStart->setEnabled(false);
-    ui->lEnd->setEnabled(false);
-    ui->sbEnd->setEnabled(false);
-
-    WiresharkDialog::captureFileClosed();
 }
 
 void ShowPacketBytesTextEdit::contextMenuEvent(QContextMenuEvent *event)

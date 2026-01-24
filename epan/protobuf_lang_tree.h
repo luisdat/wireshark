@@ -44,11 +44,11 @@ typedef enum {
 
 /* like google::protobuf::descriptor_pool of protobuf cpp library */
 typedef struct {
-    GSList* source_paths; /* the directories in which to search for proto file */
+    GQueue* source_paths; /* the directories in which to search for proto file */
     pbl_report_error_cb_t error_cb; /* error call back function */
     GHashTable* packages; /* all packages parsed from proto files */
     GHashTable* proto_files; /* all proto files that are parsed or to be parsed */
-    GSList* proto_files_to_be_parsed; /* files is to be parsed */
+    GQueue* proto_files_to_be_parsed; /* files is to be parsed */
     struct _protobuf_lang_state_t *parser_state; /* current parser state */
 } pbl_descriptor_pool_t;
 
@@ -64,10 +64,10 @@ typedef struct {
 /* Basic information of node */
 typedef struct pbl_node_t{
     pbl_node_type_t nodetype;
-    gchar* name;
-    gchar* full_name; /* constructed during first access */
+    char* name;
+    char* full_name; /* constructed during first access */
     struct pbl_node_t* parent;
-    GSList* children; /* child is a pbl_node_t */
+    GQueue* children; /* child is a pbl_node_t */
     GHashTable* children_by_name; /* take children names as keys */
     pbl_file_descriptor_t* file;
     int lineno;
@@ -76,16 +76,16 @@ typedef struct pbl_node_t{
 /* like google::protobuf::MethodDescriptor of protobuf cpp library */
 typedef struct {
     pbl_node_t basic_info;
-    gchar* in_msg_type;
-    gboolean in_is_stream;
-    gchar* out_msg_type;
-    gboolean out_is_stream;
+    char* in_msg_type;
+    bool in_is_stream;
+    char* out_msg_type;
+    bool out_is_stream;
 } pbl_method_descriptor_t;
 
 /* like google::protobuf::Descriptor of protobuf cpp library */
 typedef struct {
     pbl_node_t basic_info;
-    GSList* fields;
+    GQueue* fields;
     GHashTable* fields_by_number;
 } pbl_message_descriptor_t;
 
@@ -95,35 +95,47 @@ typedef struct {
     int number;
 } pbl_enum_value_descriptor_t;
 
-/* like google::protobuf::FieldDescriptor of protobuf cpp library */
+/**
+ * @brief Describes a field in a Protocol Buffer message, similar to `google::protobuf::FieldDescriptor`.
+ *
+ * This structure holds metadata about a field, including its type, number, repetition status,
+ * default value, and any associated options. It supports scalar types, strings, enums, and more.
+ */
 typedef struct {
-    pbl_node_t basic_info;
-    int number;
-    int type; /* refer to PROTOBUF_TYPE_XXX of protobuf-helper.h */
-    gchar* type_name;
-    pbl_node_t* options_node;
-    gboolean is_repeated;
-    gboolean is_required;
-    gboolean has_default_value; /* Does this field have an explicitly-declared default value? */
-    gchar* orig_default_value;
-    int string_or_bytes_default_value_length;
+    pbl_node_t basic_info; /**< Basic metadata node (e.g., name, documentation). */
+    int number;            /**< Field number as defined in the .proto schema. */
+    int type;              /**< Field type identifier (see PROTOBUF_TYPE_XXX in protobuf-helper.h). */
+    char* type_name;       /**< Optional type name for message or enum fields. */
+    pbl_node_t* options_node; /**< Pointer to options metadata node, if present. */
+
+    bool is_repeated;      /**< True if the field is repeated. */
+    bool is_required;      /**< True if the field is required. */
+    bool has_default_value; /**< True if a default value is explicitly declared. */
+    char* orig_default_value; /**< Original default value string from the schema. */
+    int string_or_bytes_default_value_length; /**< Length of string or bytes default value, if applicable. */
+
+    /**
+     * @brief Union holding the parsed default value for the field.
+     *
+     * The actual member used depends on the field type.
+     */
     union {
-        gint32 i32;
-        gint64 i64;
-        guint32 u32;
-        guint64 u64;
-        gfloat f;
-        gdouble d;
-        gboolean b;
-        gchar* s;
-        const pbl_enum_value_descriptor_t* e;
+        int32_t i32;   /**< Default value for int32 fields. */
+        int64_t i64;   /**< Default value for int64 fields. */
+        uint32_t u32;  /**< Default value for uint32 fields. */
+        uint64_t u64;  /**< Default value for uint64 fields. */
+        float f;       /**< Default value for float fields. */
+        double d;      /**< Default value for double fields. */
+        bool b;        /**< Default value for bool fields. */
+        char* s;       /**< Default value for string or bytes fields. */
+        const pbl_enum_value_descriptor_t* e; /**< Default enum value descriptor. */
     } default_value;
 } pbl_field_descriptor_t;
 
 /* like google::protobuf::EnumDescriptor of protobuf cpp library */
 typedef struct {
     pbl_node_t basic_info;
-    GSList* values;
+    GQueue* values;
     GHashTable* values_by_number;
 } pbl_enum_descriptor_t;
 
@@ -136,7 +148,7 @@ typedef struct {
 
 /* the struct of token used by the parser */
 typedef struct _protobuf_lang_token_t {
-    gchar* v; /* token string value */
+    char* v; /* token string value */
     int ln; /* line number of this token in the .proto file */
 } protobuf_lang_token_t;
 
@@ -148,17 +160,17 @@ typedef struct _protobuf_lang_state_t {
     GSList* lex_struct_tokens;
     void* scanner;
     void* pParser;
-    gboolean grammar_error;
+    bool grammar_error;
     protobuf_lang_token_t* tmp_token; /* just for passing token value from protobuf_lang_lex() to ProtobufLangParser() */
 } protobuf_lang_state_t;
 
 /* Store chars created by strdup or g_strconcat into protobuf_lang_state_t temporarily,
    and return back the input chars pointer.
    It will be freed when protobuf_lang_state_t is released */
-static inline gchar*
+static inline char*
 pbl_store_string_token(protobuf_lang_state_t* parser_state, char* dupstr)
 {
-    parser_state->lex_string_tokens = g_slist_append(parser_state->lex_string_tokens, dupstr);
+    parser_state->lex_string_tokens = g_slist_prepend(parser_state->lex_string_tokens, dupstr);
     return dupstr;
 }
 
@@ -167,7 +179,7 @@ pbl_store_string_token(protobuf_lang_state_t* parser_state, char* dupstr)
 static inline protobuf_lang_token_t*
 pbl_store_struct_token(protobuf_lang_state_t* parser_state, protobuf_lang_token_t* newtoken)
 {
-    parser_state->lex_struct_tokens = g_slist_append(parser_state->lex_struct_tokens, newtoken);
+    parser_state->lex_struct_tokens = g_slist_prepend(parser_state->lex_struct_tokens, newtoken);
     return newtoken;
 }
 
@@ -189,15 +201,15 @@ pbl_printf(const char* fmt, ...)
 void
 pbl_reinit_descriptor_pool(pbl_descriptor_pool_t** ppool, const char** directories, pbl_report_error_cb_t error_cb);
 
-/* free all memory used by this protocol buffers languange pool */
+/* free all memory used by this protocol buffers language pool */
 void
 pbl_free_pool(pbl_descriptor_pool_t* pool);
 
 /* add a proto file to pool. this file will not be parsed until run_pbl_parser function is invoked. */
-gboolean
+bool
 pbl_add_proto_file_to_be_parsed(pbl_descriptor_pool_t* pool, const char* filepath);
 
-/* run C protocol buffers languange parser, return 0 if successed */
+/* run C protocol buffers language parser, return 0 if success */
 int run_pbl_parser(pbl_descriptor_pool_t* pool);
 
 /* like descriptor_pool::FindMethodByName */
@@ -274,7 +286,7 @@ pbl_field_descriptor_is_packed(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::TypeName() */
 const char*
-pbl_field_descriptor_TypeName(int field_type);
+pbl_field_descriptor_TypeName(wmem_allocator_t* scope, int field_type);
 
 /* like FieldDescriptor::message_type() */
 const pbl_message_descriptor_t*
@@ -285,44 +297,44 @@ const pbl_enum_descriptor_t*
 pbl_field_descriptor_enum_type(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::is_required() */
-gboolean
+bool
 pbl_field_descriptor_is_required(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::has_default_value().
  * Does this field have an explicitly-declared default value? */
-gboolean
+bool
 pbl_field_descriptor_has_default_value(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_int32() */
-gint32
+int32_t
 pbl_field_descriptor_default_value_int32(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_int64() */
-gint64
+int64_t
 pbl_field_descriptor_default_value_int64(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_uint32() */
-guint32
+uint32_t
 pbl_field_descriptor_default_value_uint32(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_uint64() */
-guint64
+uint64_t
 pbl_field_descriptor_default_value_uint64(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_float() */
-gfloat
+float
 pbl_field_descriptor_default_value_float(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_double() */
-gdouble
+double
 pbl_field_descriptor_default_value_double(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_bool() */
-gboolean
+bool
 pbl_field_descriptor_default_value_bool(const pbl_field_descriptor_t* field);
 
 /* like FieldDescriptor::default_value_string() */
-const gchar*
+const char*
 pbl_field_descriptor_default_value_string(const pbl_field_descriptor_t* field, int* size);
 
 /* like FieldDescriptor::default_value_enum() */
@@ -351,7 +363,7 @@ pbl_enum_descriptor_FindValueByNumber(const pbl_enum_descriptor_t* anEnum, int n
 
 /* like EnumDescriptor::FindValueByName() */
 const pbl_enum_value_descriptor_t*
-pbl_enum_descriptor_FindValueByName(const pbl_enum_descriptor_t* anEnum, const gchar* name);
+pbl_enum_descriptor_FindValueByName(const pbl_enum_descriptor_t* anEnum, const char* name);
 
 /* like EnumValueDescriptor::name() */
 const char*
@@ -414,7 +426,7 @@ pbl_create_map_field_node(pbl_file_descriptor_t* file, int lineno, const char* n
 
 /* create a method (rpc or stream of service) node */
 pbl_node_t*
-pbl_create_method_node(pbl_file_descriptor_t* file, int lineno, const char* name, const char* in_msg_type, gboolean in_is_stream, const char* out_msg_type, gboolean out_is_stream);
+pbl_create_method_node(pbl_file_descriptor_t* file, int lineno, const char* name, const char* in_msg_type, bool in_is_stream, const char* out_msg_type, bool out_is_stream);
 
 /* create an option node */
 pbl_node_t*
@@ -422,7 +434,7 @@ pbl_create_option_node(pbl_file_descriptor_t* file, int lineno, const char* name
 
 /* free a pbl_node_t and its children. */
 void
-pbl_free_node(gpointer anode);
+pbl_free_node(void *anode);
 
 #ifdef __cplusplus
 }

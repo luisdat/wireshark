@@ -33,17 +33,19 @@ typedef enum _wmem_cb_event_t {
     WMEM_CB_DESTROY_EVENT  /**< wmem_destroy_allocator() */
 } wmem_cb_event_t;
 
-/** Function signature for registered user callbacks.
+/**
+ * @brief Function signature for registered user callbacks.
  *
  * allocator The allocator that triggered this callback.
  * event     The event type that triggered this callback.
  * user_data Whatever user_data was originally passed to the call to
  *                  wmem_register_callback().
- * @return          FALSE to unregister the callback, TRUE otherwise.
+ * @return          false to unregister the callback, true otherwise.
  */
-typedef gboolean (*wmem_user_cb_t) (wmem_allocator_t*, wmem_cb_event_t, void*);
+typedef bool (*wmem_user_cb_t) (wmem_allocator_t*, wmem_cb_event_t, void*);
 
-/** Register a callback function with the given allocator pool.
+/**
+ * @brief Register a callback function with the given allocator pool.
  *
  * @param allocator The allocator with which to register the callback.
  * @param callback  The function to be called as the callback.
@@ -56,18 +58,19 @@ typedef gboolean (*wmem_user_cb_t) (wmem_allocator_t*, wmem_cb_event_t, void*);
  *                  wmem_unregister_callback().
  */
 WS_DLL_PUBLIC
-guint
+unsigned
 wmem_register_callback(wmem_allocator_t *allocator, wmem_user_cb_t callback,
         void *user_data);
 
-/** Unregister the callback function with the given ID.
+/**
+ * @brief Unregister the callback function with the given ID.
  *
  * @param allocator The allocator from which to unregister the callback.
  * @param id        The callback id as returned from wmem_register_callback().
  */
 WS_DLL_PUBLIC
 void
-wmem_unregister_callback(wmem_allocator_t *allocator, guint id);
+wmem_unregister_callback(wmem_allocator_t *allocator, unsigned id);
 
 /**   @}
  *  @} */

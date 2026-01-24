@@ -1236,6 +1236,12 @@ indent_size = tab
 indent_style = tab
 indent_size = tab
 
+[packet-knxip.[ch]]
+indent_size = 2
+
+[packet-knxip_decrypt.[ch]]
+indent_size = 2
+
 [packet-l1-events.[ch]]
 indent_style = tab
 indent_size = tab
@@ -1946,10 +1952,6 @@ indent_size = tab
 indent_size = 2
 
 [packet-solaredge.[ch]]
-indent_style = tab
-indent_size = tab
-
-[packet-socketcan.[ch]]
 indent_style = tab
 indent_size = tab
 

@@ -10,9 +10,8 @@
 #ifndef __IPTRACE_H__
 #define __IPTRACE_H__
 
-#include <glib.h>
 #include "wtap.h"
 
-wtap_open_return_val iptrace_open(wtap *wth, int *err, gchar **err_info);
+wtap_open_return_val iptrace_open(wtap *wth, int *err, char **err_info);
 
 #endif

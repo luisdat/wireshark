@@ -25,6 +25,7 @@ class CapturePreferencesFrame : public QFrame
 public:
     explicit CapturePreferencesFrame(QWidget *parent = 0);
     ~CapturePreferencesFrame();
+    void enableAggregationOptions(bool);
 
 protected:
     void showEvent(QShowEvent *evt);
@@ -32,24 +33,27 @@ protected:
 private slots:
     void on_defaultInterfaceComboBox_editTextChanged(const QString &new_iface);
     void on_capturePromModeCheckBox_toggled(bool checked);
+    void on_captureMonitorModeCheckBox_toggled(bool checked);
     void on_capturePcapNgCheckBox_toggled(bool checked);
     void on_captureRealTimeCheckBox_toggled(bool checked);
+    void on_aggregationSetVisibilityCheckBox_toggled(bool checked);
     void on_captureUpdateIntervalLineEdit_textChanged(const QString &new_str);
-    void on_captureAutoScrollCheckBox_toggled(bool checked);
     void on_captureNoInterfaceLoad_toggled(bool checked);
     void on_captureNoExtcapCheckBox_toggled(bool checked);
+    void on_aggreagationEditButton_clicked();
 
 private:
     Ui::CapturePreferencesFrame *ui;
 
     pref_t *pref_device_;
     pref_t *pref_prom_mode_;
+    pref_t *pref_monitor_mode_;
     pref_t *pref_pcap_ng_;
     pref_t *pref_real_time_;
     pref_t *pref_update_interval_;
-    pref_t *pref_auto_scroll_;
     pref_t *pref_no_interface_load_;
     pref_t *pref_no_extcap_;
+    pref_t *pref_enable_aggregation_;
 
     void updateWidgets();
 };

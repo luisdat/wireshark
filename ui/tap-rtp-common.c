@@ -23,7 +23,6 @@
 
 #include <glib.h>
 
-#include <epan/rtp_pt.h>
 #include <epan/addr_resolv.h>
 #include <epan/proto_data.h>
 #include <epan/dissectors/packet-rtp.h>
@@ -32,7 +31,7 @@
 #include "tap-rtp-common.h"
 
 /* XXX: are changes needed to properly handle situations where
-        info_all_data_present == FALSE ?
+        info_all_data_present == false ?
         E.G., when captured frames are truncated.
  */
 
@@ -40,8 +39,8 @@
 /* Type for storing and writing rtpdump information */
 typedef struct st_rtpdump_info {
     double rec_time;       /**< milliseconds since start of recording */
-    guint16 num_samples;   /**< number of bytes in *frame */
-    const guint8 *samples; /**< data bytes */
+    uint16_t num_samples;   /**< number of bytes in *frame */
+    const uint8_t *samples; /**< data bytes */
 } rtpdump_info_t;
 
 /****************************************************************************/
@@ -107,7 +106,7 @@ void rtpstream_info_free_all(rtpstream_info_t *info)
 
 /****************************************************************************/
 /* GCompareFunc style comparison function for rtpstream_info_t */
-gint rtpstream_info_cmp(gconstpointer aa, gconstpointer bb)
+int rtpstream_info_cmp(const void *aa, const void *bb)
 {
     const rtpstream_info_t *a = (const rtpstream_info_t *)aa;
     const rtpstream_info_t *b = (const rtpstream_info_t *)bb;
@@ -124,18 +123,18 @@ gint rtpstream_info_cmp(gconstpointer aa, gconstpointer bb)
 
 /****************************************************************************/
 /* compare the endpoints of two RTP streams */
-gboolean rtpstream_info_is_reverse(const rtpstream_info_t *stream_a, rtpstream_info_t *stream_b)
+bool rtpstream_info_is_reverse(const rtpstream_info_t *stream_a, rtpstream_info_t *stream_b)
 {
     if (stream_a == NULL || stream_b == NULL)
-        return FALSE;
+        return false;
 
     if ((addresses_equal(&(stream_a->id.src_addr), &(stream_b->id.dst_addr)))
         && (stream_a->id.src_port == stream_b->id.dst_port)
         && (addresses_equal(&(stream_a->id.dst_addr), &(stream_b->id.src_addr)))
         && (stream_a->id.dst_port == stream_b->id.src_port))
-        return TRUE;
+        return true;
     else
-        return FALSE;
+        return false;
 }
 
 /****************************************************************************/
@@ -206,7 +205,7 @@ remove_tap_listener_rtpstream(rtpstream_tapinfo_t *tapinfo)
 {
     if (tapinfo && tapinfo->is_registered) {
         remove_tap_listener(tapinfo);
-        tapinfo->is_registered = FALSE;
+        tapinfo->is_registered = false;
     }
 }
 
@@ -230,10 +229,10 @@ register_tap_listener_rtpstream(rtpstream_tapinfo_t *tapinfo, const char *fstrin
                 tap_error(error_string);
             }
             g_string_free(error_string, TRUE);
-            exit(1);
+            return;
         }
 
-        tapinfo->is_registered = TRUE;
+        tapinfo->is_registered = true;
     }
 }
 
@@ -253,12 +252,12 @@ register_tap_listener_rtpstream(rtpstream_tapinfo_t *tapinfo, const char *fstrin
 * the RTP/RTCP header and (optionally) the actual payload.
 */
 
-static const gchar *PAYLOAD_UNKNOWN_STR = "Unknown";
+static const char *PAYLOAD_UNKNOWN_STR = "Unknown";
 
 static void update_payload_names(rtpstream_info_t *stream_info, const struct _rtp_info *rtpinfo)
 {
     GString *payload_type_names;
-    const gchar *new_payload_type_str;
+    const char *new_payload_type_str;
 
     /* Ensure that we have non empty payload_type_str */
     if (rtpinfo->info_payload_type_str != NULL) {
@@ -267,7 +266,7 @@ static void update_payload_names(rtpstream_info_t *stream_info, const struct _rt
     else {
         /* String is created from const strings only */
         new_payload_type_str = val_to_str_ext_const(rtpinfo->info_payload_type,
-            &rtp_payload_type_short_vals_ext,
+            get_external_value_string_ext("rtp_payload_type_short_vals_ext"),
             PAYLOAD_UNKNOWN_STR
         );
     }
@@ -286,11 +285,10 @@ static void update_payload_names(rtpstream_info_t *stream_info, const struct _rt
     if (stream_info->all_payload_type_names != NULL) {
         g_free(stream_info->all_payload_type_names);
     }
-    stream_info->all_payload_type_names = payload_type_names->str;
-    g_string_free(payload_type_names, FALSE);
+    stream_info->all_payload_type_names = g_string_free(payload_type_names, FALSE);
 }
 
-gboolean rtpstream_is_payload_used(const rtpstream_info_t *stream_info, const guint8 payload_type)
+bool rtpstream_is_payload_used(const rtpstream_info_t *stream_info, const uint8_t payload_type)
 {
     return stream_info->payload_type_names[payload_type] != NULL;
 }
@@ -304,12 +302,12 @@ gboolean rtpstream_is_payload_used(const rtpstream_info_t *stream_info, const gu
 */
 void rtp_write_header(rtpstream_info_t *strinfo, FILE *file)
 {
-    guint32 start_sec;     /* start of recording (GMT) (seconds) */
-    guint32 start_usec;    /* start of recording (GMT) (microseconds)*/
-    guint32 source;        /* network source (multicast address) */
+    uint32_t start_sec;     /* start of recording (GMT) (seconds) */
+    uint32_t start_usec;    /* start of recording (GMT) (microseconds)*/
+    uint32_t source;        /* network source (multicast address) */
     size_t sourcelen;
-    guint16 port;          /* UDP port */
-    guint16 padding;       /* 2 padding bytes */
+    uint16_t port;          /* UDP port */
+    uint16_t padding;       /* 2 padding bytes */
     char* addr_str = address_to_display(NULL, &(strinfo->id.dst_addr));
 
     fprintf(file, "#!rtpplay%s %s/%u\n", RTPFILE_VERSION,
@@ -319,7 +317,7 @@ void rtp_write_header(rtpstream_info_t *strinfo, FILE *file)
 
     start_sec = g_htonl(strinfo->start_fd->abs_ts.secs);
     start_usec = g_htonl(strinfo->start_fd->abs_ts.nsecs / 1000);
-    /* rtpdump only accepts guint32 as source, will be fake for IPv6 */
+    /* rtpdump only accepts uint32_t as source, will be fake for IPv6 */
     memset(&source, 0, sizeof source);
     sourcelen = strinfo->id.src_addr.len;
     if (sourcelen > sizeof source)
@@ -343,10 +341,10 @@ void rtp_write_header(rtpstream_info_t *strinfo, FILE *file)
 /* utility function for writing a sample to file in rtpdump -F dump format (.rtp)*/
 static void rtp_write_sample(rtpdump_info_t* rtpdump_info, FILE* file)
 {
-    guint16 length;    /* length of packet, including this header (may
+    uint16_t length;    /* length of packet, including this header (may
                           be smaller than plen if not whole packet recorded) */
-    guint16 plen;      /* actual header+payload length for RTP, 0 for RTCP */
-    guint32 offset;    /* milliseconds since the start of recording */
+    uint16_t plen;      /* actual header+payload length for RTP, 0 for RTCP */
+    uint32_t offset;    /* milliseconds since the start of recording */
 
     length = g_htons(rtpdump_info->num_samples + 8);
     plen = g_htons(rtpdump_info->num_samples);
@@ -375,15 +373,10 @@ tap_packet_status rtpstream_packet_cb(void *arg, packet_info *pinfo, epan_dissec
 
     /* gather infos on the stream this packet is part of.
      * Shallow copy addresses as this is just for examination. */
-    rtpstream_id_copy_pinfo_shallow(pinfo,&new_stream_id,FALSE);
+    rtpstream_id_copy_pinfo_shallow(pinfo,&new_stream_id,false);
     new_stream_id.ssrc = rtpinfo->info_sync_src;
 
     if (tapinfo->mode == TAP_ANALYSE) {
-        /* if display filtering activated and packet do not match, ignore it */
-        if (tapinfo->apply_display_filter && (pinfo->fd->passed_dfilter == 0)) {
-            return TAP_PACKET_DONT_REDRAW;
-        }
-
         /* check whether we already have a stream with these parameters in the list */
         if (tapinfo->strinfo_hash) {
             stream_info = rtpstream_info_multihash_lookup(tapinfo->strinfo_hash, &new_stream_id);
@@ -394,7 +387,7 @@ tap_packet_status rtpstream_packet_cb(void *arg, packet_info *pinfo, epan_dissec
             /* init info and collect id */
             stream_info = rtpstream_info_malloc_and_init();
             /* Deep copy addresses for the new entry. */
-            rtpstream_id_copy_pinfo(pinfo,&(stream_info->id),FALSE);
+            rtpstream_id_copy_pinfo(pinfo,&(stream_info->id),false);
             stream_info->id.ssrc = rtpinfo->info_sync_src;
 
             /* init counters for first packet */
@@ -419,7 +412,7 @@ tap_packet_status rtpstream_packet_cb(void *arg, packet_info *pinfo, epan_dissec
     else if (tapinfo->mode == TAP_SAVE) {
         if (rtpstream_id_equal(&new_stream_id, &(tapinfo->filter_stream_fwd->id), RTPSTREAM_ID_EQUAL_SSRC)) {
             /* XXX - what if rtpinfo->info_all_data_present is
-               FALSE, so that we don't *have* all the data? */
+               false, so that we don't *have* all the data? */
             rtpdump_info.rec_time = nstime_to_msec(&pinfo->abs_ts) -
                 nstime_to_msec(&tapinfo->filter_stream_fwd->start_fd->abs_ts);
             rtpdump_info.num_samples = rtpinfo->info_data_len;
@@ -449,7 +442,7 @@ void rtpstream_info_calculate(const rtpstream_info_t *strinfo, rtpstream_info_ca
         double sumt2;
         double sumtTS;
         double clock_drift_x;
-        guint32 clock_rate_x;
+        uint32_t clock_rate_x;
         double duration_x;
 
         calc->src_addr_str = address_to_display(NULL, &(strinfo->id.src_addr));
@@ -462,8 +455,7 @@ void rtpstream_info_calculate(const rtpstream_info_t *strinfo, rtpstream_info_ca
 
         calc->packet_count = strinfo->packet_count;
         /* packet count, lost packets */
-        calc->packet_expected = (strinfo->rtp_stats.stop_seq_nr + strinfo->rtp_stats.seq_cycles*0x10000)
-            - strinfo->rtp_stats.start_seq_nr + 1;
+        calc->packet_expected = strinfo->rtp_stats.stop_seq_nr - strinfo->rtp_stats.start_seq_nr + 1;
         calc->total_nr = strinfo->rtp_stats.total_nr;
         calc->lost_num = calc->packet_expected - strinfo->rtp_stats.total_nr;
         if (calc->packet_expected) {
@@ -489,7 +481,7 @@ void rtpstream_info_calculate(const rtpstream_info_t *strinfo, rtpstream_info_ca
         if ((calc->packet_count >0) && (sumt2 > 0)) {
                 clock_drift_x = (calc->packet_count * sumtTS - sumt * sumTS) / (calc->packet_count * sumt2 - sumt * sumt);
                 calc->clock_drift_ms = duration_x * (clock_drift_x - 1.0);
-                clock_rate_x = (guint32)(strinfo->rtp_stats.clock_rate * clock_drift_x);
+                clock_rate_x = (uint32_t)(strinfo->rtp_stats.clock_rate * clock_drift_x);
                 calc->freq_drift_hz = clock_drift_x * clock_rate_x;
                 calc->freq_drift_perc = 100.0 * (clock_drift_x - 1.0);
         } else {
@@ -517,7 +509,7 @@ void rtpstream_info_calc_free(rtpstream_info_calc_t *calc)
 /* Init analyse counters in rtpstream_info_t from pinfo */
 void rtpstream_info_analyse_init(rtpstream_info_t *stream_info, const packet_info *pinfo, const struct _rtp_info *rtpinfo)
 {
-    struct _rtp_conversation_info *p_conv_data = NULL;
+    struct _rtp_packet_info *p_packet_data = NULL;
 
     /* reset stream stats */
     stream_info->first_payload_type = rtpinfo->info_payload_type;
@@ -527,13 +519,13 @@ void rtpstream_info_analyse_init(rtpstream_info_t *stream_info, const packet_inf
     stream_info->start_abs_time = pinfo->abs_ts;
 
     /* reset RTP stats */
-    stream_info->rtp_stats.first_packet = TRUE;
+    stream_info->rtp_stats.first_packet = true;
     stream_info->rtp_stats.reg_pt = PT_UNDEFINED;
 
     /* Get the Setup frame number who set this RTP stream */
-    p_conv_data = (struct _rtp_conversation_info *)p_get_proto_data(wmem_file_scope(), (packet_info *)pinfo, proto_get_id_by_filter_name("rtp"), 0);
-    if (p_conv_data)
-        stream_info->setup_frame_number = p_conv_data->frame_number;
+    p_packet_data = (struct _rtp_packet_info *)p_get_proto_data(wmem_file_scope(), (packet_info *)pinfo, proto_get_id_by_filter_name("rtp"), RTP_CONVERSATION_PROTO_DATA);
+    if (p_packet_data)
+        stream_info->setup_frame_number = p_packet_data->frame_number;
     else
         stream_info->setup_frame_number = 0xFFFFFFFF;
 }
@@ -550,7 +542,7 @@ void rtpstream_info_analyse_process(rtpstream_info_t *stream_info, const packet_
 
     if (stream_info->rtp_stats.flags & STAT_FLAG_WRONG_TIMESTAMP
             || stream_info->rtp_stats.flags & STAT_FLAG_WRONG_SEQ)
-        stream_info->problem = TRUE;
+        stream_info->problem = true;
 
     /* increment the packets counter for this stream */
     ++(stream_info->packet_count);
@@ -559,7 +551,7 @@ void rtpstream_info_analyse_process(rtpstream_info_t *stream_info, const packet_
 
 /****************************************************************************/
 /* Get hash for rtpstream_info_t */
-guint rtpstream_to_hash(gconstpointer key)
+unsigned rtpstream_to_hash(const void *key)
 {
     if (key) {
         return rtpstream_id_to_hash(&((rtpstream_info_t *)key)->id);
@@ -574,14 +566,14 @@ guint rtpstream_to_hash(gconstpointer key)
 void rtpstream_info_multihash_insert(GHashTable *multihash, rtpstream_info_t *new_stream_info)
 {
     GList *hlist = (GList *)g_hash_table_lookup(multihash, GINT_TO_POINTER(rtpstream_to_hash(new_stream_info)));
-    gboolean found = FALSE;
+    bool found = false;
     if (hlist) {
         // Key exists in hash
         GList *list = g_list_first(hlist);
         while (list)
         {
             if (rtpstream_id_equal(&(new_stream_info->id), &((rtpstream_info_t *)(list->data))->id, RTPSTREAM_ID_EQUAL_SSRC)) {
-                found = TRUE;
+                found = true;
                 break;
             }
             list = g_list_next(list);
@@ -622,7 +614,7 @@ rtpstream_info_t *rtpstream_info_multihash_lookup(GHashTable *multihash, rtpstre
 /****************************************************************************/
 /* Destroys GList used in multihash */
 
-void rtpstream_info_multihash_destroy_value(gpointer key _U_, gpointer value, gpointer user_data _U_)
+void rtpstream_info_multihash_destroy_value(void *key _U_, void *value, void *user_data _U_)
 {
     g_list_free((GList *)value);
 }

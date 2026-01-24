@@ -6,14 +6,11 @@
  */
 
 #include "config.h"
-
-#include <errno.h>
-
-#include "wtap-int.h"
-#include "file_wrappers.h"
-#include <wsutil/buffer.h>
 #include "ber.h"
 
+#include "wtap_module.h"
+#include "file_wrappers.h"
+#include <wsutil/buffer.h>
 
 #define BER_CLASS_UNI   0
 #define BER_CLASS_APP   1
@@ -26,42 +23,41 @@ static int ber_file_type_subtype = -1;
 
 void register_ber(void);
 
-static gboolean ber_full_file_read(wtap *wth, wtap_rec *rec, Buffer *buf,
-                                   int *err, gchar **err_info,
-                                   gint64 *data_offset)
+static bool ber_full_file_read(wtap *wth, wtap_rec *rec,
+                                   int *err, char **err_info,
+                                   int64_t *data_offset)
 {
-  if (!wtap_full_file_read(wth, rec, buf, err, err_info, data_offset))
-    return FALSE;
+  if (!wtap_full_file_read(wth, rec, err, err_info, data_offset))
+    return false;
 
   /* Pass the file name. */
   rec->rec_header.packet_header.pseudo_header.ber.pathname = wth->pathname;
-  return TRUE;
+  return true;
 }
 
-static gboolean ber_full_file_seek_read(wtap *wth, gint64 seek_off,
-                                        wtap_rec *rec, Buffer *buf,
-                                        int *err, gchar **err_info)
+static bool ber_full_file_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+                                        int *err, char **err_info)
 {
-  if (!wtap_full_file_seek_read(wth, seek_off, rec, buf, err, err_info))
-    return FALSE;
+  if (!wtap_full_file_seek_read(wth, seek_off, rec, err, err_info))
+    return false;
 
   /* Pass the file name. */
   rec->rec_header.packet_header.pseudo_header.ber.pathname = wth->pathname;
-  return TRUE;
+  return true;
 }
 
-wtap_open_return_val ber_open(wtap *wth, int *err, gchar **err_info)
+wtap_open_return_val ber_open(wtap *wth, int *err, char **err_info)
 {
 #define BER_BYTES_TO_CHECK 8
-  guint8 bytes[BER_BYTES_TO_CHECK];
-  guint8 ber_id;
-  gint8 ber_class;
-  gint8 ber_tag;
-  gboolean ber_pc;
-  guint8 oct, nlb = 0;
+  uint8_t bytes[BER_BYTES_TO_CHECK];
+  uint8_t ber_id;
+  uint8_t ber_class;
+  uint8_t ber_tag;
+  bool ber_pc;
+  uint8_t oct, ntb = 0, nlb = 0;
   int len = 0;
-  gint64 file_size;
-  int offset = 0, i;
+  int64_t file_size;
+  size_t offset = 0;
 
   if (!wtap_read_bytes(wth->fh, &bytes, BER_BYTES_TO_CHECK, err, err_info)) {
     if (*err != WTAP_ERR_SHORT_READ)
@@ -75,11 +71,16 @@ wtap_open_return_val ber_open(wtap *wth, int *err, gchar **err_info)
   ber_pc = (ber_id>>5) & 0x01;
   ber_tag = ber_id & 0x1F;
 
+  if (ber_tag == 0x1F) {
+    ber_tag = bytes[offset++];
+    ntb = 1; /* number of tag bytes */
+  }
+
   /* it must be constructed and either a SET or a SEQUENCE */
   /* or a CONTEXT/APPLICATION less than 32 (arbitrary) */
   if(!(ber_pc &&
        (((ber_class == BER_CLASS_UNI) && ((ber_tag == BER_UNI_TAG_SET) || (ber_tag == BER_UNI_TAG_SEQ))) ||
-        (((ber_class == BER_CLASS_CON) || (ber_class == BER_CLASS_APP)) && (ber_tag < 32)))))
+        (((ber_class == BER_CLASS_CON) || (ber_class == BER_CLASS_APP)) && (ber_tag < 0xFF)))))
     return WTAP_OPEN_NOT_MINE;
 
   /* now check the length */
@@ -94,17 +95,19 @@ wtap_open_return_val ber_open(wtap *wth, int *err, gchar **err_info)
     else {
       nlb = oct & 0x7F; /* number of length bytes */
 
-      if((nlb > 0) && (nlb <= (BER_BYTES_TO_CHECK - 2))) {
+      if(nlb > 0) {
+        if (nlb + offset >= sizeof(bytes)) {
+            return WTAP_OPEN_NOT_MINE;
+        }
         /* not indefinite length and we have read enough bytes to compute the length */
-        i = nlb;
-        while(i--) {
+        for(int i = 0; i < nlb; i++) {
           oct = bytes[offset++];
           len = (len<<8) + oct;
         }
       }
     }
 
-    len += (2 + nlb); /* add back Tag and Length bytes */
+    len += (2 + ntb + nlb); /* add back Tag and Length bytes */
     file_size = wtap_file_size(wth, err);
 
     if(len != file_size) {
@@ -140,7 +143,7 @@ static const struct supported_block_type ber_blocks_supported[] = {
 
 static const struct file_type_subtype_info ber_info = {
   "ASN.1 Basic Encoding Rules", "ber", NULL, NULL,
-  FALSE, BLOCKS_SUPPORTED(ber_blocks_supported),
+  false, BLOCKS_SUPPORTED(ber_blocks_supported),
   NULL, NULL, NULL
 };
 

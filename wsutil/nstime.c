@@ -10,12 +10,17 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include "nstime.h"
+
 #include <stdio.h>
 #include <string.h>
-#include <glib.h>
-#include "nstime.h"
+#include <errno.h>
+
 #include "epochs.h"
 #include "time_util.h"
+#include "to_str.h"
+#include "strtoi.h"
+#include "ws_assert.h"
 
 /* this is #defined so that we can clearly see that we have the right number of
    zeros, rather than as a guard against the number of nanoseconds in a second
@@ -30,9 +35,15 @@ void nstime_set_zero(nstime_t *nstime)
 }
 
 /* is the given nstime_t currently zero? */
-gboolean nstime_is_zero(const nstime_t *nstime)
+bool nstime_is_zero(const nstime_t *nstime)
 {
     return nstime->secs == 0 && nstime->nsecs == 0;
+}
+
+/* is the given nstime_t currently negative? */
+bool nstime_is_negative(const nstime_t *nstime)
+{
+    return nstime->secs < 0 || nstime->nsecs < 0;
 }
 
 /* set the given nstime_t to (0,maxint) to mark it as "unset"
@@ -42,16 +53,16 @@ gboolean nstime_is_zero(const nstime_t *nstime)
 void nstime_set_unset(nstime_t *nstime)
 {
     nstime->secs  = 0;
-    nstime->nsecs = G_MAXINT;
+    nstime->nsecs = INT_MAX;
 }
 
 /* is the given nstime_t currently (0,maxint)? */
-gboolean nstime_is_unset(const nstime_t *nstime)
+bool nstime_is_unset(const nstime_t *nstime)
 {
-    if(nstime->secs == 0 && nstime->nsecs == G_MAXINT) {
-        return TRUE;
+    if(nstime->secs == 0 && nstime->nsecs == INT_MAX) {
+        return true;
     } else {
-        return FALSE;
+        return false;
     }
 }
 
@@ -73,6 +84,18 @@ void nstime_copy(nstime_t *a, const nstime_t *b)
 
 void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
 {
+    if (G_UNLIKELY(nstime_is_unset(a) || nstime_is_unset(b))) {
+        nstime_set_unset(delta);
+        return;
+    }
+    /* If calculations with the nanoseconds overflow, the nanoseconds are
+     * outside the valid range, probably because the struct member was set
+     * directly from packet data without checking the value. */
+    if (ckd_sub(&delta->nsecs, b->nsecs, a->nsecs)) {
+        ws_warn_badarg("Nanoseconds outside valid range.");
+        delta->nsecs = 0;
+        errno = EINVAL;
+    }
     if (b->secs == a->secs) {
         /* The seconds part of b is the same as the seconds part of a, so if
            the nanoseconds part of the first time is less than the nanoseconds
@@ -80,9 +103,8 @@ void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
            just be the difference between the nanoseconds part of b and the
            nanoseconds part of a; don't adjust the seconds part of the delta,
            as it's OK if the nanoseconds part is negative, and an overflow
-           can never result. */
+           should never result. */
         delta->secs = 0;
-        delta->nsecs = b->nsecs - a->nsecs;
     } else if (b->secs < a->secs) {
         /* The seconds part of b is less than the seconds part of a, so b is
            before a.
@@ -91,18 +113,32 @@ void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
            should have the same sign, so if the difference between the
            nanoseconds values would be *positive*, subtract 1,000,000,000
            from it, and add one to the seconds value. */
-        delta->secs = b->secs - a->secs;
-        delta->nsecs = b->nsecs - a->nsecs;
+        delta->secs = b->secs;
         if(delta->nsecs > 0) {
             delta->nsecs -= NS_PER_S;
-            delta->secs ++;
+            /* This can never overflow, because b is less than a. */
+            delta->secs++;
+        }
+        if (ckd_sub(&delta->secs, delta->secs, a->secs)) {
+            /* Because b is less than a, the correct answer is smaller than
+             * representable. Clamp to the minimum valid value. */
+            delta->secs = TIME_T_MIN;
+            delta->nsecs = 1 - NS_PER_S;
+            errno = ERANGE;
         }
     } else {
-        delta->secs = b->secs - a->secs;
-        delta->nsecs = b->nsecs - a->nsecs;
+        delta->secs = b->secs;
         if(delta->nsecs < 0) {
             delta->nsecs += NS_PER_S;
-            delta->secs --;
+            /* This can never overflow, because b is greater than a. */
+            delta->secs--;
+        }
+        if (ckd_sub(&delta->secs, delta->secs, a->secs)) {
+            /* Because b is greater than a, the correct answer is greater
+             * than representable. Clamp to the maximum valid value. */
+            delta->secs = TIME_T_MAX;
+            delta->nsecs = NS_PER_S - 1;
+            errno = ERANGE;
         }
     }
 }
@@ -114,14 +150,42 @@ void nstime_delta(nstime_t *delta, const nstime_t *b, const nstime_t *a )
 
 void nstime_sum(nstime_t *sum, const nstime_t *a, const nstime_t *b)
 {
-    sum->secs = a->secs + b->secs;
-    sum->nsecs = a->nsecs + b->nsecs;
+    if (G_UNLIKELY(nstime_is_unset(a) || nstime_is_unset(b))) {
+        nstime_set_unset(sum);
+        return;
+    }
+    if (ckd_add(&sum->nsecs, a->nsecs, b->nsecs)) {
+        ws_warn_badarg("Nanoseconds outside valid range.");
+        sum->nsecs = 0;
+        errno = EINVAL;
+    }
+    if (ckd_add(&sum->secs, a->secs, b->secs)) {
+        if (a->secs > 0) {
+            sum->secs = TIME_T_MAX;
+            sum->nsecs = NS_PER_S - 1;
+        } else {
+            sum->secs = TIME_T_MIN;
+            sum->nsecs = 1 - NS_PER_S;
+        }
+        errno = ERANGE;
+        return;
+    }
     if(sum->nsecs>=NS_PER_S || (sum->nsecs>0 && sum->secs<0)){
         sum->nsecs-=NS_PER_S;
-        sum->secs++;
+        if (ckd_add(&sum->secs, sum->secs, 1)) {
+            sum->secs = TIME_T_MAX;
+            sum->nsecs = NS_PER_S - 1;
+            errno = ERANGE;
+            return;
+        }
     } else if(sum->nsecs<=-NS_PER_S || (sum->nsecs<0 && sum->secs>0)) {
         sum->nsecs+=NS_PER_S;
-        sum->secs--;
+        if (ckd_sub(&sum->secs, sum->secs, 1)) {
+            sum->secs = TIME_T_MIN;
+            sum->nsecs = 1 - NS_PER_S;
+            errno = ERANGE;
+            return;
+        }
     }
 }
 
@@ -147,10 +211,34 @@ int nstime_cmp (const nstime_t *a, const nstime_t *b )
         }
     }
     if (a->secs == b->secs) {
-        return a->nsecs - b->nsecs;
+        if (a->nsecs == b->nsecs) {
+            return 0;
+        } else {
+            return a->nsecs > b->nsecs ? 1 : -1;
+        }
     } else {
-        return (int) (a->secs - b->secs);
+        return a->secs > b->secs ? 1 : -1;
+#if 0
+        /* The old behavior, in the common case, returned the difference in
+         * seconds, which could overflow. That was never promised, but if it
+         * is desired, a way to handle it with C23 checked arithmetic could be
+         * (ignoring hypothetical platforms with floating-point time_t): */
+        int ret;
+        if (ckd_sub(&ret, a->secs, b->secs)) {
+            /* We subtract b->secs, so if it's positive, there was underflow,
+             * and vice versa. */
+            ret = b->secs > 0 ? INT_MIN : INT_MAX;
+        }
+        return ret;
+#endif
     }
+}
+
+unsigned nstime_hash(const nstime_t *nstime)
+{
+    int64_t val1 = (int64_t)nstime->secs;
+
+    return g_int64_hash(&val1) ^ g_int_hash(&nstime->nsecs);
 }
 
 /*
@@ -173,27 +261,22 @@ double nstime_to_sec(const nstime_t *nstime)
     return ((double)nstime->secs + (double)nstime->nsecs/NS_PER_S);
 }
 
-/*
- * This code is based on the Samba code:
- *
- *  Unix SMB/Netbios implementation.
- *  Version 1.9.
- *  time handling functions
- *  Copyright (C) Andrew Tridgell 1992-1998
- */
-
-#ifndef TIME_T_MIN
-#define TIME_T_MIN ((time_t) ((time_t)0 < (time_t) -1 ? (time_t) 0 \
-                    : (time_t) (~0ULL << (sizeof (time_t) * CHAR_BIT - 1))))
-#endif
-#ifndef TIME_T_MAX
-#define TIME_T_MAX ((time_t) (~ (time_t) 0 - TIME_T_MIN))
-#endif
-
-static gboolean
-common_filetime_to_nstime(nstime_t *nstime, guint64 ftsecs, int nsecs)
+void nstime_rounded(nstime_t *a, const nstime_t *b, ws_tsprec_e prec)
 {
-    gint64 secs;
+    nstime_t round = NSTIME_INIT_ZERO;
+    unsigned dv = NS_PER_S;
+    for (ws_tsprec_e i = WS_TSPREC_SEC; i < prec; i++) {
+        dv /= 10;
+    }
+    round.nsecs = 5 * (dv / 10);
+    nstime_sum(a, b, &round);
+    a->nsecs = (a->nsecs / dv) * dv;
+}
+
+static bool
+common_filetime_to_nstime(nstime_t *nstime, uint64_t ftsecs, int nsecs)
+{
+    int64_t secs;
 
     /*
      * Shift the seconds from the Windows epoch to the UN*X epoch.
@@ -204,11 +287,11 @@ common_filetime_to_nstime(nstime_t *nstime, guint64 ftsecs, int nsecs)
      * maximum 64-bit signed value, so the difference between them
      * should also fit in a 64-bit signed value.
      */
-    secs = (gint64)ftsecs - EPOCH_DELTA_1601_01_01_00_00_00_UTC;
+    secs = (int64_t)ftsecs - EPOCH_DELTA_1601_01_01_00_00_00_UTC;
 
     if (!(TIME_T_MIN <= secs && secs <= TIME_T_MAX)) {
         /* The result won't fit in a time_t */
-        return FALSE;
+        return false;
     }
 
     /*
@@ -216,20 +299,20 @@ common_filetime_to_nstime(nstime_t *nstime, guint64 ftsecs, int nsecs)
      */
     nstime->secs = (time_t) secs;
     nstime->nsecs = nsecs;
-    return TRUE;
+    return true;
 }
 
 /*
  * function: filetime_to_nstime
  * converts a Windows FILETIME value to an nstime_t
- * returns TRUE if the conversion succeeds, FALSE if it doesn't
+ * returns true if the conversion succeeds, false if it doesn't
  * (for example, with a 32-bit time_t, the time overflows or
  * underflows time_t)
  */
-gboolean
-filetime_to_nstime(nstime_t *nstime, guint64 filetime)
+bool
+filetime_to_nstime(nstime_t *nstime, uint64_t filetime)
 {
-    guint64 ftsecs;
+    uint64_t ftsecs;
     int nsecs;
 
     /*
@@ -243,17 +326,17 @@ filetime_to_nstime(nstime_t *nstime, guint64 filetime)
 }
 
 /*
- * function: nsfiletime_to_nstime
+ * function: filetime_ns_to_nstime
  * converts a Windows FILETIME-like value, but given in nanoseconds
  * rather than 10ths of microseconds, to an nstime_t
- * returns TRUE if the conversion succeeds, FALSE if it doesn't
+ * returns true if the conversion succeeds, false if it doesn't
  * (for example, with a 32-bit time_t, the time overflows or
  * underflows time_t)
  */
-gboolean
-nsfiletime_to_nstime(nstime_t *nstime, guint64 nsfiletime)
+bool
+filetime_ns_to_nstime(nstime_t *nstime, uint64_t nsfiletime)
 {
-    guint64 ftsecs;
+    uint64_t ftsecs;
     int nsecs;
 
     /* Split into seconds and nanoseconds. */
@@ -264,11 +347,31 @@ nsfiletime_to_nstime(nstime_t *nstime, guint64 nsfiletime)
 }
 
 /*
+ * function: filetime_1sec_to_nstime
+ * converts a Windows FILETIME-like value, but given in seconds
+ * rather than 10ths of microseconds, to an nstime_t
+ * returns true if the conversion succeeds, false if it doesn't
+ * (for example, with a 32-bit time_t, the time overflows or
+ * underflows time_t)
+ */
+bool
+filetime_1sec_to_nstime(nstime_t *nstime, uint64_t filetime_1sec)
+{
+    /*
+     * Make sure filetime_1sec fits in a 64-bit signed integer.
+     */
+    if (filetime_1sec > INT64_MAX)
+        return false; /* No, it doesn't */
+    return common_filetime_to_nstime(nstime, filetime_1sec, 0);
+}
+
+/*
  * function: iso8601_to_nstime
  * parses a character string for a date and time given in
  * ISO 8601 date-time format (eg: 2014-04-07T05:41:56.782+00:00)
  * and converts to an nstime_t
- * returns number of chars parsed on success, or 0 on failure
+ * returns pointer to the first character after the last character
+ * parsed on success, or NULL on failure
  *
  * NB. ISO 8601 is actually a lot more flexible than the above format,
  * much to a developer's chagrin. The "basic format" is distinguished from
@@ -290,20 +393,18 @@ nsfiletime_to_nstime(nstime_t *nstime, guint64 nsfiletime)
  * YYYY-Www-D, YYYY-DDD, etc. For a relatively easy introduction to
  * these formats, see wikipedia: https://en.wikipedia.org/wiki/ISO_8601
  */
-guint8
+const char *
 iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
 {
     struct tm tm;
-    gint n_scanned = 0;
-    gint n_chars = 0;
-    guint frac = 0;
-    gint off_hr = 0;
-    gint off_min = 0;
-    guint8 ret_val = 0;
-    const char *start = ptr;
+    int n_scanned = 0;
+    int n_chars = 0;
+    unsigned frac = 0;
+    int off_hr = 0;
+    int off_min = 0;
     char sign = '\0';
-    gboolean has_separator = FALSE;
-    gboolean have_offset = FALSE;
+    bool has_separator = false;
+    bool have_offset = false;
 
     memset(&tm, 0, sizeof(tm));
     tm.tm_isdst = -1;
@@ -313,7 +414,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
      * separator. */
     for (n_scanned = 0; n_scanned < 4; n_scanned++) {
         if (!g_ascii_isdigit(*ptr)) {
-            return 0;
+            return NULL;
         }
         tm.tm_year *= 10;
         tm.tm_year += *ptr++ - '0';
@@ -321,26 +422,26 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
     if (*ptr == '-') {
         switch (format) {
             case ISO8601_DATETIME_BASIC:
-                return 0;
+                return NULL;
 
             case ISO8601_DATETIME:
             case ISO8601_DATETIME_AUTO:
             default:
-                has_separator = TRUE;
+                has_separator = true;
                 ptr++;
         };
     } else if (g_ascii_isdigit(*ptr)) {
         switch (format) {
             case ISO8601_DATETIME:
-                return 0;
+                return NULL;
 
             case ISO8601_DATETIME_BASIC:
             case ISO8601_DATETIME_AUTO:
             default:
-                has_separator = FALSE;
+                has_separator = false;
         };
     } else {
-        return 0;
+        return NULL;
     }
 
     tm.tm_year -= 1900; /* struct tm expects number of years since 1900 */
@@ -366,7 +467,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
         ptr += n_chars;
     }
     else {
-        return 0;
+        return NULL;
     }
 
     if (*ptr == 'T' || *ptr == ' ') {
@@ -379,7 +480,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
         /* Allow no separator between date and time iff we have no
            separator between units. (Some extended formats may negotiate
            no separator here, so this could be changed.) */
-        return 0;
+        return NULL;
     }
 
     /* Now we're on to the time part. We'll require a minimum of hours and
@@ -394,7 +495,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
     }
     else {
         /* didn't get hours and minutes */
-        return 0;
+        return NULL;
     }
 
     /* Test for (whole) seconds */
@@ -404,7 +505,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
         if (1 > sscanf(ptr, has_separator ? ":%2u%n" : "%2u%n",
                 &tm.tm_sec, &n_chars)) {
             /* Couldn't get them */
-            return 0;
+            return NULL;
         }
         ptr += n_chars;
 
@@ -444,7 +545,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
     /* Validate what we got so far. mktime() doesn't care about strange
        values but we should at least start with something valid */
     if (!tm_is_valid(&tm)) {
-        return 0;
+        return NULL;
     }
 
     /* Check for a time zone offset */
@@ -455,7 +556,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
         /* We have a UTC-relative offset */
         if (*ptr == 'Z') {
             off_hr = off_min = 0;
-            have_offset = TRUE;
+            have_offset = true;
             ptr++;
         }
         else {
@@ -463,7 +564,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
             n_scanned = sscanf(ptr, "%3d%n", &off_hr, &n_chars);
             if (n_scanned >= 1) {
                 /* Definitely got hours */
-                have_offset = TRUE;
+                have_offset = true;
                 ptr += n_chars;
                 n_scanned = sscanf(ptr, *ptr == ':' ? ":%2d%n" : "%2d%n", &off_min, &n_chars);
                 if (n_scanned >= 1) {
@@ -473,7 +574,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
             }
             else {
                 /* Didn't get a valid offset, treat as if there's none at all */
-                have_offset = FALSE;
+                have_offset = false;
             }
         }
     }
@@ -499,8 +600,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
         nstime->secs = mktime(&tm);
     }
     nstime->nsecs = frac;
-    ret_val = (guint)(ptr-start);
-    return ret_val;
+    return ptr;
 }
 
 /*
@@ -509,31 +609,40 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
  * a floating point number containing a Unix epoch date-time
  * format (e.g. 1600000000.000 for Sun Sep 13 05:26:40 AM PDT 2020)
  * and converts to an nstime_t
- * returns number of chars parsed on success, or 0 on failure
+ * returns pointer to the first character after the last character
+ * parsed on success, or NULL on failure
  *
  * Reference: https://en.wikipedia.org/wiki/Unix_time
  */
-guint8
+const char *
 unix_epoch_to_nstime(nstime_t *nstime, const char *ptr)
 {
-    struct tm tm;
-    char *ptr_new;
+    int64_t secs;
+    const char *ptr_new;
 
-    gint n_chars = 0;
-    guint frac = 0;
-    guint8 ret_val = 0;
-    const char *start = ptr;
+    int n_chars = 0;
+    unsigned frac = 0;
 
-    memset(&tm, 0, sizeof(tm));
-    tm.tm_isdst = -1;
     nstime_set_unset(nstime);
 
-    if (!(ptr_new = ws_strptime(ptr, "%s", &tm))) {
-        return 0;
+    /*
+     * Extract the seconds as a 64-bit signed number, as time_t
+     * might be 64-bit.
+     */
+    if (!ws_strtoi64(ptr, &ptr_new, &secs)) {
+        return NULL;
     }
 
-    /* No UTC offset given; ISO 8601 says this means local time */
-    nstime->secs = mktime(&tm);
+    /* For now, reject times before the Epoch. */
+    if (secs < 0) {
+        return NULL;
+    }
+
+    /* Make sure it fits. */
+    nstime->secs = (time_t) secs;
+    if (nstime->secs != secs) {
+        return NULL;
+    }
 
     /* Now let's test for fractional seconds */
     if (*ptr_new == '.' || *ptr_new == ',') {
@@ -561,13 +670,66 @@ unix_epoch_to_nstime(nstime_t *nstime, const char *ptr)
         /* If we didn't get frac, it's still its default of 0 */
     }
     else {
-        tm.tm_sec = 0;
+        frac = 0;
     }
     nstime->nsecs = frac;
+    return ptr_new;
+}
 
-    /* return pointer shift */
-    ret_val = (guint)(ptr_new-start);
-    return ret_val;
+size_t nstime_to_iso8601(char *buf, size_t buf_size, const nstime_t *nstime)
+{
+    struct tm *tm;
+#ifndef _WIN32
+    struct tm tm_time;
+#endif
+    size_t len;
+
+#ifdef _WIN32
+    /*
+     * Do not use gmtime_s(), as it will call and
+     * exception handler if the time we're providing
+     * is < 0, and that will, by default, exit.
+     * ("Programmers not bothering to check return
+     * values?  Try new Microsoft Visual Studio,
+     * with Parameter Validation(R)!  Kill insufficiently
+     * careful programs - *and* the processes running them -
+     * fast!")
+     *
+     * We just want to report this as an unrepresentable
+     * time.  It fills in a per-thread structure, which
+     * is sufficiently thread-safe for our purposes.
+     */
+    tm = gmtime(&nstime->secs);
+#else
+    /*
+     * Use gmtime_r(), because the Single UNIX Specification
+     * does *not* guarantee that gmtime() is thread-safe.
+     * Perhaps it is on all platforms on which we run, but
+     * this way we don't have to check.
+     */
+    tm = gmtime_r(&nstime->secs, &tm_time);
+#endif
+    if (tm == NULL) {
+        return 0;
+    }
+
+    /* Some platforms (MinGW-w64) do not support %F or %T. */
+    /* Returns number of bytes, excluding terminating null, placed in
+     * buf, or zero if there is not enough space for the whole string. */
+    len = strftime(buf, buf_size, "%Y-%m-%dT%H:%M:%S", tm);
+    if (len == 0) {
+        return 0;
+    }
+    ws_assert(len < buf_size);
+    buf += len;
+    buf_size -= len;
+    len += snprintf(buf, buf_size, ".%09dZ", nstime->nsecs);
+    return len;
+}
+
+void nstime_to_unix(char *buf, size_t buf_size, const nstime_t *nstime)
+{
+    display_signed_time(buf, buf_size, nstime, WS_TSPREC_NSEC);
 }
 
 /*

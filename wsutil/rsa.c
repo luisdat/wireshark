@@ -13,7 +13,6 @@
 #define WS_LOG_DOMAIN LOG_DOMAIN_WSUTIL
 
 #include "rsa.h"
-#include <glib.h>
 #include "filesystem.h"
 #include "file_util.h"
 #include <errno.h>
@@ -34,7 +33,7 @@ rsa_privkey_to_sexp(gnutls_x509_privkey_t priv_key, char **err)
     size_t         tmp_size;
     gcry_error_t   gret;
     gcry_sexp_t    rsa_priv_key = NULL;
-    gint           i;
+    int            i;
     gcry_mpi_t     rsa_params[RSA_PARS];
     *err = NULL;
 
@@ -96,8 +95,8 @@ rsa_load_pem_key(FILE *fp, char **err)
     gnutls_x509_privkey_t priv_key;
     gnutls_datum_t        key;
     ws_statb64            statbuf;
-    gint                  ret;
-    guint                 bytes;
+    int                   ret;
+    unsigned              bytes;
     *err = NULL;
 
     if (ws_fstat64(ws_fileno(fp), &statbuf) == -1) {
@@ -122,8 +121,8 @@ rsa_load_pem_key(FILE *fp, char **err)
     /* XXX - check for a too-big size */
     /* load all file contents into a datum buffer*/
     key.data = (unsigned char *)g_malloc((size_t)statbuf.st_size);
-    key.size = (int)statbuf.st_size;
-    bytes = (guint) fread(key.data, 1, key.size, fp);
+    key.size = (unsigned)statbuf.st_size;
+    bytes = (unsigned) fread(key.data, 1, key.size, fp);
     if (bytes < key.size) {
         if (bytes == 0 && ferror(fp)) {
             *err = ws_strdup_printf("can't read from file %d bytes, got error %s",
@@ -174,10 +173,11 @@ BAGTYPE(gnutls_pkcs12_bag_type_t x) {
 }
 
 gnutls_x509_privkey_t
-rsa_load_pkcs12(FILE *fp, const gchar *cert_passwd, char **err)
+rsa_load_pkcs12(FILE *fp, const char *cert_passwd, char **err)
 {
-    int                       i, j, ret;
-    int                       rest;
+    int                       i, ret;
+    unsigned                  j, bag_count;
+    unsigned                  rest;
     unsigned char            *p;
     gnutls_datum_t            data;
     gnutls_pkcs12_bag_t       bag = NULL;
@@ -188,13 +188,13 @@ rsa_load_pkcs12(FILE *fp, const gchar *cert_passwd, char **err)
     gnutls_x509_privkey_t     priv_key = NULL;
     *err = NULL;
 
-    rest = 4096;
+    rest = 4096U;
     data.data = (unsigned char *)g_malloc(rest);
     data.size = rest;
     p = data.data;
     while ((len = fread(p, 1, rest, fp)) > 0) {
         p += len;
-        rest -= (int) len;
+        rest -= (unsigned)len;
         if (!rest) {
             rest = 1024;
             data.data = (unsigned char *)g_realloc(data.data, data.size + rest);
@@ -250,7 +250,14 @@ rsa_load_pkcs12(FILE *fp, const gchar *cert_passwd, char **err)
             goto done;
         }
 
-        for (j=0; j<gnutls_pkcs12_bag_get_count(bag); j++) {
+        ret = gnutls_pkcs12_bag_get_count(bag);
+        if (ret < 0) {
+            *err = ws_strdup_printf("gnutls_pkcs12_get_count failed: %s",
+                                   gnutls_strerror(ret));
+            goto done;
+        }
+        bag_count = (unsigned)ret;
+        for (j=0; j < bag_count; j++) {
 
             ret = gnutls_pkcs12_bag_get_type(bag, j);
             if (ret < 0) {
@@ -264,7 +271,7 @@ rsa_load_pkcs12(FILE *fp, const gchar *cert_passwd, char **err)
                                        ret);
                 goto done;
             }
-            ws_debug("Bag %d/%d: %s", i, j, BAGTYPE(bag_type));
+            ws_debug("Bag %d/%u: %s", i, j, BAGTYPE(bag_type));
             if (bag_type == GNUTLS_BAG_ENCRYPTED) {
                 ret = gnutls_pkcs12_bag_decrypt(bag, cert_passwd);
                 if (ret == 0) {
@@ -349,7 +356,7 @@ done:
 }
 
 void
-rsa_private_key_free(gpointer key)
+rsa_private_key_free(void * key)
 {
     gcry_sexp_release((gcry_sexp_t) key);
 }
@@ -357,7 +364,7 @@ rsa_private_key_free(gpointer key)
 #else /* ! defined(HAVE_LIBGNUTLS) */
 
 void
-rsa_private_key_free(gpointer key _U_)
+rsa_private_key_free(void * key _U_)
 {
 }
 

@@ -12,8 +12,6 @@
 #include <ui/qt/models/interface_tree_cache_model.h>
 #include <ui/qt/models/interface_sort_filter_model.h>
 
-#include <glib.h>
-
 #include <epan/prefs.h>
 #include <ui/preference_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
@@ -30,6 +28,9 @@ InterfaceSortFilterModel::InterfaceSortFilterModel(QObject *parent) :
 
 void InterfaceSortFilterModel::resetAllFilter()
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     _filterHidden = true;
     _filterTypes = true;
     _invertTypeFilter = false;
@@ -43,7 +44,11 @@ void InterfaceSortFilterModel::resetAllFilter()
     for (int col = 0; col < IFTREE_COL_MAX; col++)
         _columns.append((InterfaceTreeColumns)col);
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange();
+#else
     invalidateFilter();
+#endif
     invalidate();
 }
 
@@ -91,6 +96,9 @@ bool InterfaceSortFilterModel::remoteDisplay()
 
 void InterfaceSortFilterModel::toggleRemoteDisplay()
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     _remoteDisplay = ! _remoteDisplay;
 
     if (_storeOnChange)
@@ -100,7 +108,11 @@ void InterfaceSortFilterModel::toggleRemoteDisplay()
         prefs_main_write();
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     invalidate();
 }
 
@@ -143,10 +155,7 @@ void InterfaceSortFilterModel::resetPreferenceData()
         }
     }
 
-#if 0
-    // Disabled until bug 13354 is fixed
     _filterHidden = ! prefs.gui_interfaces_show_hidden;
-#endif
 #ifdef HAVE_PCAP_REMOTE
     _remoteDisplay = prefs.gui_interfaces_remote_display;
 #endif
@@ -161,6 +170,9 @@ bool InterfaceSortFilterModel::filterHidden() const
 
 void InterfaceSortFilterModel::toggleFilterHidden()
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     _filterHidden = ! _filterHidden;
 
     if (_storeOnChange)
@@ -170,7 +182,11 @@ void InterfaceSortFilterModel::toggleFilterHidden()
         prefs_main_write();
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     invalidate();
 }
 
@@ -214,9 +230,19 @@ QList<int> InterfaceSortFilterModel::typesDisplayed()
 void InterfaceSortFilterModel::setInterfaceTypeVisible(int ifType, bool visible)
 {
     if (visible && displayHiddenTypes.contains(ifType))
+    {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+        beginFilterChange();
+#endif
         displayHiddenTypes.removeAll(ifType);
+    }
     else if (! visible && ! displayHiddenTypes.contains(ifType))
+    {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+        beginFilterChange();
+#endif
         displayHiddenTypes.append(ifType);
+    }
     else
         /* Nothing should have changed */
         return;
@@ -227,18 +253,23 @@ void InterfaceSortFilterModel::setInterfaceTypeVisible(int ifType, bool visible)
         QList<int>::const_iterator it = displayHiddenTypes.constBegin();
         while (it != displayHiddenTypes.constEnd())
         {
-            new_pref.append(QString("%1,").arg(*it));
+            new_pref.append(QStringLiteral("%1,").arg(*it));
             ++it;
         }
         if (new_pref.length() > 0)
             new_pref = new_pref.left(new_pref.length() - 1);
 
-        prefs.gui_interfaces_hide_types = qstring_strdup(new_pref);
+        wmem_free(wmem_epan_scope(), prefs.gui_interfaces_hide_types);
+        prefs.gui_interfaces_hide_types = wmem_strdup(wmem_epan_scope(), new_pref.toUtf8().constData());
 
         prefs_main_write();
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     invalidate();
 }
 
@@ -278,15 +309,18 @@ bool InterfaceSortFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex
     int type = -1;
     bool hidden = false;
 
-    if (dynamic_cast<InterfaceTreeCacheModel*>(sourceModel()) != 0)
+    InterfaceTreeCacheModel* cacheModel = qobject_cast<InterfaceTreeCacheModel*>(sourceModel());
+    InterfaceTreeModel* treeModel = nullptr;
+
+    if (cacheModel != nullptr)
     {
-        type = ((InterfaceTreeCacheModel *)sourceModel())->getColumnContent(idx, IFTREE_COL_TYPE).toInt();
-        hidden = ((InterfaceTreeCacheModel *)sourceModel())->getColumnContent(idx, IFTREE_COL_HIDDEN, Qt::UserRole).toBool();
+        type = cacheModel->getColumnContent(idx, IFTREE_COL_TYPE).toInt();
+        hidden = cacheModel->getColumnContent(idx, IFTREE_COL_HIDDEN, Qt::UserRole).toBool();
     }
-    else if (dynamic_cast<InterfaceTreeModel*>(sourceModel()) != 0)
+    else if ((treeModel = qobject_cast<InterfaceTreeModel*>(sourceModel())) != nullptr)
     {
-        type = ((InterfaceTreeModel *)sourceModel())->getColumnContent(idx, IFTREE_COL_TYPE).toInt();
-        hidden = ((InterfaceTreeModel *)sourceModel())->getColumnContent(idx, IFTREE_COL_HIDDEN, Qt::UserRole).toBool();
+        type = treeModel->getColumnContent(idx, IFTREE_COL_TYPE).toInt();
+        hidden = treeModel->getColumnContent(idx, IFTREE_COL_HIDDEN, Qt::UserRole).toBool();
     }
     else
         return false;
@@ -294,24 +328,31 @@ bool InterfaceSortFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex
     if (hidden && _filterHidden)
         return false;
 
+#ifdef HAVE_PCAP_REMOTE
+    bool isRemote = false;
+    if (cacheModel && cacheModel->isRemote(realIndex)) {
+        isRemote = true;
+    } else if (treeModel && treeModel->isRemote(idx)) {
+        isRemote = true;
+    }
+#endif
+
     if (_filterTypes && ! isInterfaceTypeShown(type))
     {
 #ifdef HAVE_PCAP_REMOTE
-        /* Remote interfaces have the if type IF_WIRED, therefore would be filtered, if not explicitly checked here */
-        if (type != IF_WIRED || ! ((InterfaceTreeModel *)sourceModel())->isRemote(idx))
+        /* Remote interfaces have the if type IF_WIRED, therefore would be filtered if not explicitly checked here */
+        if (type != IF_WIRED || !isRemote)
 #endif
         return false;
     }
 
 #ifdef HAVE_PCAP_REMOTE
-    if (((InterfaceTreeModel *)sourceModel())->isRemote(idx))
-    {
-        if (! _remoteDisplay)
+    if (isRemote && !_remoteDisplay) {
             return false;
     }
 #endif
 
-#endif
+#endif /* HAVE_LIBPCAP */
 
     return true;
 }

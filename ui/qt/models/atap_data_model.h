@@ -12,8 +12,6 @@
 
 #include "config.h"
 
-#include "glib.h"
-
 #include <epan/tap.h>
 #include <epan/conversation.h>
 #include <epan/conversation_table.h>
@@ -60,6 +58,8 @@ public:
         DATAMODEL_UNKNOWN
     } dataModelType;
 
+    conv_hash_t hash_;
+
     /**
      * @brief Construct a new ATapDataModel object
      *
@@ -77,12 +77,14 @@ public:
     virtual ~ATapDataModel();
 
     /**
-     * @brief Number of rows in this model
+     * @brief Number of rows under the given parent in this model, which
+     * is the total number of rows for the empty QModelIndex, and 0 for
+     * any valid parent index (as no row has children; this is a flat table.)
      *
-     * @param idx not used
-     * @return int the number of rows
+     * @param parent index of parent, QModelIndex() for the root
+     * @return int the number of rows under the parent
      */
-    int rowCount(const QModelIndex &idx = QModelIndex()) const;
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
 
     virtual int columnCount(const QModelIndex &parent = QModelIndex()) const = 0;
     virtual QVariant headerData(int section, Qt::Orientation orientation = Qt::Horizontal, int role = Qt::DisplayRole) const = 0;
@@ -131,7 +133,7 @@ public:
      *
      * @param resolve true if names should be resolved
      */
-    void setResolveNames(bool resolve);
+    virtual void setResolveNames(bool resolve) = 0;
 
     /**
      * @brief Does the model allow names to be resolved
@@ -149,14 +151,20 @@ public:
      *
      * @param absolute true to use absolute time values
      */
-    void useAbsoluteTime(bool absolute);
+    virtual void useAbsoluteTime(bool absolute) = 0;
 
     /**
      * @brief Use nanosecond timestamps if requested
      *
+     * Otherwise, microsecond time resolution will be displayed
+     *
      * @param nanoseconds use nanosecond timestamps if required and requested
      */
-    void useNanosecondTimestamps(bool nanoseconds);
+    virtual void useNanosecondTimestamps(bool nanoseconds) = 0;
+
+    void setMachineReadable(bool machineReadable);
+
+    void limitToDisplayFilter(bool limit);
 
     /**
      * @brief Are ports hidden for this model
@@ -197,6 +205,13 @@ public:
      */
     dataModelType modelType() const;
 
+    conv_hash_t * hash();
+
+    /**
+     * @brief Update the flags
+     */
+    void updateFlags(unsigned flag);
+
 #ifdef HAVE_MAXMINDDB
     /**
      * @brief Does this model have geoip data available
@@ -217,8 +232,6 @@ protected:
 
     virtual tap_packet_cb conversationPacketHandler();
 
-    conv_hash_t * hash();
-
     void resetData();
     void updateData(GArray * data);
 
@@ -227,19 +240,24 @@ protected:
     QString _filter;
 
     bool _absoluteTime;
+    // XXX - There are other possible time precisions besides
+    // microseconds and nanoseconds; e.g., Netmon 2.3 uses
+    // 100 ns, and pcapng can have one of many values.
     bool _nanoseconds;
     bool _resolveNames;
+    bool _machineReadable;
     bool _disableTap;
 
     double _minRelStartTime;
     double _maxRelStopTime;
+
+    unsigned _tapFlags;
 
     register_ct_t* registerTable() const;
 
 private:
     int _protoId;
 
-    conv_hash_t hash_;
 };
 
 class EndpointDataModel : public ATapDataModel
@@ -271,10 +289,13 @@ public:
 
     explicit EndpointDataModel(int protoId, QString filter, QObject *parent = nullptr);
 
-    int columnCount(const QModelIndex &parent = QModelIndex()) const;
-    QVariant headerData(int section, Qt::Orientation orientation = Qt::Horizontal, int role = Qt::DisplayRole) const;
-    QVariant data(const QModelIndex &idx, int role = Qt::DisplayRole) const;
+    int columnCount(const QModelIndex &parent = QModelIndex()) const override;
+    QVariant headerData(int section, Qt::Orientation orientation = Qt::Horizontal, int role = Qt::DisplayRole) const override;
+    QVariant data(const QModelIndex &idx, int role = Qt::DisplayRole) const override;
 
+    void setResolveNames(bool resolve) override;
+    void useAbsoluteTime(bool absolute) override;
+    void useNanosecondTimestamps(bool nanoseconds) override;
 };
 
 class ConversationDataModel : public ATapDataModel
@@ -304,11 +325,17 @@ public:
         CONV_INDEX_COLUMN = CONV_NUM_COLUMNS
     } conversation_column_type_e;
 
+    typedef enum {
+        CONV_TCP_EXT_COLUMN_A = CONV_INDEX_COLUMN,
+        CONV_TCP_EXT_NUM_COLUMNS,
+        CONV_TCP_EXT_INDEX_COLUMN = CONV_TCP_EXT_NUM_COLUMNS
+    } conversation_tcp_ext_column_type_e;
+
     explicit ConversationDataModel(int protoId, QString filter, QObject *parent = nullptr);
 
-    int columnCount(const QModelIndex &parent = QModelIndex()) const;
-    QVariant headerData(int section, Qt::Orientation orientation = Qt::Horizontal, int role = Qt::DisplayRole) const;
-    QVariant data(const QModelIndex &idx, int role = Qt::DisplayRole) const;
+    int columnCount(const QModelIndex &parent = QModelIndex()) const override;
+    QVariant headerData(int section, Qt::Orientation orientation = Qt::Horizontal, int role = Qt::DisplayRole) const override;
+    QVariant data(const QModelIndex &idx, int role = Qt::DisplayRole) const override;
 
     void doDataUpdate();
 
@@ -322,6 +349,9 @@ public:
      */
     bool showConversationId(int row = 0) const;
 
+    void setResolveNames(bool resolve) override;
+    void useAbsoluteTime(bool absolute) override;
+    void useNanosecondTimestamps(bool nanoseconds) override;
 };
 
 #endif // ATAP_DATA_MODEL_H

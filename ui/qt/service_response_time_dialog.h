@@ -66,9 +66,9 @@ private slots:
 /** Register function to register dissectors that support SRT.
  *
  * @param key is unused
- * @param value register_srt_t* representing dissetor SRT table
+ * @param value register_srt_t* representing dissector SRT table
  * @param userdata is unused
  */
-gboolean register_service_response_tables(const void *key, void *value, void *userdata);
+bool register_service_response_tables(const void *key, void *value, void *userdata);
 
 #endif // __SERVICE_RESPONSE_TIME_DIALOG_H__

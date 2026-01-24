@@ -59,7 +59,7 @@ SplashOverlay::SplashOverlay(QWidget *parent) :
     setPalette(pal);
     setAutoFillBackground(true);
 
-    setStyleSheet(QString(
+    setStyleSheet(QStringLiteral(
                       "QFrame#progressBand {"
                       "  background: %1;"
                       "}"
@@ -154,6 +154,9 @@ void SplashOverlay::splashUpdate(register_action_e action, const char *message)
         break;
     case RA_INTERFACES:
         action_msg = tr("Finding local interfaces");
+        break;
+    case RA_PREFERENCES_APPLY:
+        action_msg = tr("Applying changed preferences");
         break;
     default:
         action_msg = tr("(Unknown action)");

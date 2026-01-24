@@ -12,23 +12,34 @@
 #ifndef __WTAP_MODULES_H__
 #define __WTAP_MODULES_H__
 
-#include <glib.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
-/*
- * Entry in the table of built-in wiretap modules to register.
+/**
+ * @struct wtap_module_reg_t
+ * @brief Entry in the table of built-in wiretap modules to register.
+ *
+ * Each entry maps a module name to its registration callback.
  */
 typedef struct _wtap_module_reg {
-    const char *cb_name;
-    void (*cb_func)(void);
+    const char *cb_name;     /**< Name of the registration callback. */
+    void (*cb_func)(void);   /**< Function to invoke for registration. */
 } wtap_module_reg_t;
 
-extern wtap_module_reg_t wtap_module_reg[];
+/**
+ * @brief Table of wiretap module registrations.
+ *
+ * Each entry corresponds to a built-in module that should be registered at startup.
+ */
+extern wtap_module_reg_t const wtap_module_reg[];
 
-extern const guint wtap_module_count;
+/**
+ * @brief Number of built-in wiretap modules in the registration table.
+ *
+ * Used to iterate over wtap_module_reg[].
+ */
+extern const unsigned wtap_module_count;
 
 #ifdef __cplusplus
 }

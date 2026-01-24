@@ -12,7 +12,7 @@
 
 #include "unicode-utils.h"
 
-int ws_utf8_seqlen[256] = {
+const int ws_utf8_seqlen[256] = {
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  /* 0x00...0x0f */
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  /* 0x10...0x1f */
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  /* 0x20...0x2f */
@@ -40,13 +40,13 @@ int ws_utf8_seqlen[256] = {
  * a unit. (I.e., given a sequence of 2 or 3 bytes which are a
  * truncated version of a 3 or 4 byte UTF-8 character, but the next
  * byte does not continue the character, the set of 2 or 3 bytes
- * are replaced with one REPLACMENT CHARACTER.)
+ * are replaced with one REPLACEMENT CHARACTER.)
  */
 static inline size_t
-utf_8_validate(const guint8 *start, ssize_t length, const guint8 **end)
+utf_8_validate(const uint8_t *start, ssize_t length, const uint8_t **end)
 {
-    const guint8 *ptr = start;
-    guint8 ch;
+    const uint8_t *ptr = start;
+    uint8_t ch;
     size_t unichar_len, valid_bytes = 0;
 
     while (length > 0) {
@@ -173,14 +173,14 @@ utf_8_validate(const guint8 *start, ssize_t length, const guint8 **end)
  * be added later.
  *
  * Compared with g_utf8_make_valid(), this function does not consider
- * internal NUL bytes as invalid and replace them with replacment characters.
+ * internal NUL bytes as invalid and replace them with replacement characters.
  * It also replaces maximal subparts as a unit; i.e., a sequence of 2 or 3
  * bytes which are a truncated version of a valid 3 or 4 byte character (but
  * the next byte does not continue the character) are replaced with a single
  * REPLACEMENT CHARACTER, whereas the Glib function replaces each byte of the
  * sequence with its own (3 octet) REPLACEMENT CHARACTER.
  *
- * XXX: length should probably be a size_t instead of a gint in all
+ * XXX: length should probably be a size_t instead of a int in all
  * these encoding functions
  * XXX: the buffer returned can be of different length than the input,
  * and can have internal NULs as well (so that strlen doesn't give its
@@ -190,7 +190,7 @@ utf_8_validate(const guint8 *start, ssize_t length, const guint8 **end)
  * REPLACEMENT CHARACTER was used.)
  */
 wmem_strbuf_t *
-ws_utf8_make_valid_strbuf(wmem_allocator_t *scope, const guint8 *ptr, ssize_t length)
+ws_utf8_make_valid_strbuf(wmem_allocator_t *scope, const uint8_t *ptr, ssize_t length)
 {
     wmem_strbuf_t *str;
 
@@ -202,11 +202,11 @@ ws_utf8_make_valid_strbuf(wmem_allocator_t *scope, const guint8 *ptr, ssize_t le
      * U+FFFD Substitution of Maximal Subparts. */
 
     while (length > 0) {
-        const guint8 *prev = ptr;
+        const uint8_t *prev = ptr;
         size_t valid_bytes = utf_8_validate(prev, length, &ptr);
 
         if (valid_bytes) {
-            wmem_strbuf_append_len(str, prev, valid_bytes);
+            wmem_strbuf_append_len(str, (const char*)prev, valid_bytes);
         }
         length -= ptr - prev;
         prev += valid_bytes;
@@ -218,11 +218,11 @@ ws_utf8_make_valid_strbuf(wmem_allocator_t *scope, const guint8 *ptr, ssize_t le
     return str;
 }
 
-guint8 *
-ws_utf8_make_valid(wmem_allocator_t *scope, const guint8 *ptr, ssize_t length)
+uint8_t *
+ws_utf8_make_valid(wmem_allocator_t *scope, const uint8_t *ptr, ssize_t length)
 {
     wmem_strbuf_t *str = ws_utf8_make_valid_strbuf(scope, ptr, length);
-    return wmem_strbuf_finalize(str);
+    return (uint8_t*)wmem_strbuf_finalize(str);
 }
 
 #ifdef _WIN32
@@ -286,10 +286,10 @@ utf_8to16(const char *utf8str)
 }
 
 void
-utf_8to16_snprintf(TCHAR *utf16buf, gint utf16buf_len, const gchar* fmt, ...)
+utf_8to16_snprintf(TCHAR *utf16buf, int utf16buf_len, const char* fmt, ...)
 {
     va_list ap;
-    gchar* dst;
+    char* dst;
 
     va_start(ap,fmt);
     dst = ws_strdup_vprintf(fmt, ap);
@@ -301,10 +301,10 @@ utf_8to16_snprintf(TCHAR *utf16buf, gint utf16buf_len, const gchar* fmt, ...)
 }
 
 /* Convert from UTF-16 to UTF-8. */
-gchar *
+char *
 utf_16to8(const wchar_t *utf16str)
 {
-    static gchar *utf8buf[3];
+    static char *utf8buf[3];
     static int utf8buf_len[3];
     static int idx;
 

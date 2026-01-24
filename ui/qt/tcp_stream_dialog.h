@@ -12,14 +12,15 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include <file.h>
 
 #include <epan/dissectors/packet-tcp.h>
+#include <epan/follow.h>
+#include <wsutil/str_util.h>
 
 #include "ui/tap-tcp-stream.h"
 
+#include "capture_file.h"
 #include "geometry_state_dialog.h"
 
 #include <ui/qt/widgets/qcustomplot.h>
@@ -30,6 +31,7 @@
 namespace Ui {
 class TCPStreamDialog;
 class QCPErrorBarsNotSelectable;
+class DupAckGraph;
 }
 
 class QCPErrorBarsNotSelectable : public QCPErrorBars
@@ -41,6 +43,18 @@ public:
     virtual ~QCPErrorBarsNotSelectable();
 
     virtual double selectTest(const QPointF &pos, bool onlySelectable, QVariant *details = 0) const Q_DECL_OVERRIDE;
+    virtual void drawLegendIcon(QCPPainter *painter, const QRectF &rect) const override;
+};
+
+class DupAckGraph : public QCPGraph
+{
+    Q_OBJECT
+
+public:
+    explicit DupAckGraph(QCPAxis *keyAxis, QCPAxis *valueAxis);
+    virtual ~DupAckGraph();
+
+    virtual void drawLegendIcon(QCPPainter *painter, const QRectF &rect) const override;
 };
 
 class TCPStreamDialog : public GeometryStateDialog
@@ -48,14 +62,13 @@ class TCPStreamDialog : public GeometryStateDialog
     Q_OBJECT
 
 public:
-    explicit TCPStreamDialog(QWidget *parent = 0, capture_file *cf = NULL, tcp_graph_type graph_type = GRAPH_TSEQ_TCPTRACE);
+    explicit TCPStreamDialog(QWidget *parent, const CaptureFile &cf, tcp_graph_type graph_type = GRAPH_TSEQ_TCPTRACE);
     ~TCPStreamDialog();
 
 signals:
     void goToPacket(int packet_num);
 
 public slots:
-    void setCaptureFile(capture_file *cf);
     void updateGraph();
 
 protected:
@@ -66,14 +79,19 @@ protected:
 
 private:
     Ui::TCPStreamDialog *ui;
-    capture_file *cap_file_;
+    const CaptureFile &cap_file_;
+    bool file_closed_;
+    bool tapping_;
     QMultiMap<double, struct segment *> time_stamp_map_;
     double ts_offset_;
     bool ts_origin_conn_;
     QMap<double, struct segment *> sequence_num_map_;
-    double seq_offset_;
+    uint32_t seq_offset_;
     bool seq_origin_zero_;
+    bool si_units_;
+    bool legend_visible_;
     struct tcp_graph graph_;
+    follow_stream_count_func get_stream_count_;
     QCPTextElement *title_;
     QString stream_desc_;
     QCPGraph *base_graph_; // Clickable packets
@@ -91,7 +109,7 @@ private:
     QCPGraph *zero_win_graph_;
     QCPItemTracer *tracer_;
     QRectF axis_bounds_;
-    guint32 packet_num_;
+    uint32_t packet_num_;
     QTransform y_axis_xfrm_;
     bool mouse_drags_;
     QRubberBand *rubber_band_;
@@ -106,7 +124,7 @@ private:
             reset_axes_(false) {}
         void triggerUpdate(int timeout, bool reset_axes = false);
         void clearPendingUpdate();
-        void doUpdate();
+        void doUpdate(follow_stream_count_func get_count);
         bool hasPendingUpdate() { return graph_update_timer_ != NULL; }
     private:
         TCPStreamDialog *dialog_;
@@ -128,8 +146,12 @@ private:
     void zoomAxes(bool in);
     void zoomXAxis(bool in);
     void zoomYAxis(bool in);
+    void setAxisUnits(QCPAxis *axis, format_size_units_e units);
     void panAxes(int x_pixels, int y_pixels);
     void resetAxes();
+    void fillLegend();
+    void moveLegend();
+    void toggleLegend();
     void fillStevens();
     void fillTcptrace();
     void fillThroughput();
@@ -141,11 +163,14 @@ private:
     QRectF getZoomRanges(QRect zoom_rect);
 
 private slots:
+    void showContextMenu(const QPoint &pos);
     void graphClicked(QMouseEvent *event);
     void axisClicked(QCPAxis *axis, QCPAxis::SelectablePart part, QMouseEvent *event);
     void mouseMoved(QMouseEvent *event);
     void mouseReleased(QMouseEvent *event);
+    void captureEvent(CaptureEvent e);
     void transformYRange(const QCPRange &y_range1);
+    void toggleUnits();
     void on_buttonBox_accepted();
     void on_graphTypeComboBox_currentIndexChanged(int index);
     void on_resetButton_clicked();
@@ -158,6 +183,7 @@ private slots:
     void on_dragRadioButton_toggled(bool checked);
     void on_zoomRadioButton_toggled(bool checked);
     void on_bySeqNumberCheckBox_stateChanged(int state);
+    void on_samplingMethodComboBox_currentIndexChanged(int index);
     void on_showSegLengthCheckBox_stateChanged(int state);
     void on_showThroughputCheckBox_stateChanged(int state);
     void on_showGoodputCheckBox_stateChanged(int state);
@@ -194,3 +220,4 @@ private slots:
 };
 
 #endif // TCP_STREAM_DIALOG_H
+

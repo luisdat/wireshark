@@ -359,7 +359,7 @@ typedef enum {
     PTP_OC_MTP_WMDRMND_GetWMDRMNDLicenseResponse     = 0x9185,
 
     /*
-    * Windows Media Player Portiable Devices
+    * Windows Media Player Portable Devices
     * Extension Codes (microsoft.com/WMPPD: 11.1)
     */
     PTP_OC_MTP_WMPPD_ReportAddedDeletedItems         = 0x9201,
@@ -494,6 +494,6 @@ typedef enum {
 } ptp_respcodes;
 
 /* function prototypes */
-void dissect_ptp_opCode_openSession(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint16 *offset);
-void dissect_ptp_transactionID     (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint16 *offset);
+void dissect_ptp_opCode_openSession(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t *offset);
+void dissect_ptp_transactionID     (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t *offset);
 

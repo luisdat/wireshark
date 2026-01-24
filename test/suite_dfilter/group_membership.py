@@ -2,13 +2,10 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import unittest
-import fixtures
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
-@fixtures.uses_fixtures
-class case_membership(unittest.TestCase):
+class TestDfilterMembership:
     trace_file = "http.pcap"
 
     def test_membership_match_1(self, checkDFilterCount):
@@ -30,6 +27,22 @@ class case_membership(unittest.TestCase):
     def test_membership_match_5(self, checkDFilterCount):
         dfilter = 'tcp.port in {  80  ,  3267  }'
         checkDFilterCount(dfilter, 1)
+
+    def test_membership_any_1(self, checkDFilterCount):
+        dfilter = 'any tcp.port in {80, 3267}'
+        checkDFilterCount(dfilter, 1)
+
+    def test_membership_any_2(self, checkDFilterCount):
+        dfilter = 'any tcp.port in {70, 80, 90}'
+        checkDFilterCount(dfilter, 1)
+
+    def test_membership_all_1(self, checkDFilterCount):
+        dfilter = 'all tcp.port in {80, 3267}'
+        checkDFilterCount(dfilter, 1)
+
+    def test_membership_all_2(self, checkDFilterCount):
+        dfilter = 'all tcp.port in {70, 80, 90}'
+        checkDFilterCount(dfilter, 0)
 
     def test_membership_range_match_1(self, checkDFilterCount):
         dfilter = 'tcp.port in {80..81}'
@@ -56,9 +69,18 @@ class case_membership(unittest.TestCase):
         dfilter = 'tcp.port in {1 .. 79,81 .. 3266,3268 .. 65535}'
         checkDFilterCount(dfilter, 0)
 
+    #
+    # XXX - http.pcap is a one-packet file, which now means that there
+    # is no "time relative to the previous packet" value in it.
+    #
+    # Even when we said the time relative to the previous packet is
+    # 0 if there is no previous packet, this wasn't checking the
+    # behavior with negative field values, as the value was zero,
+    # not negative.
+    #
     def test_membership_5_negative_range_float(self, checkDFilterCount):
         dfilter = 'frame.time_delta in {-2.0 .. 0.0}'
-        checkDFilterCount(dfilter, 1)
+        checkDFilterCount(dfilter, 0)
 
     def test_membership_6_both_negative_range_float(self, checkDFilterCount):
         dfilter = 'frame.time_delta in {-20 .. -0.7}'
@@ -76,7 +98,7 @@ class case_membership(unittest.TestCase):
         # expression should be parsed as "0.1 .. .7"
         # .7 is the identifier (protocol) named "7"
         dfilter = 'frame.time_delta in {0.1...7}'
-        error = 'not a valid protocol or protocol field'
+        error = '"7" is not a valid protocol or protocol field'
         checkDFilterFail(dfilter, error)
 
     def test_membership_10_bad_lhs_number(self, checkDFilterFail):
@@ -86,9 +108,28 @@ class case_membership(unittest.TestCase):
 
     def test_membership_11_bad_rhs_string(self, checkDFilterFail):
         dfilter = 'frame.number in {1, "foo"}'
-        error = 'Unsigned integer (4 bytes) cannot be converted from a string'
+        error = 'Unsigned integer (32 bits) cannot be converted from a string'
         checkDFilterFail(dfilter, error)
 
     def test_membership_12_value_string(self, checkDFilterCount):
         dfilter = 'tcp.checksum.status in {"Unverified", "Good"}'
+        checkDFilterCount(dfilter, 1)
+
+    def test_membership_value_string_2(self, checkDFilterSucceed):
+        # These appear in different value strings registered to different
+        # versions of vlan.priority
+        dfilter = 'vlan.priority in {"Spare", "Critical Applications"}'
+        checkDFilterSucceed(dfilter)
+
+    def test_membership_arithmetic_1(self, checkDFilterCountWithSelectedFrame):
+        dfilter = 'frame.time_epoch in {${frame.time_epoch}-46..${frame.time_epoch}+43}'
+        checkDFilterCountWithSelectedFrame(dfilter, 1, 1)
+
+    def test_membership_bad_rhs_string_2(self, checkDFilterFail):
+        dfilter = 'eth.src in {11:12:13:14:15:16, 22-33-}'
+        error = 'Error: "22-33-" contains too few bytes to be a valid Ethernet address.'
+        checkDFilterFail(dfilter, error)
+
+    def test_membership_rhs_field(self, checkDFilterCount):
+        dfilter = 'eth.src in { eth.addr }'
         checkDFilterCount(dfilter, 1)

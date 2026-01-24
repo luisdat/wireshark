@@ -11,16 +11,14 @@
 #define SCTP_CHUNK_STATISTICS_DIALOG_H
 
 #include <config.h>
-#include <glib.h>
 
 #include <file.h>
 #include <wsutil/file_util.h>
 #include <epan/dissectors/packet-sctp.h>
 #include "epan/packet.h"
-#include "epan/value_string.h"
+#include <wsutil/value_string.h>
 #include <epan/prefs.h>
-#include <epan/uat-int.h>
-#include <epan/prefs-int.h>
+#include <epan/uat.h>
 #include <wsutil/filesystem.h>
 #include "wireshark_application.h"
 
@@ -62,7 +60,7 @@ signals:
 
 private:
     Ui::SCTPChunkStatisticsDialog *ui;
-    guint16 selected_assoc_id;
+    uint16_t selected_assoc_id;
     capture_file *cap_file_;
     QMenu ctx_menu_;
     QPoint selected_point;
@@ -71,7 +69,7 @@ private:
         int row;
         int id;
         int hide;
-        char name[30];
+        char name[24];
     };
 
     QMap<int, struct chunkTypes> chunks, tempChunks;

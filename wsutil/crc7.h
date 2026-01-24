@@ -23,7 +23,7 @@
 #ifndef __CRC7__H__
 #define __CRC7__H__
 
-#include "ws_symbol_export.h"
+#include <wireshark.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,30 +40,30 @@ extern "C" {
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static inline guint8 crc7init(void)
+static inline uint8_t crc7init(void)
 {
     return 0x00 << 1;
 }
 
 
 /**
- * Update the crc value with new data.
+ * @brief Update the crc value with new data.
  *
  * \param crc      The current crc value.
  * \param data     Pointer to a buffer of \a data_len bytes.
  * \param data_len Number of bytes in the \a data buffer.
  * \return         The updated crc value.
  *****************************************************************************/
-WS_DLL_PUBLIC guint8 crc7update(guint8 crc, const unsigned char *data, int data_len);
+WS_DLL_PUBLIC uint8_t crc7update(uint8_t crc, const unsigned char *data, int data_len);
 
 
 /**
- * Calculate the final crc value.
+ * @brief Calculate the final crc value.
  *
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static inline guint8 crc7finalize(guint8 crc)
+static inline uint8_t crc7finalize(uint8_t crc)
 {
     return (crc >> 1) ^ 0x00;
 }

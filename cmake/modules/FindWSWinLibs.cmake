@@ -7,30 +7,26 @@
 #  to set in the callers scope.
 
 function( FindWSWinLibs _WS_LIB_SEARCH_PATH _LIB_HINT_VAR )
-  if( WIN32 )
+  if(USE_REPOSITORY)
     if( ARGN )
       set( _PROJECT_LIB_DIR ${ARGN} )
     else()
-      if( DEFINED ENV{WIRESHARK_LIB_DIR} )
-        # The buildbots set WIRESHARK_LIB_DIR but not WIRESHARK_BASE_DIR.
-        file( TO_CMAKE_PATH "$ENV{WIRESHARK_LIB_DIR}" _PROJECT_LIB_DIR )
+      if (WIRESHARK_BASE_DIR)
+        file( TO_CMAKE_PATH ${WIRESHARK_BASE_DIR} _ws_base_dir )
+        set( _PROJECT_LIB_DIR "${_ws_base_dir}/wireshark-${WIRESHARK_TARGET_PLATFORM}-libs" )
+	unset(_ws_base_dir)
       else()
-        file( TO_CMAKE_PATH "$ENV{WIRESHARK_BASE_DIR}" _WS_BASE_DIR )
-        set( _PROJECT_LIB_DIR "${_WS_BASE_DIR}/wireshark-${WIRESHARK_TARGET_PLATFORM}-libs" )
+        file( TO_CMAKE_PATH $ENV{WIRESHARK_LIB_DIR} _PROJECT_LIB_DIR )
       endif()
     endif()
 
     file( GLOB _SUBDIR "${_PROJECT_LIB_DIR}/*" )
     # We might be able to use $ENV{VSCMD_ARG_TGT_ARCH} here.
-    set (_vcpkg_arch x64)
-    if(WIRESHARK_TARGET_PLATFORM MATCHES "win32")
-      set (_vcpkg_arch x86)
-    endif()
 
     foreach( _DIR ${_SUBDIR} )
       if( IS_DIRECTORY ${_DIR} )
         if( "${_DIR}" MATCHES ".*/${_WS_LIB_SEARCH_PATH}" )
-          set(_vcpkg_dir "${_DIR}/installed/${_vcpkg_arch}-windows")
+          set(_vcpkg_dir "${_DIR}/installed/${WIRESHARK_TARGET_PLATFORM}-windows")
           if( IS_DIRECTORY "${_vcpkg_dir}")
             set( ${_LIB_HINT_VAR} ${_vcpkg_dir} PARENT_SCOPE )
           else()
@@ -44,7 +40,7 @@ endfunction()
 
 # Add a single DLL
 function(AddWSWinDLL _PKG_NAME _PKG_HINTS _DLL_GLOB)
-  if(WIN32 AND ${_PKG_NAME}_FOUND)
+  if(USE_REPOSITORY AND ${_PKG_NAME}_FOUND)
     string(TOUPPER ${_PKG_NAME} _PKG_VAR)
     set ( ${_PKG_VAR}_DLL_DIR "${${_PKG_HINTS}}/bin"
       CACHE PATH "Path to ${_PKG_NAME} DLL"
@@ -70,7 +66,7 @@ endfunction()
 
 # Add a list of DLLs
 function(AddWSWinDLLS _PKG_NAME _PKG_HINTS) # ...DLL globs
-  if(WIN32 AND ${_PKG_NAME}_FOUND)
+  if(USE_REPOSITORY AND ${_PKG_NAME}_FOUND)
     string(TOUPPER ${_PKG_NAME} _PKG_VAR)
     set ( ${_PKG_VAR}_DLL_DIR "${${_PKG_HINTS}}/bin"
       CACHE PATH "Path to ${_PKG_NAME} DLLs"

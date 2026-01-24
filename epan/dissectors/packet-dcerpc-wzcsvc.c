@@ -5,14 +5,15 @@
 	Pidl is a perl based IDL compiler for DCE/RPC idl files.
 	It is maintained by the Samba team, not the Wireshark team.
 	Instructions on how to download and install Pidl can be
-	found at https://gitlab.com/wireshark/wireshark/-/wikis/Pidl
+	found at https://wiki.wireshark.org/Pidl
 */
 
 
 #include "config.h"
-#include <glib.h>
 #include <string.h>
+#include <wsutil/array.h>
 #include <epan/packet.h>
+#include <epan/tfs.h>
 
 #include "packet-dcerpc.h"
 #include "packet-dcerpc-nt.h"
@@ -22,13 +23,13 @@ void proto_register_dcerpc_wzcsvc(void);
 void proto_reg_handoff_dcerpc_wzcsvc(void);
 
 /* Ett declarations */
-static gint ett_dcerpc_wzcsvc = -1;
+static int ett_dcerpc_wzcsvc;
 
 
 /* Header field declarations */
-static gint hf_wzcsvc_opnum = -1;
+static int hf_wzcsvc_opnum;
 
-static gint proto_dcerpc_wzcsvc = -1;
+static int proto_dcerpc_wzcsvc;
 /* Version information */
 
 
@@ -36,22 +37,22 @@ static e_guid_t uuid_dcerpc_wzcsvc = {
 	0x621dff68, 0x3c39, 0x4c6c,
 	{ 0xaa, 0xe3, 0xe6, 0x8e, 0x2c, 0x65, 0x03, 0xad }
 };
-static guint16 ver_dcerpc_wzcsvc = 1;
+static uint16_t ver_dcerpc_wzcsvc = 1;
 
 
 /* IDL: void wzcsvc_EnumInterfaces( */
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EnumInterfaces_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EnumInterfaces_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EnumInterfaces";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EnumInterfaces_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EnumInterfaces_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EnumInterfaces";
 	return offset;
@@ -61,15 +62,15 @@ wzcsvc_dissect_EnumInterfaces_request(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_QueryInterface_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_QueryInterface_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="QueryInterface";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_QueryInterface_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_QueryInterface_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="QueryInterface";
 	return offset;
@@ -79,15 +80,15 @@ wzcsvc_dissect_QueryInterface_request(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_SetInterface_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_SetInterface_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="SetInterface";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_SetInterface_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_SetInterface_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="SetInterface";
 	return offset;
@@ -97,15 +98,15 @@ wzcsvc_dissect_SetInterface_request(tvbuff_t *tvb _U_, int offset _U_, packet_in
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_RefreshInterface_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_RefreshInterface_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="RefreshInterface";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_RefreshInterface_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_RefreshInterface_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="RefreshInterface";
 	return offset;
@@ -115,15 +116,15 @@ wzcsvc_dissect_RefreshInterface_request(tvbuff_t *tvb _U_, int offset _U_, packe
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_QueryContext_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_QueryContext_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="QueryContext";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_QueryContext_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_QueryContext_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="QueryContext";
 	return offset;
@@ -133,15 +134,15 @@ wzcsvc_dissect_QueryContext_request(tvbuff_t *tvb _U_, int offset _U_, packet_in
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_SetContext_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_SetContext_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="SetContext";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_SetContext_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_SetContext_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="SetContext";
 	return offset;
@@ -151,15 +152,15 @@ wzcsvc_dissect_SetContext_request(tvbuff_t *tvb _U_, int offset _U_, packet_info
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EapolUIResponse_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolUIResponse_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolUIResponse";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EapolUIResponse_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolUIResponse_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolUIResponse";
 	return offset;
@@ -169,15 +170,15 @@ wzcsvc_dissect_EapolUIResponse_request(tvbuff_t *tvb _U_, int offset _U_, packet
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EapolGetCustomAuthData_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolGetCustomAuthData_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolGetCustomAuthData";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EapolGetCustomAuthData_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolGetCustomAuthData_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolGetCustomAuthData";
 	return offset;
@@ -187,15 +188,15 @@ wzcsvc_dissect_EapolGetCustomAuthData_request(tvbuff_t *tvb _U_, int offset _U_,
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EapolSetCustomAuthData_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolSetCustomAuthData_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolSetCustomAuthData";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EapolSetCustomAuthData_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolSetCustomAuthData_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolSetCustomAuthData";
 	return offset;
@@ -205,15 +206,15 @@ wzcsvc_dissect_EapolSetCustomAuthData_request(tvbuff_t *tvb _U_, int offset _U_,
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EapolGetInterfaceParams_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolGetInterfaceParams_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolGetInterfaceParams";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EapolGetInterfaceParams_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolGetInterfaceParams_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolGetInterfaceParams";
 	return offset;
@@ -223,15 +224,15 @@ wzcsvc_dissect_EapolGetInterfaceParams_request(tvbuff_t *tvb _U_, int offset _U_
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EapolSetInterfaceParams_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolSetInterfaceParams_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolSetInterfaceParams";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EapolSetInterfaceParams_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolSetInterfaceParams_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolSetInterfaceParams";
 	return offset;
@@ -241,15 +242,15 @@ wzcsvc_dissect_EapolSetInterfaceParams_request(tvbuff_t *tvb _U_, int offset _U_
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EapolReAuthenticateInterface_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolReAuthenticateInterface_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolReAuthenticateInterface";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EapolReAuthenticateInterface_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolReAuthenticateInterface_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolReAuthenticateInterface";
 	return offset;
@@ -259,15 +260,15 @@ wzcsvc_dissect_EapolReAuthenticateInterface_request(tvbuff_t *tvb _U_, int offse
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EapolQueryInterfaceState_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolQueryInterfaceState_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolQueryInterfaceState";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EapolQueryInterfaceState_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EapolQueryInterfaceState_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EapolQueryInterfaceState";
 	return offset;
@@ -277,15 +278,15 @@ wzcsvc_dissect_EapolQueryInterfaceState_request(tvbuff_t *tvb _U_, int offset _U
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_OpenWZCDbLogSession_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_OpenWZCDbLogSession_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="OpenWZCDbLogSession";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_OpenWZCDbLogSession_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_OpenWZCDbLogSession_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="OpenWZCDbLogSession";
 	return offset;
@@ -295,15 +296,15 @@ wzcsvc_dissect_OpenWZCDbLogSession_request(tvbuff_t *tvb _U_, int offset _U_, pa
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_CloseWZCDbLogSession_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_CloseWZCDbLogSession_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="CloseWZCDbLogSession";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_CloseWZCDbLogSession_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_CloseWZCDbLogSession_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="CloseWZCDbLogSession";
 	return offset;
@@ -313,15 +314,15 @@ wzcsvc_dissect_CloseWZCDbLogSession_request(tvbuff_t *tvb _U_, int offset _U_, p
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_EnumWZCDbLogRecords_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EnumWZCDbLogRecords_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EnumWZCDbLogRecords";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_EnumWZCDbLogRecords_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_EnumWZCDbLogRecords_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="EnumWZCDbLogRecords";
 	return offset;
@@ -331,15 +332,15 @@ wzcsvc_dissect_EnumWZCDbLogRecords_request(tvbuff_t *tvb _U_, int offset _U_, pa
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_FlushWZCdbLog_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_FlushWZCdbLog_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="FlushWZCdbLog";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_FlushWZCdbLog_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_FlushWZCdbLog_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="FlushWZCdbLog";
 	return offset;
@@ -349,22 +350,22 @@ wzcsvc_dissect_FlushWZCdbLog_request(tvbuff_t *tvb _U_, int offset _U_, packet_i
 /* IDL:  */
 /* IDL: ); */
 
-static int
-wzcsvc_dissect_GetWZCDbLogRecord_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_GetWZCDbLogRecord_response(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="GetWZCDbLogRecord";
 	return offset;
 }
 
-static int
-wzcsvc_dissect_GetWZCDbLogRecord_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, guint8 *drep _U_)
+static unsigned
+wzcsvc_dissect_GetWZCDbLogRecord_request(tvbuff_t *tvb _U_, unsigned offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
 	di->dcerpc_procedure_name="GetWZCDbLogRecord";
 	return offset;
 }
 
 
-static dcerpc_sub_dissector wzcsvc_dissectors[] = {
+static const dcerpc_sub_dissector wzcsvc_dissectors[] = {
 	{ 0, "EnumInterfaces",
 	   wzcsvc_dissect_EnumInterfaces_request, wzcsvc_dissect_EnumInterfaces_response},
 	{ 1, "QueryInterface",
@@ -412,7 +413,7 @@ void proto_register_dcerpc_wzcsvc(void)
 	};
 
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_dcerpc_wzcsvc,
 	};
 

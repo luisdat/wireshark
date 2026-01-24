@@ -12,7 +12,6 @@
 /****************************************************************************/
 /*	File includes								*/
 
-#include "dot11decrypt_interop.h"
 #include "dot11decrypt_system.h"
 
 #include "ws_attributes.h"
@@ -44,13 +43,30 @@
 #define DOT11DECRYPT_SUBTYPE_ACTION			13
 #define DOT11DECRYPT_SUBTYPE_ACTION_NO_ACK		14
 
+/* IEEE 802.11 cipher suite selectors */
+#define DOT11DECRYPT_CIPHER_USE_GROUP		0
+#define DOT11DECRYPT_CIPHER_WEP40		1
+#define DOT11DECRYPT_CIPHER_TKIP		2
+#define DOT11DECRYPT_CIPHER_CCMP		4
+#define DOT11DECRYPT_CIPHER_WEP104		5
+#define DOT11DECRYPT_CIPHER_BIP_CMAC		6
+#define DOT11DECRYPT_CIPHER_GROUP_NA		7
+#define DOT11DECRYPT_CIPHER_GCMP		8
+#define DOT11DECRYPT_CIPHER_GCMP256		9
+#define DOT11DECRYPT_CIPHER_CCMP256		10
+#define DOT11DECRYPT_CIPHER_BIP_GMAC		11
+#define DOT11DECRYPT_CIPHER_BIP_GMAC256		12
+#define DOT11DECRYPT_CIPHER_BIP_CMAC256		13
+
 /*
- * Min length of encrypted data (TKIP=21bytes, CCMP=17bytes)
- * CCMP = 8 octets of CCMP header, 1 octet of data, 8 octets of MIC.
+ * Min length of encrypted data (WEP=9bytes, TKIP=21bytes, CCMP=17bytes, GCMP=25bytes)
+ * WEP = 4 octets of IV, 1 octet of data, 4 octets of ICV.
  * TKIP = 4 octets of IV/Key ID, 4 octets of Extended IV, 1 octet of data,
- *  8 octets of MIC, 4 octets of ICV
+ *  8 octets of MIC, 4 octets of ICV.
+ * CCMP = 8 octets of CCMP header, 1 octet of data, 8 octets of MIC.
+ * GCMP = 8 octets of GCMP header, 1 octet of data, 16 octets of MIC.
  */
-#define	DOT11DECRYPT_CRYPTED_DATA_MINLEN	17
+#define	DOT11DECRYPT_CRYPTED_DATA_MINLEN	9
 
 #define DOT11DECRYPT_TA_OFFSET	10
 
@@ -63,12 +79,12 @@
 /**
  * Macros to get various bits of a 802.11 control frame
  */
-#define	DOT11DECRYPT_TYPE(FrameControl_0)		(UINT8)((FrameControl_0 >> 2) & 0x3)
-#define	DOT11DECRYPT_SUBTYPE(FrameControl_0)	(UINT8)((FrameControl_0 >> 4) & 0xF)
-#define	DOT11DECRYPT_DS_BITS(FrameControl_1)	(UINT8)(FrameControl_1 & 0x3)
-#define	DOT11DECRYPT_TO_DS(FrameControl_1)		(UINT8)(FrameControl_1 & 0x1)
-#define	DOT11DECRYPT_FROM_DS(FrameControl_1)	(UINT8)((FrameControl_1 >> 1) & 0x1)
-#define	DOT11DECRYPT_WEP(FrameControl_1)		(UINT8)((FrameControl_1 >> 6) & 0x1)
+#define	DOT11DECRYPT_TYPE(FrameControl_0)		(uint8_t)((FrameControl_0 >> 2) & 0x3)
+#define	DOT11DECRYPT_SUBTYPE(FrameControl_0)	(uint8_t)((FrameControl_0 >> 4) & 0xF)
+#define	DOT11DECRYPT_DS_BITS(FrameControl_1)	(uint8_t)(FrameControl_1 & 0x3)
+#define	DOT11DECRYPT_TO_DS(FrameControl_1)		(uint8_t)(FrameControl_1 & 0x1)
+#define	DOT11DECRYPT_FROM_DS(FrameControl_1)	(uint8_t)((FrameControl_1 >> 1) & 0x1)
+#define	DOT11DECRYPT_WEP(FrameControl_1)		(uint8_t)((FrameControl_1 >> 6) & 0x1)
 
 /**
  * Get the Key ID from the Initialization Vector (last byte)
@@ -78,7 +94,7 @@
 #define	DOT11DECRYPT_KEY_INDEX(KeyID)	((KeyID >> 6) & 0x3)  /** Used to determine TKIP group key from unicast (group = 1, unicast = 0) */
 
 /* Macros to get various bits of an EAPOL frame				*/
-#define	DOT11DECRYPT_EAP_KEY_DESCR_VER(KeyInfo_1)	((UCHAR)(KeyInfo_1 & 0x3))
+#define	DOT11DECRYPT_EAP_KEY_DESCR_VER(KeyInfo_1)	((unsigned char)(KeyInfo_1 & 0x3))
 #define	DOT11DECRYPT_EAP_KEY(KeyInfo_1)		((KeyInfo_1 >> 3) & 0x1)
 #define	DOT11DECRYPT_EAP_INST(KeyInfo_1)		((KeyInfo_1 >> 6) & 0x1)
 #define	DOT11DECRYPT_EAP_ACK(KeyInfo_1)		((KeyInfo_1 >> 7) & 0x1)
@@ -87,6 +103,9 @@
 
 /* Note: copied from net80211/ieee80211.h					*/
 #define DOT11DECRYPT_FC1_DIR_MASK                  0x03
+#define IEEE80211_FC1_DIR_NODS                     0x00    /* STA->STA */
+#define IEEE80211_FC1_DIR_TODS                     0x01    /* STA->AP  */
+#define IEEE80211_FC1_DIR_FROMDS                   0x02    /* AP ->STA */
 #define DOT11DECRYPT_FC1_DIR_DSTODS                0x03    /* AP ->AP  */
 #define DOT11DECRYPT_FC0_SUBTYPE_QOS               0x80
 #define DOT11DECRYPT_FC0_TYPE_DATA                 0x08
@@ -110,7 +129,7 @@
 
 /*
  * XXX - According to the thread at
- * https://www.wireshark.org/lists/wireshark-dev/200612/msg00384.html we
+ * https://lists.wireshark.org/archives/wireshark-dev/200612/msg00384.html we
  * shouldn't have to worry about packing our structs, since the largest
  * elements are 8 bits wide.
  */
@@ -121,46 +140,46 @@
 
 /* Definition of IEEE 802.11 frame (without the address 4)			*/
 typedef struct _DOT11DECRYPT_MAC_FRAME {
-	UCHAR	fc[2];
-	UCHAR	dur[2];
-	UCHAR	addr1[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr2[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr3[DOT11DECRYPT_MAC_LEN];
-	UCHAR	seq[2];
+	unsigned char	fc[2];
+	unsigned char	dur[2];
+	unsigned char	addr1[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr2[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr3[DOT11DECRYPT_MAC_LEN];
+	unsigned char	seq[2];
 } DOT11DECRYPT_MAC_FRAME, *PDOT11DECRYPT_MAC_FRAME;
 
 /* Definition of IEEE 802.11 frame (with the address 4)			*/
 typedef struct _DOT11DECRYPT_MAC_FRAME_ADDR4 {
-	UCHAR	fc[2];
-	UCHAR	dur[2];
-	UCHAR	addr1[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr2[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr3[DOT11DECRYPT_MAC_LEN];
-	UCHAR	seq[2];
-	UCHAR	addr4[DOT11DECRYPT_MAC_LEN];
+	unsigned char	fc[2];
+	unsigned char	dur[2];
+	unsigned char	addr1[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr2[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr3[DOT11DECRYPT_MAC_LEN];
+	unsigned char	seq[2];
+	unsigned char	addr4[DOT11DECRYPT_MAC_LEN];
 } DOT11DECRYPT_MAC_FRAME_ADDR4, *PDOT11DECRYPT_MAC_FRAME_ADDR4;
 
 /* Definition of IEEE 802.11 frame (without the address 4, with QOS)		*/
 typedef struct _DOT11DECRYPT_MAC_FRAME_QOS {
-	UCHAR	fc[2];
-	UCHAR	dur[2];
-	UCHAR	addr1[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr2[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr3[DOT11DECRYPT_MAC_LEN];
-	UCHAR	seq[2];
-	UCHAR	qos[2];
+	unsigned char	fc[2];
+	unsigned char	dur[2];
+	unsigned char	addr1[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr2[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr3[DOT11DECRYPT_MAC_LEN];
+	unsigned char	seq[2];
+	unsigned char	qos[2];
 } DOT11DECRYPT_MAC_FRAME_QOS, *PDOT11DECRYPT_MAC_FRAME_QOS;
 
 /* Definition of IEEE 802.11 frame (with the address 4 and QOS)		*/
 typedef struct _DOT11DECRYPT_MAC_FRAME_ADDR4_QOS {
-	UCHAR	fc[2];
-	UCHAR	dur[2];
-	UCHAR	addr1[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr2[DOT11DECRYPT_MAC_LEN];
-	UCHAR	addr3[DOT11DECRYPT_MAC_LEN];
-	UCHAR	seq[2];
-	UCHAR	addr4[DOT11DECRYPT_MAC_LEN];
-	UCHAR	qos[2];
+	unsigned char	fc[2];
+	unsigned char	dur[2];
+	unsigned char	addr1[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr2[DOT11DECRYPT_MAC_LEN];
+	unsigned char	addr3[DOT11DECRYPT_MAC_LEN];
+	unsigned char	seq[2];
+	unsigned char	addr4[DOT11DECRYPT_MAC_LEN];
+	unsigned char	qos[2];
 } DOT11DECRYPT_MAC_FRAME_ADDR4_QOS, *PDOT11DECRYPT_MAC_FRAME_ADDR4_QOS;
 
 #ifdef _MSC_VER		/* MS Visual C++ */
@@ -169,26 +188,76 @@ typedef struct _DOT11DECRYPT_MAC_FRAME_ADDR4_QOS {
 
 /******************************************************************************/
 
+/*
+ * Decrypt CCMP encrypted MPDU.
+ *
+ * @Return
+ * - -1: Length constraint is not satisfied indicating that decryption is impossible
+ * - 1: Decryption fails
+ * - 0: Decryption succeeds
+ */
 int Dot11DecryptCcmpDecrypt(
-	guint8 *m,
+	uint8_t *m,
 	int mac_header_len,
 	int len,
-	guint8 *TK1,
+	uint8_t *TK1,
 	int tk_len,
-	int mic_len);
+	int mic_len,
+	const uint8_t *ap_mld_mac,
+	const uint8_t *sta_mld_mac);
 
+/*
+ * Decrypt GCMP encrypted MPDU.
+ *
+ * @Return
+ * - -1: Length constraint is not satisfied indicating that decryption is impossible
+ * - 1: Decryption fails
+ * - 0: Decryption succeeds
+ */
 int Dot11DecryptGcmpDecrypt(
-	guint8 *m,
+	uint8_t *m,
 	int mac_header_len,
 	int len,
-	guint8 *TK1,
-	int tk_len);
+	uint8_t *TK1,
+	int tk_len,
+	const uint8_t *ap_mld_mac,
+	const uint8_t *sta_mld_mac);
 
-INT Dot11DecryptTkipDecrypt(
-	UCHAR *tkip_mpdu,
+/*
+ * Decrypt TKIP encrypted MPDU.
+ *
+ * @Return
+ * - -1: Length constraint is not satisfied indicating that decryption is impossible
+ * - 1: Decryption fails
+ * - 0: Decryption succeeds
+ */
+int Dot11DecryptTkipDecrypt(
+	uint8_t *mpdu,
+	size_t mac_header_len,
 	size_t mpdu_len,
-	UCHAR TA[DOT11DECRYPT_MAC_LEN],
-	UCHAR TK[DOT11DECRYPT_TK_LEN])
-	;
+	unsigned char TK[DOT11DECRYPT_TK_LEN]);
+
+/*
+ * Decrypt WEP-encrypted 802.11 payload using RC4 stream cipher.
+ *
+ * Performs WEP decryption on the provided `cypher_text` buffer using the RC4
+ * algorithm seeded with the specified initialization vector and WEP key.
+ * The decryption is done in-place, modifying `cypher_text` directly.
+ *
+ * This function assumes the input data is WEP-encrypted and that the seed
+ * contains both the IV and the shared WEP key. It verifies the ICV assumed
+ * to follow right after the cypher_text.
+ *
+ * @param seed        Pointer to the RC4 seed (IV + WEP key).
+ * @param seed_len    Length of the seed in bytes.
+ * @param cypher_text Pointer to the encrypted data buffer (will be decrypted in-place).
+ * @param data_len    Length of the encrypted data in bytes.
+ * @return            0 on success, non-zero on failure.
+ */
+WS_DLL_PUBLIC int Dot11DecryptWepDecrypt(
+	const unsigned char *seed,
+	size_t seed_len,
+	unsigned char *cypher_text,
+	size_t data_len);
 
 #endif

@@ -9,11 +9,12 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#define WS_LOG_DOMAIN "packet-snort-config"
 #include "config.h"
+#include <wireshark.h>
 
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
 #include <wsutil/file_util.h>
 #include <wsutil/strtoi.h>
@@ -26,7 +27,7 @@
 static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd, const char *filename, const char *dirname, int recursion_level);
 
 /* Skip white space from 'source', return pointer to first non-whitespace char */
-static char *skipWhiteSpace(char *source, int *accumulated_offset)
+static const char *skipWhiteSpace(const char *source, int *accumulated_offset)
 {
     int offset = 0;
 
@@ -45,13 +46,13 @@ static char *skipWhiteSpace(char *source, int *accumulated_offset)
  * - length: out param set to delimiter or end-of-string offset
  * - accumulated_Length: out param that gets length added to it
  * - copy: whether or an allocated string should be returned
- * - returns: requested string.  Returns from static buffer when copy is FALSE */
-static char* read_token(char* source, char delimeter, int *length, int *accumulated_length, gboolean copy)
+ * - returns: requested string.  Returns from static buffer when copy is false */
+static char* read_token(const char* source, char delimeter, int *length, int *accumulated_length, bool copy)
 {
     static char static_buffer[1024];
     int offset = 0;
 
-    char *source_proper = skipWhiteSpace(source, accumulated_length);
+    const char *source_proper = skipWhiteSpace(source, accumulated_length);
 
     while (source_proper[offset] != '\0' && source_proper[offset] != delimeter) {
         offset++;
@@ -74,37 +75,37 @@ static char* read_token(char* source, char delimeter, int *length, int *accumula
 }
 
 /* Add a new content field to the rule */
-static gboolean rule_add_content(Rule_t *rule, const char *content_string, gboolean negated)
+static bool rule_add_content(Rule_t *rule, const char *content_string, bool negated)
 {
     if (rule->number_contents < MAX_CONTENT_ENTRIES) {
         content_t *new_content = &(rule->contents[rule->number_contents++]);
         new_content->str = g_strdup(content_string);
         new_content->negation = negated;
         rule->last_added_content = new_content;
-        return TRUE;
+        return true;
     }
-    return FALSE;
+    return false;
 }
 
 /* Set the nocase property for a rule */
 static void rule_set_content_nocase(Rule_t *rule)
 {
     if (rule->last_added_content) {
-        rule->last_added_content->nocase = TRUE;
+        rule->last_added_content->nocase = true;
     }
 }
 
 /* Set the offset property of a content field */
-static void rule_set_content_offset(Rule_t *rule, gint value)
+static void rule_set_content_offset(Rule_t *rule, int value)
 {
     if (rule->last_added_content) {
         rule->last_added_content->offset = value;
-        rule->last_added_content->offset_set = TRUE;
+        rule->last_added_content->offset_set = true;
     }
 }
 
 /* Set the depth property of a content field */
-static void rule_set_content_depth(Rule_t *rule, guint value)
+static void rule_set_content_depth(Rule_t *rule, unsigned value)
 {
     if (rule->last_added_content) {
         rule->last_added_content->depth = value;
@@ -112,16 +113,16 @@ static void rule_set_content_depth(Rule_t *rule, guint value)
 }
 
 /* Set the distance property of a content field */
-static void rule_set_content_distance(Rule_t *rule, gint value)
+static void rule_set_content_distance(Rule_t *rule, int value)
 {
     if (rule->last_added_content) {
         rule->last_added_content->distance = value;
-        rule->last_added_content->distance_set = TRUE;
+        rule->last_added_content->distance_set = true;
     }
 }
 
 /* Set the distance property of a content field */
-static void rule_set_content_within(Rule_t *rule, guint value)
+static void rule_set_content_within(Rule_t *rule, unsigned value)
 {
     if (rule->last_added_content) {
         /* Assuming won't be 0... */
@@ -133,7 +134,7 @@ static void rule_set_content_within(Rule_t *rule, guint value)
 static void rule_set_content_fast_pattern(Rule_t *rule)
 {
     if (rule->last_added_content) {
-        rule->last_added_content->fastpattern = TRUE;
+        rule->last_added_content->fastpattern = true;
     }
 }
 
@@ -141,7 +142,7 @@ static void rule_set_content_fast_pattern(Rule_t *rule)
 static void rule_set_content_rawbytes(Rule_t *rule)
 {
     if (rule->last_added_content) {
-        rule->last_added_content->rawbytes = TRUE;
+        rule->last_added_content->rawbytes = true;
     }
 }
 
@@ -149,7 +150,7 @@ static void rule_set_content_rawbytes(Rule_t *rule)
 static void rule_set_content_http_method(Rule_t *rule)
 {
     if (rule->last_added_content) {
-        rule->last_added_content->http_method = TRUE;
+        rule->last_added_content->http_method = true;
     }
 }
 
@@ -157,7 +158,7 @@ static void rule_set_content_http_method(Rule_t *rule)
 static void rule_set_content_http_client_body(Rule_t *rule)
 {
     if (rule->last_added_content) {
-        rule->last_added_content->http_client_body = TRUE;
+        rule->last_added_content->http_client_body = true;
     }
 }
 
@@ -165,7 +166,7 @@ static void rule_set_content_http_client_body(Rule_t *rule)
 static void rule_set_content_http_cookie(Rule_t *rule)
 {
     if (rule->last_added_content) {
-        rule->last_added_content->http_cookie = TRUE;
+        rule->last_added_content->http_cookie = true;
     }
 }
 
@@ -173,18 +174,18 @@ static void rule_set_content_http_cookie(Rule_t *rule)
 static void rule_set_content_http_user_agent(Rule_t *rule)
 {
     if (rule->last_added_content) {
-        rule->last_added_content->http_user_agent = TRUE;
+        rule->last_added_content->http_user_agent = true;
     }
 }
 
 /* Add a uricontent field to the rule */
-static gboolean rule_add_uricontent(Rule_t *rule, const char *uricontent_string, gboolean negated)
+static bool rule_add_uricontent(Rule_t *rule, const char *uricontent_string, bool negated)
 {
     if (rule_add_content(rule, uricontent_string, negated)) {
         rule->last_added_content->content_type = UriContent;
-        return TRUE;
+        return true;
     }
-    return FALSE;
+    return false;
 }
 
 /* This content field now becomes a uricontent after seeing modifier  */
@@ -196,20 +197,20 @@ static void rule_set_http_uri(Rule_t *rule)
 }
 
 /* Add a pcre field to the rule */
-static gboolean rule_add_pcre(Rule_t *rule, const char *pcre_string)
+static bool rule_add_pcre(Rule_t *rule, const char *pcre_string)
 {
-    if (rule_add_content(rule, pcre_string, FALSE)) {
+    if (rule_add_content(rule, pcre_string, false)) {
         rule->last_added_content->content_type = Pcre;
-        return TRUE;
+        return true;
     }
-    return FALSE;
+    return false;
 }
 
 /* Set the rule's classtype field */
-static gboolean rule_set_classtype(Rule_t *rule, const char *classtype)
+static bool rule_set_classtype(Rule_t *rule, const char *classtype)
 {
     rule->classtype = g_strdup(classtype);
-    return TRUE;
+    return true;
 }
 
 /* Add a reference string to the rule */
@@ -224,8 +225,8 @@ static void rule_add_reference(Rule_t *rule, const char *reference_string)
  * If it is add entry to rule */
 static void rule_check_ip_vars(SnortConfig_t *snort_config, Rule_t *rule, char *field)
 {
-    gpointer original_key = NULL;
-    gpointer value = NULL;
+    void *original_key = NULL;
+    void *value = NULL;
 
     /* Make sure field+1 not NULL. */
     if (strlen(field) < 2) {
@@ -251,8 +252,8 @@ static void rule_check_ip_vars(SnortConfig_t *snort_config, Rule_t *rule, char *
  * If it is add entry to rule */
 static void rule_check_port_vars(SnortConfig_t *snort_config, Rule_t *rule, char *field)
 {
-    gpointer original_key = NULL;
-    gpointer value = NULL;
+    void *original_key = NULL;
+    void *value = NULL;
 
     /* Make sure field+1 not NULL. */
     if (strlen(field) < 2) {
@@ -288,43 +289,43 @@ void rule_set_relevant_vars(SnortConfig_t *snort_config, Rule_t *rule)
     /* Walk tokens up to the options, and look up ones that are addresses or ports. */
 
     /* Skip "alert" */
-    read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, false);
 
     /* Skip protocol. */
-    read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, false);
 
     /* Read source address */
-    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, false);
     rule_check_ip_vars(snort_config, rule, field);
 
     /* Read source port */
-    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, false);
     rule_check_port_vars(snort_config, rule, field);
 
     /* Read direction */
-    read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, false);
 
     /* Dest address */
-    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, false);
     rule_check_ip_vars(snort_config, rule, field);
 
     /* Dest port */
-    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, false);
     rule_check_port_vars(snort_config, rule, field);
 
     /* Set flag so won't do again for this rule */
-    rule->relevant_vars.relevant_vars_set = TRUE;
+    rule->relevant_vars.relevant_vars_set = true;
 }
 
 
 typedef enum vartype_e { var, ipvar, portvar, unknownvar } vartype_e;
 
 /* Look for a "var", "ipvar" or "portvar" entry in this line */
-static gboolean parse_variables_line(SnortConfig_t *snort_config, char *line)
+static bool parse_variables_line(SnortConfig_t *snort_config, const char *line)
 {
     vartype_e var_type = unknownvar;
 
-    char *  variable_type;
+    const char*  variable_type;
     char *  variable_name;
     char *  value;
 
@@ -332,9 +333,9 @@ static gboolean parse_variables_line(SnortConfig_t *snort_config, char *line)
     int accumulated_length = 0;
 
     /* Get variable type */
-    variable_type = read_token(line, ' ', &length, &accumulated_length, FALSE);
+    variable_type = read_token(line, ' ', &length, &accumulated_length, false);
     if (variable_type == NULL) {
-        return FALSE;
+        return false;
     }
 
     if (strncmp(variable_type, "var", 3) == 0) {
@@ -347,19 +348,19 @@ static gboolean parse_variables_line(SnortConfig_t *snort_config, char *line)
         var_type = portvar;
     }
     else {
-        return FALSE;
+        return false;
     }
 
     /* Get variable name */
-    variable_name = read_token(line+ accumulated_length, ' ', &length, &accumulated_length, TRUE);
+    variable_name = read_token(line+ accumulated_length, ' ', &length, &accumulated_length, true);
     if (variable_name == NULL) {
-        return FALSE;
+        return false;
     }
 
     /* Now value */
-    value = read_token(line + accumulated_length, ' ', &length, &accumulated_length, TRUE);
+    value = read_token(line + accumulated_length, ' ', &length, &accumulated_length, true);
     if (value == NULL) {
-        return FALSE;
+        return false;
     }
 
     /* Add (name->value) to table according to variable type. */
@@ -369,7 +370,7 @@ static gboolean parse_variables_line(SnortConfig_t *snort_config, char *line)
                 /* This can be relative or absolute. */
                 snort_config->rule_path = value;
                 snort_config->rule_path_is_absolute = g_path_is_absolute(value);
-                snort_debug_printf("rule_path set to %s (is_absolute=%d)\n",
+                ws_debug("rule_path set to %s (is_absolute=%d)",
                                    snort_config->rule_path, snort_config->rule_path_is_absolute);
             }
             g_hash_table_insert(snort_config->vars, variable_name, value);
@@ -382,16 +383,16 @@ static gboolean parse_variables_line(SnortConfig_t *snort_config, char *line)
             break;
 
         default:
-            return FALSE;
+            return false;
     }
 
-    return FALSE;
+    return false;
 }
 
 /* Hash function for where key is a string. Just add up the value of each character and return that.. */
-static guint string_hash(gconstpointer key)
+static unsigned string_hash(const void *key)
 {
-    guint total=0, n=0;
+    unsigned total=0, n=0;
     const char *key_string = (const char *)key;
     char c = key_string[n];
 
@@ -403,7 +404,7 @@ static guint string_hash(gconstpointer key)
 }
 
 /* Comparison function for where key is a string. Simple comparison using strcmp() */
-static gboolean string_equal(gconstpointer a, gconstpointer b)
+static gboolean string_equal(const void *a, const void *b)
 {
     const char *stringa = (const char*)a;
     const char *stringb = (const char*)b;
@@ -412,31 +413,30 @@ static gboolean string_equal(gconstpointer a, gconstpointer b)
 }
 
 /* Process a line that configures a reference line (invariably from 'reference.config') */
-static gboolean parse_references_prefix_file_line(SnortConfig_t *snort_config, char *line)
+static bool parse_references_prefix_file_line(SnortConfig_t *snort_config, const char *line)
 {
-    char *source;
     char *prefix_name, *prefix_value;
     int length=0, accumulated_length=0;
     int n;
 
     if (strncmp(line, "config reference: ", 18) != 0) {
-        return FALSE;
+        return false;
     }
 
     /* Read the prefix and value */
-    source = line+18;
-    prefix_name = read_token(source, ' ', &length, &accumulated_length, TRUE);
+    const char *source = line+18;
+    prefix_name = read_token(source, ' ', &length, &accumulated_length, true);
     /* Store all name chars in lower case. */
     for (n=0; prefix_name[n] != '\0'; n++) {
         prefix_name[n] = g_ascii_tolower(prefix_name[n]);
     }
 
-    prefix_value = read_token(source+accumulated_length, ' ', &length, &accumulated_length, TRUE);
+    prefix_value = read_token(source+accumulated_length, ' ', &length, &accumulated_length, true);
 
     /* Add entry into table */
     g_hash_table_insert(snort_config->references_prefixes, prefix_name, prefix_value);
 
-    return FALSE;
+    return false;
 }
 
 /* Try to expand the reference using the prefixes stored in the config */
@@ -447,18 +447,18 @@ char *expand_reference(SnortConfig_t *snort_config, char *reference)
     int accumulated_length = 0;
 
     /* Extract up to ',', then substitute prefix! */
-    snort_debug_printf("expand_reference(%s)\n", reference);
-    char *prefix = read_token(reference, ',', &length, &accumulated_length, FALSE);
+    ws_debug("expand_reference(%s)", reference);
+    char *prefix = read_token(reference, ',', &length, &accumulated_length, false);
 
     if (*prefix != '\0') {
         /* Convert to lowercase before lookup */
-        guint n;
+        unsigned n;
         for (n=0; prefix[n] != '\0'; n++) {
             prefix[n] = g_ascii_tolower(prefix[n]);
         }
 
         /* Look up prefix in table. */
-        char *prefix_replacement;
+        const char* prefix_replacement;
         prefix_replacement = (char*)g_hash_table_lookup(snort_config->references_prefixes, prefix);
 
         /* Append prefix and remainder, and return!!!! */
@@ -477,8 +477,8 @@ char *expand_reference(SnortConfig_t *snort_config, char *reference)
 
 /* The rule has been matched with an alert, so update global config stats */
 void rule_set_alert(SnortConfig_t *snort_config, Rule_t *rule,
-                    guint *global_match_number,
-                    guint *rule_match_number)
+                    unsigned *global_match_number,
+                    unsigned *rule_match_number)
 {
     snort_config->stat_alerts_detected++;
     *global_match_number = snort_config->stat_alerts_detected;
@@ -490,9 +490,9 @@ void rule_set_alert(SnortConfig_t *snort_config, Rule_t *rule,
 
 
 /* Delete an individual entry from a string table. */
-static gboolean delete_string_entry(gpointer key,
-                                    gpointer value,
-                                    gpointer user_data _U_)
+static gboolean delete_string_entry(void *key,
+                                    void *value,
+                                    void *user_data _U_)
 {
     char *key_string = (char*)key;
     char *value_string = (char*)value;
@@ -504,27 +504,28 @@ static gboolean delete_string_entry(gpointer key,
 }
 
 /* See if this is an include line, if it is open the file and call parse_config_file() */
-static gboolean parse_include_file(SnortConfig_t *snort_config, char *line, const char *config_directory, int recursion_level)
+// NOLINTNEXTLINE(misc-no-recursion)
+static bool parse_include_file(SnortConfig_t *snort_config, const char *line, const char *config_directory, int recursion_level)
 {
     int length;
     int accumulated_length = 0;
     char *include_filename;
 
     /* Look for "include " */
-    char *include_token = read_token(line, ' ', &length, &accumulated_length, FALSE);
+    const char *include_token = read_token(line, ' ', &length, &accumulated_length, false);
     if (strlen(include_token) == 0) {
-        return FALSE;
+        return false;
     }
     if (strncmp(include_token, "include", 7) != 0) {
-        return FALSE;
+        return false;
     }
 
     /* Read the filename */
-    include_filename = read_token(line+accumulated_length, ' ', &length, &accumulated_length, FALSE);
+    include_filename = read_token(line+accumulated_length, ' ', &length, &accumulated_length, false);
     if (*include_filename != '\0') {
         FILE *new_config_fd;
         char *substituted_filename;
-        gboolean is_rule_file = FALSE;
+        bool is_rule_file = false;
 
         /* May need to substitute variables into include path. */
         if (strncmp(include_filename, "$RULE_PATH", 10) == 0) {
@@ -545,7 +546,7 @@ static gboolean parse_include_file(SnortConfig_t *snort_config, char *line, cons
                            include_filename + 11,
                            NULL);
             }
-            is_rule_file = TRUE;
+            is_rule_file = true;
         }
         else {
             /* No $RULE_PATH, just use directory and filename */
@@ -562,10 +563,10 @@ static gboolean parse_include_file(SnortConfig_t *snort_config, char *line, cons
         /* Try to open the file. */
         new_config_fd = ws_fopen(substituted_filename, "r");
         if (new_config_fd == NULL) {
-            snort_debug_printf("Failed to open config file %s\n", substituted_filename);
+            ws_debug("Failed to open config file %s", substituted_filename);
             report_failure("Snort dissector: Failed to open config file %s\n", substituted_filename);
             g_free(substituted_filename);
-            return FALSE;
+            return false;
         }
 
         /* Parse the file */
@@ -578,9 +579,9 @@ static gboolean parse_include_file(SnortConfig_t *snort_config, char *line, cons
         /* Close the file */
         fclose(new_config_fd);
 
-        return TRUE;
+        return true;
     }
-    return FALSE;
+    return false;
 }
 
 /* Process an individual option - i.e. the elements found between '(' and ')' */
@@ -589,9 +590,12 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
     static char name[1024], value[1024];
     name[0] = '\0';
     value[0] = '\0';
-    gint value_length = 0;
-    guint32 value32 = 0;
-    gint spaces_after_colon = 0;
+    int value_length = 0;
+    int32_t value_i32 = 0;
+    uint32_t value_u32 = 0;
+    uint16_t value_u16 = 0;
+    const char *endptr; // Just to ignore trailing whitespace
+    int spaces_after_colon = 0;
 
     if (colon_offset != 0) {
         /* Name and value */
@@ -600,16 +604,12 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
             spaces_after_colon = 1;
         }
         (void) g_strlcpy(value, options+colon_offset+spaces_after_colon, options_end_offset-spaces_after_colon-colon_offset);
-        value_length = (gint)strlen(value);
+        value_length = (int)strlen(value);
     }
     else {
         /* Just name */
         (void) g_strlcpy(name, options+option_start_offset, options_end_offset-option_start_offset);
     }
-
-    /* Some rule options expect a number, parse it now. Note that any space
-     * after the value will currently result in the number being ignored. */
-    ws_strtoi32(value, NULL, &value32);
 
     /* Think this is space at end of all options - don't compare with option names */
     if (name[0] == '\0') {
@@ -621,10 +621,18 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
         rule->msg = g_strdup(value);
     }
     else if (strcmp(name, "sid") == 0) {
-        rule->sid = value32;
+        if (!ws_strtou32(value, &endptr, &value_u32)) {
+            ws_info("failed to parse %s argument", name);
+            return;
+        }
+        rule->sid = value_u32;
     }
     else if (strcmp(name, "rev") == 0) {
-        rule->rev = value32;
+        if (!ws_strtou32(value, &endptr, &value_u32)) {
+            ws_info("failed to parse %s argument", name);
+            return;
+        }
+        rule->rev = value_u32;
     }
     else if (strcmp(name, "content") == 0) {
         int value_start = 0;
@@ -683,16 +691,36 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
         rule_set_content_nocase(rule);
     }
     else if (strcmp(name, "offset") == 0) {
-        rule_set_content_offset(rule, value32);
+        // Allows values from -65535 to 65535
+        if (!ws_strtoi32(value, &endptr, &value_i32)) {
+            ws_info("failed to parse %s argument", name);
+            return;
+        }
+        rule_set_content_offset(rule, value_i32);
     }
     else if (strcmp(name, "depth") == 0) {
-        rule_set_content_depth(rule, value32);
+        // Max value is 65535
+        if (!ws_strtou16(value, &endptr, &value_u16)) {
+            ws_info("failed to parse %s argument", name);
+            return;
+        }
+        rule_set_content_depth(rule, value_u16);
     }
     else if (strcmp(name, "within") == 0) {
-        rule_set_content_within(rule, value32);
+        // Max value is 65535
+        if (!ws_strtou16(value, &endptr, &value_u16)) {
+            ws_info("failed to parse %s argument", name);
+            return;
+        }
+        rule_set_content_within(rule, value_u16);
     }
     else if (strcmp(name, "distance") == 0) {
-        rule_set_content_distance(rule, value32);
+        // Allows values from -65535 to 65535
+        if (!ws_strtoi32(value, &endptr, &value_i32)) {
+            ws_info("failed to parse %s argument", name);
+            return;
+        }
+        rule_set_content_distance(rule, value_i32);
     }
     else if (strcmp(name, "fast_pattern") == 0) {
         rule_set_content_fast_pattern(rule);
@@ -723,12 +751,12 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
     }
 }
 
-/* Parse a Snort alert, return TRUE if successful */
-static gboolean parse_rule(SnortConfig_t *snort_config, char *line, const char *filename, int line_number, int line_length)
+/* Parse a Snort alert, return true if successful */
+static bool parse_rule(SnortConfig_t *snort_config, char *line, const char *filename, int line_number, int line_length)
 {
-    char *options_start;
+    const char* options_start;
     char *options;
-    gboolean in_quotes = FALSE;
+    bool in_quotes = false;
     int options_start_index = 0, options_index = 0, colon_offset = 0;
     char c;
     int length = 0; /*  CID 1398227 (bogus - read_token() always sets it) */
@@ -736,13 +764,13 @@ static gboolean parse_rule(SnortConfig_t *snort_config, char *line, const char *
 
     /* Rule will begin with alert */
     if (strncmp(line, "alert ", 6) != 0) {
-        return FALSE;
+        return false;
     }
 
     /* Allocate the rule itself */
     rule = g_new(Rule_t, 1);
 
-    snort_debug_printf("looks like a rule: %s\n", line);
+    ws_debug("looks like a rule: %s", line);
     memset(rule, 0, sizeof(Rule_t));
 
     rule->rule_string = g_strdup(line);
@@ -750,21 +778,21 @@ static gboolean parse_rule(SnortConfig_t *snort_config, char *line, const char *
     rule->line_number = line_number;
 
     /* Next token is the protocol */
-    rule->protocol = read_token(line+6, ' ', &length, &length, TRUE);
+    rule->protocol = read_token(line+6, ' ', &length, &length, true);
 
     /* Find start of options. */
     options_start = strstr(line, "(");
     if (options_start == NULL) {
-        snort_debug_printf("start of options not found\n");
+        ws_debug("start of options not found");
         g_free(rule);
-        return FALSE;
+        return false;
     }
     options_index = (int)(options_start-line) + 1;
 
     /* To make parsing simpler, replace final ')' with ';' */
     if (line[line_length-1] != ')') {
         g_free(rule);
-        return FALSE;
+        return false;
     }
     else {
         line[line_length-1] = ';';
@@ -797,22 +825,22 @@ static gboolean parse_rule(SnortConfig_t *snort_config, char *line, const char *
                 /* Next rule will start here */
                 options_start_index = options_index;
                 colon_offset = 0;
-                in_quotes = FALSE;
+                in_quotes = false;
             }
         }
     }
 
     /* Add rule to map of rules. */
-    g_hash_table_insert(snort_config->rules, GUINT_TO_POINTER((guint)rule->sid), rule);
-    snort_debug_printf("Snort rule with SID=%u added to table\n", rule->sid);
+    g_hash_table_insert(snort_config->rules, GUINT_TO_POINTER((unsigned)rule->sid), rule);
+    ws_debug("Snort rule with SID=%u added to table", rule->sid);
 
-    return TRUE;
+    return true;
 }
 
 /* Delete an individual rule */
-static gboolean delete_rule(gpointer  key _U_,
-                            gpointer  value,
-                            gpointer  user_data _U_)
+static gboolean delete_rule(void *    key _U_,
+                            void *    value,
+                            void *    user_data _U_)
 {
     Rule_t *rule = (Rule_t*)value;
     unsigned int n;
@@ -833,7 +861,7 @@ static gboolean delete_rule(gpointer  key _U_,
         g_free(rule->references[n]);
     }
 
-    snort_debug_printf("Freeing rule at :%p\n", rule);
+    ws_debug("Freeing rule at :%p", rule);
     g_free(rule);
     return TRUE;
 }
@@ -842,6 +870,7 @@ static gboolean delete_rule(gpointer  key _U_,
 /* Parse this file, adding details to snort_config. */
 /* N.B. using recursion_level to limit stack depth. */
 #define MAX_CONFIG_FILE_RECURSE_DEPTH 8
+// NOLINTNEXTLINE(misc-no-recursion)
 static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd,
                               const char *filename, const char *dirname, int recursion_level)
 {
@@ -849,7 +878,7 @@ static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd,
     char line[MAX_LINE_LENGTH];
     int  line_number = 0;
 
-    snort_debug_printf("parse_config_file(filename=%s, recursion_level=%d)\n", filename, recursion_level);
+    ws_debug("parse_config_file(filename=%s, recursion_level=%d)", filename, recursion_level);
 
     if (recursion_level > MAX_CONFIG_FILE_RECURSE_DEPTH) {
         return;
@@ -898,11 +927,11 @@ static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd,
 /* Create the global ConfigParser */
 void create_config(SnortConfig_t **snort_config, const char *snort_config_file)
 {
-    gchar* dirname;
-    gchar* basename;
+    char* dirname;
+    char* basename;
     FILE *config_file_fd;
 
-    snort_debug_printf("create_config (%s)\n", snort_config_file);
+    ws_debug("create_config (%s)", snort_config_file);
 
     *snort_config = g_new(SnortConfig_t, 1);
     memset(*snort_config, 0, sizeof(SnortConfig_t));
@@ -925,7 +954,7 @@ void create_config(SnortConfig_t **snort_config, const char *snort_config_file)
     /* Attempt to open the config file */
     config_file_fd = ws_fopen(snort_config_file, "r");
     if (config_file_fd == NULL) {
-        snort_debug_printf("Failed to open config file %s\n", snort_config_file);
+        ws_debug("Failed to open config file %s", snort_config_file);
         report_failure("Snort dissector: Failed to open config file %s\n", snort_config_file);
     }
     else {
@@ -942,7 +971,7 @@ void create_config(SnortConfig_t **snort_config, const char *snort_config_file)
 /* Delete the entire config */
 void delete_config(SnortConfig_t **snort_config)
 {
-    snort_debug_printf("delete_config()\n");
+    ws_debug("delete_config()");
 
     /* Iterate over all rules, freeing each one! */
     g_hash_table_foreach_remove((*snort_config)->rules, delete_rule, NULL);
@@ -966,7 +995,7 @@ void delete_config(SnortConfig_t **snort_config)
 }
 
 /* Look for a rule corresponding to the given SID */
-Rule_t *get_rule(SnortConfig_t *snort_config, guint32 sid)
+Rule_t *get_rule(SnortConfig_t *snort_config, uint32_t sid)
 {
     if ((snort_config == NULL) || (snort_config->rules == NULL)) {
         return NULL;
@@ -984,7 +1013,7 @@ void get_global_rule_stats(SnortConfig_t *snort_config, unsigned int sid,
     *number_rules_files = snort_config->stat_rules_files;
     *number_rules = snort_config->stat_rules;
     *alerts_detected = snort_config->stat_alerts_detected;
-    Rule_t *rule;
+    const Rule_t *rule;
 
     /* Look up rule and get current/total matches */
     rule = get_rule(snort_config, sid);
@@ -997,9 +1026,9 @@ void get_global_rule_stats(SnortConfig_t *snort_config, unsigned int sid,
 }
 
 /* Reset stats on individual rule */
-static void reset_rule_stats(gpointer  key _U_,
-                             gpointer  value,
-                             gpointer  user_data _U_)
+static void reset_rule_stats(void *    key _U_,
+                             void *    value,
+                             void *    user_data _U_)
 {
     Rule_t *rule = (Rule_t*)value;
     rule->matches_seen = 0;
@@ -1026,11 +1055,11 @@ void reset_global_rule_stats(SnortConfig_t *snort_config)
 static unsigned char content_get_nibble_value(char c)
 {
     static unsigned char values[256];
-    static gboolean values_set = FALSE;
+    static bool values_set = false;
 
     if (!values_set) {
         /* Set table once and for all */
-        unsigned char ch;
+        unsigned ch;
         for (ch='a'; ch <= 'f'; ch++) {
             values[ch] = 0xa + (ch-'a');
         }
@@ -1040,23 +1069,23 @@ static unsigned char content_get_nibble_value(char c)
         for (ch='0'; ch <= '9'; ch++) {
             values[ch] = (ch-'0');
         }
-        values_set = TRUE;
+        values_set = true;
     }
 
     return values[(unsigned char)c];
 }
 
-/* Go through string, converting hex digits into guint8, and removing escape characters. */
-guint content_convert_to_binary(content_t *content)
+/* Go through string, converting hex digits into uint8_t, and removing escape characters. */
+unsigned content_convert_to_binary(content_t *content)
 {
     int output_idx = 0;
-    gboolean in_binary_mode = FALSE;    /* Are we in a binary region of the string?   */
-    gboolean have_one_nibble = FALSE;   /* Do we have the first nibble of the pair needed to make a byte? */
+    bool in_binary_mode = false;    /* Are we in a binary region of the string?   */
+    bool have_one_nibble = false;   /* Do we have the first nibble of the pair needed to make a byte? */
     unsigned char one_nibble = 0;       /* Value of first nibble if we have it */
     char c;
     int n;
-    gboolean have_backslash = FALSE;
-    static gchar binary_str[1024];
+    bool have_backslash = false;
+    static char binary_str[1024];
 
     /* Just return length if have previously translated in binary string. */
     if (content->translated) {
@@ -1077,7 +1106,7 @@ guint content_convert_to_binary(content_t *content)
             if (!have_backslash) {
                 if (c == '\\') {
                     /* Just note that we have a backslash */
-                    have_backslash = TRUE;
+                    have_backslash = true;
                     continue;
                 }
                 else {
@@ -1094,7 +1123,7 @@ guint content_convert_to_binary(content_t *content)
             }
         }
         else {
-            /* Binary mode. Handle pairs of hex digits and translate into guint8 */
+            /* Binary mode. Handle pairs of hex digits and translate into uint8_t */
             if (c == ' ') {
                 /* Ignoring inside binary mode */
                 continue;
@@ -1104,22 +1133,22 @@ guint content_convert_to_binary(content_t *content)
                 if (!have_one_nibble) {
                     /* Store first nibble of a pair */
                     one_nibble = nibble;
-                    have_one_nibble = TRUE;
+                    have_one_nibble = true;
                 }
                 else {
                     /* Combine both nibbles into a byte */
                     binary_str[output_idx++] = (one_nibble << 4) + nibble;
                     /* Reset flag - looking for new pair of nibbles */
-                    have_one_nibble = FALSE;
+                    have_one_nibble = false;
                 }
             }
         }
     }
 
     /* Store result for next time. */
-    content->translated_str = (guchar*)g_malloc(output_idx+1);
+    content->translated_str = (unsigned char*)g_malloc(output_idx+1);
     memcpy(content->translated_str, binary_str, output_idx+1);
-    content->translated = TRUE;
+    content->translated = true;
     content->translated_length = output_idx;
 
     return output_idx;
@@ -1127,32 +1156,32 @@ guint content_convert_to_binary(content_t *content)
 
 /* In order to use glib's regex library, need to trim
   '/' delimiters and any modifiers from the end of the string */
-gboolean content_convert_pcre_for_regex(content_t *content)
+bool content_convert_pcre_for_regex(content_t *content)
 {
-    guint pcre_length, i, end_delimiter_offset = 0;
+    unsigned pcre_length, i, end_delimiter_offset = 0;
 
     /* Return if already converted */
     if (content->translated_str) {
-        return TRUE;
+        return true;
     }
 
-    pcre_length = (guint)strlen(content->str);
+    pcre_length = (unsigned)strlen(content->str);
 
     /* Start with content->str */
     if (pcre_length < 3) {
         /* Can't be valid.  Expect /regex/[modifiers] */
-        return FALSE;
+        return false;
     }
 
     if (pcre_length >= 512) {
         /* Have seen regex library crash on very long expressions
          * (830 bytes) as seen in SID=2019326, REV=6 */
-        return FALSE;
+        return false;
     }
 
     /* Verify that string starts with / */
     if (content->str[0] != '/') {
-        return FALSE;
+        return false;
     }
 
     /* Next, look for closing / near end of string */
@@ -1164,40 +1193,40 @@ gboolean content_convert_pcre_for_regex(content_t *content)
         else {
             switch (content->str[i]) {
                 case 'i':
-                    content->pcre_case_insensitive = TRUE;
+                    content->pcre_case_insensitive = true;
                     break;
                 case 's':
-                    content->pcre_dot_includes_newline = TRUE;
+                    content->pcre_dot_includes_newline = true;
                     break;
                 case 'B':
-                    content->pcre_raw = TRUE;
+                    content->pcre_raw = true;
                     break;
                 case 'm':
-                    content->pcre_multiline = TRUE;
+                    content->pcre_multiline = true;
                     break;
 
                 default:
                     /* TODO: handle other modifiers that will get seen? */
                     /* N.B. 'U' (match in decoded URI buffers) can't be handled, so don't store in flag. */
                     /* N.B. not sure if/how to handle 'R' (effectively distance:0) */
-                    snort_debug_printf("Unhandled pcre modifier '%c'\n", content->str[i]);
+                    ws_debug("Unhandled pcre modifier '%c'", content->str[i]);
                     break;
             }
         }
     }
     if (end_delimiter_offset == 0) {
         /* Didn't find it */
-        return FALSE;
+        return false;
     }
 
     /* Store result for next time. */
-    content->translated_str = (guchar*)g_malloc(end_delimiter_offset);
+    content->translated_str = (unsigned char*)g_malloc(end_delimiter_offset);
     memcpy(content->translated_str, content->str+1, end_delimiter_offset - 1);
     content->translated_str[end_delimiter_offset-1] = '\0';
-    content->translated = TRUE;
+    content->translated = true;
     content->translated_length = end_delimiter_offset - 1;
 
-    return TRUE;
+    return true;
 }
 
 /*

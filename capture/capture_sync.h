@@ -20,11 +20,16 @@
 #ifndef __CAPTURE_SYNC_H__
 #define __CAPTURE_SYNC_H__
 
+#include <wsutil/processes.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
 struct _info_data;
+
+typedef struct _capture_session capture_session;
+typedef struct capture_options_tag capture_options;
 
 /**
  * Start a new capture session.
@@ -40,9 +45,9 @@ struct _info_data;
  *  @param cap_session a handle for the capture session
  *  @param cap_data a struct with capture info data
  *  @param update_cb update screen
- *  @return             TRUE if a capture could be started, FALSE if not
+ *  @return             true if a capture could be started, false if not
  */
-extern gboolean
+extern bool
 sync_pipe_start(capture_options *capture_opts, GPtrArray *capture_comments,
                 capture_session *cap_session, struct _info_data* cap_data,
                 void(*update_cb)(void));
@@ -66,6 +71,7 @@ sync_pipe_kill(ws_process_id fork_child);
  *  NULL, and -1 or errno value is returned; *primary_msg, and
  *  *secondary_msg if not NULL must be freed with g_free().
  *
+ *  @param app_name Application name
  *  @param iface (monitor) network interface name
  *  @param freq channel control frequency string (in MHz)
  *  @param type channel type string (or NULL if not used)
@@ -78,29 +84,57 @@ sync_pipe_kill(ws_process_id fork_child);
  *  @return 0 on success
  */
 extern int
-sync_interface_set_80211_chan(const gchar *iface, const char *freq, const gchar *type,
-                              const gchar *center_freq1, const gchar *center_freq2,
-                              gchar **data, gchar **primary_msg,
-                              gchar **secondary_msg, void (*update_cb)(void));
+sync_interface_set_80211_chan(const char* app_name, const char *iface, const char *freq, const char *type,
+                              const char *center_freq1, const char *center_freq2,
+                              char **data, char **primary_msg,
+                              char **secondary_msg, void (*update_cb)(void));
+
+/** Compile a capture filter and get its BPF bytecode (in human-readable form.)
+ * This is necessary on Linux because, as pcap_compile(3PCAP) says:
+ * "On Linux, if the pcap_t handle corresponds to a live packet capture, the
+ * resulting filter program may use Linux BPF extensions;" this will produce
+ * the actual filter used for a live capture as opposed to the compiled version
+ * without extensions that pcap_open_dead(3PCAP) produces. (However, it requires
+ * permissions to open the device.)
+ *
+ *  @param app_name Application name
+ *  @param ifname network interface name
+ *  @param filter capture filter string
+ *  @param linktype link layer type (-1 to use device default)
+ *  @param optimize whether to optimize the filter
+ *  @param data On success, *data points to a buffer containing the dumpcap output, On failure *data is NULL
+ *  @param primary_msg On success NULL, On failure points to an error message
+ *  @param secondary_msg On success NULL, On failure either points to an additional error message or is NULL
+ *  @param update_cb update callback
+ */
+extern int
+sync_if_bpf_filter_open(const char* app_name, const char *ifname, const char* filter, int linktype,
+                        bool optimize, char **data, char **primary_msg,
+                        char **secondary_msg, void (*update_cb)(void));
 
 /** Get an interface list using dumpcap */
 extern int
-sync_interface_list_open(gchar **data, gchar **primary_msg,
-                         gchar **secondary_msg, void (*update_cb)(void));
+sync_interface_list_open(const char* app_name, char **data, char **primary_msg,
+                         char **secondary_msg, void (*update_cb)(void));
 
 /** Get interface capabilities using dumpcap */
 extern int
-sync_if_capabilities_open(const gchar *ifname, gboolean monitor_mode, const gchar* auth,
-                          gchar **data, gchar **primary_msg,
-                          gchar **secondary_msg, void (*update_cb)(void));
+sync_if_capabilities_open(const char* app_name, const char *ifname, bool monitor_mode, const char* auth,
+                          char **data, char **primary_msg,
+                          char **secondary_msg, void (*update_cb)(void));
+
+extern int
+sync_if_list_capabilities_open(const char* app_name, GList *ifqueries,
+                          char **data, char **primary_msg,
+                          char **secondary_msg, void (*update_cb)(void));
 
 /** Start getting interface statistics using dumpcap. */
 extern int
-sync_interface_stats_open(int *read_fd, ws_process_id *fork_child, gchar **msg, void (*update_cb)(void));
+sync_interface_stats_open(const char* app_name, int *read_fd, ws_process_id *fork_child, char **data, char **msg, void (*update_cb)(void));
 
 /** Stop gathering statistics. */
 extern int
-sync_interface_stats_close(int *read_fd, ws_process_id *fork_child, gchar **msg);
+sync_interface_stats_close(int *read_fd, ws_process_id *fork_child, char **msg);
 
 /** Read a line from a pipe, similar to fgets.  Non-blocking. */
 extern int

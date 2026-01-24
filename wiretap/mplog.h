@@ -13,9 +13,8 @@
 #ifndef _MPLOG_H
 #define _MPLOG_H
 
-#include <glib.h>
 #include <wiretap/wtap.h>
 
-wtap_open_return_val mplog_open(wtap *wth, int *err, gchar **err_info);
+wtap_open_return_val mplog_open(wtap *wth, int *err, char **err_info);
 
 #endif /* _MPLOG_H */

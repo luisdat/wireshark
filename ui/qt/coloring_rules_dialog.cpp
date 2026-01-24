@@ -18,6 +18,7 @@
 #include <wsutil/utf8_entities.h>
 
 #include "wsutil/filesystem.h"
+#include "app/application_flavor.h"
 #include "epan/dfilter/dfilter.h"
 
 #include "main_application.h"
@@ -75,15 +76,12 @@ ColoringRulesDialog::ColoringRulesDialog(QWidget *parent, QString add_filter) :
     ui->pathLabel->setAttribute(Qt::WA_MacSmallSize, true);
 #endif
 
-    connect(ui->coloringRulesTreeView->selectionModel(), SIGNAL(selectionChanged(const QItemSelection &, const QItemSelection &)),
-            this, SLOT(colorRuleSelectionChanged(const QItemSelection &, const QItemSelection &)));
-    connect(&colorRuleDelegate_, SIGNAL(invalidField(const QModelIndex&, const QString&)),
-            this, SLOT(invalidField(const QModelIndex&, const QString&)));
-    connect(&colorRuleDelegate_, SIGNAL(validField(const QModelIndex&)),
-            this, SLOT(validField(const QModelIndex&)));
+    connect(ui->coloringRulesTreeView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &ColoringRulesDialog::colorRuleSelectionChanged);
+    connect(&colorRuleDelegate_, &ColoringRulesDelegate::invalidField, this, &ColoringRulesDialog::invalidField);
+    connect(&colorRuleDelegate_, &ColoringRulesDelegate::validField, this, &ColoringRulesDialog::validField);
     connect(ui->coloringRulesTreeView, &QTreeView::clicked, this, &ColoringRulesDialog::treeItemClicked);
-    connect(&colorRuleModel_, SIGNAL(rowsInserted(const QModelIndex &, int, int)), this, SLOT(rowCountChanged()));
-    connect(&colorRuleModel_, SIGNAL(rowsRemoved(const QModelIndex &, int, int)), this, SLOT(rowCountChanged()));
+    connect(&colorRuleModel_, &ColoringRulesModel::rowsInserted, this, &ColoringRulesDialog::rowCountChanged);
+    connect(&colorRuleModel_, &ColoringRulesModel::rowsRemoved, this, &ColoringRulesDialog::rowCountChanged);
 
     rowCountChanged();
 
@@ -96,7 +94,7 @@ ColoringRulesDialog::ColoringRulesDialog(QWidget *parent, QString add_filter) :
     ui->buttonBox->addButton(copy_button, QDialogButtonBox::ActionRole);
     connect(copy_button, &CopyFromProfileButton::copyProfile, this, &ColoringRulesDialog::copyFromProfile);
 
-    QString abs_path = gchar_free_to_qstring(get_persconffile_path(COLORFILTERS_FILE_NAME, TRUE));
+    QString abs_path = gchar_free_to_qstring(get_persconffile_path(COLORFILTERS_FILE_NAME, true, application_configuration_environment_prefix()));
     if (file_exists(abs_path.toUtf8().constData())) {
         ui->pathLabel->setText(abs_path);
         ui->pathLabel->setUrl(QUrl::fromLocalFile(abs_path).toString());
@@ -164,7 +162,7 @@ bool ColoringRulesDialog::isValidFilter(QString filter, QString * error)
     if (df_err)
     {
         error->append(df_err->msg);
-        dfilter_error_free(df_err);
+        df_error_free(&df_err);
     }
 
     return false;
@@ -229,13 +227,13 @@ void ColoringRulesDialog::updateHint(QModelIndex idx)
 
     if (errors_.count() > 0) {
         //take the list of QModelIndexes and sort them so first color rule error is displayed
-        //This isn't the most efficent algorithm, but the list shouldn't be large to matter
+        //This isn't the most efficient algorithm, but the list shouldn't be large to matter
         QList<QModelIndex> keys = errors_.keys();
 
         //list is not guaranteed to be sorted, so force it
         std::sort(keys.begin(), keys.end());
         const QModelIndex& error_key = keys[0];
-        error_text = QString("%1: %2")
+        error_text = QStringLiteral("%1: %2")
                             .arg(colorRuleModel_.data(colorRuleModel_.index(error_key.row(), ColoringRulesModel::colName), Qt::DisplayRole).toString())
                             .arg(errors_[error_key]);
     }
@@ -315,7 +313,7 @@ void ColoringRulesDialog::changeColor(bool foreground)
     if (!current.isValid())
         return;
 
-    QColorDialog *color_dlg = new QColorDialog();
+    QColorDialog *color_dlg = new QColorDialog(this);
     color_dlg->setCurrentColor(colorRuleModel_.data(current, foreground ? Qt::ForegroundRole : Qt::BackgroundRole).toString());
 
     connect(color_dlg, &QColorDialog::colorSelected, std::bind(&ColoringRulesDialog::colorChanged, this, foreground, std::placeholders::_1));
@@ -415,7 +413,7 @@ void ColoringRulesDialog::on_buttonBox_clicked(QAbstractButton *button)
 
     if (button == import_button_) {
         QString file_name = WiresharkFileDialog::getOpenFileName(this, mainApp->windowTitleString(tr("Import Coloring Rules")),
-                                                         mainApp->lastOpenDir().path());
+                                                         mainApp->openDialogInitialDir().path());
         if (!file_name.isEmpty()) {
             if (!colorRuleModel_.importColors(file_name, err)) {
                 simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err.toUtf8().constData());
@@ -433,7 +431,7 @@ void ColoringRulesDialog::on_buttonBox_clicked(QAbstractButton *button)
 
         QString caption = mainApp->windowTitleString(tr("Export %1 Coloring Rules").arg(num_items));
         QString file_name = WiresharkFileDialog::getSaveFileName(this, caption,
-                                                         mainApp->lastOpenDir().path());
+                                                         mainApp->openDialogInitialDir().path());
         if (!file_name.isEmpty()) {
             if (!colorRuleModel_.exportColors(file_name, err)) {
                 simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err.toUtf8().constData());

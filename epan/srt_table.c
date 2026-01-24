@@ -78,7 +78,7 @@ free_srt_table_data(srt_stat_table *rst)
 
 void free_srt_table(register_srt_t *srt, GArray* srt_array)
 {
-    guint i = 0;
+    unsigned i = 0;
     srt_stat_table *srt_table;
 
     for (i = 0; i < srt_array->len; i++)
@@ -108,7 +108,7 @@ static void reset_srt_table_data(srt_stat_table *rst)
 
 void reset_srt_table(GArray* srt_array)
 {
-    guint i = 0;
+    unsigned i = 0;
     srt_stat_table *srt_table;
 
     for (i = 0; i < srt_array->len; i++)
@@ -119,25 +119,30 @@ void reset_srt_table(GArray* srt_array)
     }
 }
 
-static wmem_tree_t *registered_srt_tables = NULL;
+static wmem_tree_t *registered_srt_tables;
 
 register_srt_t* get_srt_table_by_name(const char* name)
 {
     return (register_srt_t*)wmem_tree_lookup_string(registered_srt_tables, name, 0);
 }
 
-gchar* srt_table_get_tap_string(register_srt_t* srt)
+char* srt_table_get_tap_string(register_srt_t* srt)
 {
     GString *cmd_str = g_string_new(proto_get_protocol_filter_name(srt->proto_id));
     g_string_append(cmd_str, ",srt");
     return g_string_free(cmd_str, FALSE);
 }
 
+srt_param_handler_cb srt_table_get_param_handler_cb(register_srt_t* srt)
+{
+    return srt->param_cb;
+}
+
 void srt_table_get_filter(register_srt_t* srt, const char *opt_arg, const char **filter, char** err)
 {
-    gchar* cmd_str = srt_table_get_tap_string(srt);
-    guint len = (guint32)strlen(cmd_str);
-    guint pos = len;
+    char* cmd_str = srt_table_get_tap_string(srt);
+    unsigned len = (uint32_t)strlen(cmd_str);
+    unsigned pos = len;
     *filter=NULL;
     *err = NULL;
 
@@ -167,6 +172,11 @@ void srt_table_dissector_init(register_srt_t* srt, GArray* srt_array)
     srt->srt_init(srt, srt_array);
 }
 
+void srt_table_init(void)
+{
+    registered_srt_tables = wmem_tree_new(wmem_epan_scope());
+}
+
 void
 register_srt_table(const int proto_id, const char* tap_listener, int max_tables, tap_packet_cb srt_packet_func, srt_init_cb init_cb, srt_param_handler_cb param_cb)
 {
@@ -187,13 +197,10 @@ register_srt_table(const int proto_id, const char* tap_listener, int max_tables,
     table->param_cb      = param_cb;
     table->param_data    = NULL;
 
-    if (registered_srt_tables == NULL)
-        registered_srt_tables = wmem_tree_new(wmem_epan_scope());
-
     wmem_tree_insert_string(registered_srt_tables, proto_get_protocol_filter_name(proto_id), table, 0);
 }
 
-void srt_table_iterate_tables(wmem_foreach_func func, gpointer user_data)
+void srt_table_iterate_tables(wmem_foreach_func func, void *user_data)
 {
     wmem_tree_foreach(registered_srt_tables, func, user_data);
 }

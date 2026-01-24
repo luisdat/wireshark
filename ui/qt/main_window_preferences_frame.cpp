@@ -7,7 +7,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "main_application.h"
 #include "main_window_preferences_frame.h"
 #include <ui/qt/utils/qt_ui_utils.h>
 
@@ -16,7 +15,9 @@
 
 #include <epan/prefs-int.h>
 #include <ui/qt/models/pref_models.h>
+#include <ui/qt/utils/color_utils.h>
 #include <wsutil/filesystem.h>
+#include <app/application_flavor.h>
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 
 #include <QDebug>
@@ -39,25 +40,35 @@ MainWindowPreferencesFrame::MainWindowPreferencesFrame(QWidget *parent) :
     pref_toolbar_main_style_ = prefFromPrefPtr(&prefs.gui_toolbar_main_style);
     pref_window_title_ = prefFromPrefPtr(&prefs.gui_window_title);
     pref_prepend_window_title_ = prefFromPrefPtr(&prefs.gui_prepend_window_title);
-    pref_debounce_timer_ = prefFromPrefPtr(&prefs.gui_debounce_timer);
 
     QStyleOption style_opt;
-    QString indent_ss = QString(
+    QString indent_ss = QStringLiteral(
                 "QRadioButton, QLineEdit, QLabel {"
                 "  margin-left: %1px;"
                 "}"
                 ).arg(ui->geometryCheckBox->style()->subElementRect(QStyle::SE_CheckBoxContents, &style_opt).left());
     ui->foStyleLastOpenedRadioButton->setStyleSheet(indent_ss);
     ui->foStyleSpecifiedRadioButton->setStyleSheet(indent_ss);
+    ui->foStyleCWDRadioButton->setStyleSheet(indent_ss);
     ui->maxFilterLineEdit->setStyleSheet(indent_ss);
     ui->maxRecentLineEdit->setStyleSheet(indent_ss);
 
     int num_entry_width = ui->maxFilterLineEdit->fontMetrics().height() * 3;
-    ui->maxFilterLineEdit->setMaximumWidth(num_entry_width);
-    ui->maxRecentLineEdit->setMaximumWidth(num_entry_width);
+    int num_entry_height = ui->maxFilterLineEdit->fontMetrics().height();
+    // Some styles (e.g., adwaita) add some extra space around the contents.
+    // Find the actual maximum size to set the widget.
+    QStyleOptionFrame opt;
+    initStyleOption(&opt);
+    QSize num_entry_size = ui->maxRecentLineEdit->style()->sizeFromContents(QStyle::CT_LineEdit, &opt, QSize(num_entry_width, num_entry_height));
+    ui->maxFilterLineEdit->setMaximumWidth(num_entry_size.width());
+    ui->maxRecentLineEdit->setMaximumWidth(num_entry_size.width());
 
-    QString globalLanguagesPath(QString(get_datafile_dir()) + "/languages/");
-    QString userLanguagesPath(gchar_free_to_qstring(get_persconffile_path("languages/", FALSE)));
+    QString li_path = QStringLiteral(":/languages/language%1.svg").arg(ColorUtils::themeIsDark() ? ".dark" : "");
+    QIcon language_icon = QIcon(li_path);
+    ui->languageComboBox->setItemIcon(0, language_icon);
+
+    QString globalLanguagesPath(QStringLiteral("%1/languages/").arg(get_datafile_dir(application_configuration_environment_prefix())));
+    QString userLanguagesPath(gchar_free_to_qstring(get_persconffile_path("languages/", false, application_configuration_environment_prefix())));
 
     QStringList filenames = QDir(":/i18n/").entryList(QStringList("wireshark_*.qm"));
     filenames += QDir(globalLanguagesPath).entryList(QStringList("wireshark_*.qm"));
@@ -70,22 +81,15 @@ MainWindowPreferencesFrame::MainWindowPreferencesFrame(QWidget *parent) :
         locale.remove(0, locale.indexOf('_') + 1);
 
         QString lang = QLocale::languageToString(QLocale(locale).language());
-        QIcon ico = QIcon();
-        if (QFile::exists(QString(":/languages/%1.svg").arg(locale)))
-            ico.addFile(QString(":/languages/%1.svg").arg(locale));
-        if (QFile::exists(globalLanguagesPath + locale + ".svg"))
-            ico.addFile(globalLanguagesPath + locale + ".svg");
-        if (QFile::exists(userLanguagesPath + locale + ".svg"))
-            ico.addFile(userLanguagesPath + locale + ".svg");
 
-        ui->languageComboBox->addItem(ico, lang, locale);
+        ui->languageComboBox->addItem(lang, locale);
     }
 
     ui->languageComboBox->setItemData(0, USE_SYSTEM_LANGUAGE);
     ui->languageComboBox->model()->sort(0);
 
     for (int i = 0; i < ui->languageComboBox->count(); i += 1) {
-        if (QString(language) == ui->languageComboBox->itemData(i).toString()) {
+        if (QString(get_language_used()) == ui->languageComboBox->itemData(i).toString()) {
             ui->languageComboBox->setCurrentIndex(i);
             break;
         }
@@ -112,16 +116,24 @@ void MainWindowPreferencesFrame::updateWidgets()
         ui->geometryCheckBox->setChecked(false);
     }
 
-    if (prefs_get_enum_value(pref_fileopen_style_, pref_stashed) == FO_STYLE_LAST_OPENED) {
+    switch (prefs_get_enum_value(pref_fileopen_style_, pref_stashed)) {
+
+    case FO_STYLE_LAST_OPENED:
         ui->foStyleLastOpenedRadioButton->setChecked(true);
-    } else {
+        break;
+    case FO_STYLE_CWD:
+        ui->foStyleCWDRadioButton->setChecked(true);
+        break;
+    case FO_STYLE_SPECIFIED:
+    default:
         ui->foStyleSpecifiedRadioButton->setChecked(true);
+        break;
     }
 
     ui->foStyleSpecifiedLineEdit->setText(prefs_get_string_value(pref_fileopen_dir_, pref_stashed));
 
-    ui->maxFilterLineEdit->setText(QString::number(prefs_get_uint_value_real(pref_recent_df_entries_max_, pref_stashed)));
-    ui->maxRecentLineEdit->setText(QString::number(prefs_get_uint_value_real(pref_recent_files_count_max_, pref_stashed)));
+    ui->maxFilterLineEdit->setText(QString::number(prefs_get_uint_value(pref_recent_df_entries_max_, pref_stashed)));
+    ui->maxRecentLineEdit->setText(QString::number(prefs_get_uint_value(pref_recent_files_count_max_, pref_stashed)));
 
     ui->confirmUnsavedCheckBox->setChecked(prefs_get_bool_value(pref_ask_unsaved_, pref_stashed));
     ui->displayAutoCompleteCheckBox->setChecked(prefs_get_bool_value(pref_autocomplete_filter_, pref_stashed));
@@ -129,7 +141,7 @@ void MainWindowPreferencesFrame::updateWidgets()
     ui->mainToolbarComboBox->setCurrentIndex(prefs_get_enum_value(pref_toolbar_main_style_, pref_stashed));
 
     for (int i = 0; i < ui->languageComboBox->count(); i += 1) {
-        if (QString(language) == ui->languageComboBox->itemData(i).toString()) {
+        if (QString(get_language_used()) == ui->languageComboBox->itemData(i).toString()) {
             ui->languageComboBox->setCurrentIndex(i);
             break;
         }
@@ -137,7 +149,6 @@ void MainWindowPreferencesFrame::updateWidgets()
 
     ui->windowTitle->setText(prefs_get_string_value(pref_window_title_, pref_stashed));
     ui->prependWindowTitle->setText(prefs_get_string_value(pref_prepend_window_title_, pref_stashed));
-    ui->debounceTime->setText(QString::number(prefs_get_uint_value_real(pref_debounce_timer_, pref_stashed)));
 }
 
 void MainWindowPreferencesFrame::on_geometryCheckBox_toggled(bool checked)
@@ -145,6 +156,13 @@ void MainWindowPreferencesFrame::on_geometryCheckBox_toggled(bool checked)
     prefs_set_bool_value(pref_geometry_save_position_, checked, pref_stashed);
     prefs_set_bool_value(pref_geometry_save_size_, checked, pref_stashed);
     prefs_set_bool_value(pref_geometry_save_maximized_, checked, pref_stashed);
+}
+
+void MainWindowPreferencesFrame::on_foStyleCWDRadioButton_toggled(bool checked)
+{
+    if (checked) {
+        prefs_set_enum_value(pref_fileopen_style_, FO_STYLE_CWD, pref_stashed);
+    }
 }
 
 void MainWindowPreferencesFrame::on_foStyleLastOpenedRadioButton_toggled(bool checked)
@@ -164,8 +182,7 @@ void MainWindowPreferencesFrame::on_foStyleSpecifiedRadioButton_toggled(bool che
 void MainWindowPreferencesFrame::on_foStyleSpecifiedLineEdit_textEdited(const QString &new_dir)
 {
     prefs_set_string_value(pref_fileopen_dir_, new_dir.toStdString().c_str(), pref_stashed);
-    prefs_set_enum_value(pref_fileopen_style_, FO_STYLE_SPECIFIED, pref_stashed);
-    updateWidgets();
+    ui->foStyleSpecifiedRadioButton->setChecked(true);
 }
 
 void MainWindowPreferencesFrame::on_foStyleSpecifiedPushButton_clicked()
@@ -176,8 +193,7 @@ void MainWindowPreferencesFrame::on_foStyleSpecifiedPushButton_clicked()
 
     ui->foStyleSpecifiedLineEdit->setText(specified_dir);
     prefs_set_string_value(pref_fileopen_dir_, specified_dir.toStdString().c_str(), pref_stashed);
-    prefs_set_enum_value(pref_fileopen_style_, FO_STYLE_SPECIFIED, pref_stashed);
-    updateWidgets();
+    ui->foStyleSpecifiedRadioButton->setChecked(true);
 }
 
 void MainWindowPreferencesFrame::on_maxFilterLineEdit_textEdited(const QString &new_max)
@@ -205,11 +221,9 @@ void MainWindowPreferencesFrame::on_mainToolbarComboBox_currentIndexChanged(int 
     prefs_set_enum_value(pref_toolbar_main_style_, index, pref_stashed);
 }
 
-void MainWindowPreferencesFrame::on_languageComboBox_currentIndexChanged(int index)
+void MainWindowPreferencesFrame::on_languageComboBox_currentIndexChanged(int index _U_)
 {
-    g_free(language);
-
-    language = g_strdup(ui->languageComboBox->itemData(index).toString().toStdString().c_str());
+    set_language_used(ui->languageComboBox->itemData(index).toString().toUtf8().constData());
 }
 
 void MainWindowPreferencesFrame::on_windowTitle_textEdited(const QString &new_title)
@@ -220,9 +234,4 @@ void MainWindowPreferencesFrame::on_windowTitle_textEdited(const QString &new_ti
 void MainWindowPreferencesFrame::on_prependWindowTitle_textEdited(const QString &new_prefix)
 {
     prefs_set_string_value(pref_prepend_window_title_, new_prefix.toStdString().c_str(), pref_stashed);
-}
-
-void MainWindowPreferencesFrame::on_debounceTime_textEdited(const QString &new_timer)
-{
-    prefs_set_uint_value(pref_debounce_timer_, new_timer.toUInt(), pref_stashed);
 }

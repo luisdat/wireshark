@@ -14,7 +14,11 @@
 #include <epan/packet.h>
 #include <epan/oids.h>
 #include <epan/asn1.h>
+#include <epan/expert.h>
 #include <epan/strutil.h>
+#include <epan/export_object.h>
+#include <epan/proto_data.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-x509af.h"
@@ -22,7 +26,7 @@
 #include "packet-x509if.h"
 #include "packet-x509sat.h"
 #include "packet-ldap.h"
-#include "packet-pkcs1.h"
+#include "packet-pkixalgs.h"
 #if defined(HAVE_LIBGNUTLS)
 #include <gnutls/gnutls.h>
 #endif
@@ -34,19 +38,99 @@
 void proto_register_x509af(void);
 void proto_reg_handoff_x509af(void);
 
+static dissector_handle_t pkix_crl_handle;
+
+static int x509af_eo_tap;
+
 /* Initialize the protocol and registered fields */
-static int proto_x509af = -1;
-static int hf_x509af_algorithm_id = -1;
-static int hf_x509af_extension_id = -1;
+static int proto_x509af;
+static int hf_x509af_algorithm_id;
+static int hf_x509af_extension_id;
+static int hf_x509af_subjectPublicKey_dh;
+static int hf_x509af_subjectPublicKey_dsa;
+static int hf_x509af_subjectPublicKey_rsa;
 #include "packet-x509af-hf.c"
 
 /* Initialize the subtree pointers */
-static gint ett_pkix_crl = -1;
+static int ett_pkix_crl;
+static int ett_x509af_SubjectPublicKey;
 #include "packet-x509af-ett.c"
-static const char *algorithm_id = NULL;
+
+static expert_field ei_x509af_certificate_invalid;
+
+static const char *algorithm_id;
 static void
 x509af_export_publickey(tvbuff_t *tvb, asn1_ctx_t *actx, int offset, int len);
+
+/* proto_data keys */
+#define X509AF_EO_INFO_KEY      0
+#define X509AF_PRIVATE_DATA_KEY 1
+
+typedef struct _x509af_eo_t {
+  const char *subjectname;
+  char *serialnum;
+  tvbuff_t *payload;
+} x509af_eo_t;
+
+typedef struct _x509af_private_data_t {
+  nstime_t last_time;
+  nstime_t not_before;
+  nstime_t not_after;
+#if 0
+  // TODO: Move static global algorithm_id here.
+  // (Why is the algorithm_id string wmem_file_scope()? That makes
+  // no sense as a global common to all conversations.)
+  const char *algorithm_id;
+#endif
+} x509af_private_data_t;
+
+static x509af_private_data_t *
+x509af_get_private_data(packet_info *pinfo)
+{
+  x509af_private_data_t *x509af_data = (x509af_private_data_t*)p_get_proto_data(pinfo->pool, pinfo, proto_x509af, X509AF_PRIVATE_DATA_KEY);
+  if (!x509af_data) {
+    x509af_data = wmem_new0(pinfo->pool, x509af_private_data_t);
+    nstime_set_unset(&x509af_data->not_before);
+    nstime_set_unset(&x509af_data->not_after);
+    p_add_proto_data(pinfo->pool, pinfo, proto_x509af, X509AF_PRIVATE_DATA_KEY, x509af_data);
+  }
+  return x509af_data;
+}
+
 #include "packet-x509af-fn.c"
+
+static tap_packet_status
+x509af_eo_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const void *data, tap_flags_t flags _U_)
+{
+  export_object_list_t *object_list = (export_object_list_t *)tapdata;
+  const x509af_eo_t *eo_info = (const x509af_eo_t *)data;
+  export_object_entry_t *entry;
+
+  if (data) {
+    entry = g_new0(export_object_entry_t, 1);
+
+    entry->pkt_num = pinfo->num;
+
+    // There should be a commonName
+    char *name = strstr(eo_info->subjectname, "id-at-commonName=");
+    if (name) {
+      name += strlen("id-at-commonName=");
+      entry->hostname = g_strndup(name, strcspn(name, ","));
+    }
+    entry->content_type = g_strdup("application/pkix-cert");
+
+    entry->filename = g_strdup_printf("%s.cer", eo_info->serialnum);
+
+    entry->payload_len = tvb_captured_length(eo_info->payload);
+    entry->payload_data = (uint8_t *)tvb_memdup(NULL, eo_info->payload, 0, entry->payload_len);
+
+    object_list->add_entry(object_list->gui_data, entry);
+
+    return TAP_PACKET_REDRAW;
+  } else {
+    return TAP_PACKET_DONT_REDRAW;
+  }
+}
 
 /* Exports the SubjectPublicKeyInfo structure as gnutls_datum_t.
  * actx->private_data is assumed to be a gnutls_datum_t pointer which will be
@@ -57,7 +141,10 @@ x509af_export_publickey(tvbuff_t *tvb _U_, asn1_ctx_t *actx _U_, int offset _U_,
 #if defined(HAVE_LIBGNUTLS)
   gnutls_datum_t *subjectPublicKeyInfo = (gnutls_datum_t *)actx->private_data;
   if (subjectPublicKeyInfo) {
-    subjectPublicKeyInfo->data = (guchar *) tvb_get_ptr(tvb, offset, len);
+    /* This is only passed to ssh_find_private_key_by_pubkey, which uses it
+     * with gnutls_pubkey_import, which treats the data as const, so this
+     * cast is acceptable. */
+    subjectPublicKeyInfo->data = (unsigned char *) tvb_get_ptr(tvb, offset, len);
     subjectPublicKeyInfo->size = len;
     actx->private_data = NULL;
   }
@@ -74,7 +161,7 @@ dissect_pkix_crl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, voi
 {
 	proto_tree *tree;
 	asn1_ctx_t asn1_ctx;
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "PKIX-CRL");
 
@@ -83,7 +170,7 @@ dissect_pkix_crl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, voi
 
 	tree=proto_tree_add_subtree(parent_tree, tvb, 0, -1, ett_pkix_crl, NULL, "Certificate Revocation List");
 
-	return dissect_x509af_CertificateList(FALSE, tvb, 0, &asn1_ctx, tree, -1);
+	return dissect_x509af_CertificateList(false, tvb, 0, &asn1_ctx, tree, -1);
 }
 
 static void
@@ -105,14 +192,33 @@ void proto_register_x509af(void) {
       { "Extension Id", "x509af.extension.id",
         FT_OID, BASE_NONE, NULL, 0,
         NULL, HFILL }},
+    { &hf_x509af_subjectPublicKey_dh,
+      { "DH Public Key", "x509af.subjectPublicKey.dh",
+        FT_BYTES, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
+    { &hf_x509af_subjectPublicKey_dsa,
+      { "DSA Public Key", "x509af.subjectPublicKey.dsa",
+        FT_BYTES, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
+    { &hf_x509af_subjectPublicKey_rsa,
+      { "RSA Public Key", "x509af.subjectPublicKey.rsa",
+        FT_NONE, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
 #include "packet-x509af-hfarr.c"
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_pkix_crl,
+    &ett_x509af_SubjectPublicKey,
 #include "packet-x509af-ettarr.c"
   };
+
+  static ei_register_info ei[] = {
+    { &ei_x509af_certificate_invalid, { "x509af.signedCertificate.invalid", PI_SECURITY, PI_WARN, "Invalid certificate", EXPFILL }},
+  };
+
+  expert_module_t *expert_x509af;
 
   /* Register protocol */
   proto_x509af = proto_register_protocol(PNAME, PSNAME, PFNAME);
@@ -121,7 +227,14 @@ void proto_register_x509af(void) {
   proto_register_field_array(proto_x509af, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
 
+  expert_x509af = expert_register_protocol(proto_x509af);
+  expert_register_field_array(expert_x509af, ei, array_length(ei));
+
+  x509af_eo_tap = register_export_object(proto_x509af, x509af_eo_packet, NULL);
+
   register_cleanup_routine(&x509af_cleanup_protocol);
+
+  pkix_crl_handle = register_dissector(PFNAME, dissect_pkix_crl, proto_x509af);
 
   register_ber_syntax_dissector("Certificate", proto_x509af, dissect_x509af_Certificate_PDU);
   register_ber_syntax_dissector("CertificateList", proto_x509af, dissect_CertificateList_PDU);
@@ -135,9 +248,7 @@ void proto_register_x509af(void) {
 
 /*--- proto_reg_handoff_x509af -------------------------------------------*/
 void proto_reg_handoff_x509af(void) {
-	dissector_handle_t pkix_crl_handle;
 
-	pkix_crl_handle = create_dissector_handle(dissect_pkix_crl, proto_x509af);
 	dissector_add_string("media_type", "application/pkix-crl", pkix_crl_handle);
 
 #include "packet-x509af-dis-tab.c"

@@ -7,6 +7,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 
+# CMake says that these paths should be relative to the install prefix
+# https://cmake.org/cmake/help/latest/module/GNUInstallDirs.html
+# Things generally work if they're not, but it becomes impossible
+# to relocate paths. Work around that, and just don't try to support
+# relocation.
 file(TO_NATIVE_PATH "${CMAKE_INSTALL_PREFIX}" PATH_INSTALL_PREFIX)
 string(REPLACE "\\" "\\\\" PATH_INSTALL_PREFIX "${PATH_INSTALL_PREFIX}")
 file(TO_NATIVE_PATH "${CMAKE_INSTALL_DATADIR}" PATH_DATA_DIR)
@@ -17,6 +22,8 @@ file(TO_NATIVE_PATH "${PLUGIN_INSTALL_LIBDIR}" PATH_PLUGIN_DIR)
 string(REPLACE "\\" "\\\\" PATH_PLUGIN_DIR "${PATH_PLUGIN_DIR}")
 file(TO_NATIVE_PATH "${EXTCAP_INSTALL_LIBDIR}" PATH_EXTCAP_DIR)
 string(REPLACE "\\" "\\\\" PATH_EXTCAP_DIR "${PATH_EXTCAP_DIR}")
+file(TO_NATIVE_PATH "${STRATOSHARK_EXTCAP_INSTALL_LIBDIR}" PATH_STRATOSHARK_EXTCAP_DIR)
+string(REPLACE "\\" "\\\\" PATH_STRATOSHARK_EXTCAP_DIR "${PATH_STRATOSHARK_EXTCAP_DIR}")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/path_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/path_config.h)
 
@@ -74,7 +81,8 @@ set(WMEM_FILES
 set(WSUTIL_PUBLIC_HEADERS
 	802_11-utils.h
 	adler32.h
-	base32.h
+	app_mem_usage.h
+	array.h
 	bits_count_ones.h
 	bits_ctz.h
 	bitswap.h
@@ -95,15 +103,18 @@ set(WSUTIL_PUBLIC_HEADERS
 	crc16-plain.h
 	crc32.h
 	curve25519.h
+	dtoa.h
 	eax.h
 	epochs.h
 	exported_pdu_tlvs.h
+	failure_message_simple.h
 	feature_list.h
+	file_compressed.h
+	file_util.h
 	filesystem.h
 	g711.h
 	inet_addr.h
-	inet_ipv4.h
-	inet_ipv6.h
+	inet_cidr.h
 	interface.h
 	introspection.h
 	jsmn.h
@@ -113,6 +124,7 @@ set(WSUTIL_PUBLIC_HEADERS
 	os_version_info.h
 	pint.h
 	please_report_bug.h
+	plugins.h
 	pow2.h
 	privileges.h
 	processes.h
@@ -130,6 +142,7 @@ set(WSUTIL_PUBLIC_HEADERS
 	type_util.h
 	unicode-utils.h
 	utf8_entities.h
+	value_string.h
 	version_info.h
 	ws_assert.h
 	ws_cpuid.h
@@ -137,19 +150,21 @@ set(WSUTIL_PUBLIC_HEADERS
 	ws_getopt.h
 	ws_mempbrk.h
 	ws_mempbrk_int.h
+	ws_padding_to.h
 	ws_pipe.h
 	ws_roundup.h
-	ws_return.h
+	ws_strptime.h
 	wsgcrypt.h
 	wsjson.h
 	wslog.h
 	xtea.h
+	zlib_compat.h
 )
 
 set(WSUTIL_COMMON_FILES
 	802_11-utils.c
 	adler32.c
-	base32.c
+	app_mem_usage.c
 	bitswap.c
 	buffer.c
 	clopts_common.c
@@ -166,13 +181,16 @@ set(WSUTIL_COMMON_FILES
 	crc8.c
 	crc11.c
 	curve25519.c
-	dot11decrypt_wep.c
+	dtoa.c
 	eax.c
+	failure_message_simple.c
 	feature_list.c
+	file_compressed.c
 	filesystem.c
 	filter_files.c
 	g711.c
 	inet_addr.c
+	inet_cidr.c
 	interface.c
 	introspection.c
 	jsmn.c
@@ -196,10 +214,12 @@ set(WSUTIL_COMMON_FILES
 	to_str.c
 	type_util.c
 	unicode-utils.c
+	value_string.c
 	version_info.c
 	ws_getopt.c
 	ws_mempbrk.c
 	ws_pipe.c
+	ws_strptime.c
 	wsgcrypt.c
 	wsjson.c
 	wslog.c
@@ -304,10 +324,6 @@ if(HAVE_SSE4_2)
 	list(APPEND WSUTIL_FILES ws_mempbrk_sse42.c)
 endif()
 
-if(NOT HAVE_STRPTIME)
-	list(APPEND WSUTIL_FILES strptime.c)
-endif()
-
 if(APPLE)
 	#
 	# We assume that APPLE means macOS so that we have the macOS
@@ -321,6 +337,28 @@ set_source_files_properties(
 	PROPERTIES
 	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
 )
+
+if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
+	# The optimizer in GCC 12.2 (at least) gets confused about "ulpmask"
+	# being used uninitialized.  Silence it.
+	set_source_files_properties(
+		dtoa.c
+		PROPERTIES
+		COMPILE_FLAGS "${WERROR_COMMON_FLAGS} -Wno-maybe-uninitialized"
+	)
+	# Make GCC follow the C standard with regards to excess precision to
+	# avoid floating point instability on x86 processors without SSE
+	# (using the x87 FPU and 80-bit floating point intermediates.)
+	# GCC supports -fexcess-precision=standard for C starting with 4.5.
+	# (Wireshark requires C11, so not clear the project can be compiled
+	# with an older version anyway so don't bother testing for the flag.)
+	set_property(SOURCE
+		str_util.c
+		APPEND
+		PROPERTY
+		COMPILE_OPTIONS
+		-fexcess-precision=standard)
+endif()
 
 if (HAVE_SSE4_2)
 	# TODO with CMake 2.8.12, we could use COMPILE_OPTIONS and just append
@@ -337,7 +375,7 @@ if (ENABLE_APPLICATION_BUNDLE)
 		filesystem.c
 		PROPERTIES
 		COMPILE_FLAGS "${WERROR_COMMON_FLAGS} -DENABLE_APPLICATION_BUNDLE"
-)
+	)
 endif()
 
 add_library(wsutil
@@ -368,16 +406,21 @@ endif()
 target_link_libraries(wsutil
 	PUBLIC
 		${GLIB2_LIBRARIES}
+		${XXHASH_LIBRARIES}
 	PRIVATE
 		${GMODULE2_LIBRARIES}
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${CMAKE_DL_LIBS}
 		${GCRYPT_LIBRARIES}
 		${GNUTLS_LIBRARIES}
+		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
-		${PCRE2_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
+		${LZ4_LIBRARIES}
+		$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_LIBRARIES},${PCRE2_LIBRARIES}>
 		${WIN_IPHLPAPI_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
+		${WIN_PSAPI_LIBRARY}
 )
 
 target_include_directories(wsutil SYSTEM
@@ -385,9 +428,13 @@ target_include_directories(wsutil SYSTEM
 		${GLIB2_INCLUDE_DIRS}
 		${GCRYPT_INCLUDE_DIRS}
 		${GNUTLS_INCLUDE_DIRS}
+		${XXHASH_INCLUDE_DIRS}
 	PRIVATE
 		${GMODULE2_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
+		${ZLIBNG_INCLUDE_DIRS}
+		${ZSTD_INCLUDE_DIRS}
+		${LZ4_INCLUDE_DIRS}
 		${PCRE2_INCLUDE_DIRS}
 )
 
@@ -428,10 +475,15 @@ target_link_libraries(wsutil_static
 		${CMAKE_DL_LIBS}
 		${GCRYPT_LIBRARIES}
 		${GNUTLS_LIBRARIES}
+		${M_LIBRARIES}
+		${XXHASH_LIBRARIES}
 		${ZLIB_LIBRARIES}
-		${PCRE2_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
+		${LZ4_LIBRARIES}
+		$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_LIBRARIES},${PCRE2_LIBRARIES}>
 		${WIN_IPHLPAPI_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
+		${WIN_PSAPI_LIBRARY}
 )
 
 target_include_directories(wsutil_static SYSTEM
@@ -441,7 +493,11 @@ target_include_directories(wsutil_static SYSTEM
 		${GNUTLS_INCLUDE_DIRS}
 	PRIVATE
 		${GMODULE2_INCLUDE_DIRS}
+		${XXHASH_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
+		${ZLIBNG_INCLUDE_DIRS}
+		${ZSTD_INCLUDE_DIRS}
+		${LZ4_INCLUDE_DIRS}
 		${PCRE2_INCLUDE_DIRS}
 )
 
@@ -464,7 +520,7 @@ add_executable(test_wsutil EXCLUDE_FROM_ALL
 	test_wsutil.c
 )
 
-target_link_libraries(test_wsutil ${GLIB2_LIBRARIES} wsutil)
+target_link_libraries(test_wsutil ${M_LIBRARIES} ${GLIB2_LIBRARIES} wsutil)
 
 set_target_properties(test_wsutil PROPERTIES
 	FOLDER "Tests"

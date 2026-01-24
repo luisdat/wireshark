@@ -24,17 +24,17 @@
 void proto_register_bootparams(void);
 void proto_reg_handoff_bootparams(void);
 
-static int proto_bootparams = -1;
-static int hf_bootparams_procedure_v1 = -1;
-static int hf_bootparams_host = -1;
-static int hf_bootparams_domain = -1;
-static int hf_bootparams_fileid = -1;
-static int hf_bootparams_filepath = -1;
-static int hf_bootparams_hostaddr = -1;
-static int hf_bootparams_routeraddr = -1;
-static int hf_bootparams_addresstype = -1;
+static int proto_bootparams;
+static int hf_bootparams_procedure_v1;
+static int hf_bootparams_host;
+static int hf_bootparams_domain;
+static int hf_bootparams_fileid;
+static int hf_bootparams_filepath;
+static int hf_bootparams_hostaddr;
+static int hf_bootparams_routeraddr;
+static int hf_bootparams_addresstype;
 
-static gint ett_bootparams = -1;
+static int ett_bootparams;
 
 
 static const value_string addr_type[] =
@@ -46,8 +46,8 @@ static const value_string addr_type[] =
 static int
 dissect_bp_address(tvbuff_t *tvb, int offset, proto_tree *tree, int hfindex)
 {
-	guint32 type;
-	guint32 ipaddr;
+	uint32_t type;
+	uint32_t ipaddr;
 
 
 	type = tvb_get_ntohl(tvb, offset);
@@ -56,10 +56,10 @@ dissect_bp_address(tvbuff_t *tvb, int offset, proto_tree *tree, int hfindex)
 
 	switch(type){
 	case 1:
-		ipaddr = ((tvb_get_guint8(tvb, offset+3 )&0xff)<<24)
-			|((tvb_get_guint8(tvb, offset+7 )&0xff)<<16)
-			|((tvb_get_guint8(tvb, offset+11)&0xff)<<8 )
-			|((tvb_get_guint8(tvb, offset+15)&0xff) );
+		ipaddr = ((tvb_get_uint8(tvb, offset+3 )&0xff)<<24)
+			|((tvb_get_uint8(tvb, offset+7 )&0xff)<<16)
+			|((tvb_get_uint8(tvb, offset+11)&0xff)<<8 )
+			|((tvb_get_uint8(tvb, offset+15)&0xff) );
 		proto_tree_add_ipv4(tree, hfindex, tvb,
 			offset, 16, g_ntohl(ipaddr));
 		offset += 16;
@@ -74,24 +74,24 @@ dissect_bp_address(tvbuff_t *tvb, int offset, proto_tree *tree, int hfindex)
 
 
 static int
-dissect_getfile_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_getfile_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-	offset = dissect_rpc_string(tvb, tree, hf_bootparams_host, offset, NULL);
-	offset = dissect_rpc_string(tvb, tree, hf_bootparams_fileid, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_bootparams_host, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_bootparams_fileid, offset, NULL);
 
 	return offset;
 }
 
 static int
-dissect_getfile_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_getfile_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-	offset = dissect_rpc_string(tvb, tree, hf_bootparams_host, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_bootparams_host, offset, NULL);
 	offset = dissect_bp_address(tvb, offset, tree, hf_bootparams_hostaddr);
-	offset = dissect_rpc_string(tvb, tree, hf_bootparams_filepath, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_bootparams_filepath, offset, NULL);
 
 	return offset;
 }
@@ -105,12 +105,12 @@ dissect_whoami_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, voi
 }
 
 static int
-dissect_whoami_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_whoami_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-    offset = dissect_rpc_string(tvb, tree, hf_bootparams_host, offset, NULL);
-	offset = dissect_rpc_string(tvb, tree, hf_bootparams_domain, offset, NULL);
+    offset = dissect_rpc_string(tvb, pinfo, tree, hf_bootparams_host, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_bootparams_domain, offset, NULL);
 	offset = dissect_bp_address(tvb, offset, tree, hf_bootparams_routeraddr);
 
 	return offset;
@@ -160,7 +160,7 @@ proto_register_bootparams(void)
 			NULL, 0, NULL, HFILL }},
 		{ &hf_bootparams_hostaddr, {
 			"Client Address", "bootparams.hostaddr", FT_IPv4, BASE_NONE,
-			NULL, 0, "Address", HFILL }},
+			NULL, 0, NULL, HFILL }},
 		{ &hf_bootparams_routeraddr, {
 			"Router Address", "bootparams.routeraddr", FT_IPv4, BASE_NONE,
 			NULL, 0, NULL, HFILL }},
@@ -168,7 +168,7 @@ proto_register_bootparams(void)
 			"Address Type", "bootparams.type", FT_UINT32, BASE_DEC,
 			VALS(addr_type), 0, NULL, HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_bootparams,
 	};
 

@@ -8,12 +8,12 @@ INCLUDE(FindChocolatey)
 
 FIND_PROGRAM(ASCIIDOCTOR_EXECUTABLE
     NAMES
-        asciidoctorj.cmd
-        asciidoctorj.bat
-        asciidoctorj
         asciidoctor.cmd
         asciidoctor.bat
         asciidoctor
+        asciidoctorj.cmd
+        asciidoctorj.bat
+        asciidoctorj
         asciidoctor.ruby2.1
         # XXX Add Asciidoctor.js releases (asciidoctor-linux,
         # asciidoctor-macos, asciidoctor-win) if that ever becomes an option.
@@ -40,19 +40,33 @@ if(ASCIIDOCTOR_EXECUTABLE)
         )
     endfunction(set_asciidoctor_target_properties)
 
+    set (_ad_failure_level_args)
+    if (ENABLE_WERROR)
+        execute_process( COMMAND ${ASCIIDOCTOR_EXECUTABLE} --help OUTPUT_VARIABLE _ad_help )
+        if (_ad_help MATCHES "--failure-level")
+            set (_ad_failure_level_args --failure-level WARN)
+        endif()
+    endif()
+
     set (_asciidoctor_common_args
-        # Doesn't work with AsciidoctorJ?
-        # --failure-level=WARN
+        # AsciidoctorJ added --failure-level in version 2.5.6
         # --trace
         --quiet
-        --attribute build_dir=${CMAKE_CURRENT_BINARY_DIR}
-        --require ${CMAKE_SOURCE_DIR}/docbook/asciidoctor-macros/ws_utils.rb
-        --require ${CMAKE_SOURCE_DIR}/docbook/asciidoctor-macros/commaize-block.rb
-        --require ${CMAKE_SOURCE_DIR}/docbook/asciidoctor-macros/cveidlink-inline-macro.rb
-        --require ${CMAKE_SOURCE_DIR}/docbook/asciidoctor-macros/manarg-block.rb
-        --require ${CMAKE_SOURCE_DIR}/docbook/asciidoctor-macros/wsbuglink-inline-macro.rb
-        --require ${CMAKE_SOURCE_DIR}/docbook/asciidoctor-macros/wssalink-inline-macro.rb
+        ${_ad_failure_level_args}
+        --attribute build_dir=${CMAKE_BINARY_DIR}/doc
+        --attribute css_dir=${CMAKE_SOURCE_DIR}/doc
+        --attribute min-macos-version=${MIN_MACOS_VERSION}
+        --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/ws_utils.rb
+        --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/commaize-block.rb
+        --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/cveidlink-inline-macro.rb
+        --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/manarg-block.rb
+        --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/wsbuglink-inline-macro.rb
+        --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/wssalink-inline-macro.rb
     )
+
+    unset(_ad_full_version)
+    unset(_ad_help)
+    unset(_ad_failure_level_args)
 
     set(_asciidoctor_common_command
         ${CMAKE_COMMAND} -E env TZ=UTC
@@ -78,7 +92,7 @@ if(ASCIIDOCTOR_EXECUTABLE)
                 --out-file ${_output_xml}
                 ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
             DEPENDS
-                ${CMAKE_SOURCE_DIR}/docbook/attributes.adoc
+                ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                 ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
                 ${ARGN}
         )
@@ -97,10 +111,19 @@ if(ASCIIDOCTOR_EXECUTABLE)
         unset(_output_xml)
     ENDMACRO()
 
-    # Single page only, for the release notes and man pages.
-    MACRO( ASCIIDOCTOR2HTML _asciidocsource )
-        GET_FILENAME_COMPONENT( _source_base_name ${_asciidocsource} NAME_WE )
-        set( _output_html ${_source_base_name}.html )
+    # Single page only, for the release notes and other user-facing documentation.
+    # Man pages are converted separately below.
+    function(ASCIIDOCTOR2HTML _asciidocsource)
+        cmake_parse_arguments(arg "CONVERT_UNDERSCORES" "OUTPUT" "" ${ARGN})
+        get_filename_component(_source_base_name ${_asciidocsource} NAME_WE)
+        if (arg_CONVERT_UNDERSCORES)
+            string(REPLACE "_" " " _source_base_name ${_source_base_name})
+        endif()
+        if (arg_OUTPUT)
+            set(_output_html ${arg_OUTPUT})
+        else()
+            set(_output_html ${_source_base_name}.html)
+        endif()
 
         ADD_CUSTOM_COMMAND(
             OUTPUT
@@ -110,45 +133,47 @@ if(ASCIIDOCTOR_EXECUTABLE)
                 --out-file ${_output_html}
                 ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
             DEPENDS
-                ${CMAKE_SOURCE_DIR}/docbook/attributes.adoc
+                ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                 ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
-                ${ARGN}
+                ${_asciidocsource}
         )
-        add_custom_target(generate_${_output_html} DEPENDS ${_output_html})
-        set_asciidoctor_target_properties(generate_${_output_html})
-        unset(_output_html)
-    ENDMACRO()
+        # string(REPLACE " " "_" _output_target ${_source_base_name})
+        # add_custom_target(generate_${_output_target}_html DEPENDS ${_output_html})
+        # set_asciidoctor_target_properties(generate_${_output_target}_html)
+    endfunction()
 
-    MACRO( ASCIIDOCTOR2TXT _asciidocsource )
-        GET_FILENAME_COMPONENT( _source_base_name ${_asciidocsource} NAME_WE )
-        set( _output_html ${_source_base_name}.html )
-        set( _output_txt ${_source_base_name}.txt )
+    function(ASCIIDOCTOR2TXT _asciidocsource)
+        cmake_parse_arguments(arg "CONVERT_UNDERSCORES" "" "" ${ARGN})
+        get_filename_component(_source_base_name ${_asciidocsource} NAME_WE)
+        if (arg_CONVERT_UNDERSCORES)
+            string(REPLACE "_" " " _source_base_name ${_source_base_name})
+        endif()
+        set(_input_html ${_source_base_name}.html)
+        set(_output_txt ${_source_base_name}.txt)
 
         ADD_CUSTOM_COMMAND(
             OUTPUT
                 ${_output_txt}
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/html2text.py
-                ${_output_html}
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/html2text.py
+                ${_input_html}
                 > ${_output_txt}
             DEPENDS
                 ${MAN_INCLUDES}
-                ${CMAKE_SOURCE_DIR}/docbook/attributes.adoc
+                ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                 ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
-                ${_output_html}
-                ${ARGN}
+                ${_input_html}
+                ${_asciidocsource}
         )
-        unset(_output_html)
-        unset(_output_txt)
-    ENDMACRO()
+    endfunction()
 
     # Generate one or more ROFF man pages
-    MACRO(ASCIIDOCTOR2ROFFMAN _man_section)
+    function(ASCIIDOCTOR2ROFFMAN _man_section)
         set(_input_adoc)
         set(_output_man)
         foreach(_src_file ${ARGN})
             list(APPEND _input_adoc ${_src_file})
             GET_FILENAME_COMPONENT(_source_base_name ${_src_file} NAME_WE )
-            list(APPEND _output_man ${_source_base_name}.${_man_section} )
+            list(APPEND _output_man man_pages/${_source_base_name}.${_man_section} )
         endforeach()
 
         ADD_CUSTOM_COMMAND(
@@ -156,26 +181,23 @@ if(ASCIIDOCTOR_EXECUTABLE)
                 ${_output_man}
             COMMAND ${_asciidoctor_common_command}
                 --backend manpage
-                --destination-dir ${CMAKE_CURRENT_BINARY_DIR}
+                --destination-dir ${CMAKE_CURRENT_BINARY_DIR}/man_pages
                 ${_input_adoc}
             DEPENDS
                 ${MAN_INCLUDES}
-                ${CMAKE_SOURCE_DIR}/docbook/attributes.adoc
+                ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                 ${_input_adoc}
         )
-        unset(_src_file)
-        unset(_input_adoc)
-        unset(_output_man)
-    ENDMACRO()
+    endfunction()
 
     # Generate one or more HTML man pages
-    MACRO(ASCIIDOCTOR2HTMLMAN)
+    function(ASCIIDOCTOR2HTMLMAN)
         set(_input_adoc)
         set(_output_man)
         foreach(_src_file ${ARGN})
             list(APPEND _input_adoc ${_src_file})
             GET_FILENAME_COMPONENT(_source_base_name ${_src_file} NAME_WE )
-            list(APPEND _output_man ${_source_base_name}.html )
+            list(APPEND _output_man man_pages/${_source_base_name}.html )
         endforeach()
 
         ADD_CUSTOM_COMMAND(
@@ -183,25 +205,20 @@ if(ASCIIDOCTOR_EXECUTABLE)
                 ${_output_man}
             COMMAND ${_asciidoctor_common_command}
                 --backend html
-                --destination-dir ${CMAKE_CURRENT_BINARY_DIR}
+                --destination-dir ${CMAKE_CURRENT_BINARY_DIR}/man_pages
                 ${_input_adoc}
             DEPENDS
                 ${MAN_INCLUDES}
-                ${CMAKE_SOURCE_DIR}/docbook/attributes.adoc
+                ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                 ${_input_adoc}
         )
-        unset(_src_file)
-        unset(_input_adoc)
-        unset(_output_man)
-    ENDMACRO()
-
-    # news: release-notes.txt
-    #         ${CMAKE_COMMAND} -E copy_if_different release-notes.txt ../NEWS
+    endfunction()
 
     FIND_PROGRAM(ASCIIDOCTOR_PDF_EXECUTABLE
         NAMES
-            asciidoctorj
+            asciidoctor-pdf.bat
             asciidoctor-pdf
+            asciidoctorj
         PATHS
             /bin
             /usr/bin
@@ -230,9 +247,12 @@ if(ASCIIDOCTOR_EXECUTABLE)
                     ${_output_pdf}
             COMMAND ${_asciidoctor_pdf_common_command}
                     --out-file "${_output_pdf}"
+                    -a pdf-fontsdir=${CMAKE_SOURCE_DIR}/resources/fonts
+                    -a pdf-themesdir=${CMAKE_SOURCE_DIR}/doc/asciidoctor-themes
+                    -a pdf-theme=wsug
                     ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
             DEPENDS
-                    ${CMAKE_SOURCE_DIR}/docbook/attributes.adoc
+                    ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                     ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
                     ${ARGN}
             VERBATIM
@@ -252,8 +272,9 @@ if(ASCIIDOCTOR_EXECUTABLE)
 
     FIND_PROGRAM(ASCIIDOCTOR_EPUB_EXECUTABLE
         NAMES
-            asciidoctorj
+            asciidoctor-epub3.bat
             asciidoctor-epub3
+            asciidoctorj
         PATHS
             /bin
             /usr/bin
@@ -283,7 +304,7 @@ if(ASCIIDOCTOR_EXECUTABLE)
                     --out-file "${_output_epub}"
                     ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
             DEPENDS
-                    ${CMAKE_SOURCE_DIR}/docbook/attributes.adoc
+                    ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                     ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
                     ${ARGN}
             VERBATIM

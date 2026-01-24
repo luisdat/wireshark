@@ -34,9 +34,12 @@
 #include <epan/expert.h>
 #include "packet-rdm.h"
 #include "packet-arp.h"
+#include "data-dmx-manfid.h"
 
 void proto_register_rdm(void);
 void proto_reg_handoff_rdm(void);
+
+static dissector_handle_t rdm_handle;
 
 #define RDM_SC_RDM          0xCC
 #define RDM_SC_SUB_MESSAGE  0x01
@@ -240,7 +243,7 @@ static const value_string rdm_nr_vals[] = {
 #define RDM_PARAM_ID_PRESET_MERGEMODE                             0x1043
 #define RDM_PARAM_ID_POWER_ON_SELF_TEST                           0x1044
 
-const value_string rdm_param_id_vals[] = {
+static const value_string rdm_param_id_vals[] = {
   { RDM_PARAM_ID_DISC_UNIQUE_BRANCH,                  "Discovery Unique Branch" },
   { RDM_PARAM_ID_DISC_MUTE,                           "Discovery Mute" },
   { RDM_PARAM_ID_DISC_UN_MUTE,                        "Discovery Un-Mute" },
@@ -698,6 +701,203 @@ static const value_string rdm_product_cat_vals[] = {
 };
 static value_string_ext rdm_product_cat_vals_ext = VALUE_STRING_EXT_INIT(rdm_product_cat_vals);
 
+/* E1.20 Table A-6 */
+#define RDM_PRODUCT_DETAIL_NOT_DECLARED		0x0000
+// Generally applied to fixtures
+#define RDM_PRODUCT_DETAIL_ARC			0x0001
+#define RDM_PRODUCT_DETAIL_METAL_HALIDE		0x0002
+#define RDM_PRODUCT_DETAIL_INCANDESCENT		0x0003
+#define RDM_PRODUCT_DETAIL_LED			0x0004
+#define RDM_PRODUCT_DETAIL_FLUORESCENT		0x0005
+#define RDM_PRODUCT_DETAIL_COLDCATHODE		0x0006
+#define RDM_PRODUCT_DETAIL_ELECTROLUMINESCENT	0x0007
+#define RDM_PRODUCT_DETAIL_LASER		0x0008
+#define RDM_PRODUCT_DETAIL_FLASHTUBE		0x0009
+// Generally applied to fixture accessories
+#define RDM_PRODUCT_DETAIL_COLORSCROLLER	0x0100
+#define RDM_PRODUCT_DETAIL_COLORWHEEL		0x0101
+#define RDM_PRODUCT_DETAIL_COLORCHANGE		0x0102
+#define RDM_PRODUCT_DETAIL_IRIS_DOUSER		0x0103
+#define RDM_PRODUCT_DETAIL_DIMMING_SHUTTER	0x0104
+#define RDM_PRODUCT_DETAIL_PROFILE_SHUTTER	0x0105
+#define RDM_PRODUCT_DETAIL_BARNDOOR_SHUTTER	0x0106
+#define RDM_PRODUCT_DETAIL_EFFECTS_DISC		0x0107
+#define RDM_PRODUCT_DETAIL_GOBO_ROTATOR		0x0108
+// Generally applied to Projectors
+#define RDM_PRODUCT_DETAIL_VIDEO		0x0200
+#define RDM_PRODUCT_DETAIL_SLIDE		0x0201
+#define RDM_PRODUCT_DETAIL_FILM			0x0202
+#define RDM_PRODUCT_DETAIL_OILWHEEL		0x0203
+#define RDM_PRODUCT_DETAIL_LCDGATE		0x0204
+// Generally applied to Atmospheric Effects
+#define RDM_PRODUCT_DETAIL_FOGGER_GLYCOL	0x0300
+#define RDM_PRODUCT_DETAIL_FOGGER_MINERALOIL	0x0301
+#define RDM_PRODUCT_DETAIL_FOGGER_WATER		0x0302
+#define RDM_PRODUCT_DETAIL_CO2			0x0303
+#define RDM_PRODUCT_DETAIL_LN2			0x0304
+#define RDM_PRODUCT_DETAIL_BUBBLE		0x0305
+#define RDM_PRODUCT_DETAIL_FLAME_PROPANE	0x0306
+#define RDM_PRODUCT_DETAIL_FLAME_OTHER		0x0307
+#define RDM_PRODUCT_DETAIL_OLEFACTORY_STIMULATOR	0x0308
+#define RDM_PRODUCT_DETAIL_SNOW			0x0309
+#define RDM_PRODUCT_DETAIL_WATER_JET		0x030A
+#define RDM_PRODUCT_DETAIL_WIND			0x030B
+#define RDM_PRODUCT_DETAIL_CONFETTI		0x030C
+#define RDM_PRODUCT_DETAIL_HAZARD		0x030D
+// Generally applied to Dimmers/Power controllers
+#define RDM_PRODUCT_DETAIL_PHASE_CONTROL	0x0400
+#define RDM_PRODUCT_DETAIL_REVERSE_PHASE_CONTROL	0x0401
+#define RDM_PRODUCT_DETAIL_SINE			0x0402
+#define RDM_PRODUCT_DETAIL_PWM			0x0403
+#define RDM_PRODUCT_DETAIL_DC			0x0404
+#define RDM_PRODUCT_DETAIL_HFBALLAST		0x0405
+#define RDM_PRODUCT_DETAIL_HFHV_NEONBALLAST	0x0406
+#define RDM_PRODUCT_DETAIL_HFHV_EL		0x0407
+#define RDM_PRODUCT_DETAIL_MHR_BALLAST		0x0408
+#define RDM_PRODUCT_DETAIL_BITANGLE_MODULATION	0x0409
+#define RDM_PRODUCT_DETAIL_FREQUENCY_MODULATION	0x040A
+#define RDM_PRODUCT_DETAIL_HIGHFREQUENCY_12V	0x040B
+#define RDM_PRODUCT_DETAIL_RELAY_MECHANICAL	0x040C
+#define RDM_PRODUCT_DETAIL_RELAY_ELECTRONIC	0x040D
+#define RDM_PRODUCT_DETAIL_SWITCH_ELECTRONIC	0x040E
+#define RDM_PRODUCT_DETAIL_CONTACTOR		0x040F
+// Generally applied to Scenic drive
+#define RDM_PRODUCT_DETAIL_MIRRORBALL_ROTATOR	0x0500
+#define RDM_PRODUCT_DETAIL_OTHER_ROTATOR	0x0501
+#define RDM_PRODUCT_DETAIL_KABUKI_DROP		0x0502
+#define RDM_PRODUCT_DETAIL_CURTAIN		0x0503
+#define RDM_PRODUCT_DETAIL_LINESET		0x0504
+#define RDM_PRODUCT_DETAIL_MOTOR_CONTROL	0x0505
+#define RDM_PRODUCT_DETAIL_DAMPER_CONTROL	0x0506
+// Generally applied to Data Distribution
+#define RDM_PRODUCT_DETAIL_SPLITTER		0x0600
+#define RDM_PRODUCT_DETAIL_ETHERNET_NODE	0x0601
+#define RDM_PRODUCT_DETAIL_MERGE		0x0602
+#define RDM_PRODUCT_DETAIL_DATAPATCH		0x0603
+#define RDM_PRODUCT_DETAIL_WIRELESS_LINK	0x0604
+// Generally applied to Data Conversion and Interfaces
+#define RDM_PRODUCT_DETAIL_PROTOCOL_CONVERTOR	0x0701
+#define RDM_PRODUCT_DETAIL_ANALOG_DEMULTIPLEX	0x0702
+#define RDM_PRODUCT_DETAIL_ANALOG_MULTIPLEX	0x0703
+#define RDM_PRODUCT_DETAIL_SWITCH_PANEL		0x0704
+// Generally applied to Audio or Video (AV) devices
+#define RDM_PRODUCT_DETAIL_ROUTER		0x0800
+#define RDM_PRODUCT_DETAIL_FADER		0x0801
+#define RDM_PRODUCT_DETAIL_MIXER		0x0802
+// Generally applied to Controllers, Backup devices, and Test Equipment
+#define RDM_PRODUCT_DETAIL_CHANGEOVER_MANUAL	0x0900
+#define RDM_PRODUCT_DETAIL_CHANGEOVER_AUTO	0x0901
+#define RDM_PRODUCT_DETAIL_TEST			0x0902
+// Could be applied to any category
+#define RDM_PRODUCT_DETAIL_GFI_RCD		0x0A00
+#define RDM_PRODUCT_DETAIL_BATTERY		0x0A01
+#define RDM_PRODUCT_DETAIL_CONTROLLABLE_BREAKER	0x0A02
+// Input Devices E1.20-2025
+#define RDM_PRODUCT_DETAIL_INPUT		0x0B00
+#define RDM_PRODUCT_DETAIL_SENSOR		0x0B01
+#define RDM_PRODUCT_DETAIL_OTHER		0x7FFF
+
+static const value_string rdm_product_detail_vals[] = {
+  { RDM_PRODUCT_DETAIL_NOT_DECLARED,	"Not Declared" },
+// Generally applied to fixtures
+  { RDM_PRODUCT_DETAIL_ARC,		"Arc Lamp" },
+  { RDM_PRODUCT_DETAIL_METAL_HALIDE,	"Metal Halide" },
+  { RDM_PRODUCT_DETAIL_INCANDESCENT,	"Incandescent" },
+  { RDM_PRODUCT_DETAIL_LED,		"LED" },
+// ANSI-ESTA E1.20-2010 misspells this FLUROESCENT
+  { RDM_PRODUCT_DETAIL_FLUORESCENT,	"Fluorescent" },
+  { RDM_PRODUCT_DETAIL_COLDCATHODE,	"Cold Cathode" },
+  { RDM_PRODUCT_DETAIL_ELECTROLUMINESCENT,	"Electroluminescent" },
+  { RDM_PRODUCT_DETAIL_LASER,		"LED" },
+  { RDM_PRODUCT_DETAIL_FLASHTUBE,	"Flashtube" },
+// Generally applied to fixture accessories
+  { RDM_PRODUCT_DETAIL_COLORSCROLLER,	"Color Scroller" },
+  { RDM_PRODUCT_DETAIL_COLORWHEEL,	"Color Wheel" },
+  { RDM_PRODUCT_DETAIL_COLORCHANGE,	"Color Change" },
+  { RDM_PRODUCT_DETAIL_IRIS_DOUSER,	"Iris / Douser" },
+  { RDM_PRODUCT_DETAIL_DIMMING_SHUTTER,	"Dimming Shutter" },
+  { RDM_PRODUCT_DETAIL_PROFILE_SHUTTER,	"Profile Shutter" },
+  { RDM_PRODUCT_DETAIL_BARNDOOR_SHUTTER,	"Barn Door Shutter" },
+  { RDM_PRODUCT_DETAIL_EFFECTS_DISC,	"Effects Disc" },
+  { RDM_PRODUCT_DETAIL_GOBO_ROTATOR,	"Gobo Rotator" },
+// Generally applied to Projectors
+  { RDM_PRODUCT_DETAIL_VIDEO,		"Video" },
+  { RDM_PRODUCT_DETAIL_SLIDE,		"Slide" },
+  { RDM_PRODUCT_DETAIL_FILM,		"Film" },
+  { RDM_PRODUCT_DETAIL_OILWHEEL,	"Oil Wheel" },
+  { RDM_PRODUCT_DETAIL_LCDGATE,		"LCD Gate" },
+// Generally applied to Atmospheric Effects
+  { RDM_PRODUCT_DETAIL_FOGGER_GLYCOL,	"Fogger, Glycol" },
+  { RDM_PRODUCT_DETAIL_FOGGER_MINERALOIL,	"Fogger, Mineral Oil" },
+  { RDM_PRODUCT_DETAIL_FOGGER_WATER,	"Fogger, Water" },
+// ANSI E1.20-2010 has a '0' instead of 'O' in CO2
+  { RDM_PRODUCT_DETAIL_CO2,		"Dry Ice / CO2 based" },
+  { RDM_PRODUCT_DETAIL_LN2,		"Liquid Nitrogen based" },
+  { RDM_PRODUCT_DETAIL_BUBBLE,		"Bubble or Foam" },
+  { RDM_PRODUCT_DETAIL_FLAME_PROPANE,	"Propane Flame" },
+  { RDM_PRODUCT_DETAIL_FLAME_OTHER,	"Other Flame" },
+  { RDM_PRODUCT_DETAIL_OLEFACTORY_STIMULATOR,	"Scents" },
+  { RDM_PRODUCT_DETAIL_SNOW,		"Snow" },
+  { RDM_PRODUCT_DETAIL_WATER_JET,	"Water Jet" },
+  { RDM_PRODUCT_DETAIL_WIND,		"Wind" },
+  { RDM_PRODUCT_DETAIL_CONFETTI,	"Confetti" },
+  { RDM_PRODUCT_DETAIL_HAZARD,		"Hazard (any pyrotechnic)" },
+// Generally applied to Dimmers/Power controllers
+  { RDM_PRODUCT_DETAIL_PHASE_CONTROL,	"Phase Control" },
+  { RDM_PRODUCT_DETAIL_REVERSE_PHASE_CONTROL,	"Reverse Phase Control" },
+  { RDM_PRODUCT_DETAIL_SINE,		"Sine" },
+  { RDM_PRODUCT_DETAIL_PWM,		"Pulse Width Modulation" },
+  { RDM_PRODUCT_DETAIL_DC,		"DC" },
+  { RDM_PRODUCT_DETAIL_HFBALLAST,	"HF Ballast" },
+  { RDM_PRODUCT_DETAIL_HFHV_NEONBALLAST,	"HF Neon Ballast" },
+  { RDM_PRODUCT_DETAIL_HFHV_EL,		"HFHV Electroluminescent" },
+  { RDM_PRODUCT_DETAIL_MHR_BALLAST,	"Metal Halide Ballast" },
+  { RDM_PRODUCT_DETAIL_BITANGLE_MODULATION,	"Bit Angle Modulation" },
+  { RDM_PRODUCT_DETAIL_FREQUENCY_MODULATION,	"Frequency Modulation" },
+  { RDM_PRODUCT_DETAIL_HIGHFREQUENCY_12V,	"High Frequency 12V" },
+  { RDM_PRODUCT_DETAIL_RELAY_MECHANICAL,	"Mechanical Relay" },
+  { RDM_PRODUCT_DETAIL_RELAY_ELECTRONIC,	"Electronic Relay" },
+  { RDM_PRODUCT_DETAIL_SWITCH_ELECTRONIC,	"Electronic Switch" },
+  { RDM_PRODUCT_DETAIL_CONTACTOR,	"Contactor" },
+// Generally applied to Scenic driver
+  { RDM_PRODUCT_DETAIL_MIRRORBALL_ROTATOR,	"Mirror Ball Rotator" },
+  { RDM_PRODUCT_DETAIL_OTHER_ROTATOR,	"Other Rotator" },
+  { RDM_PRODUCT_DETAIL_KABUKI_DROP,	"Kabuki Drop" },
+  { RDM_PRODUCT_DETAIL_CURTAIN,		"Curtain" },
+  { RDM_PRODUCT_DETAIL_LINESET,		"Line Set" },
+  { RDM_PRODUCT_DETAIL_MOTOR_CONTROL,	"Motor Control" },
+  { RDM_PRODUCT_DETAIL_DAMPER_CONTROL,	"Damper Control" },
+// Generally applied to Data Distribution
+  { RDM_PRODUCT_DETAIL_SPLITTER,	"Splitter" },
+  { RDM_PRODUCT_DETAIL_ETHERNET_NODE,	"DMX512 to/from Ethernet" },
+  { RDM_PRODUCT_DETAIL_MERGE,		"DMX512 Combiner" },
+  { RDM_PRODUCT_DETAIL_DATAPATCH,	"Datapatch" },
+  { RDM_PRODUCT_DETAIL_WIRELESS_LINK,	"Wireless Link" },
+// Generally applied to Data Conversion and Interfaces
+  { RDM_PRODUCT_DETAIL_PROTOCOL_CONVERTOR,	"Protocol Converter" },
+  { RDM_PRODUCT_DETAIL_ANALOG_DEMULTIPLEX,	"DMX512 to DC Voltage" },
+  { RDM_PRODUCT_DETAIL_ANALOG_MULTIPLEX,	"DC Voltage to DMX512" },
+  { RDM_PRODUCT_DETAIL_SWITCH_PANEL,	"Switch Panel" },
+// Generally applied to Audio or Video (AV) devices
+  { RDM_PRODUCT_DETAIL_ROUTER,		"Router" },
+  { RDM_PRODUCT_DETAIL_FADER,		"Fader" },
+  { RDM_PRODUCT_DETAIL_MIXER,		"Mixer" },
+// Generally applied to Controllers, Backup devices, and Test Equipment
+  { RDM_PRODUCT_DETAIL_CHANGEOVER_MANUAL,	"Manual Changeover" },
+  { RDM_PRODUCT_DETAIL_CHANGEOVER_AUTO,	"Auto Changeover" },
+  { RDM_PRODUCT_DETAIL_TEST,		"Test Equipment" },
+// Could be applied to any category
+  { RDM_PRODUCT_DETAIL_GFI_RCD,		"Includes GFI/RCD Trip" },
+  { RDM_PRODUCT_DETAIL_BATTERY,		"Battery Operated" },
+  { RDM_PRODUCT_DETAIL_CONTROLLABLE_BREAKER,	"Controllable Breaker" },
+// Input Devices E1.20-2025
+  { RDM_PRODUCT_DETAIL_INPUT,		"Generic Input" },
+  { RDM_PRODUCT_DETAIL_SENSOR,		"Sensor Input" },
+  { RDM_PRODUCT_DETAIL_OTHER,		"Other" },
+  { 0, NULL },
+};
+static value_string_ext rdm_product_detail_vals_ext = VALUE_STRING_EXT_INIT(rdm_product_detail_vals);
+
 /* E1.37-1 */
 #define RDM_PRESET_NOT_PROGRAMMED        0x00
 #define RDM_PRESET_PROGRAMMED            0x01
@@ -816,299 +1016,316 @@ static const value_string on_off_vals[] = {
   { 0, NULL },
 };
 
-static int proto_rdm = -1;
+static int proto_rdm;
 
-static int hf_rdm_sub_start_code = -1;
-static int hf_rdm_message_length = -1;
-static int hf_rdm_dest_uid = -1;
-static int hf_rdm_src_uid = -1;
-static int hf_rdm_transaction_number = -1;
-static int hf_rdm_port_id = -1;
-static int hf_rdm_response_type = -1;
-static int hf_rdm_message_count = -1;
-static int hf_rdm_sub_device = -1;
-static int hf_rdm_mdb = -1;
-static int hf_rdm_command_class = -1;
-static int hf_rdm_parameter_id = -1;
-static int hf_rdm_parameter_data_length = -1;
-static int hf_rdm_parameter_data = -1;
-static int hf_rdm_parameter_data_raw = -1;
-static int hf_rdm_intron = -1;
-static int hf_rdm_checksum = -1;
-static int hf_rdm_checksum_status = -1;
-static int hf_rdm_trailer = -1;
+static int hf_rdm_sub_start_code;
+static int hf_rdm_message_length;
+static int hf_rdm_dest_uid;
+static int hf_rdm_dest_uid_manf;
+static int hf_rdm_dest_uid_dev;
+static int hf_rdm_src_uid;
+static int hf_rdm_src_uid_manf;
+static int hf_rdm_src_uid_dev;
+static int hf_rdm_transaction_number;
+static int hf_rdm_port_id;
+static int hf_rdm_response_type;
+static int hf_rdm_message_count;
+static int hf_rdm_sub_device;
+static int hf_rdm_mdb;
+static int hf_rdm_command_class;
+static int hf_rdm_parameter_id;
+static int hf_rdm_parameter_data_length;
+static int hf_rdm_parameter_data;
+static int hf_rdm_parameter_data_raw;
+static int hf_rdm_intron;
+static int hf_rdm_checksum;
+static int hf_rdm_checksum_status;
+static int hf_rdm_trailer;
 
-static int hf_rdm_pd_ack_timer_estimated_response_time = -1;
-static int hf_rdm_pd_ack_overflow_raw_data = -1;
-static int hf_rdm_pd_nack_reason_code = -1;
+static int hf_rdm_pd_ack_timer_estimated_response_time;
+static int hf_rdm_pd_ack_overflow_raw_data;
+static int hf_rdm_pd_nack_reason_code;
 
-static int hf_rdm_pd_device_label = -1;
+static int hf_rdm_pd_device_label;
 
-static int hf_rdm_pd_manu_label = -1;
+static int hf_rdm_pd_manu_label;
 
-static int hf_rdm_pd_dmx_start_address = -1;
+static int hf_rdm_pd_dmx_start_address;
 
-static int hf_rdm_pd_queued_message_status = -1;
+static int hf_rdm_pd_queued_message_status;
 
-static int hf_rdm_pd_sensor_nr = -1;
-static int hf_rdm_pd_sensor_type = -1;
-static int hf_rdm_pd_sensor_unit = -1;
-static int hf_rdm_pd_sensor_prefix = -1;
-static int hf_rdm_pd_sensor_value_pres = -1;
-static int hf_rdm_pd_sensor_value_low = -1;
-static int hf_rdm_pd_sensor_value_high = -1;
-static int hf_rdm_pd_sensor_value_rec = -1;
+static int hf_rdm_pd_sensor_nr;
+static int hf_rdm_pd_sensor_type;
+static int hf_rdm_pd_sensor_unit;
+static int hf_rdm_pd_sensor_prefix;
+static int hf_rdm_pd_sensor_value_pres;
+static int hf_rdm_pd_sensor_value_low;
+static int hf_rdm_pd_sensor_value_high;
+static int hf_rdm_pd_sensor_value_rec;
 
-static int hf_rdm_pd_sensor_range_min_value = -1;
-static int hf_rdm_pd_sensor_range_max_value = -1;
-static int hf_rdm_pd_sensor_normal_min_value = -1;
-static int hf_rdm_pd_sensor_normal_max_value = -1;
-static int hf_rdm_pd_sensor_recorded_value_support = -1;
-static int hf_rdm_pd_sensor_description = -1;
+static int hf_rdm_pd_sensor_range_min_value;
+static int hf_rdm_pd_sensor_range_max_value;
+static int hf_rdm_pd_sensor_normal_min_value;
+static int hf_rdm_pd_sensor_normal_max_value;
+static int hf_rdm_pd_sensor_recorded_value_support;
+static int hf_rdm_pd_sensor_description;
 
-static int hf_rdm_pd_device_hours = -1;
-static int hf_rdm_pd_lamp_hours = -1;
-static int hf_rdm_pd_lamp_strikes = -1;
+static int hf_rdm_pd_device_hours;
+static int hf_rdm_pd_lamp_hours;
+static int hf_rdm_pd_lamp_strikes;
 
 
-static int hf_rdm_pd_proto_vers = -1;
-static int hf_rdm_pd_device_model_id = -1;
-static int hf_rdm_pd_product_cat = -1;
-static int hf_rdm_pd_software_vers_id = -1;
-static int hf_rdm_pd_dmx_footprint = -1;
-static int hf_rdm_pd_dmx_pers_current = -1;
-static int hf_rdm_pd_dmx_pers_total = -1;
-static int hf_rdm_pd_sub_device_count = -1;
-static int hf_rdm_pd_sensor_count = -1;
+static int hf_rdm_pd_proto_vers;
+static int hf_rdm_pd_device_model_id;
+static int hf_rdm_pd_product_cat;
+static int hf_rdm_pd_software_vers_id;
+static int hf_rdm_pd_dmx_footprint;
+static int hf_rdm_pd_dmx_pers_current;
+static int hf_rdm_pd_dmx_pers_total;
+static int hf_rdm_pd_sub_device_count;
+static int hf_rdm_pd_sensor_count;
 
-static int hf_rdm_pd_device_model_description = -1;
+static int hf_rdm_pd_device_model_description;
 
-static int hf_rdm_pd_disc_unique_branch_lb_uid = -1;
-static int hf_rdm_pd_disc_unique_branch_ub_uid = -1;
-static int hf_rdm_pd_disc_mute_control_field = -1;
-static int hf_rdm_pd_disc_mute_binding_uid = -1;
-static int hf_rdm_pd_disc_unmute_control_field = -1;
-static int hf_rdm_pd_disc_unmute_binding_uid = -1;
-static int hf_rdm_pd_proxied_devices_uid = -1;
-static int hf_rdm_pd_proxied_device_count = -1;
-static int hf_rdm_pd_proxied_device_list_change = -1;
-static int hf_rdm_pd_real_time_clock_year = -1;
-static int hf_rdm_pd_real_time_clock_month = -1;
-static int hf_rdm_pd_real_time_clock_day = -1;
-static int hf_rdm_pd_real_time_clock_hour = -1;
-static int hf_rdm_pd_real_time_clock_minute = -1;
-static int hf_rdm_pd_real_time_clock_second = -1;
-static int hf_rdm_pd_lamp_state = -1;
-static int hf_rdm_pd_lamp_on_mode = -1;
-static int hf_rdm_pd_device_power_cycles = -1;
-static int hf_rdm_pd_display_invert = -1;
-static int hf_rdm_pd_display_level = -1;
-static int hf_rdm_pd_pan_invert = -1;
-static int hf_rdm_pd_tilt_invert = -1;
-static int hf_rdm_pd_tilt_swap = -1;
-static int hf_rdm_pd_selftest_nr = -1;
-static int hf_rdm_pd_selftest_state = -1;
-static int hf_rdm_pd_selftest_description = -1;
-static int hf_rdm_pd_language_code = -1;
-static int hf_rdm_pd_identify_device = -1;
-static int hf_rdm_pd_identify_device_state = -1;
-static int hf_rdm_pd_reset_device = -1;
-static int hf_rdm_pd_power_state = -1;
-static int hf_rdm_pd_capture_preset_scene_nr = -1;
-static int hf_rdm_pd_capture_preset_up_fade_time = -1;
-static int hf_rdm_pd_capture_preset_down_fade_time = -1;
-static int hf_rdm_pd_capture_preset_wait_time = -1;
-static int hf_rdm_pd_preset_playback_mode = -1;
-static int hf_rdm_pd_preset_playback_level = -1;
-static int hf_rdm_pd_parameter_id = -1;
-static int hf_rdm_pd_parameter_pdl_size = -1;
-static int hf_rdm_pd_parameter_data_type = -1;
-static int hf_rdm_pd_parameter_cmd_class = -1;
-static int hf_rdm_pd_parameter_type = -1;
-static int hf_rdm_pd_parameter_unit = -1;
-static int hf_rdm_pd_parameter_prefix = -1;
-static int hf_rdm_pd_parameter_min_value = -1;
-static int hf_rdm_pd_parameter_max_value = -1;
-static int hf_rdm_pd_parameter_default_value = -1;
-static int hf_rdm_pd_parameter_description = -1;
-static int hf_rdm_pd_software_version_label = -1;
-static int hf_rdm_pd_boot_software_version_id = -1;
-static int hf_rdm_pd_boot_software_version_label = -1;
-static int hf_rdm_pd_comms_status_short_msg = -1;
-static int hf_rdm_pd_comms_status_len_mismatch = -1;
-static int hf_rdm_pd_comms_status_csum_fail = -1;
-static int hf_rdm_pd_status_messages_type = -1;
-static int hf_rdm_pd_status_messages_sub_device_id = -1;
-static int hf_rdm_pd_status_messages_id = -1;
-static int hf_rdm_pd_status_messages_data_value_1 = -1;
-static int hf_rdm_pd_status_messages_data_value_2 = -1;
-static int hf_rdm_pd_status_id = -1;
-static int hf_rdm_pd_status_id_description = -1;
-static int hf_rdm_pd_sub_device_status_report_threshold_status_type = -1;
-static int hf_rdm_pd_product_detail_id_list = -1;
-static int hf_rdm_pd_factory_defaults = -1;
-static int hf_rdm_pd_background_discovery_endpoint_id = -1;
-static int hf_rdm_pd_background_discovery_enabled = -1;
-static int hf_rdm_pd_background_queued_status_policy_current_policy = -1;
-static int hf_rdm_pd_background_queued_status_policy_number_of_policies = -1;
-static int hf_rdm_pd_background_queued_status_policy_description_policy = -1;
-static int hf_rdm_pd_background_queued_status_policy_description_description = -1;
-static int hf_rdm_pd_binding_control_fields_endpoint_id = -1;
-static int hf_rdm_pd_binding_control_fields_uid = -1;
-static int hf_rdm_pd_binding_control_fields_control_field = -1;
-static int hf_rdm_pd_binding_control_fields_binding_uid = -1;
-static int hf_rem_pd_broker_status_set_allowed = -1;
-static int hf_rem_pd_broker_status_state = -1;
-static int hf_rdm_pd_burn_in = -1;
-static int hf_rdm_pd_component_scope_scope_slot = -1;
-static int hf_rdm_pd_component_scope_scope_string = -1;
-static int hf_rdm_pd_component_scope_scope_static_config_type = -1;
-static int hf_rdm_pd_component_scope_scope_static_ipv4_address = -1;
-static int hf_rdm_pd_component_scope_scope_static_ipv6_address = -1;
-static int hf_rdm_pd_component_scope_scope_static_port = -1;
-static int hf_rdm_pd_current_address_interface_identifier = -1;
-static int hf_rdm_pd_current_address_ipv4_address = -1;
-static int hf_rdm_pd_current_address_netmask = -1;
-static int hf_rdm_pd_current_address_dhcp_status = -1;
-static int hf_rdm_pd_curve_curve = -1;
-static int hf_rdm_pd_curve_number_of_curves = -1;
-static int hf_rdm_pd_curve_description_curve = -1;
-static int hf_rdm_pd_curve_description_text = -1;
-static int hf_rdm_pd_dhcp_mode_interface_identifier = -1;
-static int hf_rdm_pd_dhcp_mode_enabled = -1;
-static int hf_rdm_pd_dimmer_info_minimum_level_lower_limit = -1;
-static int hf_rdm_pd_dimmer_info_minimum_level_upper_limit = -1;
-static int hf_rdm_pd_dimmer_info_maximum_level_lower_limit = -1;
-static int hf_rdm_pd_dimmer_info_maximum_level_upper_limit = -1;
-static int hf_rdm_pd_dimmer_info_number_of_supported_curves = -1;
-static int hf_rdm_pd_dimmer_info_levels_resolution = -1;
-static int hf_rdm_pd_dimmer_info_minimum_level_split_levels_supported = -1;
-static int hf_rdm_pd_discovery_state_endpoint_id = -1;
-static int hf_rdm_pd_discovery_state_device_count = -1;
-static int hf_rdm_pd_discovery_state_discovery_state = -1;
-static int hf_rdm_pd_dmx_block_address_base_dmx_address = -1;
-static int hf_rdm_pd_dmx_block_address_subdevice_footprint = -1;
-static int hf_rdm_pd_dmx_fail_mode_scene_number = -1;
-static int hf_rdm_pd_dmx_fail_mode_loss_of_signal_delay = -1;
-static int hf_rdm_pd_dmx_fail_mode_hold_time = -1;
-static int hf_rdm_pd_dmx_fail_mode_level = -1;
-static int hf_rdm_pd_dmx_pers_nr = -1;
-static int hf_rdm_pd_dmx_pers_count = -1;
-static int hf_rdm_pd_dmx_pers_requested = -1;
-static int hf_rdm_pd_dmx_pers_slots = -1;
-static int hf_rdm_pd_dmx_pers_text = -1;
-static int hf_rdm_pd_dmx_startup_mode_scene_number = -1;
-static int hf_rdm_pd_dmx_startup_mode_loss_of_signal_delay = -1;
-static int hf_rdm_pd_dmx_startup_mode_hold_time = -1;
-static int hf_rdm_pd_dmx_startup_mode_level = -1;
-static int hf_rdm_pd_dns_domain_name = -1;
-static int hf_rdm_pd_dns_hostname = -1;
-static int hf_rdm_pd_dns_ipv4_name_server_index = -1;
-static int hf_rdm_pd_dns_ipv4_name_server_address = -1;
-static int hf_rdm_pd_endpoint_label_endpoint_id = -1;
-static int hf_rdm_pd_endpoint_label_label = -1;
-static int hf_rdm_pd_endpoint_list_change_number = -1;
-static int hf_rdm_pd_endpoint_list_endpoint_id = -1;
-static int hf_rdm_pd_endpoint_list_endpoint_type = -1;
-static int hf_rdm_pd_endpoint_list_change_change_number = -1;
-static int hf_rdm_pd_endpoint_mode_endpoint_id = -1;
-static int hf_rdm_pd_endpoint_mode_endpoint_mode = -1;
-static int hf_rdm_pd_endpoint_responder_list_change_endpoint_id = -1;
-static int hf_rdm_pd_endpoint_responder_list_change_change_number = -1;
-static int hf_rdm_pd_endpoint_responders_endpoint_id = -1;
-static int hf_rdm_pd_endpoint_responders_change_number = -1;
-static int hf_rdm_pd_endpoint_responders_uid = -1;
-static int hf_rdm_pd_endpoint_timing_endpoint_id = -1;
-static int hf_rdm_pd_endpoint_timing_setting = -1;
-static int hf_rdm_pd_endpoint_timing_number_of_settings = -1;
-static int hf_rdm_pd_endpoint_timing_description_setting = -1;
-static int hf_rdm_pd_endpoint_timing_description_description = -1;
-static int hf_rdm_pd_endpoint_to_universe_endpoint_id = -1;
-static int hf_rdm_pd_endpoint_to_universe_universe_number = -1;
-static int hf_rdm_pd_hardware_address_type1_interface_identifier = -1;
-static int hf_rdm_pd_hardware_address_type1_hardware_address = -1;
-static int hf_rdm_pd_identify_endpoint_endpoint_id = -1;
-static int hf_rdm_pd_identify_endpoint_identify_state = -1;
-static int hf_rdm_pd_identify_mode = -1;
-static int hf_rdm_pd_interface_apply_configuration_interface_identifier = -1;
-static int hf_rdm_pd_interface_label_interface_identifier = -1;
-static int hf_rdm_pd_interface_label_label = -1;
-static int hf_rdm_pd_interface_release_dhcp_interface_identifier = -1;
-static int hf_rdm_pd_interface_renew_dhcp_interface_identifier = -1;
-static int hf_rdm_pd_ipv4_default_route_interface_identifier = -1;
-static int hf_rdm_pd_ipv4_default_route_ipv4_default_route = -1;
-static int hf_rdm_pd_list_interfaces_interface_identifier = -1;
-static int hf_rdm_pd_list_interfaces_interface_hardware_type = -1;
-static int hf_rdm_pd_lock_pin_pin_code = -1;
-static int hf_rdm_pd_lock_pin_new_pin_code = -1;
-static int hf_rdm_pd_lock_state_lock_state = -1;
-static int hf_rdm_pd_lock_state_number_of_lock_states = -1;
-static int hf_rdm_pd_lock_state_pin_code = -1;
-static int hf_rdm_pd_lock_state_description_lock_state = -1;
-static int hf_rdm_pd_lock_state_description_text = -1;
-static int hf_rdm_pd_maximum_level_level = -1;
-static int hf_rdm_pd_preset_mergemode = -1;
-static int hf_rdm_pd_power_on_self_test = -1;
-static int hf_rdm_pd_minimum_level_increasing = -1;
-static int hf_rdm_pd_minimum_level_decreasing = -1;
-static int hf_rdm_pd_minimum_level_on_below_minimum = -1;
-static int hf_rdm_pd_modulation_frequency_modulation_frequency = -1;
-static int hf_rdm_pd_modulation_frequency_number_of_modulation_frequencies = -1;
-static int hf_rdm_pd_modulation_frequency_description_modulation_frequency = -1;
-static int hf_rdm_pd_modulation_frequency_description_text = -1;
-static int hf_rdm_pd_output_response_time_response_time = -1;
-static int hf_rdm_pd_output_response_time_number_of_response_times = -1;
-static int hf_rdm_pd_output_response_time_description_output_response_time = -1;
-static int hf_rdm_pd_output_response_time_description_text = -1;
-static int hf_rdm_pd_preset_info_level_field_supported = -1;
-static int hf_rdm_pd_preset_info_preset_sequence_supported = -1;
-static int hf_rdm_pd_preset_info_split_times_supported = -1;
-static int hf_rdm_pd_preset_info_dmx_fail_infinite_delay_time_supported = -1;
-static int hf_rdm_pd_preset_info_dmx_fail_infinite_hold_time_supported = -1;
-static int hf_rdm_pd_preset_info_start_up_infinite_hold_time_supported = -1;
-static int hf_rdm_pd_preset_info_maximum_scene_number = -1;
-static int hf_rdm_pd_preset_info_minimum_preset_fade_time_supported = -1;
-static int hf_rdm_pd_preset_info_maximum_preset_fade_time_supported = -1;
-static int hf_rdm_pd_preset_info_minimum_preset_wait_time_supported = -1;
-static int hf_rdm_pd_preset_info_maximum_preset_wait_time_supported = -1;
-static int hf_rdm_pd_preset_info_minimum_dmx_fail_delay_time_supported = -1;
-static int hf_rdm_pd_preset_info_maximum_dmx_fail_delay_time_supported = -1;
-static int hf_rdm_pd_preset_info_minimum_dmx_fail_hold_time_supported = -1;
-static int hf_rdm_pd_preset_info_maximum_dmx_fail_hold_time_supported = -1;
-static int hf_rdm_pd_preset_info_minimum_start_up_delay_time_supported = -1;
-static int hf_rdm_pd_preset_info_maximum_start_up_delay_time_supported = -1;
-static int hf_rdm_pd_preset_info_minimum_start_up_hold_time_supported = -1;
-static int hf_rdm_pd_preset_info_maximum_start_up_hold_time_supported = -1;
-static int hf_rdm_pd_preset_status_scene_number = -1;
-static int hf_rdm_pd_preset_status_up_fade_time = -1;
-static int hf_rdm_pd_preset_status_down_fade_time = -1;
-static int hf_rdm_pd_preset_status_wait_time = -1;
-static int hf_rdm_pd_preset_status_programmed = -1;
-static int hf_rdm_pd_preset_status_clear_preset = -1;
-static int hf_rdm_pd_rdm_traffic_enable_endpoint_id = -1;
-static int hf_rdm_pd_rdm_traffic_enable_rdm_enabled = -1;
-static int hf_rdm_pd_search_domain_dns_domain_name = -1;
-static int hf_rdm_pd_slot_offset = -1;
-static int hf_rdm_pd_slot_type = -1;
-static int hf_rdm_pd_slot_label_id = -1;
-static int hf_rdm_pd_slot_nr = -1;
-static int hf_rdm_pd_slot_description = -1;
-static int hf_rdm_pd_slot_value = -1;
-static int hf_rdm_pd_static_address_interface_identifier = -1;
-static int hf_rdm_pd_static_address_ipv4_address = -1;
-static int hf_rdm_pd_static_address_netmask = -1;
-static int hf_rdm_pd_tcp_comms_status_scope_string = -1;
-static int hf_rdm_pd_tcp_comms_status_broker_ipv4_address = -1;
-static int hf_rdm_pd_tcp_comms_status_broker_ipv6_address = -1;
-static int hf_rdm_pd_tcp_comms_status_broker_port = -1;
-static int hf_rdm_pd_tcp_comms_status_unhealthy_tcp_events = -1;
-static int hf_rdm_pd_zeroconf_mode_interface_identifier = -1;
-static int hf_rdm_pd_zeroconf_mode_enabled = -1;
-static int hf_rdm_pd_rec_value_support = -1;
+static int hf_rdm_pd_disc_unique_branch_lb_uid;
+static int hf_rdm_pd_disc_unique_branch_ub_uid;
+static int hf_rdm_pd_disc_mute_control_field;
+static int hf_rdm_pd_disc_mute_binding_uid;
+static int hf_rdm_pd_disc_mute_binding_uid_manf;
+static int hf_rdm_pd_disc_mute_binding_uid_dev;
+static int hf_rdm_pd_disc_unmute_control_field;
+static int hf_rdm_pd_disc_unmute_binding_uid;
+static int hf_rdm_pd_disc_unmute_binding_uid_manf;
+static int hf_rdm_pd_disc_unmute_binding_uid_dev;
+static int hf_rdm_pd_proxied_devices_uid;
+static int hf_rdm_pd_proxied_devices_uid_manf;
+static int hf_rdm_pd_proxied_devices_uid_dev;
+static int hf_rdm_pd_proxied_device_count;
+static int hf_rdm_pd_proxied_device_list_change;
+static int hf_rdm_pd_real_time_clock_year;
+static int hf_rdm_pd_real_time_clock_month;
+static int hf_rdm_pd_real_time_clock_day;
+static int hf_rdm_pd_real_time_clock_hour;
+static int hf_rdm_pd_real_time_clock_minute;
+static int hf_rdm_pd_real_time_clock_second;
+static int hf_rdm_pd_lamp_state;
+static int hf_rdm_pd_lamp_on_mode;
+static int hf_rdm_pd_device_power_cycles;
+static int hf_rdm_pd_display_invert;
+static int hf_rdm_pd_display_level;
+static int hf_rdm_pd_pan_invert;
+static int hf_rdm_pd_tilt_invert;
+static int hf_rdm_pd_tilt_swap;
+static int hf_rdm_pd_selftest_nr;
+static int hf_rdm_pd_selftest_state;
+static int hf_rdm_pd_selftest_description;
+static int hf_rdm_pd_language_code;
+static int hf_rdm_pd_identify_device;
+static int hf_rdm_pd_identify_device_state;
+static int hf_rdm_pd_reset_device;
+static int hf_rdm_pd_power_state;
+static int hf_rdm_pd_capture_preset_scene_nr;
+static int hf_rdm_pd_capture_preset_up_fade_time;
+static int hf_rdm_pd_capture_preset_down_fade_time;
+static int hf_rdm_pd_capture_preset_wait_time;
+static int hf_rdm_pd_preset_playback_mode;
+static int hf_rdm_pd_preset_playback_level;
+static int hf_rdm_pd_parameter_id;
+static int hf_rdm_pd_parameter_pdl_size;
+static int hf_rdm_pd_parameter_data_type;
+static int hf_rdm_pd_parameter_cmd_class;
+static int hf_rdm_pd_parameter_type;
+static int hf_rdm_pd_parameter_unit;
+static int hf_rdm_pd_parameter_prefix;
+static int hf_rdm_pd_parameter_min_value;
+static int hf_rdm_pd_parameter_max_value;
+static int hf_rdm_pd_parameter_default_value;
+static int hf_rdm_pd_parameter_description;
+static int hf_rdm_pd_software_version_label;
+static int hf_rdm_pd_boot_software_version_id;
+static int hf_rdm_pd_boot_software_version_label;
+static int hf_rdm_pd_comms_status_short_msg;
+static int hf_rdm_pd_comms_status_len_mismatch;
+static int hf_rdm_pd_comms_status_csum_fail;
+static int hf_rdm_pd_status_messages_type;
+static int hf_rdm_pd_status_messages_sub_device_id;
+static int hf_rdm_pd_status_messages_id;
+static int hf_rdm_pd_status_messages_data_value_1;
+static int hf_rdm_pd_status_messages_data_value_2;
+static int hf_rdm_pd_status_id;
+static int hf_rdm_pd_status_id_description;
+static int hf_rdm_pd_sub_device_status_report_threshold_status_type;
+static int hf_rdm_pd_product_detail_id;
+static int hf_rdm_pd_factory_defaults;
+static int hf_rdm_pd_background_discovery_endpoint_id;
+static int hf_rdm_pd_background_discovery_enabled;
+static int hf_rdm_pd_background_queued_status_policy_current_policy;
+static int hf_rdm_pd_background_queued_status_policy_number_of_policies;
+static int hf_rdm_pd_background_queued_status_policy_description_policy;
+static int hf_rdm_pd_background_queued_status_policy_description_description;
+static int hf_rdm_pd_binding_control_fields_endpoint_id;
+static int hf_rdm_pd_binding_control_fields_uid;
+static int hf_rdm_pd_binding_control_fields_uid_manf;
+static int hf_rdm_pd_binding_control_fields_uid_dev;
+static int hf_rdm_pd_binding_control_fields_control_field;
+static int hf_rdm_pd_binding_control_fields_binding_uid;
+static int hf_rdm_pd_binding_control_fields_binding_uid_manf;
+static int hf_rdm_pd_binding_control_fields_binding_uid_dev;
+static int hf_rem_pd_broker_status_set_allowed;
+static int hf_rem_pd_broker_status_state;
+static int hf_rdm_pd_burn_in;
+static int hf_rdm_pd_component_scope_scope_slot;
+static int hf_rdm_pd_component_scope_scope_string;
+static int hf_rdm_pd_component_scope_scope_static_config_type;
+static int hf_rdm_pd_component_scope_scope_static_ipv4_address;
+static int hf_rdm_pd_component_scope_scope_static_ipv6_address;
+static int hf_rdm_pd_component_scope_scope_static_port;
+static int hf_rdm_pd_current_address_interface_identifier;
+static int hf_rdm_pd_current_address_ipv4_address;
+static int hf_rdm_pd_current_address_netmask;
+static int hf_rdm_pd_current_address_dhcp_status;
+static int hf_rdm_pd_curve_curve;
+static int hf_rdm_pd_curve_number_of_curves;
+static int hf_rdm_pd_curve_description_curve;
+static int hf_rdm_pd_curve_description_text;
+static int hf_rdm_pd_dhcp_mode_interface_identifier;
+static int hf_rdm_pd_dhcp_mode_enabled;
+static int hf_rdm_pd_dimmer_info_minimum_level_lower_limit;
+static int hf_rdm_pd_dimmer_info_minimum_level_upper_limit;
+static int hf_rdm_pd_dimmer_info_maximum_level_lower_limit;
+static int hf_rdm_pd_dimmer_info_maximum_level_upper_limit;
+static int hf_rdm_pd_dimmer_info_number_of_supported_curves;
+static int hf_rdm_pd_dimmer_info_levels_resolution;
+static int hf_rdm_pd_dimmer_info_minimum_level_split_levels_supported;
+static int hf_rdm_pd_discovery_state_endpoint_id;
+static int hf_rdm_pd_discovery_state_device_count;
+static int hf_rdm_pd_discovery_state_discovery_state;
+static int hf_rdm_pd_dmx_block_address_base_dmx_address;
+static int hf_rdm_pd_dmx_block_address_subdevice_footprint;
+static int hf_rdm_pd_dmx_fail_mode_scene_number;
+static int hf_rdm_pd_dmx_fail_mode_loss_of_signal_delay;
+static int hf_rdm_pd_dmx_fail_mode_hold_time;
+static int hf_rdm_pd_dmx_fail_mode_level;
+static int hf_rdm_pd_dmx_pers_nr;
+static int hf_rdm_pd_dmx_pers_count;
+static int hf_rdm_pd_dmx_pers_requested;
+static int hf_rdm_pd_dmx_pers_slots;
+static int hf_rdm_pd_dmx_pers_text;
+static int hf_rdm_pd_dmx_startup_mode_scene_number;
+static int hf_rdm_pd_dmx_startup_mode_loss_of_signal_delay;
+static int hf_rdm_pd_dmx_startup_mode_hold_time;
+static int hf_rdm_pd_dmx_startup_mode_level;
+static int hf_rdm_pd_dns_domain_name;
+static int hf_rdm_pd_dns_hostname;
+static int hf_rdm_pd_dns_ipv4_name_server_index;
+static int hf_rdm_pd_dns_ipv4_name_server_address;
+static int hf_rdm_pd_endpoint_label_endpoint_id;
+static int hf_rdm_pd_endpoint_label_label;
+static int hf_rdm_pd_endpoint_list_change_number;
+static int hf_rdm_pd_endpoint_list_endpoint_id;
+static int hf_rdm_pd_endpoint_list_endpoint_type;
+static int hf_rdm_pd_endpoint_list_change_change_number;
+static int hf_rdm_pd_endpoint_mode_endpoint_id;
+static int hf_rdm_pd_endpoint_mode_endpoint_mode;
+static int hf_rdm_pd_endpoint_responder_list_change_endpoint_id;
+static int hf_rdm_pd_endpoint_responder_list_change_change_number;
+static int hf_rdm_pd_endpoint_responders_endpoint_id;
+static int hf_rdm_pd_endpoint_responders_change_number;
+static int hf_rdm_pd_endpoint_responders_uid;
+static int hf_rdm_pd_endpoint_responders_uid_manf;
+static int hf_rdm_pd_endpoint_responders_uid_dev;
+static int hf_rdm_pd_endpoint_timing_endpoint_id;
+static int hf_rdm_pd_endpoint_timing_setting;
+static int hf_rdm_pd_endpoint_timing_number_of_settings;
+static int hf_rdm_pd_endpoint_timing_description_setting;
+static int hf_rdm_pd_endpoint_timing_description_description;
+static int hf_rdm_pd_endpoint_to_universe_endpoint_id;
+static int hf_rdm_pd_endpoint_to_universe_universe_number;
+static int hf_rdm_pd_hardware_address_type1_interface_identifier;
+static int hf_rdm_pd_hardware_address_type1_hardware_address;
+static int hf_rdm_pd_identify_endpoint_endpoint_id;
+static int hf_rdm_pd_identify_endpoint_identify_state;
+static int hf_rdm_pd_identify_mode;
+static int hf_rdm_pd_interface_apply_configuration_interface_identifier;
+static int hf_rdm_pd_interface_label_interface_identifier;
+static int hf_rdm_pd_interface_label_label;
+static int hf_rdm_pd_interface_release_dhcp_interface_identifier;
+static int hf_rdm_pd_interface_renew_dhcp_interface_identifier;
+static int hf_rdm_pd_ipv4_default_route_interface_identifier;
+static int hf_rdm_pd_ipv4_default_route_ipv4_default_route;
+static int hf_rdm_pd_list_interfaces_interface_identifier;
+static int hf_rdm_pd_list_interfaces_interface_hardware_type;
+static int hf_rdm_pd_lock_pin_pin_code;
+static int hf_rdm_pd_lock_pin_new_pin_code;
+static int hf_rdm_pd_lock_state_lock_state;
+static int hf_rdm_pd_lock_state_number_of_lock_states;
+static int hf_rdm_pd_lock_state_pin_code;
+static int hf_rdm_pd_lock_state_description_lock_state;
+static int hf_rdm_pd_lock_state_description_text;
+static int hf_rdm_pd_maximum_level_level;
+static int hf_rdm_pd_preset_mergemode;
+static int hf_rdm_pd_power_on_self_test;
+static int hf_rdm_pd_minimum_level_increasing;
+static int hf_rdm_pd_minimum_level_decreasing;
+static int hf_rdm_pd_minimum_level_on_below_minimum;
+static int hf_rdm_pd_modulation_frequency_modulation_frequency;
+static int hf_rdm_pd_modulation_frequency_number_of_modulation_frequencies;
+static int hf_rdm_pd_modulation_frequency_description_modulation_frequency;
+static int hf_rdm_pd_modulation_frequency_description_text;
+static int hf_rdm_pd_output_response_time_response_time;
+static int hf_rdm_pd_output_response_time_number_of_response_times;
+static int hf_rdm_pd_output_response_time_description_output_response_time;
+static int hf_rdm_pd_output_response_time_description_text;
+static int hf_rdm_pd_preset_info_level_field_supported;
+static int hf_rdm_pd_preset_info_preset_sequence_supported;
+static int hf_rdm_pd_preset_info_split_times_supported;
+static int hf_rdm_pd_preset_info_dmx_fail_infinite_delay_time_supported;
+static int hf_rdm_pd_preset_info_dmx_fail_infinite_hold_time_supported;
+static int hf_rdm_pd_preset_info_start_up_infinite_hold_time_supported;
+static int hf_rdm_pd_preset_info_maximum_scene_number;
+static int hf_rdm_pd_preset_info_minimum_preset_fade_time_supported;
+static int hf_rdm_pd_preset_info_maximum_preset_fade_time_supported;
+static int hf_rdm_pd_preset_info_minimum_preset_wait_time_supported;
+static int hf_rdm_pd_preset_info_maximum_preset_wait_time_supported;
+static int hf_rdm_pd_preset_info_minimum_dmx_fail_delay_time_supported;
+static int hf_rdm_pd_preset_info_maximum_dmx_fail_delay_time_supported;
+static int hf_rdm_pd_preset_info_minimum_dmx_fail_hold_time_supported;
+static int hf_rdm_pd_preset_info_maximum_dmx_fail_hold_time_supported;
+static int hf_rdm_pd_preset_info_minimum_start_up_delay_time_supported;
+static int hf_rdm_pd_preset_info_maximum_start_up_delay_time_supported;
+static int hf_rdm_pd_preset_info_minimum_start_up_hold_time_supported;
+static int hf_rdm_pd_preset_info_maximum_start_up_hold_time_supported;
+static int hf_rdm_pd_preset_status_scene_number;
+static int hf_rdm_pd_preset_status_up_fade_time;
+static int hf_rdm_pd_preset_status_down_fade_time;
+static int hf_rdm_pd_preset_status_wait_time;
+static int hf_rdm_pd_preset_status_programmed;
+static int hf_rdm_pd_preset_status_clear_preset;
+static int hf_rdm_pd_rdm_traffic_enable_endpoint_id;
+static int hf_rdm_pd_rdm_traffic_enable_rdm_enabled;
+static int hf_rdm_pd_search_domain_dns_domain_name;
+static int hf_rdm_pd_slot_offset;
+static int hf_rdm_pd_slot_type;
+static int hf_rdm_pd_slot_label_id;
+static int hf_rdm_pd_slot_nr;
+static int hf_rdm_pd_slot_description;
+static int hf_rdm_pd_slot_value;
+static int hf_rdm_pd_static_address_interface_identifier;
+static int hf_rdm_pd_static_address_ipv4_address;
+static int hf_rdm_pd_static_address_netmask;
+static int hf_rdm_pd_tcp_comms_status_scope_string;
+static int hf_rdm_pd_tcp_comms_status_broker_ipv4_address;
+static int hf_rdm_pd_tcp_comms_status_broker_ipv6_address;
+static int hf_rdm_pd_tcp_comms_status_broker_port;
+static int hf_rdm_pd_tcp_comms_status_unhealthy_tcp_events;
+static int hf_rdm_pd_zeroconf_mode_interface_identifier;
+static int hf_rdm_pd_zeroconf_mode_enabled;
+static int hf_rdm_pd_rec_value_support;
 
-static int ett_rdm = -1;
+static int ett_rdm;
+static int ett_rdm_uid;
 
-static expert_field ei_rdm_checksum = EI_INIT;
+static expert_field ei_rdm_checksum;
 
 /* begin manufacturer-specific constants and variables */
 /* begin ETC */
@@ -1479,153 +1696,164 @@ static const value_string etc_model_id_vals[] = {
   { 0, NULL },
 };
 
-static int hf_etc_parameter_id = -1;       /* every manufacturer needs one of these */
-static int hf_etc_pd_parameter_id = -1;    /* every manufacturer needs one of these */
-static int hf_etc_pd_device_model_id = -1;
-static int hf_etc_pd_led_curve = -1;
-static int hf_etc_pd_led_curve_description_curve = -1;
-static int hf_etc_pd_led_curve_description_text = -1;
-static int hf_etc_pd_led_strobe = -1;
-static int hf_etc_pd_led_output_mode = -1;
-static int hf_etc_pd_led_output_mode_description_mode = -1;
-static int hf_etc_pd_led_output_mode_description_text = -1;
-static int hf_etc_pd_led_red_shift = -1;
-static int hf_etc_pd_led_white_point = -1;
-static int hf_etc_pd_led_white_point_description_white_point = -1;
-static int hf_etc_pd_led_white_point_description_text = -1;
-static int hf_etc_pd_led_frequency = -1;
-static int hf_etc_pd_dmx_data_loss_behavior = -1;
-static int hf_etc_pd_dmx_data_loss_behavior_description_behavior = -1;
-static int hf_etc_pd_dmx_data_loss_behavior_description_text = -1;
-static int hf_etc_pd_led_plus_seven = -1;
-static int hf_etc_pd_backlight_brightness = -1;
-static int hf_etc_pd_backlight_timeout = -1;
-static int hf_etc_pd_status_indicators = -1;
-static int hf_etc_pd_overtemp_mode = -1;
-static int hf_etc_pd_simple_setup_mode = -1;
-static int hf_etc_pd_led_strobe_description_strobe = -1;
-static int hf_etc_pd_led_strobe_description_text = -1;
-static int hf_etc_pd_red_shift_description_red_shift = -1;
-static int hf_etc_pd_red_shift_description_text = -1;
-static int hf_etc_pd_plus_seven_description_plus_seven = -1;
-static int hf_etc_pd_plus_seven_description_text = -1;
-static int hf_etc_pd_backlight_timeout_description_timeout = -1;
-static int hf_etc_pd_backlight_timeout_description_text = -1;
-static int hf_etc_pd_simple_setup_mode_description_mode = -1;
-static int hf_etc_pd_simple_setup_mode_description_text = -1;
-static int hf_etc_pd_overtemp_mode_description_mode = -1;
-static int hf_etc_pd_overtemp_mode_description_text = -1;
-static int hf_etc_pd_led_requested_xy_x = -1;
-static int hf_etc_pd_led_requested_xy_y = -1;
-static int hf_etc_pd_led_current_xy_x = -1;
-static int hf_etc_pd_led_current_xy_y = -1;
-static int hf_etc_pd_current_pwm_led_number = -1;
-static int hf_etc_pd_current_pwm_channel_duty_cycle = -1;
-static int hf_etc_pd_tristimulus_led_number = -1;
-static int hf_etc_pd_tristimulus_x = -1;
-static int hf_etc_pd_tristimulus_y = -1;
-static int hf_etc_pd_tristimulus_z = -1;
-static int hf_etc_pd_led_information_led_number = -1;
-static int hf_etc_pd_led_information_type = -1;
-static int hf_etc_pd_led_information_dmx_control_channel = -1;
-static int hf_etc_pd_led_information_drive_current = -1;
-static int hf_etc_pd_led_information_gamut_polygon_order = -1;
-static int hf_etc_pd_led_information_quantity = -1;
-static int hf_etc_pd_preset_config_preset_number = -1;
-static int hf_etc_pd_preset_config_fade_time = -1;
-static int hf_etc_pd_preset_config_delay_time = -1;
-static int hf_etc_pd_preset_config_hue = -1;
-static int hf_etc_pd_preset_config_saturation = -1;
-static int hf_etc_pd_preset_config_intensity = -1;
-static int hf_etc_pd_preset_config_strobe = -1;
-static int hf_etc_pd_sequence_playback_sequence_number = -1;
-static int hf_etc_pd_sequence_config_sequence_number = -1;
-static int hf_etc_pd_sequence_config_preset_steps = -1;
-static int hf_etc_pd_sequence_config_preset_step = -1;
-static int hf_etc_pd_sequence_config_step_link_times = -1;
-static int hf_etc_pd_sequence_config_step_link_time = -1;
-static int hf_etc_pd_sequence_config_rate = -1;
-static int hf_etc_pd_sequence_config_end_state = -1;
-static int hf_etc_pd_low_power_timeout = -1;
-static int hf_etc_pd_low_power_timeout_description_timeout = -1;
-static int hf_etc_pd_low_power_timeout_description_text = -1;
-static int hf_etc_pd_led_enum_frequency = -1;
-static int hf_etc_pd_led_enum_frequency_description_frequency = -1;
-static int hf_etc_pd_led_enum_frequency_description_text = -1;
-static int hf_etc_pd_rgbi_preset_config_preset_number = -1;
-static int hf_etc_pd_rgbi_preset_config_fade_time = -1;
-static int hf_etc_pd_rgbi_preset_config_delay_time = -1;
-static int hf_etc_pd_rgbi_preset_config_red = -1;
-static int hf_etc_pd_rgbi_preset_config_green = -1;
-static int hf_etc_pd_rgbi_preset_config_blue = -1;
-static int hf_etc_pd_rgbi_preset_config_intensity = -1;
-static int hf_etc_pd_rgbi_preset_config_strobe = -1;
-static int hf_etc_pd_cct_preset_config_preset_number = -1;
-static int hf_etc_pd_cct_preset_config_fade_time = -1;
-static int hf_etc_pd_cct_preset_config_delay_time = -1;
-static int hf_etc_pd_cct_preset_config_white_point = -1;
-static int hf_etc_pd_cct_preset_config_tint = -1;
-static int hf_etc_pd_cct_preset_config_strobe = -1;
-static int hf_etc_pd_cct_preset_config_intensity = -1;
-static int hf_etc_pd_cct_preset_config_tone = -1;
-static int hf_etc_pd_cct_preset_config_reserved = -1;
-static int hf_etc_pd_supplementary_device_version_param_index = -1;
-static int hf_etc_pd_supplementary_device_version_param_description = -1;
-static int hf_etc_pd_power_command = -1;
-static int hf_etc_pd_power_command_description_state = -1;
-static int hf_etc_pd_power_command_description_text = -1;
-static int hf_etc_pd_dali_short_address = -1;
-static int hf_etc_pd_dali_group_membership = -1;
-static int hf_etc_pd_auto_bind = -1;
-static int hf_etc_pd_packet_delay = -1;
-static int hf_etc_pd_has_enum_text_pid = -1;
-static int hf_etc_pd_has_enum_text_true_false = -1;
-static int hf_etc_pd_get_enum_text_pid = -1;
-static int hf_etc_pd_get_enum_text_enum = -1;
-static int hf_etc_pd_get_enum_text_description = -1;
+static int hf_etc_parameter_id;       /* every manufacturer needs one of these */
+static int hf_etc_pd_parameter_id;    /* every manufacturer needs one of these */
+static int hf_etc_pd_device_model_id;
+static int hf_etc_pd_led_curve;
+static int hf_etc_pd_led_curve_description_curve;
+static int hf_etc_pd_led_curve_description_text;
+static int hf_etc_pd_led_strobe;
+static int hf_etc_pd_led_output_mode;
+static int hf_etc_pd_led_output_mode_description_mode;
+static int hf_etc_pd_led_output_mode_description_text;
+static int hf_etc_pd_led_red_shift;
+static int hf_etc_pd_led_white_point;
+static int hf_etc_pd_led_white_point_description_white_point;
+static int hf_etc_pd_led_white_point_description_text;
+static int hf_etc_pd_led_frequency;
+static int hf_etc_pd_dmx_data_loss_behavior;
+static int hf_etc_pd_dmx_data_loss_behavior_description_behavior;
+static int hf_etc_pd_dmx_data_loss_behavior_description_text;
+static int hf_etc_pd_led_plus_seven;
+static int hf_etc_pd_backlight_brightness;
+static int hf_etc_pd_backlight_timeout;
+static int hf_etc_pd_status_indicators;
+static int hf_etc_pd_overtemp_mode;
+static int hf_etc_pd_simple_setup_mode;
+static int hf_etc_pd_led_strobe_description_strobe;
+static int hf_etc_pd_led_strobe_description_text;
+static int hf_etc_pd_red_shift_description_red_shift;
+static int hf_etc_pd_red_shift_description_text;
+static int hf_etc_pd_plus_seven_description_plus_seven;
+static int hf_etc_pd_plus_seven_description_text;
+static int hf_etc_pd_backlight_timeout_description_timeout;
+static int hf_etc_pd_backlight_timeout_description_text;
+static int hf_etc_pd_simple_setup_mode_description_mode;
+static int hf_etc_pd_simple_setup_mode_description_text;
+static int hf_etc_pd_overtemp_mode_description_mode;
+static int hf_etc_pd_overtemp_mode_description_text;
+static int hf_etc_pd_led_requested_xy_x;
+static int hf_etc_pd_led_requested_xy_y;
+static int hf_etc_pd_led_current_xy_x;
+static int hf_etc_pd_led_current_xy_y;
+static int hf_etc_pd_current_pwm_led_number;
+static int hf_etc_pd_current_pwm_channel_duty_cycle;
+static int hf_etc_pd_tristimulus_led_number;
+static int hf_etc_pd_tristimulus_x;
+static int hf_etc_pd_tristimulus_y;
+static int hf_etc_pd_tristimulus_z;
+static int hf_etc_pd_led_information_led_number;
+static int hf_etc_pd_led_information_type;
+static int hf_etc_pd_led_information_dmx_control_channel;
+static int hf_etc_pd_led_information_drive_current;
+static int hf_etc_pd_led_information_gamut_polygon_order;
+static int hf_etc_pd_led_information_quantity;
+static int hf_etc_pd_preset_config_preset_number;
+static int hf_etc_pd_preset_config_fade_time;
+static int hf_etc_pd_preset_config_delay_time;
+static int hf_etc_pd_preset_config_hue;
+static int hf_etc_pd_preset_config_saturation;
+static int hf_etc_pd_preset_config_intensity;
+static int hf_etc_pd_preset_config_strobe;
+static int hf_etc_pd_sequence_playback_sequence_number;
+static int hf_etc_pd_sequence_config_sequence_number;
+static int hf_etc_pd_sequence_config_preset_steps;
+static int hf_etc_pd_sequence_config_preset_step;
+static int hf_etc_pd_sequence_config_step_link_times;
+static int hf_etc_pd_sequence_config_step_link_time;
+static int hf_etc_pd_sequence_config_rate;
+static int hf_etc_pd_sequence_config_end_state;
+static int hf_etc_pd_low_power_timeout;
+static int hf_etc_pd_low_power_timeout_description_timeout;
+static int hf_etc_pd_low_power_timeout_description_text;
+static int hf_etc_pd_led_enum_frequency;
+static int hf_etc_pd_led_enum_frequency_description_frequency;
+static int hf_etc_pd_led_enum_frequency_description_text;
+static int hf_etc_pd_rgbi_preset_config_preset_number;
+static int hf_etc_pd_rgbi_preset_config_fade_time;
+static int hf_etc_pd_rgbi_preset_config_delay_time;
+static int hf_etc_pd_rgbi_preset_config_red;
+static int hf_etc_pd_rgbi_preset_config_green;
+static int hf_etc_pd_rgbi_preset_config_blue;
+static int hf_etc_pd_rgbi_preset_config_intensity;
+static int hf_etc_pd_rgbi_preset_config_strobe;
+static int hf_etc_pd_cct_preset_config_preset_number;
+static int hf_etc_pd_cct_preset_config_fade_time;
+static int hf_etc_pd_cct_preset_config_delay_time;
+static int hf_etc_pd_cct_preset_config_white_point;
+static int hf_etc_pd_cct_preset_config_tint;
+static int hf_etc_pd_cct_preset_config_strobe;
+static int hf_etc_pd_cct_preset_config_intensity;
+static int hf_etc_pd_cct_preset_config_tone;
+static int hf_etc_pd_cct_preset_config_reserved;
+static int hf_etc_pd_supplementary_device_version_param_index;
+static int hf_etc_pd_supplementary_device_version_param_description;
+static int hf_etc_pd_power_command;
+static int hf_etc_pd_power_command_description_state;
+static int hf_etc_pd_power_command_description_text;
+static int hf_etc_pd_dali_short_address;
+static int hf_etc_pd_dali_group_membership;
+static int hf_etc_pd_auto_bind;
+static int hf_etc_pd_packet_delay;
+static int hf_etc_pd_has_enum_text_pid;
+static int hf_etc_pd_has_enum_text_true_false;
+static int hf_etc_pd_get_enum_text_pid;
+static int hf_etc_pd_get_enum_text_enum;
+static int hf_etc_pd_get_enum_text_description;
 
-static int ett_etc_sequence_config_steps = -1;
-static int ett_etc_sequence_config_times = -1;
+static int ett_etc_sequence_config_steps;
+static int ett_etc_sequence_config_times;
 
 /* end ETC */
 /* end manufacturer-specific constants and variables */
 
-static guint16
-rdm_checksum(tvbuff_t *tvb, guint length)
+static uint16_t
+rdm_checksum(tvbuff_t *tvb, unsigned length)
 {
-  guint16 sum = RDM_SC_RDM;
-  guint  i;
+  uint16_t sum = RDM_SC_RDM;
+  unsigned  i;
   for (i = 0; i < length; i++)
-    sum += tvb_get_guint8(tvb, i);
+    sum += tvb_get_uint8(tvb, i);
   return sum;
 }
 
 static void
-rdm_proto_tree_add_numeric_item(proto_tree *tree, int hfindex, tvbuff_t *tvb, guint *offset_ptr, guint8 len)
+rdm_proto_tree_add_numeric_item(proto_tree *tree, int hfindex, tvbuff_t *tvb, unsigned *offset_ptr, uint8_t len)
 {
-  guint offset = *offset_ptr;
+  unsigned offset = *offset_ptr;
   proto_tree_add_item(tree, hfindex, tvb, offset, len, ENC_BIG_ENDIAN);
   *offset_ptr += len;
 }
 
 static void
-rdm_proto_tree_add_ascii_item(proto_tree *tree, int hfindex, tvbuff_t *tvb, guint *offset_ptr, gint len)
+rdm_proto_tree_add_ascii_item(proto_tree *tree, int hfindex, tvbuff_t *tvb, unsigned *offset_ptr, int len)
 {
-  guint offset = *offset_ptr;
+  unsigned offset = *offset_ptr;
   proto_tree_add_item(tree, hfindex, tvb, offset, len, ENC_ASCII|ENC_NA);
   *offset_ptr += len;
 }
 
 static void
-rdm_proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb, guint *offset_ptr, gint len)
+rdm_proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb, unsigned *offset_ptr, int len)
 {
-  guint offset = *offset_ptr;
+  unsigned offset = *offset_ptr;
   proto_tree_add_item(tree, hfindex, tvb, offset, len, ENC_NA);
   *offset_ptr += len;
 }
 
-static guint
-dissect_rdm_pd_queued_message(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static void
+rdm_proto_tree_add_uid_item(proto_tree *tree, int hfindex, tvbuff_t *tvb, unsigned *offset_ptr, int hfindex_manf, int hfindex_dev)
+{
+  unsigned offset = *offset_ptr;
+  proto_item* uid_item = proto_tree_add_item(tree, hfindex, tvb, offset, 6, ENC_NA);
+  proto_tree* uid_tree = proto_item_add_subtree(uid_item, ett_rdm_uid);
+  proto_tree_add_item(uid_tree, hfindex_manf, tvb, offset, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_item(uid_tree, hfindex_dev, tvb, offset+2, 4, ENC_BIG_ENDIAN);
+  *offset_ptr += 6;
+}
+
+static unsigned
+dissect_rdm_pd_queued_message(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -1636,8 +1864,8 @@ dissect_rdm_pd_queued_message(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dmx_start_address(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_dmx_start_address(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -1649,8 +1877,8 @@ dissect_rdm_pd_dmx_start_address(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_device_info(tvbuff_t *tvb _U_, guint offset, proto_tree *tree _U_, guint8 cc, guint8 len _U_, guint16 device_manufacturer_id)
+static unsigned
+dissect_rdm_pd_device_info(tvbuff_t *tvb _U_, unsigned offset, proto_tree *tree _U_, uint8_t cc, uint8_t len _U_, uint16_t device_manufacturer_id)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -1678,8 +1906,8 @@ dissect_rdm_pd_device_info(tvbuff_t *tvb _U_, guint offset, proto_tree *tree _U_
 }
 
 
-static guint
-dissect_rdm_pd_device_model_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_device_model_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -1691,8 +1919,8 @@ dissect_rdm_pd_device_model_description(tvbuff_t *tvb, guint offset, proto_tree 
 }
 
 
-static guint
-dissect_rdm_pd_device_label(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_device_label(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -1705,8 +1933,8 @@ dissect_rdm_pd_device_label(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
 }
 
 
-static guint
-dissect_rdm_pd_device_hours(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_device_hours(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -1719,8 +1947,8 @@ dissect_rdm_pd_device_hours(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
 }
 
 
-static guint
-dissect_rdm_pd_lamp_hours(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_lamp_hours(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -1733,8 +1961,8 @@ dissect_rdm_pd_lamp_hours(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 
 }
 
 
-static guint
-dissect_rdm_pd_lamp_strikes(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_lamp_strikes(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -1747,8 +1975,8 @@ dissect_rdm_pd_lamp_strikes(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
 }
 
 
-static guint
-dissect_rdm_pd_sensor_definition(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_sensor_definition(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -1772,10 +2000,10 @@ dissect_rdm_pd_sensor_definition(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_sensor_value(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_sensor_value(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
-  guint8 original_len = len;
+  uint8_t original_len = len;
 
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -1803,8 +2031,8 @@ dissect_rdm_pd_sensor_value(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_rdm_pd_manufacturer_label(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_manufacturer_label(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -1815,8 +2043,8 @@ dissect_rdm_pd_manufacturer_label(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_rdm_pd_disc_unique_branch(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_disc_unique_branch(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_DISCOVERY_COMMAND:
@@ -1828,14 +2056,15 @@ dissect_rdm_pd_disc_unique_branch(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_rdm_pd_disc_mute(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_disc_mute(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_DISCOVERY_COMMAND_RESPONSE:
     rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_disc_mute_control_field, tvb, &offset, 2);
     if (len > 2) {
-      rdm_proto_tree_add_bytes_item(tree, hf_rdm_pd_disc_mute_binding_uid, tvb, &offset, 6);
+      rdm_proto_tree_add_uid_item(tree, hf_rdm_pd_disc_mute_binding_uid, tvb, &offset,
+        hf_rdm_pd_disc_mute_binding_uid_manf, hf_rdm_pd_disc_mute_binding_uid_dev);
     }
     break;
   }
@@ -1843,14 +2072,15 @@ dissect_rdm_pd_disc_mute(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 c
   return offset;
 }
 
-static guint
-dissect_rdm_pd_disc_un_mute(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_disc_un_mute(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_DISCOVERY_COMMAND_RESPONSE:
     rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_disc_unmute_control_field, tvb, &offset, 2);
     if (len > 2) {
-      rdm_proto_tree_add_bytes_item(tree, hf_rdm_pd_disc_unmute_binding_uid, tvb, &offset, 6);
+      rdm_proto_tree_add_uid_item(tree, hf_rdm_pd_disc_unmute_binding_uid, tvb, &offset,
+        hf_rdm_pd_disc_unmute_binding_uid_manf, hf_rdm_pd_disc_unmute_binding_uid_dev);
     }
     break;
   }
@@ -1858,13 +2088,14 @@ dissect_rdm_pd_disc_un_mute(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_rdm_pd_proxied_devices(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_proxied_devices(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
     while (len >= 6) {
-      rdm_proto_tree_add_bytes_item(tree, hf_rdm_pd_proxied_devices_uid, tvb, &offset, 6);
+      rdm_proto_tree_add_uid_item(tree, hf_rdm_pd_proxied_devices_uid, tvb, &offset,
+        hf_rdm_pd_proxied_devices_uid_manf, hf_rdm_pd_proxied_devices_uid_dev);
       len -= 6;
     }
     break;
@@ -1873,8 +2104,8 @@ dissect_rdm_pd_proxied_devices(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_proxied_device_count(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_proxied_device_count(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -1886,8 +2117,8 @@ dissect_rdm_pd_proxied_device_count(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_comms_status(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_comms_status(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -1900,8 +2131,8 @@ dissect_rdm_pd_comms_status(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_rdm_pd_status_messages(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_status_messages(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -1923,8 +2154,8 @@ dissect_rdm_pd_status_messages(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_status_id_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_status_id_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -1939,14 +2170,14 @@ dissect_rdm_pd_status_id_description(tvbuff_t *tvb, guint offset, proto_tree *tr
   return offset;
 }
 
-static guint
-dissect_rdm_pd_clear_status_id(tvbuff_t *tvb _U_, guint offset, proto_tree *tree _U_, guint8 cc _U_, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_clear_status_id(tvbuff_t *tvb _U_, unsigned offset, proto_tree *tree _U_, uint8_t cc _U_, uint8_t len _U_)
 {
   return offset;
 }
 
-static guint
-dissect_rdm_pd_sub_device_status_report_threshold(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_sub_device_status_report_threshold(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -1959,7 +2190,7 @@ dissect_rdm_pd_sub_device_status_report_threshold(tvbuff_t *tvb, guint offset, p
 }
 
 static void
-add_param_id_to_tree(guint16 param_id, proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 device_manufacturer_id)
+add_param_id_to_tree(uint16_t param_id, proto_tree *tree, tvbuff_t *tvb, unsigned *offset, uint16_t device_manufacturer_id)
 {
   if (param_id < 0x8000) {
     rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_parameter_id, tvb, offset, 2);
@@ -1975,10 +2206,10 @@ add_param_id_to_tree(guint16 param_id, proto_tree *tree, tvbuff_t *tvb, guint *o
   }
 }
 
-static guint
-dissect_rdm_pd_supported_parameters(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len, guint16 device_manufacturer_id)
+static unsigned
+dissect_rdm_pd_supported_parameters(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len, uint16_t device_manufacturer_id)
 {
-  guint16      param_id;
+  uint16_t     param_id;
 
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -1993,10 +2224,10 @@ dissect_rdm_pd_supported_parameters(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_parameter_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len, guint16 device_manufacturer_id)
+static unsigned
+dissect_rdm_pd_parameter_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len, uint16_t device_manufacturer_id)
 {
-  guint16      param_id;
+  uint16_t     param_id;
 
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2023,13 +2254,13 @@ dissect_rdm_pd_parameter_description(tvbuff_t *tvb, guint offset, proto_tree *tr
   return offset;
 }
 
-static guint
-dissect_rdm_pd_product_detail_id_list(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_product_detail_id_list(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
     while (len >= 2) {
-      rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_product_detail_id_list, tvb, &offset, 2);
+      rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_product_detail_id, tvb, &offset, 2);
       len -= 2;
     }
     break;
@@ -2038,8 +2269,8 @@ dissect_rdm_pd_product_detail_id_list(tvbuff_t *tvb, guint offset, proto_tree *t
   return offset;
 }
 
-static guint
-dissect_rdm_pd_factory_defaults(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_factory_defaults(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2050,8 +2281,8 @@ dissect_rdm_pd_factory_defaults(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_rdm_pd_language_capabilities(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_language_capabilities(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2065,8 +2296,8 @@ dissect_rdm_pd_language_capabilities(tvbuff_t *tvb, guint offset, proto_tree *tr
   return offset;
 }
 
-static guint
-dissect_rdm_pd_language(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_language(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2078,8 +2309,8 @@ dissect_rdm_pd_language(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc
   return offset;
 }
 
-static guint
-dissect_rdm_pd_software_version_label(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_software_version_label(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2090,8 +2321,8 @@ dissect_rdm_pd_software_version_label(tvbuff_t *tvb, guint offset, proto_tree *t
   return offset;
 }
 
-static guint
-dissect_rdm_pd_boot_software_version_id(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_boot_software_version_id(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2102,8 +2333,8 @@ dissect_rdm_pd_boot_software_version_id(tvbuff_t *tvb, guint offset, proto_tree 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_boot_software_version_label(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_boot_software_version_label(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2114,8 +2345,8 @@ dissect_rdm_pd_boot_software_version_label(tvbuff_t *tvb, guint offset, proto_tr
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dmx_personality(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_dmx_personality(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2131,8 +2362,8 @@ dissect_rdm_pd_dmx_personality(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dmx_personality_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_dmx_personality_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2149,8 +2380,8 @@ dissect_rdm_pd_dmx_personality_description(tvbuff_t *tvb, guint offset, proto_tr
   return offset;
 }
 
-static guint
-dissect_rdm_pd_slot_info(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_slot_info(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2166,8 +2397,8 @@ dissect_rdm_pd_slot_info(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 c
   return offset;
 }
 
-static guint
-dissect_rdm_pd_slot_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_slot_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2183,8 +2414,8 @@ dissect_rdm_pd_slot_description(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_rdm_pd_slot_value(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_slot_value(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2199,8 +2430,8 @@ dissect_rdm_pd_slot_value(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dmx_block_address(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_dmx_block_address(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2216,8 +2447,8 @@ dissect_rdm_pd_dmx_block_address(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dmx_fail_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_dmx_fail_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2232,8 +2463,8 @@ dissect_rdm_pd_dmx_fail_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dmx_startup_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_dmx_startup_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2248,8 +2479,8 @@ dissect_rdm_pd_dmx_startup_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_rdm_pd_record_sensors(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_record_sensors(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2273,8 +2504,8 @@ dissect_rdm_pd_record_sensors(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dimmer_info(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_dimmer_info(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2291,8 +2522,8 @@ dissect_rdm_pd_dimmer_info(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint
-dissect_rdm_pd_minimum_level(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_minimum_level(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2306,8 +2537,8 @@ dissect_rdm_pd_minimum_level(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_maximum_level(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_maximum_level(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2319,8 +2550,8 @@ dissect_rdm_pd_maximum_level(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_curve(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_curve(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2336,8 +2567,8 @@ dissect_rdm_pd_curve(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
   return offset;
 }
 
-static guint
-dissect_rdm_pd_curve_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_curve_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2353,8 +2584,8 @@ dissect_rdm_pd_curve_description(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_output_response_time(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_output_response_time(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2370,8 +2601,8 @@ dissect_rdm_pd_output_response_time(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_output_response_time_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_output_response_time_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2387,8 +2618,8 @@ dissect_rdm_pd_output_response_time_description(tvbuff_t *tvb, guint offset, pro
   return offset;
 }
 
-static guint
-dissect_rdm_pd_modulation_frequency(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_modulation_frequency(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2404,8 +2635,8 @@ dissect_rdm_pd_modulation_frequency(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_modulation_frequency_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_modulation_frequency_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2421,8 +2652,8 @@ dissect_rdm_pd_modulation_frequency_description(tvbuff_t *tvb, guint offset, pro
   return offset;
 }
 
-static guint
-dissect_rdm_pd_lamp_state(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_lamp_state(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2434,8 +2665,8 @@ dissect_rdm_pd_lamp_state(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_lamp_on_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_lamp_on_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2447,8 +2678,8 @@ dissect_rdm_pd_lamp_on_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_rdm_pd_device_power_cycles(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_device_power_cycles(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2460,8 +2691,8 @@ dissect_rdm_pd_device_power_cycles(tvbuff_t *tvb, guint offset, proto_tree *tree
   return offset;
 }
 
-static guint
-dissect_rdm_pd_burn_in(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_burn_in(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2473,8 +2704,8 @@ dissect_rdm_pd_burn_in(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
   return offset;
 }
 
-static guint
-dissect_rdm_pd_display_invert(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_display_invert(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2486,8 +2717,8 @@ dissect_rdm_pd_display_invert(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_rdm_pd_display_level(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_display_level(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2499,8 +2730,8 @@ dissect_rdm_pd_display_level(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_pan_invert(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_pan_invert(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2512,8 +2743,8 @@ dissect_rdm_pd_pan_invert(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_tilt_invert(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_tilt_invert(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2525,8 +2756,8 @@ dissect_rdm_pd_tilt_invert(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint
-dissect_rdm_pd_pan_tilt_swap(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_pan_tilt_swap(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2538,8 +2769,8 @@ dissect_rdm_pd_pan_tilt_swap(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_real_time_clock(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_real_time_clock(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2556,8 +2787,8 @@ dissect_rdm_pd_real_time_clock(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_lock_pin(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_lock_pin(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2573,8 +2804,8 @@ dissect_rdm_pd_lock_pin(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc
   return offset;
 }
 
-static guint
-dissect_rdm_pd_lock_state(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_lock_state(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2591,8 +2822,8 @@ dissect_rdm_pd_lock_state(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_lock_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_lock_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2608,8 +2839,8 @@ dissect_rdm_pd_lock_description(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_rdm_pd_list_interfaces(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_list_interfaces(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2624,8 +2855,8 @@ dissect_rdm_pd_list_interfaces(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_interface_label(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_interface_label(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2640,8 +2871,8 @@ dissect_rdm_pd_interface_label(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_hardware_address_type1(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_hardware_address_type1(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2656,8 +2887,8 @@ dissect_rdm_pd_hardware_address_type1(tvbuff_t *tvb, guint offset, proto_tree *t
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dhcp_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_dhcp_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2673,8 +2904,8 @@ dissect_rdm_pd_dhcp_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 c
   return offset;
 }
 
-static guint
-dissect_rdm_pd_zeroconf_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_zeroconf_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2690,8 +2921,8 @@ dissect_rdm_pd_zeroconf_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_current_address(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_current_address(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2708,8 +2939,8 @@ dissect_rdm_pd_current_address(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_static_address(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_static_address(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2726,8 +2957,8 @@ dissect_rdm_pd_static_address(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_rdm_pd_interface_renew_dhcp(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_interface_renew_dhcp(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2738,8 +2969,8 @@ dissect_rdm_pd_interface_renew_dhcp(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_interface_release_dhcp(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_interface_release_dhcp(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2750,8 +2981,8 @@ dissect_rdm_pd_interface_release_dhcp(tvbuff_t *tvb, guint offset, proto_tree *t
   return offset;
 }
 
-static guint
-dissect_rdm_pd_interface_apply_configuration(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_interface_apply_configuration(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2762,8 +2993,8 @@ dissect_rdm_pd_interface_apply_configuration(tvbuff_t *tvb, guint offset, proto_
   return offset;
 }
 
-static guint
-dissect_rdm_pd_ipv4_default_route(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_ipv4_default_route(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2776,8 +3007,8 @@ dissect_rdm_pd_ipv4_default_route(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dns_ipv4_name_server(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_dns_ipv4_name_server(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2793,8 +3024,8 @@ dissect_rdm_pd_dns_ipv4_name_server(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dns_hostname(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_dns_hostname(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2806,8 +3037,8 @@ dissect_rdm_pd_dns_hostname(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_rdm_pd_dns_domain_name(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_dns_domain_name(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2819,8 +3050,8 @@ dissect_rdm_pd_dns_domain_name(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_identify_device(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_identify_device(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2835,8 +3066,8 @@ dissect_rdm_pd_identify_device(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_reset_device(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_reset_device(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2847,8 +3078,8 @@ dissect_rdm_pd_reset_device(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_rdm_pd_power_state(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_power_state(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2860,8 +3091,8 @@ dissect_rdm_pd_power_state(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint
-dissect_rdm_pd_perform_selftest(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_perform_selftest(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2876,8 +3107,8 @@ dissect_rdm_pd_perform_selftest(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_rdm_pd_self_test_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_self_test_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2893,8 +3124,8 @@ dissect_rdm_pd_self_test_description(tvbuff_t *tvb, guint offset, proto_tree *tr
   return offset;
 }
 
-static guint
-dissect_rdm_pd_capture_preset(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_capture_preset(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2908,8 +3139,8 @@ dissect_rdm_pd_capture_preset(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_rdm_pd_preset_playback(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len _U_)
+static unsigned
+dissect_rdm_pd_preset_playback(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len _U_)
 {
   switch(cc) {
   case RDM_CC_SET_COMMAND:
@@ -2922,8 +3153,8 @@ dissect_rdm_pd_preset_playback(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_identify_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_identify_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2935,8 +3166,8 @@ dissect_rdm_pd_identify_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_preset_info(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_preset_info(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -2965,8 +3196,8 @@ dissect_rdm_pd_preset_info(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint
-dissect_rdm_pd_preset_status(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_preset_status(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -2991,8 +3222,8 @@ dissect_rdm_pd_preset_status(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_preset_mergemode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_preset_mergemode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3004,8 +3235,8 @@ dissect_rdm_pd_preset_mergemode(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_rdm_pd_power_on_self_test(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_power_on_self_test(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3017,8 +3248,8 @@ dissect_rdm_pd_power_on_self_test(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_rdm_pd_background_queued_status_policy(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_background_queued_status_policy(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3033,8 +3264,8 @@ dissect_rdm_pd_background_queued_status_policy(tvbuff_t *tvb, guint offset, prot
   return offset;
 }
 
-static guint
-dissect_rdm_pd_background_queued_status_policy_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_background_queued_status_policy_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3049,8 +3280,8 @@ dissect_rdm_pd_background_queued_status_policy_description(tvbuff_t *tvb, guint 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_list(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_endpoint_list(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3067,8 +3298,8 @@ dissect_rdm_pd_endpoint_list(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_search_domain(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_search_domain(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3079,8 +3310,8 @@ dissect_rdm_pd_search_domain(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_to_universe(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_endpoint_to_universe(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3097,8 +3328,8 @@ dissect_rdm_pd_endpoint_to_universe(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_rdm_traffic_enable(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_rdm_traffic_enable(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3114,8 +3345,8 @@ dissect_rdm_pd_rdm_traffic_enable(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_endpoint_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3132,8 +3363,8 @@ dissect_rdm_pd_endpoint_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_label(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_endpoint_label(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3150,8 +3381,8 @@ dissect_rdm_pd_endpoint_label(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_rdm_pd_discovery_state(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_discovery_state(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3172,8 +3403,8 @@ dissect_rdm_pd_discovery_state(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_timing(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_endpoint_timing(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3194,8 +3425,8 @@ dissect_rdm_pd_endpoint_timing(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_timing_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_endpoint_timing_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3210,27 +3441,30 @@ dissect_rdm_pd_endpoint_timing_description(tvbuff_t *tvb, guint offset, proto_tr
   return offset;
 }
 
-static guint
-dissect_rdm_pd_binding_control_fields(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_binding_control_fields(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
     rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_binding_control_fields_endpoint_id, tvb, &offset, 2);
-    rdm_proto_tree_add_bytes_item(tree, hf_rdm_pd_binding_control_fields_uid, tvb, &offset, 6);
+    rdm_proto_tree_add_uid_item(tree, hf_rdm_pd_binding_control_fields_uid, tvb, &offset,
+      hf_rdm_pd_binding_control_fields_uid_manf, hf_rdm_pd_binding_control_fields_uid_dev);
     break;
   case RDM_CC_GET_COMMAND_RESPONSE:
     rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_binding_control_fields_endpoint_id, tvb, &offset, 2);
-    rdm_proto_tree_add_bytes_item(tree, hf_rdm_pd_binding_control_fields_uid, tvb, &offset, 6);
+    rdm_proto_tree_add_uid_item(tree, hf_rdm_pd_binding_control_fields_uid, tvb, &offset,
+      hf_rdm_pd_binding_control_fields_uid_manf, hf_rdm_pd_binding_control_fields_uid_dev);
     rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_binding_control_fields_control_field, tvb, &offset, 2);
-    rdm_proto_tree_add_bytes_item(tree, hf_rdm_pd_binding_control_fields_binding_uid, tvb, &offset, 6);
+    rdm_proto_tree_add_uid_item(tree, hf_rdm_pd_binding_control_fields_binding_uid, tvb, &offset,
+      hf_rdm_pd_binding_control_fields_binding_uid_manf, hf_rdm_pd_binding_control_fields_binding_uid_dev);
     break;
   }
 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_identify_endpoint(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_identify_endpoint(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3247,8 +3481,8 @@ dissect_rdm_pd_identify_endpoint(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_rdm_pd_background_discovery(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_background_discovery(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3265,8 +3499,8 @@ dissect_rdm_pd_background_discovery(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_responder_list_change(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_endpoint_responder_list_change(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3281,8 +3515,8 @@ dissect_rdm_pd_endpoint_responder_list_change(tvbuff_t *tvb, guint offset, proto
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_responders(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_endpoint_responders(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3293,7 +3527,8 @@ dissect_rdm_pd_endpoint_responders(tvbuff_t *tvb, guint offset, proto_tree *tree
     rdm_proto_tree_add_numeric_item(tree, hf_rdm_pd_endpoint_responders_change_number, tvb, &offset, 4);
     len -= 6;
     while (len >= 6) {
-      rdm_proto_tree_add_bytes_item(tree, hf_rdm_pd_endpoint_responders_uid, tvb, &offset, 6);
+      rdm_proto_tree_add_uid_item(tree, hf_rdm_pd_endpoint_responders_uid, tvb, &offset,
+        hf_rdm_pd_endpoint_responders_uid_manf, hf_rdm_pd_endpoint_responders_uid_dev);
       len -= 6;
     }
     break;
@@ -3302,8 +3537,8 @@ dissect_rdm_pd_endpoint_responders(tvbuff_t *tvb, guint offset, proto_tree *tree
   return offset;
 }
 
-static guint
-dissect_rdm_pd_tcp_comms_status(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_rdm_pd_tcp_comms_status(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3324,8 +3559,8 @@ dissect_rdm_pd_tcp_comms_status(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_rdm_pd_endpoint_list_change(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_endpoint_list_change(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3336,8 +3571,8 @@ dissect_rdm_pd_endpoint_list_change(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_rdm_pd_component_scope(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_component_scope(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3357,8 +3592,8 @@ dissect_rdm_pd_component_scope(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_rdm_pd_broker_status(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_rdm_pd_broker_status(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3373,8 +3608,8 @@ dissect_rdm_pd_broker_status(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_curve(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_curve(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3386,8 +3621,8 @@ dissect_etc_pd_led_curve(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 c
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_curve_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_led_curve_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3402,8 +3637,8 @@ dissect_etc_pd_led_curve_description(tvbuff_t *tvb, guint offset, proto_tree *tr
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_strobe(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_strobe(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3415,8 +3650,8 @@ dissect_etc_pd_led_strobe(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_output_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_output_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3428,8 +3663,8 @@ dissect_etc_pd_led_output_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_output_mode_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_led_output_mode_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3444,8 +3679,8 @@ dissect_etc_pd_led_output_mode_description(tvbuff_t *tvb, guint offset, proto_tr
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_red_shift(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_red_shift(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3457,8 +3692,8 @@ dissect_etc_pd_led_red_shift(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_white_point(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_white_point(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3470,8 +3705,8 @@ dissect_etc_pd_led_white_point(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_white_point_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_led_white_point_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3486,8 +3721,8 @@ dissect_etc_pd_led_white_point_description(tvbuff_t *tvb, guint offset, proto_tr
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_frequency(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_frequency(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3499,8 +3734,8 @@ dissect_etc_pd_led_frequency(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_dmx_data_loss_behavior(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_dmx_data_loss_behavior(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3512,8 +3747,8 @@ dissect_etc_pd_dmx_data_loss_behavior(tvbuff_t *tvb, guint offset, proto_tree *t
   return offset;
 }
 
-static guint
-dissect_etc_pd_dmx_data_loss_behavior_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_dmx_data_loss_behavior_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3528,8 +3763,8 @@ dissect_etc_pd_dmx_data_loss_behavior_description(tvbuff_t *tvb, guint offset, p
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_plus_seven(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_plus_seven(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3541,8 +3776,8 @@ dissect_etc_pd_led_plus_seven(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_etc_pd_backlight_brightness(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_backlight_brightness(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3554,8 +3789,8 @@ dissect_etc_pd_backlight_brightness(tvbuff_t *tvb, guint offset, proto_tree *tre
   return offset;
 }
 
-static guint
-dissect_etc_pd_backlight_timeout(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_backlight_timeout(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3567,8 +3802,8 @@ dissect_etc_pd_backlight_timeout(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_etc_pd_status_indicators(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_status_indicators(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3580,15 +3815,15 @@ dissect_etc_pd_status_indicators(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_etc_pd_recalibrate_fixture(guint offset)
+static unsigned
+dissect_etc_pd_recalibrate_fixture(unsigned offset)
 {
   /* set-only, no data */
   return offset;
 }
 
-static guint
-dissect_etc_pd_overtemp_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_overtemp_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3600,8 +3835,8 @@ dissect_etc_pd_overtemp_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_simple_setup_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_simple_setup_mode(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3613,8 +3848,8 @@ dissect_etc_pd_simple_setup_mode(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_strobe_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_led_strobe_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3629,8 +3864,8 @@ dissect_etc_pd_led_strobe_description(tvbuff_t *tvb, guint offset, proto_tree *t
   return offset;
 }
 
-static guint
-dissect_etc_pd_red_shift_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_red_shift_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3645,8 +3880,8 @@ dissect_etc_pd_red_shift_description(tvbuff_t *tvb, guint offset, proto_tree *tr
   return offset;
 }
 
-static guint
-dissect_etc_pd_plus_seven_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_plus_seven_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3661,8 +3896,8 @@ dissect_etc_pd_plus_seven_description(tvbuff_t *tvb, guint offset, proto_tree *t
   return offset;
 }
 
-static guint
-dissect_etc_pd_backlight_timeout_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_backlight_timeout_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3677,8 +3912,8 @@ dissect_etc_pd_backlight_timeout_description(tvbuff_t *tvb, guint offset, proto_
   return offset;
 }
 
-static guint
-dissect_etc_pd_simple_setup_mode_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_simple_setup_mode_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3693,8 +3928,8 @@ dissect_etc_pd_simple_setup_mode_description(tvbuff_t *tvb, guint offset, proto_
   return offset;
 }
 
-static guint
-dissect_etc_pd_overtemp_mode_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_overtemp_mode_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3709,8 +3944,8 @@ dissect_etc_pd_overtemp_mode_description(tvbuff_t *tvb, guint offset, proto_tree
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_requested_xy(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_requested_xy(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3722,8 +3957,8 @@ dissect_etc_pd_led_requested_xy(tvbuff_t *tvb, guint offset, proto_tree *tree, g
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_current_xy(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_current_xy(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3735,8 +3970,8 @@ dissect_etc_pd_led_current_xy(tvbuff_t *tvb, guint offset, proto_tree *tree, gui
   return offset;
 }
 
-static guint
-dissect_etc_pd_current_pwm(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_current_pwm(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3751,8 +3986,8 @@ dissect_etc_pd_current_pwm(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint
-dissect_etc_pd_tristimulus(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_tristimulus(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3769,8 +4004,8 @@ dissect_etc_pd_tristimulus(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_information(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_information(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3789,8 +4024,8 @@ dissect_etc_pd_led_information(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
   return offset;
 }
 
-static guint
-dissect_etc_pd_preset_config(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_preset_config(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3811,8 +4046,8 @@ dissect_etc_pd_preset_config(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_sequence_playback(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_sequence_playback(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3824,10 +4059,10 @@ dissect_etc_pd_sequence_playback(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_etc_pd_sequence_config(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_sequence_config(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
-  guint       i;
+  unsigned    i;
   proto_tree *preset_steps_tree, *preset_steps_sub_item;
   proto_tree *step_link_times_tree, *step_link_times_sub_item;
 
@@ -3860,8 +4095,8 @@ dissect_etc_pd_sequence_config(tvbuff_t *tvb, guint offset, proto_tree *tree, gu
 }
 
 
-static guint
-dissect_etc_pd_low_power_timeout(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_low_power_timeout(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3873,8 +4108,8 @@ dissect_etc_pd_low_power_timeout(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_etc_pd_low_power_timeout_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_low_power_timeout_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3889,8 +4124,8 @@ dissect_etc_pd_low_power_timeout_description(tvbuff_t *tvb, guint offset, proto_
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_enum_frequency(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_led_enum_frequency(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3902,8 +4137,8 @@ dissect_etc_pd_led_enum_frequency(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_etc_pd_led_enum_frequency_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_led_enum_frequency_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3918,8 +4153,8 @@ dissect_etc_pd_led_enum_frequency_description(tvbuff_t *tvb, guint offset, proto
   return offset;
 }
 
-static guint
-dissect_etc_pd_rgbi_preset_config(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_rgbi_preset_config(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3941,8 +4176,8 @@ dissect_etc_pd_rgbi_preset_config(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_etc_pd_cct_preset_config(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_cct_preset_config(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3965,8 +4200,8 @@ dissect_etc_pd_cct_preset_config(tvbuff_t *tvb, guint offset, proto_tree *tree, 
   return offset;
 }
 
-static guint
-dissect_etc_pd_supplementary_device_version(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_supplementary_device_version(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -3981,8 +4216,8 @@ dissect_etc_pd_supplementary_device_version(tvbuff_t *tvb, guint offset, proto_t
   return offset;
 }
 
-static guint
-dissect_etc_pd_power_command(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_power_command(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -3994,8 +4229,8 @@ dissect_etc_pd_power_command(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_power_command_description(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_power_command_description(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -4010,8 +4245,8 @@ dissect_etc_pd_power_command_description(tvbuff_t *tvb, guint offset, proto_tree
   return offset;
 }
 
-static guint
-dissect_etc_pd_dali_short_address(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_dali_short_address(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -4023,8 +4258,8 @@ dissect_etc_pd_dali_short_address(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_etc_pd_dali_group_membership(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_dali_group_membership(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -4036,8 +4271,8 @@ dissect_etc_pd_dali_group_membership(tvbuff_t *tvb, guint offset, proto_tree *tr
   return offset;
 }
 
-static guint
-dissect_etc_pd_auto_bind(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_auto_bind(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -4049,15 +4284,15 @@ dissect_etc_pd_auto_bind(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 c
   return offset;
 }
 
-static guint
-dissect_etc_pd_delete_subdevice(guint offset)
+static unsigned
+dissect_etc_pd_delete_subdevice(unsigned offset)
 {
   /* set-only, no data */
   return offset;
 }
 
-static guint
-dissect_etc_pd_packet_delay(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_packet_delay(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND_RESPONSE:
@@ -4069,8 +4304,8 @@ dissect_etc_pd_packet_delay(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_etc_pd_has_enum_text(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc)
+static unsigned
+dissect_etc_pd_has_enum_text(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -4085,8 +4320,8 @@ dissect_etc_pd_has_enum_text(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_get_enum_text(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint8 len)
+static unsigned
+dissect_etc_pd_get_enum_text(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint8_t len)
 {
   switch(cc) {
   case RDM_CC_GET_COMMAND:
@@ -4103,15 +4338,15 @@ dissect_etc_pd_get_enum_text(tvbuff_t *tvb, guint offset, proto_tree *tree, guin
   return offset;
 }
 
-static guint
-dissect_etc_pd_prepare_for_software_download(guint offset)
+static unsigned
+dissect_etc_pd_prepare_for_software_download(unsigned offset)
 {
   /* set-only, no data */
   return offset;
 }
 
-static guint
-dissect_etc_pid(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint16 param_id, guint8 pdl)
+static unsigned
+dissect_etc_pid(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint16_t param_id, uint8_t pdl)
 {
   switch(param_id) {
   case ETC_PARAM_ID_LED_CURVE:
@@ -4297,8 +4532,8 @@ dissect_etc_pid(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint1
   return offset;
 }
 
-static guint
-dissect_manufacturer_specific_pid(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint16 param_id, guint8 pdl, guint16 device_manufacturer_id)
+static unsigned
+dissect_manufacturer_specific_pid(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint16_t param_id, uint8_t pdl, uint16_t device_manufacturer_id)
 {
   switch(device_manufacturer_id) {
   case RDM_MANUFACTURER_ID_ETC:
@@ -4313,8 +4548,8 @@ dissect_manufacturer_specific_pid(tvbuff_t *tvb, guint offset, proto_tree *tree,
   return offset;
 }
 
-static guint
-dissect_rdm_mdb_param_data(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint16 param_id, guint8 pdl, guint16 device_manufacturer_id)
+static unsigned
+dissect_rdm_mdb_param_data(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint16_t param_id, uint8_t pdl, uint16_t device_manufacturer_id)
 {
   if (param_id >= 0x8000) {
     offset = dissect_manufacturer_specific_pid(tvb, offset, tree, cc, param_id, pdl, device_manufacturer_id);
@@ -4759,8 +4994,8 @@ dissect_rdm_mdb_param_data(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint
-dissect_rdm_pd_ack_overflow(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint16 param_id _U_, guint8 pdl)
+static unsigned
+dissect_rdm_pd_ack_overflow(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint16_t param_id _U_, uint8_t pdl)
 {
   if (pdl > 0) {
     switch(cc) {
@@ -4775,8 +5010,8 @@ dissect_rdm_pd_ack_overflow(tvbuff_t *tvb, guint offset, proto_tree *tree, guint
   return offset;
 }
 
-static guint
-dissect_rdm_pd_ack_timer(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint16 param_id _U_, guint8 pdl)
+static unsigned
+dissect_rdm_pd_ack_timer(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint16_t param_id _U_, uint8_t pdl)
 {
   if (pdl == 2) {
     switch(cc) {
@@ -4791,8 +5026,8 @@ dissect_rdm_pd_ack_timer(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 c
   return offset;
 }
 
-static guint
-dissect_rdm_pd_nack_reason(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8 cc, guint16 param_id _U_, guint8 pdl _U_)
+static unsigned
+dissect_rdm_pd_nack_reason(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint8_t cc, uint16_t param_id _U_, uint8_t pdl _U_)
 {
   if (pdl == 2) {
     switch(cc) {
@@ -4808,8 +5043,8 @@ dissect_rdm_pd_nack_reason(tvbuff_t *tvb, guint offset, proto_tree *tree, guint8
   return offset;
 }
 
-static guint8
-is_response(guint8 command_class)
+static uint8_t
+is_response(uint8_t command_class)
 {
   if ((command_class & RDM_CC_COMMAND_RESPONSE_FLAG) == RDM_CC_COMMAND_RESPONSE_FLAG) {
     return 1;
@@ -4818,7 +5053,7 @@ is_response(guint8 command_class)
 }
 
 static void
-add_pid_to_tree(guint16 param_id, proto_tree *mdb_tree, tvbuff_t *tvb, guint offset, guint16 device_manufacturer_id)
+add_pid_to_tree(uint16_t param_id, proto_tree *mdb_tree, tvbuff_t *tvb, unsigned offset, uint16_t device_manufacturer_id)
 {
   if (param_id < 0x8000) {
     proto_tree_add_item(mdb_tree, hf_rdm_parameter_id, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -4834,17 +5069,17 @@ add_pid_to_tree(guint16 param_id, proto_tree *mdb_tree, tvbuff_t *tvb, guint off
   }
 }
 
-static guint
-dissect_rdm_mdb(tvbuff_t *tvb, guint offset, proto_tree *tree, guint16 device_manufacturer_id)
+static unsigned
+dissect_rdm_mdb(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint16_t device_manufacturer_id)
 {
-  guint8      cc;
-  guint8      rt;
-  guint16      param_id;
-  guint8      parameter_data_length;
+  uint8_t     cc;
+  uint8_t     rt;
+  uint16_t     param_id;
+  uint8_t     parameter_data_length;
   proto_tree *hi,*si, *mdb_tree;
 
-  rt = tvb_get_guint8(tvb, offset);
-  cc = tvb_get_guint8(tvb, offset + 4);
+  rt = tvb_get_uint8(tvb, offset);
+  cc = tvb_get_uint8(tvb, offset + 4);
 
   if (is_response(cc)) {
     proto_tree_add_item(tree, hf_rdm_response_type, tvb,
@@ -4877,7 +5112,7 @@ dissect_rdm_mdb(tvbuff_t *tvb, guint offset, proto_tree *tree, guint16 device_ma
   add_pid_to_tree(param_id, mdb_tree, tvb, offset, device_manufacturer_id);
   offset += 2;
 
-  parameter_data_length = tvb_get_guint8(tvb, offset);
+  parameter_data_length = tvb_get_uint8(tvb, offset);
   proto_tree_add_item(mdb_tree, hf_rdm_parameter_data_length, tvb,
       offset, 1, ENC_BIG_ENDIAN);
   offset += 1;
@@ -4914,8 +5149,8 @@ dissect_rdm_mdb(tvbuff_t *tvb, guint offset, proto_tree *tree, guint16 device_ma
   return offset;
 }
 
-static guint16
-get_device_manufacturer_id(guint8 command_class, guint16 source_manufacturer_id, guint16 destination_manufacturer_id)
+static uint16_t
+get_device_manufacturer_id(uint8_t command_class, uint16_t source_manufacturer_id, uint16_t destination_manufacturer_id)
 {
   if ((command_class == RDM_CC_GET_COMMAND) ||
       (command_class == RDM_CC_SET_COMMAND)) {
@@ -4935,14 +5170,16 @@ dissect_rdm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   col_clear(pinfo->cinfo, COL_INFO);
 
   if (tree) {
-    gint      padding_size;
-    guint8    command_class;
-    guint16   destination_manufacturer_id;
-    guint16   source_manufacturer_id;
-    guint16   device_manufacturer_id;
-    guint32   destination_device_id;
-    guint32   source_device_id;
-    guint     message_length, offset = 0;
+    int       padding_size;
+    uint8_t   command_class;
+    uint16_t  destination_manufacturer_id;
+    uint16_t  source_manufacturer_id;
+    uint16_t  device_manufacturer_id;
+    uint32_t  destination_device_id;
+    uint32_t  source_device_id;
+    proto_item* uid_item;
+    proto_tree* uid_tree;
+    unsigned  message_length, offset = 0;
 
     proto_tree *ti = proto_tree_add_item(tree, proto_rdm, tvb,
         offset, -1, ENC_NA);
@@ -4952,7 +5189,7 @@ dissect_rdm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-    message_length = tvb_get_guint8(tvb, offset);
+    message_length = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(rdm_tree, hf_rdm_message_length, tvb,
         offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
@@ -4961,23 +5198,33 @@ dissect_rdm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     destination_device_id = tvb_get_ntohl(tvb, offset + 2);
     proto_item_append_text(ti, ", Dst UID: %04x:%08x",
         destination_manufacturer_id, destination_device_id);
-    proto_tree_add_item(rdm_tree, hf_rdm_dest_uid, tvb,
+    uid_item = proto_tree_add_item(rdm_tree, hf_rdm_dest_uid, tvb,
         offset, 6, ENC_NA);
+    uid_tree = proto_item_add_subtree(uid_item, ett_rdm_uid);
+    proto_tree_add_item(uid_tree, hf_rdm_dest_uid_manf, tvb,
+        offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(uid_tree, hf_rdm_dest_uid_dev, tvb,
+        offset+2, 4, ENC_BIG_ENDIAN);
     offset += 6;
 
     source_manufacturer_id = tvb_get_ntohs(tvb, offset);
     source_device_id = tvb_get_ntohl(tvb, offset + 2);
     proto_item_append_text(ti, ", Src UID: %04x:%08x",
         source_manufacturer_id, source_device_id);
-    proto_tree_add_item(rdm_tree, hf_rdm_src_uid, tvb,
+    uid_item = proto_tree_add_item(rdm_tree, hf_rdm_src_uid, tvb,
         offset, 6, ENC_NA);
+    uid_tree = proto_item_add_subtree(uid_item, ett_rdm_uid);
+    proto_tree_add_item(uid_tree, hf_rdm_src_uid_manf, tvb,
+        offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(uid_tree, hf_rdm_src_uid_dev, tvb,
+        offset+2, 4, ENC_BIG_ENDIAN);
     offset += 6;
 
     proto_tree_add_item(rdm_tree, hf_rdm_transaction_number, tvb,
         offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-    command_class = tvb_get_guint8(tvb, offset + 4);
+    command_class = tvb_get_uint8(tvb, offset + 4);
     device_manufacturer_id = get_device_manufacturer_id(command_class, source_manufacturer_id, destination_manufacturer_id);
     offset = dissect_rdm_mdb(tvb, offset, rdm_tree, device_manufacturer_id);
 
@@ -5019,9 +5266,29 @@ proto_register_rdm(void)
         FT_BYTES, BASE_NONE, NULL, 0x0,
         NULL, HFILL }},
 
+    { &hf_rdm_dest_uid_manf,
+      { "Manufacturer ID", "rdm.dst.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_dest_uid_dev,
+      { "Device ID", "rdm.dst.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
+        NULL, HFILL }},
+
     { &hf_rdm_src_uid,
       { "Source UID", "rdm.src",
         FT_BYTES, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_src_uid_manf,
+      { "Manufacturer ID", "rdm.src.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_src_uid_dev,
+      { "Device ID", "rdm.src.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
         NULL, HFILL }},
 
     { &hf_rdm_transaction_number,
@@ -5290,6 +5557,16 @@ proto_register_rdm(void)
         FT_BYTES, BASE_NONE, NULL, 0x0,
         NULL, HFILL }},
 
+    { &hf_rdm_pd_disc_mute_binding_uid_manf,
+      { "Manufacturer ID", "rdm.pd.disc_mute.binding_uid.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_disc_mute_binding_uid_dev,
+      { "Device ID", "rdm.pd.disc_mute.binding_uid.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
+        NULL, HFILL }},
+
     { &hf_rdm_pd_disc_unmute_control_field,
       { "Control Field", "rdm.pd.disc_unmute.control_field",
         FT_UINT8, BASE_HEX, NULL, 0x0,
@@ -5300,9 +5577,29 @@ proto_register_rdm(void)
         FT_BYTES, BASE_NONE, NULL, 0x0,
         NULL, HFILL }},
 
+    { &hf_rdm_pd_disc_unmute_binding_uid_manf,
+      { "Manufacturer ID", "rdm.pd.disc_unmute.binding_uid.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_disc_unmute_binding_uid_dev,
+      { "Device ID", "rdm.pd.disc_unmute.binding_uid.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
+        NULL, HFILL }},
+
     { &hf_rdm_pd_proxied_devices_uid,
       { "UID", "rdm.pd.proxied_devices.uid",
         FT_BYTES, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_proxied_devices_uid_manf,
+      { "Manufacturer ID", "rdm.pd.proxied_devices.uid.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_proxied_devices_uid_dev,
+      { "Device ID", "rdm.pd.proxied_devices.uid.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
         NULL, HFILL }},
 
     { &hf_rdm_pd_proxied_device_count,
@@ -5580,9 +5877,9 @@ proto_register_rdm(void)
         FT_UINT8, BASE_HEX, NULL, 0x0,
         NULL, HFILL }},
 
-    { &hf_rdm_pd_product_detail_id_list,
-      { "Sensor Count", "rdm.pd.product_detail_id_list",
-        FT_UINT16, BASE_HEX, NULL, 0x0,
+    { &hf_rdm_pd_product_detail_id,
+      { "Product Detail ID", "rdm.pd.product_detail_id",
+        FT_UINT16, BASE_HEX | BASE_EXT_STRING, &rdm_product_detail_vals_ext, 0x0,
         NULL, HFILL }},
 
     { &hf_rdm_pd_factory_defaults,
@@ -5635,6 +5932,16 @@ proto_register_rdm(void)
         FT_BYTES, BASE_NONE, NULL, 0x0,
         NULL, HFILL }},
 
+    { &hf_rdm_pd_binding_control_fields_uid_manf,
+      { "Manufacturer ID", "rdm.pd.binding_control_fields.uid.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_binding_control_fields_uid_dev,
+      { "Device ID", "rdm.pd.binding_control_fields.uid.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
+        NULL, HFILL }},
+
     { &hf_rdm_pd_binding_control_fields_control_field,
       { "Control Field", "rdm.pd.binding_control_fields.control_field",
         FT_UINT16, BASE_DEC, NULL, 0x0,
@@ -5643,6 +5950,16 @@ proto_register_rdm(void)
     { &hf_rdm_pd_binding_control_fields_binding_uid,
       { "Binding UID", "rdm.pd.binding_control_fields.binding_uid",
         FT_BYTES, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_binding_control_fields_binding_uid_manf,
+      { "Manufacturer ID", "rdm.pd.binding_control_fields.binding_uid.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_binding_control_fields_binding_uid_dev,
+      { "Device ID", "rdm.pd.binding_control_fields.binding_uid.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
         NULL, HFILL }},
 
     { &hf_rem_pd_broker_status_set_allowed,
@@ -5948,6 +6265,16 @@ proto_register_rdm(void)
     { &hf_rdm_pd_endpoint_responders_uid,
       { "UID", "rdm.pd.endpoint_responders.uid",
         FT_BYTES, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_endpoint_responders_uid_manf,
+      { "Manufacturer ID", "rdm.pd.endpoint_responders.uid.manf",
+        FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_rdm_pd_endpoint_responders_uid_dev,
+      { "Device ID", "rdm.pd.endpoint_responders.uid.dev",
+        FT_UINT32, BASE_HEX, NULL, 0x0,
         NULL, HFILL }},
 
     { &hf_rdm_pd_endpoint_timing_endpoint_id,
@@ -6901,8 +7228,9 @@ proto_register_rdm(void)
 
   };
 
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_rdm,
+    &ett_rdm_uid,
     &ett_etc_sequence_config_steps,
     &ett_etc_sequence_config_times
   };
@@ -6916,14 +7244,14 @@ proto_register_rdm(void)
   proto_rdm = proto_register_protocol("Remote Device Management", "RDM", "rdm");
   proto_register_field_array(proto_rdm, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
-  register_dissector("rdm", dissect_rdm, proto_rdm);
+  rdm_handle = register_dissector("rdm", dissect_rdm, proto_rdm);
   expert_rdm = expert_register_protocol(proto_rdm);
   expert_register_field_array(expert_rdm, ei, array_length(ei));
 }
 
 void
 proto_reg_handoff_rdm(void) {
-  dissector_add_uint("dmx", 0xCC, create_dissector_handle(dissect_rdm, proto_rdm));
+  dissector_add_uint("dmx", 0xCC, rdm_handle);
 }
 
 /*

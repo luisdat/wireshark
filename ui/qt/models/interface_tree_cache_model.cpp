@@ -11,8 +11,6 @@
 
 #include <ui/qt/models/interface_tree_cache_model.h>
 
-#include "glib.h"
-
 #include "epan/prefs.h"
 
 #include <ui/qt/utils/qt_ui_utils.h>
@@ -34,18 +32,13 @@ InterfaceTreeCacheModel::InterfaceTreeCacheModel(QObject *parent) :
     sourceModel = new InterfaceTreeModel(parent);
 
     QIdentityProxyModel::setSourceModel(sourceModel);
-    storage = new QMap<int, QMap<InterfaceTreeColumns, QVariant> *>();
+    storage = new QMap<int, QSharedPointer<QMap<InterfaceTreeColumns, QVariant> > >();
 
     checkableColumns << IFTREE_COL_HIDDEN << IFTREE_COL_PROMISCUOUSMODE;
-#ifdef HAVE_PCAP_CREATE
     checkableColumns << IFTREE_COL_MONITOR_MODE;
-#endif
 
     editableColumns << IFTREE_COL_COMMENT << IFTREE_COL_SNAPLEN << IFTREE_COL_PIPE_PATH;
-
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     editableColumns << IFTREE_COL_BUFFERLEN;
-#endif
 }
 
 InterfaceTreeCacheModel::~InterfaceTreeCacheModel()
@@ -69,8 +62,7 @@ void InterfaceTreeCacheModel::reset(int row)
 {
     if (row < 0)
     {
-        delete storage;
-        storage = new QMap<int, QMap<InterfaceTreeColumns, QVariant> *>();
+        storage->clear();
     }
     else
     {
@@ -83,7 +75,7 @@ void InterfaceTreeCacheModel::saveNewDevices()
 {
     QList<interface_t>::const_iterator it = newDevices.constBegin();
     /* idx is used for iterating only over the indices of the new devices. As all new
-     * devices are stored with an index higher then sourceModel->rowCount(), we start
+     * devices are stored with an index higher than sourceModel->rowCount(), we start
      * only with those storage indices.
      * it is just the iterator over the new devices. A new device must not necessarily
      * have storage, which will lead to that device not being stored in global_capture_opts */
@@ -92,7 +84,7 @@ void InterfaceTreeCacheModel::saveNewDevices()
         interface_t *device = const_cast<interface_t *>(&(*it));
         bool useDevice = false;
 
-        QMap<InterfaceTreeColumns, QVariant> * dataField = storage->value(idx, 0);
+        QSharedPointer<QMap<InterfaceTreeColumns, QVariant> > dataField = storage->value(idx, 0);
         /* When devices are being added, they are added using generic values. So only devices
          * whose data have been changed should be used from here on out. */
         if (dataField != 0)
@@ -126,7 +118,6 @@ void InterfaceTreeCacheModel::saveNewDevices()
 
         /* All entries of this new devices have been considered */
         storage->remove(idx);
-        delete dataField;
     }
 
     newDevices.clear();
@@ -142,6 +133,13 @@ void InterfaceTreeCacheModel::save()
     /* No devices are hidden until checking "Show" state */
     prefStorage[&prefs.capture_devices_hide] = QStringList();
 
+    /* Some of the columns we only add entries to the QStringList for
+     * interfaces that have a non-default value, so we need to ensure
+     * that we set the pref string to empty if no interface is set.
+     */
+    prefStorage[&prefs.capture_devices_descr] = QStringList();
+    prefStorage[&prefs.capture_devices_monitor_mode] << QStringList();
+
     /* Storing new devices first including their changed values */
     saveNewDevices();
 
@@ -154,7 +152,7 @@ void InterfaceTreeCacheModel::save()
             continue;
 
         /* Try to load a saved value row for this index */
-        QMap<InterfaceTreeColumns, QVariant> * dataField = storage->value(idx, 0);
+        QSharedPointer<QMap<InterfaceTreeColumns, QVariant> > dataField = storage->value(idx, 0);
 
         /* Handle the storing of values for this device here */
         if (dataField)
@@ -172,7 +170,8 @@ void InterfaceTreeCacheModel::save()
 
                 if (col == IFTREE_COL_HIDDEN)
                 {
-                    device->hidden = saveValue.toBool();
+                    /* Hidden is de-selection, therefore inverted logic here */
+                    device->hidden = (saveValue == Qt::Unchecked);
                 }
                 else if (device->if_info.type == IF_EXTCAP)
                 {
@@ -184,12 +183,10 @@ void InterfaceTreeCacheModel::save()
                 {
                     device->pmode = saveValue.toBool();
                 }
-#ifdef HAVE_PCAP_CREATE
                 else if (col == IFTREE_COL_MONITOR_MODE)
                 {
                     device->monitor_mode_enabled = saveValue.toBool();
                 }
-#endif
                 else if (col == IFTREE_COL_SNAPLEN)
                 {
                     int iVal = saveValue.toInt();
@@ -204,12 +201,10 @@ void InterfaceTreeCacheModel::save()
                         device->snaplen = WTAP_MAX_PACKET_SIZE_STANDARD;
                     }
                 }
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
                 else if (col == IFTREE_COL_BUFFERLEN)
                 {
                     device->buffer = saveValue.toInt();
                 }
-#endif
                 ++it;
             }
         }
@@ -220,7 +215,7 @@ void InterfaceTreeCacheModel::save()
 
         content = getColumnContent(idx, IFTREE_COL_COMMENT);
         if (content.isValid() && content.toString().size() > 0)
-            prefStorage[&prefs.capture_devices_descr] << QString("%1(%2)").arg(device->name).arg(content.toString());
+            prefStorage[&prefs.capture_devices_descr] << QStringLiteral("%1(%2)").arg(device->name).arg(content.toString());
 
         bool allowExtendedColumns = true;
 
@@ -233,26 +228,23 @@ void InterfaceTreeCacheModel::save()
             if (content.isValid())
             {
                 bool value = static_cast<Qt::CheckState>(content.toInt()) == Qt::Checked;
-                prefStorage[&prefs.capture_devices_pmode]  << QString("%1(%2)").arg(device->name).arg(value ? 1 : 0);
+                prefStorage[&prefs.capture_devices_pmode]  << QStringLiteral("%1(%2)").arg(device->name).arg(value ? 1 : 0);
             }
 
-#ifdef HAVE_PCAP_CREATE
             content = getColumnContent(idx, IFTREE_COL_MONITOR_MODE, Qt::CheckStateRole);
             if (content.isValid() && static_cast<Qt::CheckState>(content.toInt()) == Qt::Checked)
                     prefStorage[&prefs.capture_devices_monitor_mode] << QString(device->name);
-#endif
 
             content = getColumnContent(idx, IFTREE_COL_SNAPLEN);
             if (content.isValid())
             {
                 int value = content.toInt();
                 prefStorage[&prefs.capture_devices_snaplen]  <<
-                        QString("%1:%2(%3)").arg(device->name).
+                        QStringLiteral("%1:%2(%3)").arg(device->name).
                         arg(device->has_snaplen ? 1 : 0).
                         arg(device->has_snaplen ? value : WTAP_MAX_PACKET_SIZE_STANDARD);
             }
 
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             content = getColumnContent(idx, IFTREE_COL_BUFFERLEN);
             if (content.isValid())
             {
@@ -260,11 +252,10 @@ void InterfaceTreeCacheModel::save()
                 if (value != -1)
                 {
                     prefStorage[&prefs.capture_devices_buffersize]  <<
-                            QString("%1(%2)").arg(device->name).
+                            QStringLiteral("%1(%2)").arg(device->name).
                             arg(value);
                 }
             }
-#endif
         }
     }
 
@@ -342,10 +333,8 @@ bool InterfaceTreeCacheModel::isAllowedToBeEdited(const QModelIndex &index) cons
         /* extcap interfaces do not have those settings */
         if (col == IFTREE_COL_PROMISCUOUSMODE || col == IFTREE_COL_SNAPLEN)
             return false;
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
         if (col == IFTREE_COL_BUFFERLEN)
             return false;
-#endif
     }
 #endif
     return true;
@@ -415,12 +404,12 @@ bool InterfaceTreeCacheModel::setData(const QModelIndex &index, const QVariant &
         {
             QVariant saveValue = value;
 
-            QMap<InterfaceTreeColumns, QVariant> * dataField = 0;
+            QSharedPointer<QMap<InterfaceTreeColumns, QVariant> > dataField = nullptr;
             /* obtain the list of already stored changes for this row. If none exist
              * create a new storage row for this entry */
-            if ((dataField = storage->value(row, 0)) == 0)
+            if ((dataField = storage->value(row, 0)) == nullptr)
             {
-                dataField = new QMap<InterfaceTreeColumns, QVariant>();
+                dataField = QSharedPointer<QMap<InterfaceTreeColumns, QVariant> >(new QMap<InterfaceTreeColumns, QVariant>);
                 storage->insert(row, dataField);
             }
 
@@ -447,8 +436,8 @@ QVariant InterfaceTreeCacheModel::data(const QModelIndex &index, int role) const
         if (((role == Qt::DisplayRole || role == Qt::EditRole) && editableColumns.contains(col)) ||
                 (role == Qt::CheckStateRole && checkableColumns.contains(col)) )
         {
-            QMap<InterfaceTreeColumns, QVariant> * dataField = 0;
-            if ((dataField = storage->value(row, 0)) != 0)
+            QSharedPointer<QMap<InterfaceTreeColumns, QVariant> > dataField = nullptr;
+            if ((dataField = storage->value(row, 0)) != nullptr)
             {
                 if (dataField->contains(col))
                 {
@@ -487,8 +476,8 @@ QVariant InterfaceTreeCacheModel::data(const QModelIndex &index, int role) const
                         col == IFTREE_COL_DESCRIPTION)
                 {
 
-                    QMap<InterfaceTreeColumns, QVariant> * dataField = 0;
-                    if ((dataField = storage->value(row, 0)) != 0 &&
+                    QSharedPointer<QMap<InterfaceTreeColumns, QVariant> > dataField = nullptr;
+                    if ((dataField = storage->value(row, 0)) != nullptr &&
                             dataField->contains(IFTREE_COL_PIPE_PATH))
                     {
                         return dataField->value(IFTREE_COL_PIPE_PATH, QVariant());
@@ -519,6 +508,17 @@ QVariant InterfaceTreeCacheModel::data(const QModelIndex &index, int role) const
 
     return QVariant();
 }
+
+#ifdef HAVE_PCAP_REMOTE
+bool InterfaceTreeCacheModel::isRemote(const QModelIndex &index) const
+{
+    const interface_t *device = lookup(index);
+    if (device != nullptr && device->remote_opts.src_type == CAPTURE_IFREMOTE) {
+        return true;
+    }
+    return false;
+}
+#endif
 
 #ifdef HAVE_LIBPCAP
 QModelIndex InterfaceTreeCacheModel::index(int row, int column, const QModelIndex &parent) const

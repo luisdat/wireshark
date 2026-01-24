@@ -11,6 +11,16 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/*
+ * What happened to Yahoo Messenger?
+ * Original service discontinued: The original Yahoo Messenger service was shut down in phases.
+ *  The legacy version was discontinued in 2016, and the new version was shut down entirely in July 2018.
+ * Alternative introduced: Yahoo directed users to its group messaging app, Squirrel, as an alternative at the time of the shutdown.
+ * Yahoo! Squirrel was a group messaging app launched in 2018, intended to replace Yahoo! Messenger.
+ *  It was an invite-only application for iOS and Android that focused on private group chats,
+ *  but it was discontinued in April 2019.
+ */
+
 #include "config.h"
 
 #include <epan/packet.h>
@@ -18,19 +28,19 @@
 void proto_register_yhoo(void);
 void proto_reg_handoff_yhoo(void);
 
-static int proto_yhoo = -1;
-static int hf_yhoo_version = -1;
-static int hf_yhoo_len = -1;
-static int hf_yhoo_service = -1;
-static int hf_yhoo_connection_id = -1;
-static int hf_yhoo_magic_id = -1;
-static int hf_yhoo_unknown1 = -1;
-static int hf_yhoo_msgtype = -1;
-static int hf_yhoo_nick1 = -1;
-static int hf_yhoo_nick2 = -1;
-static int hf_yhoo_content = -1;
+static int proto_yhoo;
+static int hf_yhoo_version;
+static int hf_yhoo_len;
+static int hf_yhoo_service;
+static int hf_yhoo_connection_id;
+static int hf_yhoo_magic_id;
+static int hf_yhoo_unknown1;
+static int hf_yhoo_msgtype;
+static int hf_yhoo_nick1;
+static int hf_yhoo_nick2;
+static int hf_yhoo_content;
 
-static gint ett_yhoo = -1;
+static int ett_yhoo;
 
 #define TCP_PORT_YHOO	5050
 
@@ -160,7 +170,7 @@ static const value_string yhoo_msgtype_vals[] = {
 	{0, NULL}
 };
 
-static gboolean
+static bool
 dissect_yhoo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 	proto_tree      *yhoo_tree, *ti;
@@ -168,7 +178,7 @@ dissect_yhoo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 
 	if (pinfo->srcport != TCP_PORT_YHOO && pinfo->destport != TCP_PORT_YHOO) {
 		/* Not the Yahoo port - not a Yahoo Messenger packet. */
-		return FALSE;
+		return false;
 	}
 
 	/* get at least a full packet structure */
@@ -176,20 +186,20 @@ dissect_yhoo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 		/* Not enough data captured; maybe it is a Yahoo
 		   Messenger packet, but it contains too little data to
 		   tell. */
-		return FALSE;
+		return false;
 	}
 
-	if (tvb_memeql(tvb, offset, (const guint8*)"YPNS", 4) != 0 &&
-	    tvb_memeql(tvb, offset, (const guint8*)"YHOO", 4) != 0) {
+	if (tvb_memeql(tvb, offset, (const uint8_t*)"YPNS", 4) != 0 &&
+	    tvb_memeql(tvb, offset, (const uint8_t*)"YHOO", 4) != 0) {
 		/* Not a Yahoo Messenger packet. */
-		return FALSE;
+		return false;
 	}
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "YHOO");
 
 	col_add_fstr(pinfo->cinfo, COL_INFO, "%s: %s",
-			     ( tvb_memeql(tvb, offset + 0, (const guint8*)"YPNS", 4) == 0 ) ? "Request" : "Response",
-			     val_to_str(tvb_get_letohl(tvb, offset + 12),
+			     ( tvb_memeql(tvb, offset + 0, (const uint8_t*)"YPNS", 4) == 0 ) ? "Request" : "Response",
+			     val_to_str(pinfo->pool, tvb_get_letohl(tvb, offset + 12),
 					yhoo_service_vals, "Unknown Service: %u"));
 
 	if (tree) {
@@ -237,7 +247,7 @@ dissect_yhoo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 			offset, ENC_ASCII);
 	}
 
-	return TRUE;
+	return true;
 }
 
 void
@@ -275,7 +285,7 @@ proto_register_yhoo(void)
 				"Version", "yhoo.version", FT_STRING, BASE_NONE,
 				NULL, 0, "Packet version identifier", HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_yhoo,
 	};
 
@@ -285,6 +295,8 @@ proto_register_yhoo(void)
 	proto_register_field_array(proto_yhoo, hf, array_length(hf));
 
 	proto_register_subtree_array(ett, array_length(ett));
+
+	proto_disable_by_default(proto_yhoo);
 }
 
 void
@@ -297,7 +309,7 @@ proto_reg_handoff_yhoo(void)
 	 * Just register as a heuristic TCP dissector, and reject stuff
 	 * not to or from that port.
 	 */
-	heur_dissector_add("tcp", dissect_yhoo, "Yahoo Messenger over TCP", "yhoo_tcp", proto_yhoo, HEURISTIC_ENABLE);
+	heur_dissector_add("tcp", dissect_yhoo, "Yahoo Messenger over TCP", "yhoo_tcp", proto_yhoo, HEURISTIC_DISABLE);
 }
 
 /*

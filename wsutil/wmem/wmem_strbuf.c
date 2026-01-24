@@ -39,14 +39,14 @@ wmem_strbuf_new_sized(wmem_allocator_t *allocator,
     strbuf->len       = 0;
     strbuf->alloc_size = alloc_size ? alloc_size : DEFAULT_MINIMUM_SIZE;
 
-    strbuf->str    = (gchar *)wmem_alloc(strbuf->allocator, strbuf->alloc_size);
+    strbuf->str    = (char *)wmem_alloc(strbuf->allocator, strbuf->alloc_size);
     strbuf->str[0] = '\0';
 
     return strbuf;
 }
 
 wmem_strbuf_t *
-wmem_strbuf_new_len(wmem_allocator_t *allocator, const gchar *str, size_t len)
+wmem_strbuf_new_len(wmem_allocator_t *allocator, const char *str, size_t len)
 {
     wmem_strbuf_t *strbuf;
     size_t          alloc_size;
@@ -71,7 +71,7 @@ wmem_strbuf_new_len(wmem_allocator_t *allocator, const gchar *str, size_t len)
 }
 
 wmem_strbuf_t *
-wmem_strbuf_new(wmem_allocator_t *allocator, const gchar *str)
+wmem_strbuf_new(wmem_allocator_t *allocator, const char *str)
 {
     return wmem_strbuf_new_len(allocator, str, str ? strlen(str) : 0);
 }
@@ -88,8 +88,7 @@ wmem_strbuf_dup(wmem_allocator_t *allocator, const wmem_strbuf_t *src)
     return new;
 }
 
-/* grows the allocated size of the wmem_strbuf_t. If max_size is set, then
- * not guaranteed to grow by the full amount to_add */
+/* grows the allocated size of the wmem_strbuf_t */
 static inline void
 wmem_strbuf_grow(wmem_strbuf_t *strbuf, const size_t to_add)
 {
@@ -115,13 +114,13 @@ wmem_strbuf_grow(wmem_strbuf_t *strbuf, const size_t to_add)
         return;
     }
 
-    strbuf->str = (gchar *)wmem_realloc(strbuf->allocator, strbuf->str, new_alloc_len);
+    strbuf->str = (char *)wmem_realloc(strbuf->allocator, strbuf->str, new_alloc_len);
 
     strbuf->alloc_size = new_alloc_len;
 }
 
 void
-wmem_strbuf_append(wmem_strbuf_t *strbuf, const gchar *str)
+wmem_strbuf_append(wmem_strbuf_t *strbuf, const char *str)
 {
     size_t append_len;
 
@@ -139,7 +138,7 @@ wmem_strbuf_append(wmem_strbuf_t *strbuf, const gchar *str)
 }
 
 void
-wmem_strbuf_append_len(wmem_strbuf_t *strbuf, const gchar *str, size_t append_len)
+wmem_strbuf_append_len(wmem_strbuf_t *strbuf, const char *str, size_t append_len)
 {
 
     if (!append_len || !str) {
@@ -168,7 +167,7 @@ int _strbuf_vsnprintf(wmem_strbuf_t *strbuf, const char *format, va_list ap)
     }
     if ((size_t)want_len < buffer_size) {
         /* Success. */
-        strbuf->len += want_len;
+        strbuf->len += (size_t)want_len;
         return 0;
     }
 
@@ -180,7 +179,7 @@ int _strbuf_vsnprintf(wmem_strbuf_t *strbuf, const char *format, va_list ap)
 }
 
 void
-wmem_strbuf_append_vprintf(wmem_strbuf_t *strbuf, const gchar *fmt, va_list ap)
+wmem_strbuf_append_vprintf(wmem_strbuf_t *strbuf, const char *fmt, va_list ap)
 {
     int want_len;
     va_list ap2;
@@ -193,14 +192,14 @@ wmem_strbuf_append_vprintf(wmem_strbuf_t *strbuf, const gchar *fmt, va_list ap)
         return;
 
     /* Resize buffer and try again. */
-    wmem_strbuf_grow(strbuf, want_len);
+    wmem_strbuf_grow(strbuf, (size_t)want_len);
     want_len = _strbuf_vsnprintf(strbuf, fmt, ap);
     /* Second time must succeed or error out. */
     ws_assert(want_len <= 0);
 }
 
 void
-wmem_strbuf_append_printf(wmem_strbuf_t *strbuf, const gchar *format, ...)
+wmem_strbuf_append_printf(wmem_strbuf_t *strbuf, const char *format, ...)
 {
     va_list ap;
 
@@ -210,7 +209,7 @@ wmem_strbuf_append_printf(wmem_strbuf_t *strbuf, const gchar *format, ...)
 }
 
 void
-wmem_strbuf_append_c(wmem_strbuf_t *strbuf, const gchar c)
+wmem_strbuf_append_c(wmem_strbuf_t *strbuf, const char c)
 {
     wmem_strbuf_grow(strbuf, 1);
 
@@ -220,7 +219,7 @@ wmem_strbuf_append_c(wmem_strbuf_t *strbuf, const gchar c)
 }
 
 void
-wmem_strbuf_append_c_count(wmem_strbuf_t *strbuf, const gchar c, size_t count)
+wmem_strbuf_append_c_count(wmem_strbuf_t *strbuf, const char c, size_t count)
 {
     wmem_strbuf_grow(strbuf, count);
 
@@ -233,10 +232,10 @@ wmem_strbuf_append_c_count(wmem_strbuf_t *strbuf, const gchar c, size_t count)
 void
 wmem_strbuf_append_unichar(wmem_strbuf_t *strbuf, const gunichar c)
 {
-    gchar buf[6];
+    char buf[6];
     size_t charlen;
 
-    charlen = g_unichar_to_utf8(c, buf);
+    charlen = (size_t)g_unichar_to_utf8(c, buf);
 
     wmem_strbuf_grow(strbuf, charlen);
 
@@ -334,7 +333,7 @@ wmem_strbuf_truncate(wmem_strbuf_t *strbuf, const size_t len)
     strbuf->len = len;
 }
 
-const gchar *
+const char *
 wmem_strbuf_get_str(const wmem_strbuf_t *strbuf)
 {
     return strbuf->str;
@@ -372,7 +371,7 @@ wmem_strbuf_strcmp(const wmem_strbuf_t *sb1, const wmem_strbuf_t *sb2)
 const char *
 wmem_strbuf_strstr(const wmem_strbuf_t *haystack, const wmem_strbuf_t *needle)
 {
-    return ws_memmem(haystack->str, haystack->len, needle->str, needle->len);
+    return (const char*)ws_memmem(haystack->str, haystack->len, needle->str, needle->len);
 }
 
 /* Truncates the allocated memory down to the minimal amount, frees the header
@@ -434,7 +433,7 @@ string_utf8_validate(const char *str, ssize_t max_len, const char **endpptr)
     return string_utf8_validate(str, max_len, endpptr);
 }
 
-/* g_utf8_validate() returns FALSE in the string contains embedded NUL
+/* g_utf8_validate() returns false in the string contains embedded NUL
  * bytes. We accept \x00 as valid and work around that to validate the
  * entire len bytes. */
 bool
@@ -446,7 +445,7 @@ wmem_strbuf_utf8_validate(wmem_strbuf_t *strbuf, const char **endpptr)
 void
 wmem_strbuf_utf8_make_valid(wmem_strbuf_t *strbuf)
 {
-    wmem_strbuf_t *tmp = ws_utf8_make_valid_strbuf(strbuf->allocator, strbuf->str, strbuf->len);
+    wmem_strbuf_t *tmp = ws_utf8_make_valid_strbuf(strbuf->allocator, (const uint8_t*)strbuf->str, strbuf->len);
 
     wmem_free(strbuf->allocator, strbuf->str);
     strbuf->str = tmp->str;

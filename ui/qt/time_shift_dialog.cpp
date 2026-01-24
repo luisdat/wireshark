@@ -32,7 +32,7 @@ TimeShiftDialog::TimeShiftDialog(QWidget *parent, capture_file *cf) :
     QStyleOption style_opt;
     int rb_label_offset =  ts_ui_->shiftAllButton->style()->subElementRect(QStyle::SE_RadioButtonContents, &style_opt).left();
     int cb_label_offset =  ts_ui_->shiftAllButton->style()->subElementRect(QStyle::SE_CheckBoxContents, &style_opt).left();
-    setStyleSheet(QString(
+    setStyleSheet(QStringLiteral(
                       "QCheckBox#setTwoCheckBox {"
                       "  margin-left: %1px;"
                       "}"
@@ -101,7 +101,7 @@ void TimeShiftDialog::enableWidgets()
         ts_ui_->errorLabel->setStyleSheet(" QLabel { margin-top: 0.5em; }");
     } else {
         ts_ui_->errorLabel->setText(syntax_err_);
-        ts_ui_->errorLabel->setStyleSheet(QString(
+        ts_ui_->errorLabel->setStyleSheet(QStringLiteral(
                     "QLabel {"
                     "  margin-top: 0.5em;"
                     "  background-color: %2;"
@@ -116,7 +116,7 @@ void TimeShiftDialog::enableWidgets()
 void TimeShiftDialog::checkFrameNumber(SyntaxLineEdit &frame_le)
 {
     bool frame_valid;
-    guint frame_num = frame_le.text().toUInt(&frame_valid);
+    unsigned frame_num = frame_le.text().toUInt(&frame_valid);
 
     syntax_err_.clear();
     if (frame_le.text().isEmpty()) {
@@ -124,7 +124,7 @@ void TimeShiftDialog::checkFrameNumber(SyntaxLineEdit &frame_le)
     } else if (!frame_valid || !cap_file_ || frame_num < 1 || frame_num > cap_file_->count) {
         frame_le.setSyntaxState(SyntaxLineEdit::Invalid);
         if (cap_file_) {
-            syntax_err_ = QString(tr("Frame numbers must be between 1 and %1.").arg(cap_file_->count));
+            syntax_err_ = tr("Frame numbers must be between 1 and %1.").arg(cap_file_->count);
         } else {
             syntax_err_ = tr("Invalid frame number.");
         }
@@ -137,7 +137,7 @@ void TimeShiftDialog::checkDateTime(SyntaxLineEdit &time_le)
 {
     int Y, M, D, h, m;
     long double s;
-    const gchar *err_str;
+    const char *err_str;
 
     syntax_err_.clear();
     if (time_le.text().isEmpty()) {
@@ -175,8 +175,8 @@ void TimeShiftDialog::on_shiftAllTimeLineEdit_textChanged(const QString &sa_text
 {
     int h, m;
     long double s;
-    gboolean neg;
-    const gchar *err_str;
+    bool neg;
+    const char *err_str;
 
     syntax_err_.clear();
     if (sa_text.isEmpty()) {
@@ -223,13 +223,13 @@ void TimeShiftDialog::on_setTwoTimeLineEdit_textChanged(const QString &)
 
 void TimeShiftDialog::applyTimeShift()
 {
-    const gchar *err_str = NULL;
+    const char *err_str = NULL;
 
-    if (!cap_file_ || cap_file_->state == FILE_CLOSED) return;
+    if (!cap_file_ || cap_file_->state == FILE_CLOSED || cap_file_->state == FILE_READ_PENDING) return;
 
     syntax_err_.clear();
     if (cap_file_->state == FILE_READ_IN_PROGRESS) {
-        syntax_err_ = tr("Time shifting is not available capturing packets.");
+        syntax_err_ = tr("Time shifting is not available while capturing packets.");
     } else if (ts_ui_->shiftAllButton->isChecked()) {
         err_str = time_shift_all(cap_file_,
                                  ts_ui_->shiftAllTimeLineEdit->text().toUtf8().constData());

@@ -1,7 +1,6 @@
 [
   {
     "_index": "packets-2004-12-05",
-    "_type": "doc",
     "_score": null,
     "_source": {
       "layers": {
@@ -10,7 +9,8 @@
           0,
           314,
           0,
-          1
+          1,
+          0
         ],
         "frame": {
           "frame.encap_type_raw": [
@@ -18,91 +18,104 @@
             0,
             0,
             0,
-            13
+            13,
+            0
           ],
           "frame.time_raw": [
             "",
             0,
             0,
             0,
-            24
+            24,
+            0
           ],
-          "frame.offset_shift_raw": [
+          "frame.time_utc_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
           ],
           "frame.time_epoch_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
           ],
-          "frame.time_delta_raw": [
+          "frame.offset_shift_raw": [
             "",
             0,
             0,
             0,
-            25
-          ],
-          "frame.time_delta_displayed_raw": [
-            "",
-            0,
-            0,
-            0,
-            25
+            25,
+            0
           ],
           "frame.time_relative_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.number_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.cap_len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.marked_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.ignored_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.protocols_raw": [
             "",
             0,
             0,
             0,
-            26
+            26,
+            0
+          ],
+          "frame.encoding_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "eth_raw": [
@@ -110,7 +123,8 @@
           0,
           14,
           0,
-          1
+          1,
+          0
         ],
         "eth": {
           "eth.dst_raw": [
@@ -118,7 +132,8 @@
             0,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.dst_tree": {
             "eth.dst_resolved_raw": [
@@ -126,63 +141,72 @@
               0,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.dst.oui_raw": [
               "ffffff",
               0,
               3,
               0,
-              6
-            ],
-            "eth.addr_raw": [
-              "ffffffffffff",
-              0,
               6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "ffffffffffff",
-              0,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "ffffff",
-              0,
-              3,
-              0,
-              6
+              0
             ],
             "eth.dst.lg_raw": [
               "1",
               0,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "1",
-              0,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.dst.ig_raw": [
               "1",
               0,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "ffffffffffff",
+              0,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "ffffffffffff",
+              0,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "ffffff",
+              0,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.lg_raw": [
+              "1",
+              0,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "1",
               0,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.src_raw": [
@@ -190,7 +214,8 @@
             6,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.src_tree": {
             "eth.src_resolved_raw": [
@@ -198,77 +223,88 @@
               6,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.src.oui_raw": [
               "000b82",
               6,
               3,
               0,
-              6
+              6,
+              0
             ],
             "eth.src.oui_resolved_raw": [
               "000b8201fc42",
               6,
               6,
               0,
-              26
-            ],
-            "eth.addr_raw": [
-              "000b8201fc42",
-              6,
-              6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "000b8201fc42",
-              6,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "000b82",
-              6,
-              3,
-              0,
-              6
-            ],
-            "eth.addr.oui_resolved_raw": [
-              "000b8201fc42",
-              6,
-              6,
-              0,
-              26
+              26,
+              0
             ],
             "eth.src.lg_raw": [
               "0",
               6,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "0",
-              6,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.src.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "000b8201fc42",
+              6,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "000b8201fc42",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "000b82",
+              6,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.addr.oui_resolved_raw": [
+              "000b8201fc42",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.lg_raw": [
+              "0",
+              6,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.type_raw": [
@@ -276,7 +312,16 @@
             12,
             2,
             0,
-            5
+            5,
+            0
+          ],
+          "eth.stream_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "ip_raw": [
@@ -284,7 +329,8 @@
           14,
           20,
           0,
-          1
+          1,
+          0
         ],
         "ip": {
           "ip.version_raw": [
@@ -292,21 +338,24 @@
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.hdr_len_raw": [
             "45",
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_raw": [
             "00",
             15,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_tree": {
             "ip.dsfield.dscp_raw": [
@@ -314,14 +363,16 @@
               15,
               1,
               252,
-              4
+              4,
+              0
             ],
             "ip.dsfield.ecn_raw": [
               "0",
               15,
               1,
               3,
-              4
+              4,
+              0
             ]
           },
           "ip.len_raw": [
@@ -329,21 +380,24 @@
             16,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.id_raw": [
             "a836",
             18,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.flags_raw": [
             "0",
             20,
             1,
             224,
-            4
+            4,
+            0
           ],
           "ip.flags_tree": {
             "ip.flags.rb_raw": [
@@ -351,21 +405,24 @@
               20,
               1,
               128,
-              2
+              2,
+              0
             ],
             "ip.flags.df_raw": [
               "0",
               20,
               1,
               64,
-              2
+              2,
+              0
             ],
             "ip.flags.mf_raw": [
               "0",
               20,
               1,
               32,
-              2
+              2,
+              0
             ]
           },
           "ip.frag_offset_raw": [
@@ -373,91 +430,112 @@
             20,
             2,
             8191,
-            5
+            5,
+            0
           ],
           "ip.ttl_raw": [
             "fa",
             22,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.proto_raw": [
             "11",
             23,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.checksum_raw": [
             "178b",
             24,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.checksum.status_raw": [
             "",
             24,
             0,
             0,
-            4
+            4,
+            0
           ],
           "ip.src_raw": [
             "00000000",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "00000000",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.src_host_raw": [
             "00000000",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "00000000",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.dst_raw": [
             "ffffffff",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "ffffffff",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.dst_host_raw": [
             "ffffffff",
             30,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "ffffffff",
             30,
             4,
             0,
-            26
+            26,
+            0
+          ],
+          "ip.stream_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "udp_raw": [
@@ -465,7 +543,8 @@
           34,
           8,
           0,
-          1
+          1,
+          0
         ],
         "udp": {
           "udp.srcport_raw": [
@@ -473,56 +552,72 @@
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.dstport_raw": [
             "0043",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0044",
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0043",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.length_raw": [
             "0118",
             38,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum_raw": [
             "591f",
             40,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum.status_raw": [
             "",
             40,
             0,
             0,
-            4
+            4,
+            0
           ],
           "udp.stream_raw": [
             "",
             42,
             0,
             0,
-            7
+            7,
+            0
+          ],
+          "udp.stream.pnum_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ],
           "Timestamps": {
             "udp.time_relative_raw": [
@@ -530,14 +625,16 @@
               34,
               0,
               0,
-              25
+              25,
+              0
             ],
             "udp.time_delta_raw": [
               "",
               34,
               0,
               0,
-              25
+              25,
+              0
             ]
           },
           "udp.payload_raw": [
@@ -545,7 +642,8 @@
             42,
             272,
             0,
-            30
+            30,
+            0
           ]
         },
         "dhcp_raw": [
@@ -553,7 +651,8 @@
           42,
           272,
           0,
-          1
+          1,
+          0
         ],
         "dhcp": {
           "dhcp.type_raw": [
@@ -561,49 +660,56 @@
             42,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.type_raw": [
             "01",
             43,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.len_raw": [
             "06",
             44,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hops_raw": [
             "00",
             45,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.id_raw": [
             "00003d1d",
             46,
             4,
             0,
-            7
+            7,
+            0
           ],
           "dhcp.secs_raw": [
             "0000",
             50,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_raw": [
             "0000",
             52,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_tree": {
             "dhcp.flags.bc_raw": [
@@ -611,14 +717,16 @@
               52,
               2,
               32768,
-              2
+              2,
+              0
             ],
             "dhcp.flags.reserved_raw": [
               "0",
               52,
               2,
               32767,
-              5
+              5,
+              0
             ]
           },
           "dhcp.ip.client_raw": [
@@ -626,70 +734,80 @@
             54,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.your_raw": [
             "00000000",
             58,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.server_raw": [
             "00000000",
             62,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.relay_raw": [
             "00000000",
             66,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.hw.mac_addr_raw": [
             "000b8201fc42",
             70,
             6,
             0,
-            29
+            29,
+            0
           ],
           "dhcp.hw.addr_padding_raw": [
             "00000000000000000000",
             76,
             10,
             0,
-            30
+            30,
+            0
           ],
           "dhcp.server_raw": [
             "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             86,
             64,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.file_raw": [
             "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             150,
             128,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.cookie_raw": [
             "63825363",
             278,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.option.type_raw": [
             "350101",
             282,
             3,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -697,21 +815,24 @@
               283,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "01",
               284,
               1,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.dhcp_raw": [
               "01",
               284,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -719,7 +840,8 @@
             285,
             9,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -727,28 +849,32 @@
               286,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "01000b8201fc42",
               287,
               7,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.hw.type_raw": [
               "01",
               287,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.hw.mac_addr_raw": [
               "000b8201fc42",
               288,
               6,
               0,
-              29
+              29,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -756,7 +882,8 @@
             294,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -764,21 +891,24 @@
               295,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "00000000",
               296,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.requested_ip_address_raw": [
               "00000000",
               296,
               4,
               0,
-              32
+              32,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -786,7 +916,8 @@
             300,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -794,42 +925,48 @@
               301,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "0103062a",
               302,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "01",
               302,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "03",
               303,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "06",
               304,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "2a",
               305,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -837,7 +974,8 @@
             306,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.end_raw": [
@@ -845,7 +983,8 @@
               306,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.padding_raw": [
@@ -853,7 +992,8 @@
             307,
             7,
             0,
-            30
+            30,
+            0
           ]
         }
       }
@@ -861,7 +1001,6 @@
   },
   {
     "_index": "packets-2004-12-05",
-    "_type": "doc",
     "_score": null,
     "_source": {
       "layers": {
@@ -870,7 +1009,8 @@
           0,
           342,
           0,
-          1
+          1,
+          0
         ],
         "frame": {
           "frame.encap_type_raw": [
@@ -878,91 +1018,120 @@
             0,
             0,
             0,
-            13
+            13,
+            0
           ],
           "frame.time_raw": [
             "",
             0,
             0,
             0,
-            24
+            24,
+            0
           ],
-          "frame.offset_shift_raw": [
+          "frame.time_utc_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
           ],
           "frame.time_epoch_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
+          ],
+          "frame.offset_shift_raw": [
+            "",
+            0,
+            0,
+            0,
+            25,
+            0
           ],
           "frame.time_delta_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.time_delta_displayed_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.time_relative_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.number_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.cap_len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.marked_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.ignored_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.protocols_raw": [
             "",
             0,
             0,
             0,
-            26
+            26,
+            0
+          ],
+          "frame.encoding_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "eth_raw": [
@@ -970,7 +1139,8 @@
           0,
           14,
           0,
-          1
+          1,
+          0
         ],
         "eth": {
           "eth.dst_raw": [
@@ -978,7 +1148,8 @@
             0,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.dst_tree": {
             "eth.dst_resolved_raw": [
@@ -986,77 +1157,88 @@
               0,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.dst.oui_raw": [
               "000b82",
               0,
               3,
               0,
-              6
+              6,
+              0
             ],
             "eth.dst.oui_resolved_raw": [
               "000b8201fc42",
               0,
               6,
               0,
-              26
-            ],
-            "eth.addr_raw": [
-              "000b8201fc42",
-              0,
-              6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "000b8201fc42",
-              0,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "000b82",
-              0,
-              3,
-              0,
-              6
-            ],
-            "eth.addr.oui_resolved_raw": [
-              "000b8201fc42",
-              0,
-              6,
-              0,
-              26
+              26,
+              0
             ],
             "eth.dst.lg_raw": [
               "0",
               0,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "0",
-              0,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.dst.ig_raw": [
               "0",
               0,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "000b8201fc42",
+              0,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "000b8201fc42",
+              0,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "000b82",
+              0,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.addr.oui_resolved_raw": [
+              "000b8201fc42",
+              0,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.lg_raw": [
+              "0",
+              0,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "0",
               0,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.src_raw": [
@@ -1064,7 +1246,8 @@
             6,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.src_tree": {
             "eth.src_resolved_raw": [
@@ -1072,77 +1255,88 @@
               6,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.src.oui_raw": [
               "000874",
               6,
               3,
               0,
-              6
+              6,
+              0
             ],
             "eth.src.oui_resolved_raw": [
               "000874adf19b",
               6,
               6,
               0,
-              26
-            ],
-            "eth.addr_raw": [
-              "000874adf19b",
-              6,
-              6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "000874adf19b",
-              6,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "000874",
-              6,
-              3,
-              0,
-              6
-            ],
-            "eth.addr.oui_resolved_raw": [
-              "000874adf19b",
-              6,
-              6,
-              0,
-              26
+              26,
+              0
             ],
             "eth.src.lg_raw": [
               "0",
               6,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "0",
-              6,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.src.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "000874adf19b",
+              6,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "000874adf19b",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "000874",
+              6,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.addr.oui_resolved_raw": [
+              "000874adf19b",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.lg_raw": [
+              "0",
+              6,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.type_raw": [
@@ -1150,7 +1344,16 @@
             12,
             2,
             0,
-            5
+            5,
+            0
+          ],
+          "eth.stream_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "ip_raw": [
@@ -1158,7 +1361,8 @@
           14,
           20,
           0,
-          1
+          1,
+          0
         ],
         "ip": {
           "ip.version_raw": [
@@ -1166,21 +1370,24 @@
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.hdr_len_raw": [
             "45",
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_raw": [
             "00",
             15,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_tree": {
             "ip.dsfield.dscp_raw": [
@@ -1188,14 +1395,16 @@
               15,
               1,
               252,
-              4
+              4,
+              0
             ],
             "ip.dsfield.ecn_raw": [
               "0",
               15,
               1,
               3,
-              4
+              4,
+              0
             ]
           },
           "ip.len_raw": [
@@ -1203,21 +1412,24 @@
             16,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.id_raw": [
             "0445",
             18,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.flags_raw": [
             "0",
             20,
             1,
             224,
-            4
+            4,
+            0
           ],
           "ip.flags_tree": {
             "ip.flags.rb_raw": [
@@ -1225,21 +1437,24 @@
               20,
               1,
               128,
-              2
+              2,
+              0
             ],
             "ip.flags.df_raw": [
               "0",
               20,
               1,
               64,
-              2
+              2,
+              0
             ],
             "ip.flags.mf_raw": [
               "0",
               20,
               1,
               32,
-              2
+              2,
+              0
             ]
           },
           "ip.frag_offset_raw": [
@@ -1247,91 +1462,112 @@
             20,
             2,
             8191,
-            5
+            5,
+            0
           ],
           "ip.ttl_raw": [
             "80",
             22,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.proto_raw": [
             "11",
             23,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.checksum_raw": [
             "0000",
             24,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.checksum.status_raw": [
             "",
             24,
             0,
             0,
-            4
+            4,
+            0
           ],
           "ip.src_raw": [
             "c0a80001",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "c0a80001",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.src_host_raw": [
             "c0a80001",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "c0a80001",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.dst_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.dst_host_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            26
+            26,
+            0
+          ],
+          "ip.stream_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "udp_raw": [
@@ -1339,7 +1575,8 @@
           34,
           8,
           0,
-          1
+          1,
+          0
         ],
         "udp": {
           "udp.srcport_raw": [
@@ -1347,56 +1584,72 @@
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.dstport_raw": [
             "0044",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0043",
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0044",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.length_raw": [
             "0134",
             38,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum_raw": [
             "2233",
             40,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum.status_raw": [
             "",
             40,
             0,
             0,
-            4
+            4,
+            0
           ],
           "udp.stream_raw": [
             "",
             42,
             0,
             0,
-            7
+            7,
+            0
+          ],
+          "udp.stream.pnum_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ],
           "Timestamps": {
             "udp.time_relative_raw": [
@@ -1404,14 +1657,16 @@
               34,
               0,
               0,
-              25
+              25,
+              0
             ],
             "udp.time_delta_raw": [
               "",
               34,
               0,
               0,
-              25
+              25,
+              0
             ]
           },
           "udp.payload_raw": [
@@ -1419,7 +1674,8 @@
             42,
             300,
             0,
-            30
+            30,
+            0
           ]
         },
         "dhcp_raw": [
@@ -1427,7 +1683,8 @@
           42,
           300,
           0,
-          1
+          1,
+          0
         ],
         "dhcp": {
           "dhcp.type_raw": [
@@ -1435,49 +1692,56 @@
             42,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.type_raw": [
             "01",
             43,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.len_raw": [
             "06",
             44,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hops_raw": [
             "00",
             45,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.id_raw": [
             "00003d1d",
             46,
             4,
             0,
-            7
+            7,
+            0
           ],
           "dhcp.secs_raw": [
             "0000",
             50,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_raw": [
             "0000",
             52,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_tree": {
             "dhcp.flags.bc_raw": [
@@ -1485,14 +1749,16 @@
               52,
               2,
               32768,
-              2
+              2,
+              0
             ],
             "dhcp.flags.reserved_raw": [
               "0",
               52,
               2,
               32767,
-              5
+              5,
+              0
             ]
           },
           "dhcp.ip.client_raw": [
@@ -1500,70 +1766,80 @@
             54,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.your_raw": [
             "c0a8000a",
             58,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.server_raw": [
             "c0a80001",
             62,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.relay_raw": [
             "00000000",
             66,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.hw.mac_addr_raw": [
             "000b8201fc42",
             70,
             6,
             0,
-            29
+            29,
+            0
           ],
           "dhcp.hw.addr_padding_raw": [
             "00000000000000000000",
             76,
             10,
             0,
-            30
+            30,
+            0
           ],
           "dhcp.server_raw": [
             "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             86,
             64,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.file_raw": [
             "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             150,
             128,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.cookie_raw": [
             "63825363",
             278,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.option.type_raw": [
             "350102",
             282,
             3,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -1571,21 +1847,24 @@
               283,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "02",
               284,
               1,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.dhcp_raw": [
               "02",
               284,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -1593,7 +1872,8 @@
             285,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -1601,21 +1881,24 @@
               286,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "ffffff00",
               287,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.subnet_mask_raw": [
               "ffffff00",
               287,
               4,
               0,
-              32
+              32,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -1623,7 +1906,8 @@
             291,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -1631,21 +1915,24 @@
               292,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "00000708",
               293,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.renewal_time_value_raw": [
               "00000708",
               293,
               4,
               0,
-              7
+              7,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -1653,7 +1940,8 @@
             297,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -1661,21 +1949,24 @@
               298,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "00000c4e",
               299,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.rebinding_time_value_raw": [
               "00000c4e",
               299,
               4,
               0,
-              7
+              7,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -1683,7 +1974,8 @@
             303,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -1691,21 +1983,24 @@
               304,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "00000e10",
               305,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.ip_address_lease_time_raw": [
               "00000e10",
               305,
               4,
               0,
-              7
+              7,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -1713,7 +2008,8 @@
             309,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -1721,21 +2017,24 @@
               310,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "c0a80001",
               311,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.dhcp_server_id_raw": [
               "c0a80001",
               311,
               4,
               0,
-              32
+              32,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -1743,7 +2042,8 @@
             315,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.end_raw": [
@@ -1751,7 +2051,8 @@
               315,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.padding_raw": [
@@ -1759,7 +2060,8 @@
             316,
             26,
             0,
-            30
+            30,
+            0
           ]
         }
       }
@@ -1767,7 +2069,6 @@
   },
   {
     "_index": "packets-2004-12-05",
-    "_type": "doc",
     "_score": null,
     "_source": {
       "layers": {
@@ -1776,7 +2077,8 @@
           0,
           314,
           0,
-          1
+          1,
+          0
         ],
         "frame": {
           "frame.encap_type_raw": [
@@ -1784,91 +2086,120 @@
             0,
             0,
             0,
-            13
+            13,
+            0
           ],
           "frame.time_raw": [
             "",
             0,
             0,
             0,
-            24
+            24,
+            0
           ],
-          "frame.offset_shift_raw": [
+          "frame.time_utc_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
           ],
           "frame.time_epoch_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
+          ],
+          "frame.offset_shift_raw": [
+            "",
+            0,
+            0,
+            0,
+            25,
+            0
           ],
           "frame.time_delta_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.time_delta_displayed_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.time_relative_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.number_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.cap_len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.marked_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.ignored_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.protocols_raw": [
             "",
             0,
             0,
             0,
-            26
+            26,
+            0
+          ],
+          "frame.encoding_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "eth_raw": [
@@ -1876,7 +2207,8 @@
           0,
           14,
           0,
-          1
+          1,
+          0
         ],
         "eth": {
           "eth.dst_raw": [
@@ -1884,7 +2216,8 @@
             0,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.dst_tree": {
             "eth.dst_resolved_raw": [
@@ -1892,63 +2225,72 @@
               0,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.dst.oui_raw": [
               "ffffff",
               0,
               3,
               0,
-              6
-            ],
-            "eth.addr_raw": [
-              "ffffffffffff",
-              0,
               6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "ffffffffffff",
-              0,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "ffffff",
-              0,
-              3,
-              0,
-              6
+              0
             ],
             "eth.dst.lg_raw": [
               "1",
               0,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "1",
-              0,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.dst.ig_raw": [
               "1",
               0,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "ffffffffffff",
+              0,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "ffffffffffff",
+              0,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "ffffff",
+              0,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.lg_raw": [
+              "1",
+              0,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "1",
               0,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.src_raw": [
@@ -1956,7 +2298,8 @@
             6,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.src_tree": {
             "eth.src_resolved_raw": [
@@ -1964,77 +2307,88 @@
               6,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.src.oui_raw": [
               "000b82",
               6,
               3,
               0,
-              6
+              6,
+              0
             ],
             "eth.src.oui_resolved_raw": [
               "000b8201fc42",
               6,
               6,
               0,
-              26
-            ],
-            "eth.addr_raw": [
-              "000b8201fc42",
-              6,
-              6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "000b8201fc42",
-              6,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "000b82",
-              6,
-              3,
-              0,
-              6
-            ],
-            "eth.addr.oui_resolved_raw": [
-              "000b8201fc42",
-              6,
-              6,
-              0,
-              26
+              26,
+              0
             ],
             "eth.src.lg_raw": [
               "0",
               6,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "0",
-              6,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.src.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "000b8201fc42",
+              6,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "000b8201fc42",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "000b82",
+              6,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.addr.oui_resolved_raw": [
+              "000b8201fc42",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.lg_raw": [
+              "0",
+              6,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.type_raw": [
@@ -2042,7 +2396,16 @@
             12,
             2,
             0,
-            5
+            5,
+            0
+          ],
+          "eth.stream_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "ip_raw": [
@@ -2050,7 +2413,8 @@
           14,
           20,
           0,
-          1
+          1,
+          0
         ],
         "ip": {
           "ip.version_raw": [
@@ -2058,21 +2422,24 @@
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.hdr_len_raw": [
             "45",
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_raw": [
             "00",
             15,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_tree": {
             "ip.dsfield.dscp_raw": [
@@ -2080,14 +2447,16 @@
               15,
               1,
               252,
-              4
+              4,
+              0
             ],
             "ip.dsfield.ecn_raw": [
               "0",
               15,
               1,
               3,
-              4
+              4,
+              0
             ]
           },
           "ip.len_raw": [
@@ -2095,21 +2464,24 @@
             16,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.id_raw": [
             "a837",
             18,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.flags_raw": [
             "0",
             20,
             1,
             224,
-            4
+            4,
+            0
           ],
           "ip.flags_tree": {
             "ip.flags.rb_raw": [
@@ -2117,21 +2489,24 @@
               20,
               1,
               128,
-              2
+              2,
+              0
             ],
             "ip.flags.df_raw": [
               "0",
               20,
               1,
               64,
-              2
+              2,
+              0
             ],
             "ip.flags.mf_raw": [
               "0",
               20,
               1,
               32,
-              2
+              2,
+              0
             ]
           },
           "ip.frag_offset_raw": [
@@ -2139,91 +2514,112 @@
             20,
             2,
             8191,
-            5
+            5,
+            0
           ],
           "ip.ttl_raw": [
             "fa",
             22,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.proto_raw": [
             "11",
             23,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.checksum_raw": [
             "178a",
             24,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.checksum.status_raw": [
             "",
             24,
             0,
             0,
-            4
+            4,
+            0
           ],
           "ip.src_raw": [
             "00000000",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "00000000",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.src_host_raw": [
             "00000000",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "00000000",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.dst_raw": [
             "ffffffff",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "ffffffff",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.dst_host_raw": [
             "ffffffff",
             30,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "ffffffff",
             30,
             4,
             0,
-            26
+            26,
+            0
+          ],
+          "ip.stream_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "udp_raw": [
@@ -2231,7 +2627,8 @@
           34,
           8,
           0,
-          1
+          1,
+          0
         ],
         "udp": {
           "udp.srcport_raw": [
@@ -2239,56 +2636,72 @@
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.dstport_raw": [
             "0043",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0044",
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0043",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.length_raw": [
             "0118",
             38,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum_raw": [
             "9fbd",
             40,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum.status_raw": [
             "",
             40,
             0,
             0,
-            4
+            4,
+            0
           ],
           "udp.stream_raw": [
             "",
             42,
             0,
             0,
-            7
+            7,
+            0
+          ],
+          "udp.stream.pnum_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ],
           "Timestamps": {
             "udp.time_relative_raw": [
@@ -2296,14 +2709,16 @@
               34,
               0,
               0,
-              25
+              25,
+              0
             ],
             "udp.time_delta_raw": [
               "",
               34,
               0,
               0,
-              25
+              25,
+              0
             ]
           },
           "udp.payload_raw": [
@@ -2311,7 +2726,8 @@
             42,
             272,
             0,
-            30
+            30,
+            0
           ]
         },
         "dhcp_raw": [
@@ -2319,7 +2735,8 @@
           42,
           272,
           0,
-          1
+          1,
+          0
         ],
         "dhcp": {
           "dhcp.type_raw": [
@@ -2327,49 +2744,56 @@
             42,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.type_raw": [
             "01",
             43,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.len_raw": [
             "06",
             44,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hops_raw": [
             "00",
             45,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.id_raw": [
             "00003d1e",
             46,
             4,
             0,
-            7
+            7,
+            0
           ],
           "dhcp.secs_raw": [
             "0000",
             50,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_raw": [
             "0000",
             52,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_tree": {
             "dhcp.flags.bc_raw": [
@@ -2377,14 +2801,16 @@
               52,
               2,
               32768,
-              2
+              2,
+              0
             ],
             "dhcp.flags.reserved_raw": [
               "0",
               52,
               2,
               32767,
-              5
+              5,
+              0
             ]
           },
           "dhcp.ip.client_raw": [
@@ -2392,70 +2818,80 @@
             54,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.your_raw": [
             "00000000",
             58,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.server_raw": [
             "00000000",
             62,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.relay_raw": [
             "00000000",
             66,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.hw.mac_addr_raw": [
             "000b8201fc42",
             70,
             6,
             0,
-            29
+            29,
+            0
           ],
           "dhcp.hw.addr_padding_raw": [
             "00000000000000000000",
             76,
             10,
             0,
-            30
+            30,
+            0
           ],
           "dhcp.server_raw": [
             "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             86,
             64,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.file_raw": [
             "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             150,
             128,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.cookie_raw": [
             "63825363",
             278,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.option.type_raw": [
             "350103",
             282,
             3,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -2463,21 +2899,24 @@
               283,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "03",
               284,
               1,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.dhcp_raw": [
               "03",
               284,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -2485,7 +2924,8 @@
             285,
             9,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -2493,28 +2933,32 @@
               286,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "01000b8201fc42",
               287,
               7,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.hw.type_raw": [
               "01",
               287,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.hw.mac_addr_raw": [
               "000b8201fc42",
               288,
               6,
               0,
-              29
+              29,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -2522,7 +2966,8 @@
             294,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -2530,21 +2975,24 @@
               295,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "c0a8000a",
               296,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.requested_ip_address_raw": [
               "c0a8000a",
               296,
               4,
               0,
-              32
+              32,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -2552,7 +3000,8 @@
             300,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -2560,21 +3009,24 @@
               301,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "c0a80001",
               302,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.dhcp_server_id_raw": [
               "c0a80001",
               302,
               4,
               0,
-              32
+              32,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -2582,7 +3034,8 @@
             306,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -2590,42 +3043,48 @@
               307,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "0103062a",
               308,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "01",
               308,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "03",
               309,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "06",
               310,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.request_list_item_raw": [
               "2a",
               311,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -2633,7 +3092,8 @@
             312,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.end_raw": [
@@ -2641,7 +3101,8 @@
               312,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.padding_raw": [
@@ -2649,7 +3110,8 @@
             313,
             1,
             0,
-            30
+            30,
+            0
           ]
         }
       }
@@ -2657,7 +3119,6 @@
   },
   {
     "_index": "packets-2004-12-05",
-    "_type": "doc",
     "_score": null,
     "_source": {
       "layers": {
@@ -2666,7 +3127,8 @@
           0,
           342,
           0,
-          1
+          1,
+          0
         ],
         "frame": {
           "frame.encap_type_raw": [
@@ -2674,91 +3136,120 @@
             0,
             0,
             0,
-            13
+            13,
+            0
           ],
           "frame.time_raw": [
             "",
             0,
             0,
             0,
-            24
+            24,
+            0
           ],
-          "frame.offset_shift_raw": [
+          "frame.time_utc_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
           ],
           "frame.time_epoch_raw": [
             "",
             0,
             0,
             0,
-            25
+            24,
+            0
+          ],
+          "frame.offset_shift_raw": [
+            "",
+            0,
+            0,
+            0,
+            25,
+            0
           ],
           "frame.time_delta_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.time_delta_displayed_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.time_relative_raw": [
             "",
             0,
             0,
             0,
-            25
+            25,
+            0
           ],
           "frame.number_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.cap_len_raw": [
             "",
             0,
             0,
             0,
-            7
+            7,
+            0
           ],
           "frame.marked_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.ignored_raw": [
             "",
             0,
             0,
             0,
-            2
+            2,
+            0
           ],
           "frame.protocols_raw": [
             "",
             0,
             0,
             0,
-            26
+            26,
+            0
+          ],
+          "frame.encoding_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "eth_raw": [
@@ -2766,7 +3257,8 @@
           0,
           14,
           0,
-          1
+          1,
+          0
         ],
         "eth": {
           "eth.dst_raw": [
@@ -2774,7 +3266,8 @@
             0,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.dst_tree": {
             "eth.dst_resolved_raw": [
@@ -2782,77 +3275,88 @@
               0,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.dst.oui_raw": [
               "000b82",
               0,
               3,
               0,
-              6
+              6,
+              0
             ],
             "eth.dst.oui_resolved_raw": [
               "000b8201fc42",
               0,
               6,
               0,
-              26
-            ],
-            "eth.addr_raw": [
-              "000b8201fc42",
-              0,
-              6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "000b8201fc42",
-              0,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "000b82",
-              0,
-              3,
-              0,
-              6
-            ],
-            "eth.addr.oui_resolved_raw": [
-              "000b8201fc42",
-              0,
-              6,
-              0,
-              26
+              26,
+              0
             ],
             "eth.dst.lg_raw": [
               "0",
               0,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "0",
-              0,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.dst.ig_raw": [
               "0",
               0,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "000b8201fc42",
+              0,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "000b8201fc42",
+              0,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "000b82",
+              0,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.addr.oui_resolved_raw": [
+              "000b8201fc42",
+              0,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.lg_raw": [
+              "0",
+              0,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "0",
               0,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.src_raw": [
@@ -2860,7 +3364,8 @@
             6,
             6,
             0,
-            29
+            29,
+            0
           ],
           "eth.src_tree": {
             "eth.src_resolved_raw": [
@@ -2868,77 +3373,88 @@
               6,
               6,
               0,
-              26
+              26,
+              0
             ],
             "eth.src.oui_raw": [
               "000874",
               6,
               3,
               0,
-              6
+              6,
+              0
             ],
             "eth.src.oui_resolved_raw": [
               "000874adf19b",
               6,
               6,
               0,
-              26
-            ],
-            "eth.addr_raw": [
-              "000874adf19b",
-              6,
-              6,
-              0,
-              29
-            ],
-            "eth.addr_resolved_raw": [
-              "000874adf19b",
-              6,
-              6,
-              0,
-              26
-            ],
-            "eth.addr.oui_raw": [
-              "000874",
-              6,
-              3,
-              0,
-              6
-            ],
-            "eth.addr.oui_resolved_raw": [
-              "000874adf19b",
-              6,
-              6,
-              0,
-              26
+              26,
+              0
             ],
             "eth.src.lg_raw": [
               "0",
               6,
               3,
               131072,
-              2
-            ],
-            "eth.lg_raw": [
-              "0",
-              6,
-              3,
-              131072,
-              2
+              2,
+              0
             ],
             "eth.src.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
+            ],
+            "eth.addr_raw": [
+              "000874adf19b",
+              6,
+              6,
+              0,
+              29,
+              0
+            ],
+            "eth.addr_resolved_raw": [
+              "000874adf19b",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.addr.oui_raw": [
+              "000874",
+              6,
+              3,
+              0,
+              6,
+              0
+            ],
+            "eth.addr.oui_resolved_raw": [
+              "000874adf19b",
+              6,
+              6,
+              0,
+              26,
+              0
+            ],
+            "eth.lg_raw": [
+              "0",
+              6,
+              3,
+              131072,
+              2,
+              0
             ],
             "eth.ig_raw": [
               "0",
               6,
               3,
               65536,
-              2
+              2,
+              0
             ]
           },
           "eth.type_raw": [
@@ -2946,7 +3462,16 @@
             12,
             2,
             0,
-            5
+            5,
+            0
+          ],
+          "eth.stream_raw": [
+            "",
+            0,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "ip_raw": [
@@ -2954,7 +3479,8 @@
           14,
           20,
           0,
-          1
+          1,
+          0
         ],
         "ip": {
           "ip.version_raw": [
@@ -2962,21 +3488,24 @@
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.hdr_len_raw": [
             "45",
             14,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_raw": [
             "00",
             15,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.dsfield_tree": {
             "ip.dsfield.dscp_raw": [
@@ -2984,14 +3513,16 @@
               15,
               1,
               252,
-              4
+              4,
+              0
             ],
             "ip.dsfield.ecn_raw": [
               "0",
               15,
               1,
               3,
-              4
+              4,
+              0
             ]
           },
           "ip.len_raw": [
@@ -2999,21 +3530,24 @@
             16,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.id_raw": [
             "0446",
             18,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.flags_raw": [
             "0",
             20,
             1,
             224,
-            4
+            4,
+            0
           ],
           "ip.flags_tree": {
             "ip.flags.rb_raw": [
@@ -3021,21 +3555,24 @@
               20,
               1,
               128,
-              2
+              2,
+              0
             ],
             "ip.flags.df_raw": [
               "0",
               20,
               1,
               64,
-              2
+              2,
+              0
             ],
             "ip.flags.mf_raw": [
               "0",
               20,
               1,
               32,
-              2
+              2,
+              0
             ]
           },
           "ip.frag_offset_raw": [
@@ -3043,91 +3580,112 @@
             20,
             2,
             8191,
-            5
+            5,
+            0
           ],
           "ip.ttl_raw": [
             "80",
             22,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.proto_raw": [
             "11",
             23,
             1,
             0,
-            4
+            4,
+            0
           ],
           "ip.checksum_raw": [
             "0000",
             24,
             2,
             0,
-            5
+            5,
+            0
           ],
           "ip.checksum.status_raw": [
             "",
             24,
             0,
             0,
-            4
+            4,
+            0
           ],
           "ip.src_raw": [
             "c0a80001",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "c0a80001",
             26,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.src_host_raw": [
             "c0a80001",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "c0a80001",
             26,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.dst_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.addr_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            32
+            32,
+            0
           ],
           "ip.dst_host_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            26
+            26,
+            0
           ],
           "ip.host_raw": [
             "c0a8000a",
             30,
             4,
             0,
-            26
+            26,
+            0
+          ],
+          "ip.stream_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ]
         },
         "udp_raw": [
@@ -3135,7 +3693,8 @@
           34,
           8,
           0,
-          1
+          1,
+          0
         ],
         "udp": {
           "udp.srcport_raw": [
@@ -3143,56 +3702,72 @@
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.dstport_raw": [
             "0044",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0043",
             34,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.port_raw": [
             "0044",
             36,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.length_raw": [
             "0134",
             38,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum_raw": [
             "dfdb",
             40,
             2,
             0,
-            5
+            5,
+            0
           ],
           "udp.checksum.status_raw": [
             "",
             40,
             0,
             0,
-            4
+            4,
+            0
           ],
           "udp.stream_raw": [
             "",
             42,
             0,
             0,
-            7
+            7,
+            0
+          ],
+          "udp.stream.pnum_raw": [
+            "",
+            34,
+            0,
+            0,
+            7,
+            0
           ],
           "Timestamps": {
             "udp.time_relative_raw": [
@@ -3200,14 +3775,16 @@
               34,
               0,
               0,
-              25
+              25,
+              0
             ],
             "udp.time_delta_raw": [
               "",
               34,
               0,
               0,
-              25
+              25,
+              0
             ]
           },
           "udp.payload_raw": [
@@ -3215,7 +3792,8 @@
             42,
             300,
             0,
-            30
+            30,
+            0
           ]
         },
         "dhcp_raw": [
@@ -3223,7 +3801,8 @@
           42,
           300,
           0,
-          1
+          1,
+          0
         ],
         "dhcp": {
           "dhcp.type_raw": [
@@ -3231,49 +3810,56 @@
             42,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.type_raw": [
             "01",
             43,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hw.len_raw": [
             "06",
             44,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.hops_raw": [
             "00",
             45,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.id_raw": [
             "00003d1e",
             46,
             4,
             0,
-            7
+            7,
+            0
           ],
           "dhcp.secs_raw": [
             "0000",
             50,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_raw": [
             "0000",
             52,
             2,
             0,
-            5
+            5,
+            0
           ],
           "dhcp.flags_tree": {
             "dhcp.flags.bc_raw": [
@@ -3281,14 +3867,16 @@
               52,
               2,
               32768,
-              2
+              2,
+              0
             ],
             "dhcp.flags.reserved_raw": [
               "0",
               52,
               2,
               32767,
-              5
+              5,
+              0
             ]
           },
           "dhcp.ip.client_raw": [
@@ -3296,70 +3884,80 @@
             54,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.your_raw": [
             "c0a8000a",
             58,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.server_raw": [
             "00000000",
             62,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.ip.relay_raw": [
             "00000000",
             66,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.hw.mac_addr_raw": [
             "000b8201fc42",
             70,
             6,
             0,
-            29
+            29,
+            0
           ],
           "dhcp.hw.addr_padding_raw": [
             "00000000000000000000",
             76,
             10,
             0,
-            30
+            30,
+            0
           ],
           "dhcp.server_raw": [
             "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             86,
             64,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.file_raw": [
             "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             150,
             128,
             0,
-            26
+            26,
+            0
           ],
           "dhcp.cookie_raw": [
             "63825363",
             278,
             4,
             0,
-            32
+            32,
+            0
           ],
           "dhcp.option.type_raw": [
             "350105",
             282,
             3,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -3367,21 +3965,24 @@
               283,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "05",
               284,
               1,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.dhcp_raw": [
               "05",
               284,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -3389,7 +3990,8 @@
             285,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -3397,21 +3999,24 @@
               286,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "00000708",
               287,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.renewal_time_value_raw": [
               "00000708",
               287,
               4,
               0,
-              7
+              7,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -3419,7 +4024,8 @@
             291,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -3427,21 +4033,24 @@
               292,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "00000c4e",
               293,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.rebinding_time_value_raw": [
               "00000c4e",
               293,
               4,
               0,
-              7
+              7,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -3449,7 +4058,8 @@
             297,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -3457,21 +4067,24 @@
               298,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "00000e10",
               299,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.ip_address_lease_time_raw": [
               "00000e10",
               299,
               4,
               0,
-              7
+              7,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -3479,7 +4092,8 @@
             303,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -3487,21 +4101,24 @@
               304,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "c0a80001",
               305,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.dhcp_server_id_raw": [
               "c0a80001",
               305,
               4,
               0,
-              32
+              32,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -3509,7 +4126,8 @@
             309,
             6,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.length_raw": [
@@ -3517,21 +4135,24 @@
               310,
               1,
               0,
-              4
+              4,
+              0
             ],
             "dhcp.option.value_raw": [
               "ffffff00",
               311,
               4,
               0,
-              30
+              30,
+              0
             ],
             "dhcp.option.subnet_mask_raw": [
               "ffffff00",
               311,
               4,
               0,
-              32
+              32,
+              0
             ]
           },
           "dhcp.option.type_raw": [
@@ -3539,7 +4160,8 @@
             315,
             1,
             0,
-            4
+            4,
+            0
           ],
           "dhcp.option.type_tree": {
             "dhcp.option.end_raw": [
@@ -3547,7 +4169,8 @@
               315,
               1,
               0,
-              4
+              4,
+              0
             ]
           },
           "dhcp.option.padding_raw": [
@@ -3555,7 +4178,8 @@
             316,
             26,
             0,
-            30
+            30,
+            0
           ]
         }
       }

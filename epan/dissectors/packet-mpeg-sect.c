@@ -11,6 +11,8 @@
 
 #include "config.h"
 
+#include "jtckdint.h"
+
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/crc32-tvb.h>
@@ -21,21 +23,21 @@
 
 void proto_register_mpeg_sect(void);
 
-static int proto_mpeg_sect = -1;
-static int hf_mpeg_sect_table_id = -1;
-static int hf_mpeg_sect_syntax_indicator = -1;
-static int hf_mpeg_sect_reserved = -1;
-static int hf_mpeg_sect_length = -1;
-static int hf_mpeg_sect_crc = -1;
-static int hf_mpeg_sect_crc_status = -1;
+static int proto_mpeg_sect;
+static int hf_mpeg_sect_table_id;
+static int hf_mpeg_sect_syntax_indicator;
+static int hf_mpeg_sect_reserved;
+static int hf_mpeg_sect_length;
+static int hf_mpeg_sect_crc;
+static int hf_mpeg_sect_crc_status;
 
-static gint ett_mpeg_sect = -1;
+static int ett_mpeg_sect;
 
-static expert_field ei_mpeg_sect_crc = EI_INIT;
+static expert_field ei_mpeg_sect_crc;
 
 static dissector_table_t mpeg_sect_tid_dissector_table;
 
-static gboolean mpeg_sect_check_crc = FALSE;
+static bool mpeg_sect_check_crc;
 
 /* minimum length of the entire section ==
    bytes from table_id to section_length == 3 bytes */
@@ -207,13 +209,13 @@ static const value_string mpeg_sect_table_id_vals[] = {
     { 0, NULL }
 };
 
-static void mpeg_sect_prompt(packet_info *pinfo, gchar* result)
+static void mpeg_sect_prompt(packet_info *pinfo, char* result)
 {
     snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "Table ID %u as",
         GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_mpeg_sect, MPEG_SECT_TID_KEY)));
 }
 
-static gpointer mpeg_sect_value(packet_info *pinfo)
+static void *mpeg_sect_value(packet_info *pinfo)
 {
     return p_get_proto_data(pinfo->pool, pinfo, proto_mpeg_sect, MPEG_SECT_TID_KEY);
 }
@@ -222,21 +224,26 @@ static gpointer mpeg_sect_value(packet_info *pinfo)
    the encoding of the field is according to DVB-SI specification, section 5.2.5
    16bit modified julian day (MJD), 24bit 6*4bit BCD digits hhmmss
    return the length in bytes or -1 for error */
-gint
-packet_mpeg_sect_mjd_to_utc_time(tvbuff_t *tvb, gint offset, nstime_t *utc_time)
+int
+packet_mpeg_sect_mjd_to_utc_time(tvbuff_t *tvb, int offset, nstime_t *utc_time)
 {
-    gint   bcd_time_offset;     /* start offset of the bcd time in the tvbuff */
-    guint8 hour, min, sec;
+    int    bcd_time_offset;     /* start offset of the bcd time in the tvbuff */
+    uint8_t hour, min, sec;
 
     if (!utc_time)
         return -1;
 
     nstime_set_zero(utc_time);
-    utc_time->secs  = (tvb_get_ntohs(tvb, offset) - 40587) * 86400;
+    /* The 16-bit MJD epoch is November 17, 1858, which is 40587 days
+     * before the UN*X epoch. */
+    if (ckd_mul(&utc_time->secs, tvb_get_ntohs(tvb, offset) - 40587, 86400)) {
+        /* This can overflow with 32-bit time_t. */
+        return -1;
+    }
     bcd_time_offset = offset+2;
-    hour            = MPEG_SECT_BCD44_TO_DEC(tvb_get_guint8(tvb, bcd_time_offset));
-    min             = MPEG_SECT_BCD44_TO_DEC(tvb_get_guint8(tvb, bcd_time_offset+1));
-    sec             = MPEG_SECT_BCD44_TO_DEC(tvb_get_guint8(tvb, bcd_time_offset+2));
+    hour            = MPEG_SECT_BCD44_TO_DEC(tvb_get_uint8(tvb, bcd_time_offset));
+    min             = MPEG_SECT_BCD44_TO_DEC(tvb_get_uint8(tvb, bcd_time_offset+1));
+    sec             = MPEG_SECT_BCD44_TO_DEC(tvb_get_uint8(tvb, bcd_time_offset+2));
     if (hour>23 || min>59 || sec>59)
         return -1;
 
@@ -244,23 +251,23 @@ packet_mpeg_sect_mjd_to_utc_time(tvbuff_t *tvb, gint offset, nstime_t *utc_time)
     return 5;
 }
 
-guint
-packet_mpeg_sect_header(tvbuff_t *tvb, guint offset,
-            proto_tree *tree, guint *sect_len, gboolean *ssi)
+unsigned
+packet_mpeg_sect_header(tvbuff_t *tvb, unsigned offset,
+            proto_tree *tree, unsigned *sect_len, bool *ssi)
 {
     return packet_mpeg_sect_header_extra(tvb, offset, tree, sect_len,
                          NULL, ssi, NULL);
 }
 
-guint
-packet_mpeg_sect_header_extra(tvbuff_t *tvb, guint offset, proto_tree *tree,
-                guint *sect_len, guint *reserved, gboolean *ssi,
+unsigned
+packet_mpeg_sect_header_extra(tvbuff_t *tvb, unsigned offset, proto_tree *tree,
+                unsigned *sect_len, unsigned *reserved, bool *ssi,
                 proto_item **items)
 {
-    guint       tmp;
-    guint       len = 0;
+    unsigned    tmp;
+    unsigned    len = 0;
     proto_item *pi[PACKET_MPEG_SECT_PI__SIZE];
-    gint        i;
+    int         i;
 
     for (i = 0; i < PACKET_MPEG_SECT_PI__SIZE; i++) {
         pi[i] = NULL;
@@ -311,9 +318,9 @@ packet_mpeg_sect_header_extra(tvbuff_t *tvb, guint offset, proto_tree *tree,
 }
 
 
-guint
+unsigned
 packet_mpeg_sect_crc(tvbuff_t *tvb, packet_info *pinfo,
-             proto_tree *tree, guint start, guint end)
+             proto_tree *tree, unsigned start, unsigned end)
 {
     if (mpeg_sect_check_crc) {
         proto_tree_add_checksum(tree, tvb, end, hf_mpeg_sect_crc, hf_mpeg_sect_crc_status, &ei_mpeg_sect_crc, pinfo, crc32_mpeg2_tvb_offset(tvb, start, end),
@@ -331,22 +338,22 @@ static int
 dissect_mpeg_sect(tvbuff_t *tvb, packet_info *pinfo,
         proto_tree *tree, void *data _U_)
 {
-    gint     tvb_len;
-    gint     offset           = 0;
-    guint    section_length   = 0;
-    gboolean syntax_indicator = FALSE;
-    guint8   table_id;
+    int      tvb_len;
+    int      offset           = 0;
+    unsigned section_length   = 0;
+    bool     syntax_indicator = false;
+    uint8_t  table_id;
 
     proto_item *ti;
     proto_tree *mpeg_sect_tree;
 
     /* the incoming tvb contains only one section, no additional data */
 
-    tvb_len = (gint)tvb_reported_length(tvb);
+    tvb_len = (int)tvb_reported_length(tvb);
     if (tvb_len<MPEG_SECT_MIN_LEN || tvb_len>MPEG_SECT_MAX_LEN)
         return 0;
 
-    table_id = tvb_get_guint8(tvb, offset);
+    table_id = tvb_get_uint8(tvb, offset);
     p_add_proto_data(pinfo->pool, pinfo, proto_mpeg_sect, MPEG_SECT_TID_KEY, GUINT_TO_POINTER(table_id));
 
     /* Check if a dissector can parse the current table */
@@ -408,7 +415,7 @@ proto_register_mpeg_sect(void)
 
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_mpeg_sect
     };
 
@@ -419,7 +426,7 @@ proto_register_mpeg_sect(void)
     /* Decode As handling */
     static build_valid_func mpeg_sect_da_build_value[1] = {mpeg_sect_value};
     static decode_as_value_t mpeg_sect_da_values = {mpeg_sect_prompt, 1, mpeg_sect_da_build_value};
-    static decode_as_t mpeg_sect_da = {"mpeg_sect", "mpeg_sect.tid", 1, 0, &mpeg_sect_da_values, NULL, NULL, decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+    static decode_as_t mpeg_sect_da = {"mpeg_sect", "mpeg_sect.tid", 1, 0, &mpeg_sect_da_values, NULL, NULL, decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
     module_t *mpeg_sect_module;
     expert_module_t* expert_mpeg_sect;

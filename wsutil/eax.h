@@ -14,9 +14,13 @@
 
 #include <wireshark.h>
 
+/**
+ * @brief 4-byte MAC identifier used in EAX contexts.
+ *
+ */
 typedef struct tagMAC_T
 {
-    guint8 Mac[4];
+    uint8_t Mac[4]; /**< 4-byte MAC value */
 } MAC_T;
 
 #define EAX_MODE_CLEARTEXT_AUTH     1
@@ -25,8 +29,7 @@ typedef struct tagMAC_T
 #define EAX_SIZEOF_KEY              16
 
 /*!
- Decrypts cleartext data using EAX' mode (see ANSI Standard C12.22-2008).
-
+ @brief Decrypts cleartext data using EAX' mode (see ANSI Standard C12.22-2008).
  @param[in]	pN	pointer to cleartext (canonified form)
  @param[in]	pK	pointer to secret key
  @param[in,out] pC	pointer to ciphertext
@@ -35,12 +38,12 @@ typedef struct tagMAC_T
  @param[in]	SizeC	byte length of ciphertext (pC) buffer
  @param[in]	pMac	four-byte Message Authentication Code
  @param[in]	Mode	EAX_MODE_CLEARTEXT_AUTH or EAX_MODE_CIPHERTEXT_AUTH
- @return		TRUE if message has been authenticated; FALSE if not
+ @return		true if message has been authenticated; false if not
 			authenticated, invalid Mode or error
  */
 WS_DLL_PUBLIC
-gboolean Eax_Decrypt(guint8 *pN, guint8 *pK, guint8 *pC,
-                 guint32 SizeN, guint32 SizeK, guint32 SizeC, MAC_T *pMac,
-		 guint8 Mode);
+bool Eax_Decrypt(uint8_t *pN, uint8_t *pK, uint8_t *pC,
+                 uint32_t SizeN, uint32_t SizeK, uint32_t SizeC, MAC_T *pMac,
+		 uint8_t Mode);
 
 #endif

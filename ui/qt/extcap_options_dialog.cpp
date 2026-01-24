@@ -9,8 +9,6 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include <extcap_options_dialog.h>
 #include <ui_extcap_options_dialog.h>
 
@@ -25,11 +23,9 @@
 #include <QDesktopServices>
 #include <QTabWidget>
 
-#include "ringbuffer.h"
 #include "ui/capture_ui_utils.h"
 #include "ui/capture_globals.h"
 #include "ui/iface_lists.h"
-#include "ui/last_open_dir.h"
 
 #include "ui/ws_ui_util.h"
 #include "ui/util.h"
@@ -68,19 +64,21 @@ ExtcapOptionsDialog::ExtcapOptionsDialog(bool startCaptureOnClose, QWidget *pare
 
     ui->checkSaveOnStart->setCheckState(prefs.extcap_save_on_start ? Qt::Checked : Qt::Unchecked);
 
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("Start"));
     if (startCaptureOnClose) {
-        ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("Start"));
-    } else {
-        ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("Save"));
+        // This dialog was spawned because the user wanted to start a capture
+        // immediately but a mandatory parameter was not configured.
+        ui->buttonBox->button(QDialogButtonBox::Save)->hide();
     }
 }
 
-ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bool startCaptureOnClose, QWidget *parent)
+ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bool startCaptureOnClose, QWidget *parent,
+    QString *option_name, QString *option_value)
 {
     interface_t *device;
     ExtcapOptionsDialog * resultDialog = NULL;
     bool dev_found = false;
-    guint if_idx;
+    unsigned if_idx;
 
     if (dev_name.length() == 0)
         return NULL;
@@ -102,7 +100,24 @@ ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bo
     resultDialog->device_name = QString(dev_name);
     resultDialog->device_idx = if_idx;
 
-    resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Options") + ": " + device->display_name));
+    if (option_name != NULL && option_value != NULL)
+    {
+        // Sub argument is specified: this is an extcap popup created from a parent extcap popup,
+        // to configure a specific argument.
+        resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Sub-options") + ": " + (*option_name)));
+        resultDialog->option_name = *option_name;
+        resultDialog->option_value = *option_value;
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("Ok"));
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::Save)->hide();
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::Help)->hide();
+        resultDialog->ui->buttonBox->button(QDialogButtonBox::RestoreDefaults)->hide();
+        resultDialog->ui->checkSaveOnStart->setCheckState(Qt::Checked);
+        resultDialog->ui->checkSaveOnStart->hide();
+    }
+    else
+    {
+        resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Options") + ": " + device->display_name));
+    }
 
     resultDialog->updateWidgets();
 
@@ -116,19 +131,6 @@ ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bo
 ExtcapOptionsDialog::~ExtcapOptionsDialog()
 {
     delete ui;
-}
-
-void ExtcapOptionsDialog::on_buttonBox_accepted()
-{
-    if (saveOptionToCaptureInfo()) {
-        /* Starting a new capture with those values */
-        prefs.extcap_save_on_start = ui->checkSaveOnStart->checkState() == Qt::Checked;
-
-        if (prefs.extcap_save_on_start)
-            storeValues();
-
-        accept();
-    }
 }
 
 void ExtcapOptionsDialog::anyValueChanged()
@@ -202,8 +204,15 @@ void ExtcapOptionsDialog::loadArguments()
 
     extcapArguments.clear();
 
-    arguments = g_list_first(extcap_get_if_configuration(device_name.toUtf8().constData()));
-
+    if (!option_name.isEmpty())
+    {
+        arguments = g_list_first(extcap_get_if_configuration_option(device_name.toUtf8().constData(),
+            option_name.toUtf8().constData(), option_value.toUtf8().constData()));
+    }
+    else
+    {
+        arguments = g_list_first(extcap_get_if_configuration(device_name.toUtf8().constData()));
+    }
     ExtcapArgumentList required;
     ExtcapArgumentList optional;
 
@@ -234,7 +243,7 @@ void ExtcapOptionsDialog::loadArguments()
         extcapArguments << optional;
 
     /* argument items are now owned by ExtcapArgument. Only free the lists */
-    extcap_free_if_configuration(arguments, FALSE);
+    extcap_free_if_configuration(arguments, false);
 }
 
 void ExtcapOptionsDialog::updateWidgets()
@@ -242,6 +251,7 @@ void ExtcapOptionsDialog::updateWidgets()
     QWidget * lblWidget = NULL, *editWidget = NULL;
     ExtcapArgument * argument = NULL;
     bool allowStart = true;
+    extcap_argument_sufficient sufficient = EXTCAP_ARGUMENT_SUFFICIENT_NOTSET;
 
     unsigned int counter = 0;
 
@@ -272,7 +282,6 @@ void ExtcapOptionsDialog::updateWidgets()
         ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
         return;
     }
-    ui->checkSaveOnStart->setText(tr("Save parameter(s) on capture start", "", static_cast<int>(extcapArguments.count())));
 
     QStringList groupKeys;
     QString defaultKeyName(tr("Default"));
@@ -345,12 +354,19 @@ void ExtcapOptionsDialog::updateWidgets()
                     QPushButton *button = new QPushButton(defaultValueIcon_,"");
                     button->setToolTip(tr("Restore default value of the item"));
                     layout->addWidget(button, counter, 2, Qt::AlignVCenter);
-                    connect(button, SIGNAL(clicked()), argument, SLOT(setDefaultValue()));
+                    connect(button, &QPushButton::clicked, argument, &ExtcapArgument::setDefaultValue);
                 }
             }
 
             if (argument->isRequired() && ! argument->isValid())
                 allowStart = false;
+
+            if (argument->isSufficient() && sufficient != EXTCAP_ARGUMENT_SUFFICIENT_OK)
+            {
+                sufficient = EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED;
+                if (argument->isValid())
+                    sufficient = EXTCAP_ARGUMENT_SUFFICIENT_OK;
+            }
 
             connect(argument, &ExtcapArgument::valueChanged, this, &ExtcapOptionsDialog::anyValueChanged);
 
@@ -358,6 +374,9 @@ void ExtcapOptionsDialog::updateWidgets()
         }
         ++iter;
     }
+
+    if (sufficient == EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED)
+        allowStart = false;
 
     if (counter > 0)
     {
@@ -396,12 +415,6 @@ void ExtcapOptionsDialog::updateWidgets()
     }
 }
 
-// Not sure why we have to do this manually.
-void ExtcapOptionsDialog::on_buttonBox_rejected()
-{
-    reject();
-}
-
 void ExtcapOptionsDialog::on_buttonBox_helpRequested()
 {
     interface_t *device;
@@ -423,7 +436,7 @@ void ExtcapOptionsDialog::on_buttonBox_helpRequested()
         QFileInfo help_file(local_path);
         if (!help_file.exists()) {
             QMessageBox::warning(this, tr("Extcap Help cannot be found"),
-                QString(tr("The help for the extcap interface %1 cannot be found. Given file: %2"))
+                tr("The help for the extcap interface %1 cannot be found. Given file: %2")
                     .arg(device->name).arg(QDir::toNativeSeparators(local_path)),
                 QMessageBox::Ok);
             return;
@@ -454,41 +467,25 @@ bool ExtcapOptionsDialog::saveOptionToCaptureInfo()
             continue;
 
         if (call.length() <= 0) {
-            /* BOOLFLAG was cleared, make its value empty */
-            if ((*iter)->argument()->arg_type == EXTCAP_ARG_BOOLFLAG) {
-                *(*iter)->argument()->pref_valptr[0] = 0;
-            }
             continue;
         }
 
         if (value.compare((*iter)->defaultValue()) == 0) {
-            extcap_arg *arg = (*iter)->argument();
-
-            // If previous value is not default, set it to default value
-            if (arg->default_complex != NULL && arg->default_complex->_val != NULL) {
-                g_free(*arg->pref_valptr);
-                *arg->pref_valptr = g_strdup(arg->default_complex->_val);
-            } else {
-                // Set empty value if there is no default value
-                *arg->pref_valptr[0] = 0;
-            }
-            continue;
+            // What _does_ required and also has a default mean (And how is
+            // it different, if at all, from has a default and also placeholder
+            // text)? Will the extcap use the default if we don't pass the
+            // argument (so it's not really required)?
+            // To be safe we can pass the default explicitly.
+            if (!(*iter)->isRequired())
+                continue;
         }
 
-        gchar * call_string = g_strdup(call.toStdString().c_str());
-        gchar * value_string = NULL;
+        char * call_string = qstring_strdup(call);
+        char * value_string = NULL;
         if (value.length() > 0)
-            value_string = g_strdup(value.toStdString().c_str());
+            value_string = qstring_strdup(value);
 
         g_hash_table_insert(ret_args, call_string, value_string);
-
-        // For current value we need strdup even it is empty
-        value_string = g_strdup(prefValue.toStdString().c_str());
-        // Update current value with new value
-        // We use prefValue because for bool/boolflag it returns value
-        // even it is false
-        g_free(*(*iter)->argument()->pref_valptr);
-        *(*iter)->argument()->pref_valptr = value_string;
     }
 
     if (device->external_cap_args_settings != NULL)
@@ -500,8 +497,41 @@ bool ExtcapOptionsDialog::saveOptionToCaptureInfo()
 void ExtcapOptionsDialog::on_buttonBox_clicked(QAbstractButton *button)
 {
     /* Only the save button has the ActionRole */
-    if (ui->buttonBox->buttonRole(button) == QDialogButtonBox::ResetRole)
+    switch (ui->buttonBox->buttonRole(button)) {
+    case QDialogButtonBox::ResetRole:
         resetValues();
+        break;
+    case QDialogButtonBox::RejectRole:
+    case QDialogButtonBox::DestructiveRole:
+        /* entries are only saved if saveOptionToCaptureInfo() is called,
+         * so do nothing. */
+        reject();
+        break;
+    case QDialogButtonBox::AcceptRole:
+        if (saveOptionToCaptureInfo()) {
+            /* Starting a new capture with those values */
+            prefs.extcap_save_on_start = ui->checkSaveOnStart->checkState() == Qt::Checked;
+
+            /* XXX - If extcap_save_on_start is the only preference that has
+             * changed, or if it changed from true to false, we should write
+             * out a new preference file with its new value, but don't.
+             */
+            if (ui->buttonBox->standardButton(button) == QDialogButtonBox::Save) {
+                storeValues();
+                /* Reject the dialog, because we don't want to start a capture. */
+                reject();
+            } else {
+                /* Start */
+                if (prefs.extcap_save_on_start) {
+                    storeValues();
+                }
+                accept();
+            }
+        }
+        break;
+    default:
+        break;
+    }
 }
 
 void ExtcapOptionsDialog::resetValues()
@@ -558,14 +588,14 @@ void ExtcapOptionsDialog::resetValues()
 
         }
 
-        /* Values are stored when dialog is commited, just check validity*/
+        /* Values are stored when dialog is committed, just check validity */
         anyValueChanged();
     }
 }
 
 GHashTable *ExtcapOptionsDialog::getArgumentSettings(bool useCallsAsKey, bool includeEmptyValues)
 {
-    GHashTable * entries = g_hash_table_new(g_str_hash, g_str_equal);
+    GHashTable * entries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     ExtcapArgumentList::const_iterator iter;
 
     QString value;
@@ -618,15 +648,15 @@ GHashTable *ExtcapOptionsDialog::getArgumentSettings(bool useCallsAsKey, bool in
         else
             value = (*iter)->prefValue();
 
-        QString key = argument->prefKey(device_name);
+        QString key = argument->prefKey(device_name, option_name, option_value);
         if (useCallsAsKey)
             key = argument->call();
 
         if ((key.length() > 0) && (includeEmptyValues || isBoolflag || value.length() > 0) )
         {
-            gchar * val = g_strdup(value.toStdString().c_str());
+            char * val = qstring_strdup(value);
 
-            g_hash_table_insert(entries, g_strdup(key.toStdString().c_str()), val);
+            g_hash_table_insert(entries, qstring_strdup(key), val);
         }
     }
 
@@ -643,6 +673,8 @@ void ExtcapOptionsDialog::storeValues()
             mainApp->emitAppSignal(MainApplication::PreferencesChanged);
 
     }
+
+    g_hash_table_unref(entries);
 }
 
 ExtcapValueList ExtcapOptionsDialog::loadValuesFor(int argNum, QString argumentName, QString parent)
@@ -682,7 +714,7 @@ ExtcapValueList ExtcapOptionsDialog::loadValuesFor(int argNum, QString argumentN
             QString call = QString().fromUtf8(v->call);
 
             ExtcapValue element = ExtcapValue(display, call,
-                            v->enabled == (gboolean)TRUE, v->is_default == (gboolean)TRUE);
+                            v->enabled == true, v->is_default == true);
 
 #if 0
             /* TODO: Disabled due to wrong parent handling. It leads to an infinite loop for now. To implement this properly, other things

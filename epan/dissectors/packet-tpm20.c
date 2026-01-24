@@ -12,113 +12,115 @@
 
 #include "config.h"
 
-#include <stdbool.h>
 #include <epan/packet.h>
-#include <epan/to_str.h>
 #include <epan/tvbuff.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include <epan/wmem_scopes.h>
 
 typedef struct {
-	guint32 com_pnum;
-	guint32 resp_type;
-	guint32 command;
-	guint32 num_auths;
+	uint32_t com_pnum;
+	uint32_t resp_type;
+	uint32_t command;
+	uint32_t num_auths;
 } tpm_entry;
 
-static wmem_tree_t *cmd_tree = NULL;
-static guint last_command_pnum;
-static bool response_size = TRUE;
+static wmem_tree_t *cmd_tree;
+static unsigned last_command_pnum;
+static bool response_size = true;
 
 /* sub tree items */
-static int proto_tpm20 = -1;
-static int proto_tpm20_header = -1;
-static int proto_tpm20_resp_header = -1;
-static int proto_tpm20_hndl_area = -1;
-static int proto_tpm20_auth_area = -1;
-static int proto_tpm20_params_area = -1;
+static int proto_tpm20;
+static int proto_tpm20_header;
+static int proto_tpm20_resp_header;
+static int proto_tpm20_hndl_area;
+static int proto_tpm20_auth_area;
+static int proto_tpm20_params_area;
 
 /* pdu fields */
-static int hf_tpm20_platform_cmd = -1;
-static int hf_tpm20_platform_resp_code = -1;
-static int hf_tpm20_platform_resp_size = -1;
-static int hf_tpm20_tag = -1;
-static int hf_tpm20_size = -1;
-static int hf_tpm20_cc = -1;
-static int hf_tpm20_resp_tag = -1;
-static int hf_tpm20_resp_size = -1;
-static int hf_tpm20_resp_code = -1;
-static int hf_tpm20_startup_type = -1;
-static int hf_tpmi_rh_hierarhy = -1;
-static int hf_tpmi_rh_provision = -1;
-static int hf_tpmi_rh_platform = -1;
-static int hf_tpmi_rh_endorsment = -1;
-static int hf_tpmi_rh_nv_index = -1;
-static int hf_tpmi_rh_nv_auth = -1;
-static int hf_tpmi_rh_hierarhy_auth = -1;
-static int hf_tpmi_rh_clear = -1;
-static int hf_tpmi_rh_lockout = -1;
-static int hf_tpmi_dh_object = -1;
-static int hf_tpmi_dh_entity = -1;
-static int hf_tpmi_dh_context = -1;
-static int hf_tpmi_dh_parent = -1;
-static int hf_tpmi_dh_pcr = -1;
-static int hf_tpmi_ht_handle = -1;
-static int hf_tpmi_sh_auth_session = -1;
-static int hf_tpmi_rh_act = -1;
-static int hf_auth_area_size = -1;
-static int hf_session_nonce_size = -1;
-static int hf_session_nonce = -1;
-static int hf_session_attribs_cont = -1;
-static int hf_session_attribs_auditex = -1;
-static int hf_session_attribs_auditreset = -1;
-static int hf_session_attribs_res = -1;
-static int hf_session_attribs_decrypt = -1;
-static int hf_session_attribs_encrypt = -1;
-static int hf_session_attribs_audit = -1;
-static int hf_session_auth_size = -1;
-static int hf_session_auth = -1;
-static int hf_resp_param_size = -1;
-static int hf_encrypted_secret_size = -1;
-static int hf_encrypted_secret = -1;
-static int hf_session_type = -1;
-static int hf_alg_hash = -1;
-static int hf_alg_sym = -1;
-static int hf_alg_sym_keybits = -1;
-static int hf_alg_sym_mode = -1;
-static int hf_tpm_priv_size = -1;
-static int hf_tpm_priv = -1;
-static int hf_tpm_pub_size = -1;
-static int hf_tpm_pub = -1;
-static int hf_tpm_name_size = -1;
-static int hf_tpm_name = -1;
-static int hf_tpm_sensitive_crate_size = -1;
-static int hf_tpm_sensitive_crate = -1;
-static int hf_tpm_template_size = -1;
-static int hf_tpm_template = -1;
-static int hf_tpm_data_size = -1;
-static int hf_tpm_data = -1;
-static int hf_tpm_creation_data_size = -1;
-static int hf_tpm_creation_data = -1;
-static int hf_tpm_digest_size = -1;
-static int hf_tpm_digest = -1;
-static int hf_params = -1;
+static int hf_tpm20_platform_cmd;
+static int hf_tpm20_platform_resp_code;
+static int hf_tpm20_platform_resp_size;
+static int hf_tpm20_tag;
+static int hf_tpm20_size;
+static int hf_tpm20_cc;
+static int hf_tpm20_resp_tag;
+static int hf_tpm20_resp_size;
+static int hf_tpm20_resp_code;
+static int hf_tpm20_startup_type;
+static int hf_tpmi_rh_hierarchy;
+static int hf_tpmi_rh_provision;
+static int hf_tpmi_rh_platform;
+static int hf_tpmi_rh_endorsement;
+static int hf_tpmi_rh_nv_index;
+static int hf_tpmi_rh_nv_auth;
+static int hf_tpmi_rh_hierarchy_auth;
+static int hf_tpmi_rh_clear;
+static int hf_tpmi_rh_lockout;
+static int hf_tpmi_dh_object;
+static int hf_tpmi_dh_entity;
+static int hf_tpmi_dh_context;
+static int hf_tpmi_dh_parent;
+static int hf_tpmi_dh_pcr;
+static int hf_tpmi_ht_handle;
+static int hf_tpmi_sh_auth_session;
+static int hf_tpmi_rh_act;
+static int hf_auth_area_size;
+static int hf_session_nonce_size;
+static int hf_session_nonce;
+static int hf_session_attribs_cont;
+static int hf_session_attribs_auditex;
+static int hf_session_attribs_auditreset;
+static int hf_session_attribs_res;
+static int hf_session_attribs_decrypt;
+static int hf_session_attribs_encrypt;
+static int hf_session_attribs_audit;
+static int hf_session_auth_size;
+static int hf_session_auth;
+static int hf_resp_param_size;
+static int hf_encrypted_secret_size;
+static int hf_encrypted_secret;
+static int hf_session_type;
+static int hf_alg_hash;
+static int hf_alg_sym;
+static int hf_alg_sym_keybits;
+static int hf_alg_sym_mode;
+static int hf_tpm_priv_size;
+static int hf_tpm_priv;
+static int hf_tpm_pub_size;
+static int hf_tpm_pub;
+static int hf_tpm_name_size;
+static int hf_tpm_name;
+static int hf_tpm_sensitive_create_size;
+static int hf_tpm_sensitive_create;
+static int hf_tpm_template_size;
+static int hf_tpm_template;
+static int hf_tpm_data_size;
+static int hf_tpm_data;
+static int hf_tpm_creation_data_size;
+static int hf_tpm_creation_data;
+static int hf_tpm_digest_size;
+static int hf_tpm_digest;
+static int hf_params;
 
 /* sub trees */
-static gint ett_tpm = -1;
-static gint ett_tpm_header = -1;
-static gint ett_tpm_response_header = -1;
-static gint ett_tpm_handles = -1;
-static gint ett_tpm_auth = -1;
-static gint ett_tpm_params = -1;
-static gint ett_tpm_attrib = -1;
+static int ett_tpm;
+static int ett_tpm_header;
+static int ett_tpm_response_header;
+static int ett_tpm_handles;
+static int ett_tpm_auth;
+static int ett_tpm_params;
+static int ett_tpm_attrib;
 
-static expert_field ei_invalid_tag = EI_INIT;
-static expert_field ei_invalid_auth_size = EI_INIT;
-static expert_field ei_invalid_num_sessions = EI_INIT;
+static expert_field ei_invalid_tag;
+static expert_field ei_invalid_auth_size;
+static expert_field ei_invalid_num_sessions;
 
 void proto_register_tpm20(void);
 void proto_reg_handoff_tpm20(void);
+
+static dissector_handle_t tpm20_handle;
 
 #define TCP_TPM_PORT_PLATFORM_PORT    2321
 #define TCP_TPM_PORT_COMMAND_PORT     2322
@@ -130,34 +132,34 @@ void proto_reg_handoff_tpm20(void);
 #define TPM_COMMAND_HEADER_LEN 10
 
 struct num_handles {
-	guint32 command;
-	guint8 num_req_handles;
+	uint32_t command;
+	uint8_t num_req_handles;
 	int *req_pd[MAX_HNDL];
-	guint8 num_resp_handles;
+	uint8_t num_resp_handles;
 	int *resp_pd[MAX_HNDL];
 };
 
-static struct num_handles tpm_handles_map[] = {
+static const struct num_handles tpm_handles_map[] = {
 	{ 0x11f, 2, { &hf_tpmi_rh_provision, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0}}, /* CC_NV_UndefineSpaceSpecial */
 	{ 0x120, 2, { &hf_tpmi_rh_provision, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0}}, /* CC_EvictControl */
-	{ 0x121, 1, { &hf_tpmi_rh_hierarhy, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_HierarchyControl */
+	{ 0x121, 1, { &hf_tpmi_rh_hierarchy, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_HierarchyControl */
 	{ 0x122, 2, { &hf_tpmi_rh_provision, &hf_tpmi_rh_nv_index, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_UndefineSpace */
 	{ 0x124, 1, { &hf_tpmi_rh_platform, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_ChangeEPS */
 	{ 0x125, 1, { &hf_tpmi_rh_platform, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_ChangePPS */
 	{ 0x126, 1, { &hf_tpmi_rh_clear, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_Clear */
 	{ 0x127, 1, { &hf_tpmi_rh_clear, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_ClearControl */
 	{ 0x128, 1, { &hf_tpmi_rh_provision, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_ClockSet */
-	{ 0x129, 1, { &hf_tpmi_rh_hierarhy_auth, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_HierarchyChangeAuth */
+	{ 0x129, 1, { &hf_tpmi_rh_hierarchy_auth, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_HierarchyChangeAuth */
 	{ 0x12a, 1, { &hf_tpmi_rh_provision, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_DefineSpace */
 	{ 0x12b, 1, { &hf_tpmi_rh_platform, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_PCR_Allocate */
 	{ 0x12c, 1, { &hf_tpmi_rh_platform, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_PCR_SetAuthPolicy */
 	{ 0x12d, 1, { &hf_tpmi_rh_platform, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_PP_Commands */
-	{ 0x12e, 1, { &hf_tpmi_rh_hierarhy_auth, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_SetPrimaryPolicy */
+	{ 0x12e, 1, { &hf_tpmi_rh_hierarchy_auth, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_SetPrimaryPolicy */
 	{ 0x12f, 2, { &hf_tpmi_rh_platform, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_FieldUpgradeStart */
 	{ 0x130, 1, { &hf_tpmi_rh_platform, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_ClockRateAdjust */
-	{ 0x131, 1, { &hf_tpmi_rh_hierarhy, 0, 0 }, 1, { &hf_tpmi_ht_handle, 0, 0 }}, /* CC_CreatePrimary */
+	{ 0x131, 1, { &hf_tpmi_rh_hierarchy, 0, 0 }, 1, { &hf_tpmi_ht_handle, 0, 0 }}, /* CC_CreatePrimary */
 	{ 0x132, 1, { &hf_tpmi_rh_provision, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_GlobalWriteLock */
-	{ 0x133, 2, { &hf_tpmi_rh_endorsment, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_GetCommandAuditDigest */
+	{ 0x133, 2, { &hf_tpmi_rh_endorsement, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_GetCommandAuditDigest */
 	{ 0x134, 2, { &hf_tpmi_rh_nv_auth, &hf_tpmi_rh_nv_index, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_Increment */
 	{ 0x135, 2, { &hf_tpmi_rh_nv_auth, &hf_tpmi_rh_nv_index, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_SetBits */
 	{ 0x136, 2, { &hf_tpmi_rh_nv_auth, &hf_tpmi_rh_nv_index, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_Extend */
@@ -182,9 +184,9 @@ static struct num_handles tpm_handles_map[] = {
 	{ 0x149, 3, { &hf_tpmi_rh_nv_auth, &hf_tpmi_rh_nv_index, &hf_tpmi_sh_auth_session}, 0, { 0, 0, 0 }}, /* CC_PolicyNV */
 	{ 0x14a, 2, { &hf_tpmi_dh_object, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_CertifyCreation */
 	{ 0x14b, 2, { &hf_tpmi_dh_object, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_Duplicate */
-	{ 0x14c, 2, { &hf_tpmi_rh_endorsment, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_GetTime */
-	{ 0x14d, 3, { &hf_tpmi_rh_endorsment, &hf_tpmi_dh_object, &hf_tpmi_sh_auth_session }, 0, { 0, 0, 0 }}, /* CC_GetSessionAuditDigest */
-	{ 0x14e, 1, { &hf_tpmi_rh_nv_index, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_Read */
+	{ 0x14c, 2, { &hf_tpmi_rh_endorsement, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_GetTime */
+	{ 0x14d, 3, { &hf_tpmi_rh_endorsement, &hf_tpmi_dh_object, &hf_tpmi_sh_auth_session }, 0, { 0, 0, 0 }}, /* CC_GetSessionAuditDigest */
+	{ 0x14e, 2, { &hf_tpmi_rh_nv_auth, &hf_tpmi_rh_nv_index, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_Read */
 	{ 0x14f, 2, { &hf_tpmi_rh_nv_auth, &hf_tpmi_rh_nv_index, 0 }, 0, { 0, 0, 0 }}, /* CC_NV_ReadLock */
 	{ 0x150, 2, { &hf_tpmi_dh_object, &hf_tpmi_dh_object, 0 }, 0, { 0, 0, 0 }}, /* CC_ObjectChangeAuth */
 	{ 0x151, 2, { &hf_tpmi_dh_entity, &hf_tpmi_sh_auth_session, 0 }, 0, { 0, 0, 0 }}, /* CC_PolicySecret */
@@ -247,7 +249,7 @@ static struct num_handles tpm_handles_map[] = {
 	{ 0x18e, 0, { 0, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_EC_Ephemeral */
 	{ 0x18f, 1, { &hf_tpmi_sh_auth_session, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_PolicyNvWritten */
 	{ 0x190, 1, { &hf_tpmi_sh_auth_session, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_PolicyTemplate */
-	{ 0x191, 1, { &hf_tpmi_rh_hierarhy, 0, 0 }, 1, { &hf_tpmi_dh_parent, 0, 0 }}, /* CC_CreateLoaded */
+	{ 0x191, 1, { &hf_tpmi_rh_hierarchy, 0, 0 }, 1, { &hf_tpmi_dh_parent, 0, 0 }}, /* CC_CreateLoaded */
 	{ 0x192, 3, { &hf_tpmi_rh_nv_auth, &hf_tpmi_rh_nv_index, &hf_tpmi_sh_auth_session }, 0, { 0, 0, 0 }}, /* CC_PolicyAuthorizeNV */
 	{ 0x193, 1, { &hf_tpmi_dh_object, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_EncryptDecrypt2 */
 	{ 0x194, 1, { &hf_tpmi_ht_handle, 0, 0 }, 0, { 0, 0, 0 }}, /* CC_AC_GetCapability */
@@ -259,15 +261,13 @@ static struct num_handles tpm_handles_map[] = {
 
 static void get_num_hndl(struct num_handles *map)
 {
-	guint8 i, y;
-
-	for (i = 0; i < array_length(tpm_handles_map); i++) {
+	for (size_t i = 0; i < array_length(tpm_handles_map); i++) {
 		if (map->command == tpm_handles_map[i].command) {
 			map->num_req_handles = tpm_handles_map[i].num_req_handles;
 			map->num_resp_handles = tpm_handles_map[i].num_resp_handles;
-			for (y = 0; y < map->num_req_handles; y++)
+			for (size_t y = 0; y < map->num_req_handles; y++)
 				map->req_pd[y] = tpm_handles_map[i].req_pd[y];
-			for (y = 0; y < map->num_resp_handles; y++)
+			for (size_t y = 0; y < map->num_resp_handles; y++)
 				map->resp_pd[y] = tpm_handles_map[i].resp_pd[y];
 		}
 	}
@@ -609,21 +609,21 @@ static const value_string responses [] = {
 	{ 0, NULL }
 };
 
-#define TPMA_SESSION_CONTINUESESSION 0x00000001
-#define TPMA_SESSION_AUDITEXCLUSIVE  0x00000002
-#define TPMA_SESSION_AUDITRESET      0x00000004
-#define TPMA_SESSION_RESERVED1_MASK  0x00000018
-#define TPMA_SESSION_DECRYPT         0x00000020
-#define TPMA_SESSION_ENCRYPT         0x00000040
-#define TPMA_SESSION_AUDIT           0x00000080
+#define TPMA_SESSION_CONTINUESESSION 0x01
+#define TPMA_SESSION_AUDITEXCLUSIVE  0x02
+#define TPMA_SESSION_AUDITRESET      0x04
+#define TPMA_SESSION_RESERVED1_MASK  0x18
+#define TPMA_SESSION_DECRYPT         0x20
+#define TPMA_SESSION_ENCRYPT         0x40
+#define TPMA_SESSION_AUDIT           0x80
 
-static tpm_entry *get_command_entry(wmem_tree_t *tree, guint32 pnum)
+static tpm_entry *get_command_entry(wmem_tree_t *tree, uint32_t pnum)
 {
 	tpm_entry *entry = (tpm_entry *)wmem_tree_lookup32(tree, pnum);
-	DISSECTOR_ASSERT(entry != NULL);
-	tpm_entry *command_entry = (tpm_entry *)wmem_tree_lookup32(tree, entry->com_pnum);
-	DISSECTOR_ASSERT(command_entry != NULL);
+	if (entry == NULL)
+		return NULL;
 
+	tpm_entry *command_entry = (tpm_entry *)wmem_tree_lookup32(tree, entry->com_pnum);
 	return command_entry;
 }
 
@@ -631,24 +631,23 @@ static void
 dissect_tpm20_platform_command(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree *tree)
 {
-	guint32 command;
+	uint32_t command;
+	char* str_command;
 
 	proto_tree_add_item_ret_uint(tree, hf_tpm20_platform_cmd, tvb, 0,
 				4, ENC_BIG_ENDIAN, &command);
 
-	col_append_fstr(pinfo->cinfo, COL_INFO, ", Platform Command %s",
-		val_to_str(command, platform_commands, "Unknown (0x%02x)"));
-
-	proto_item_append_text(tree, ", %s", val_to_str(command,
-				platform_commands, "Unknown (0x%02x)"));
-	response_size = FALSE;
+	str_command = val_to_str(pinfo->pool, command, platform_commands, "Unknown (0x%02x)");
+	col_append_fstr(pinfo->cinfo, COL_INFO, ", Platform Command %s", str_command);
+	proto_item_append_text(tree, ", %s", str_command);
+	response_size = false;
 }
 
 static void
 dissect_auth_common(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *auth, proto_tree *tree _U_, gint *offset)
+	proto_tree *auth, proto_tree *tree _U_, int *offset)
 {
-	guint nonce_size, auth_size;
+	unsigned nonce_size, auth_size;
 	static int * const attrib_fields[] = {
 		&hf_session_attribs_cont,
 		&hf_session_attribs_auditex,
@@ -677,21 +676,23 @@ dissect_auth_common(tvbuff_t *tvb, packet_info *pinfo _U_,
 
 static void
 dissect_auth_resp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *auth,
-	proto_tree *tree, gint *offset)
+	proto_tree *tree, int *offset)
 {
 	tpm_entry *command_entry = get_command_entry(cmd_tree, pinfo->num);
-	guint32 i;
+	uint32_t i;
 
-	for (i = 0; i < command_entry->num_auths; i++)
-		dissect_auth_common(tvb, pinfo, auth, tree, offset);
+	if (command_entry != NULL) {
+		for (i = 0; i < command_entry->num_auths; i++)
+			dissect_auth_common(tvb, pinfo, auth, tree, offset);
+	}
 }
 
 static void
 dissect_auth_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *auth,
-		proto_tree *tree, gint *offset)
+		proto_tree *tree, int *offset)
 {
-	guint32 auth_area_size;
-	guint32 num_auths = 0;
+	uint32_t auth_area_size;
+	uint32_t num_auths = 0;
 	tpm_entry *entry = (tpm_entry *)wmem_tree_lookup32(cmd_tree, pinfo->num);
 	DISSECTOR_ASSERT(entry != NULL);
 
@@ -703,7 +704,7 @@ dissect_auth_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *auth,
 		proto_tree_add_expert_format(auth, pinfo, &ei_invalid_auth_size, tvb, 0, 0,
 					"Error: Auth size: %d", auth_area_size);
 	while (auth_area_size) {
-		guint32 size;
+		uint32_t size;
 		proto_tree_add_item(auth, hf_tpmi_sh_auth_session, tvb, *offset, 4, ENC_BIG_ENDIAN);
 		*offset += 4;
 		auth_area_size -= 4;
@@ -721,7 +722,7 @@ dissect_auth_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *auth,
 
 static void
 dissect_startup(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *header, proto_tree *tree _U_, gint *offset)
+	proto_tree *header, proto_tree *tree _U_, int *offset)
 {
 	proto_tree_add_item(header, hf_tpm20_startup_type, tvb, *offset, 2, ENC_BIG_ENDIAN);
 	*offset += 2;
@@ -729,9 +730,9 @@ dissect_startup(tvbuff_t *tvb, packet_info *pinfo _U_,
 
 static void
 dissect_start_auth_session(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *header _U_, proto_tree *tree, gint *offset)
+	proto_tree *header _U_, proto_tree *tree, int *offset)
 {
-	guint32 nonce_size, encrypted, sym_alg;
+	uint32_t nonce_size, encrypted, sym_alg;
 	proto_tree_add_item_ret_uint(tree, hf_session_nonce_size, tvb, *offset, 2,
 			ENC_BIG_ENDIAN, &nonce_size);
 	*offset += 2;
@@ -754,20 +755,20 @@ dissect_start_auth_session(tvbuff_t *tvb, packet_info *pinfo _U_,
 		proto_tree_add_item(tree, hf_alg_sym_mode, tvb, *offset, 2, ENC_BIG_ENDIAN);
 		*offset += 2;
 	}
-	proto_tree_add_item(tree, hf_alg_hash, tvb, *offset, 2, ENC_NA);
+	proto_tree_add_item(tree, hf_alg_hash, tvb, *offset, 2, ENC_BIG_ENDIAN);
 	*offset += 2;
 }
 
 static void
 dissect_create_primary(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *header _U_, proto_tree *tree, gint *offset)
+	proto_tree *header _U_, proto_tree *tree, int *offset)
 {
-	guint32 sensitive_size, pub_size, data_size;
+	uint32_t sensitive_size, pub_size, data_size;
 
-	proto_tree_add_item_ret_uint(tree, hf_tpm_sensitive_crate_size, tvb, *offset, 2,
+	proto_tree_add_item_ret_uint(tree, hf_tpm_sensitive_create_size, tvb, *offset, 2,
 			ENC_BIG_ENDIAN, &sensitive_size);
 	*offset += 2;
-	proto_tree_add_item(tree, hf_tpm_sensitive_crate, tvb, *offset, sensitive_size, ENC_NA);
+	proto_tree_add_item(tree, hf_tpm_sensitive_create, tvb, *offset, sensitive_size, ENC_NA);
 	*offset += sensitive_size;
 
 	proto_tree_add_item_ret_uint(tree, hf_tpm_pub_size, tvb, *offset, 2,
@@ -785,14 +786,14 @@ dissect_create_primary(tvbuff_t *tvb, packet_info *pinfo _U_,
 
 static void
 dissect_create_loaded(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *header _U_, proto_tree *tree, gint *offset)
+	proto_tree *header _U_, proto_tree *tree, int *offset)
 {
-	guint32 sensitive_size, template_size;
+	uint32_t sensitive_size, template_size;
 
-	proto_tree_add_item_ret_uint(tree, hf_tpm_sensitive_crate_size, tvb, *offset, 2,
+	proto_tree_add_item_ret_uint(tree, hf_tpm_sensitive_create_size, tvb, *offset, 2,
 			ENC_BIG_ENDIAN, &sensitive_size);
 	*offset += 2;
-	proto_tree_add_item(tree, hf_tpm_sensitive_crate, tvb, *offset, sensitive_size, ENC_NA);
+	proto_tree_add_item(tree, hf_tpm_sensitive_create, tvb, *offset, sensitive_size, ENC_NA);
 	*offset += sensitive_size;
 
 	proto_tree_add_item_ret_uint(tree, hf_tpm_template_size, tvb, *offset, 2,
@@ -803,8 +804,8 @@ dissect_create_loaded(tvbuff_t *tvb, packet_info *pinfo _U_,
 }
 
 static void
-dissect_command(guint32 command, tvbuff_t *tvb, packet_info *pinfo,
-	proto_tree *header, proto_tree *tree, gint *offset)
+dissect_command(uint32_t command, tvbuff_t *tvb, packet_info *pinfo,
+	proto_tree *header, proto_tree *tree, int *offset)
 {
 	last_command_pnum = pinfo->num;
 
@@ -825,22 +826,21 @@ dissect_command(guint32 command, tvbuff_t *tvb, packet_info *pinfo,
 }
 
 static void
-dissect_tpm20_tpm_command(tvbuff_t *tvb, packet_info *pinfo _U_,
+dissect_tpm20_tpm_command(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree *tree)
 {
-	gint offset = 0;
-	guint32 command = tvb_get_guint32(tvb, 6, ENC_BIG_ENDIAN);
-	guint16 tag = tvb_get_guint16(tvb, 0, ENC_BIG_ENDIAN);
+	int offset = 0;
+	uint32_t command = tvb_get_uint32(tvb, 6, ENC_BIG_ENDIAN);
+	uint16_t tag = tvb_get_uint16(tvb, 0, ENC_BIG_ENDIAN);
 	struct num_handles handl_map;
 	unsigned int i;
+	char* str_command = val_to_str(pinfo->pool, command, commands, "Unknown (0x%02x)");
 
-	col_append_fstr(pinfo->cinfo, COL_INFO, ", Command %s",
-			val_to_str(command, commands, "Unknown (0x%02x)"));
+	col_append_fstr(pinfo->cinfo, COL_INFO, ", Command %s", str_command);
 
 	proto_item *item = proto_tree_add_item(tree, proto_tpm20_header,
 						tvb, 0, -1, ENC_NA);
-	proto_item_append_text(item, ", %s", val_to_str(command, commands,
-				"Unknown (0x%02x)"));
+	proto_item_append_text(item, ", %s", str_command);
 	proto_tree *header = proto_item_add_subtree(item, ett_tpm_header);
 	proto_tree_add_item(header, hf_tpm20_tag, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset += 2;
@@ -879,7 +879,7 @@ dissect_tpm20_tpm_command(tvbuff_t *tvb, packet_info *pinfo _U_,
 	}
 
 	dissect_command(command, tvb, pinfo, header, tree, &offset);
-	response_size = TRUE;
+	response_size = true;
 }
 
 #define PNUM_UNINIT 0xFFFFFFFF
@@ -889,18 +889,18 @@ static void
 dissect_tpm20_platform_response(tvbuff_t *tvb, packet_info *pinfo _U_,
 	proto_tree *tree)
 {
-	guint32 rc = tvb_get_guint32(tvb, 0, ENC_BIG_ENDIAN);
+	uint32_t rc = tvb_get_uint32(tvb, 0, ENC_BIG_ENDIAN);
 
 	tpm_entry *entry = (tpm_entry *)wmem_tree_lookup32(cmd_tree, pinfo->num);
 	DISSECTOR_ASSERT(entry != NULL);
 
 	if (entry->resp_type == PNUM_UNINIT) {
-		if (response_size == TRUE) {
+		if (response_size == true) {
 			entry->resp_type = RESP_SIZE;
-			response_size = FALSE;
+			response_size = false;
 		} else {
 			entry->resp_type = RESP_CODE;
-			response_size = TRUE;
+			response_size = true;
 		}
 	}
 
@@ -911,16 +911,16 @@ dissect_tpm20_platform_response(tvbuff_t *tvb, packet_info *pinfo _U_,
 	} else {
 		col_append_fstr(pinfo->cinfo, COL_INFO, ", Response code %d", rc);
 		proto_item_append_text(tree, ", Response code %s",
-				       val_to_str(rc, responses, "Unknown (0x%02x)"));
+				       val_to_str(pinfo->pool, rc, responses, "Unknown (0x%02x)"));
 		proto_tree_add_item(tree, hf_tpm20_platform_resp_code, tvb, 0, 4, ENC_BIG_ENDIAN);
 	}
 }
 
 static void
 dissect_start_auth_session_resp(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
-	gint *offset, guint32 param_size _U_)
+	int *offset, uint32_t param_size _U_)
 {
-	guint32 nonce_size;
+	uint32_t nonce_size;
 
 	proto_tree_add_item_ret_uint(tree, hf_session_nonce_size, tvb, *offset, 2,
 			ENC_BIG_ENDIAN, &nonce_size);
@@ -931,9 +931,9 @@ dissect_start_auth_session_resp(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
 
 static void
 dissect_create_primary_resp(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
-	gint *offset, guint32 param_size _U_)
+	int *offset, uint32_t param_size _U_)
 {
-	guint32 pub_size, creation_data_size, digest_size, name_size;
+	uint32_t pub_size, creation_data_size, digest_size, name_size;
 
 	proto_tree_add_item_ret_uint(tree, hf_tpm_pub_size, tvb, *offset, 2,
 			ENC_BIG_ENDIAN, &pub_size);
@@ -962,9 +962,9 @@ dissect_create_primary_resp(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 
 static void
 dissect_create_loaded_resp(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
-	gint *offset, guint32 param_size _U_)
+	int *offset, uint32_t param_size _U_)
 {
-	guint32 priv_size, pub_size, name_size;
+	uint32_t priv_size, pub_size, name_size;
 
 	proto_tree_add_item_ret_uint(tree, hf_tpm_priv_size, tvb, *offset, 2,
 			ENC_BIG_ENDIAN, &priv_size);
@@ -987,9 +987,15 @@ dissect_create_loaded_resp(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 
 static void
 dissect_response(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
-	gint *offset, guint32 param_size)
+	int *offset, uint32_t param_size)
 {
 	tpm_entry *entry = get_command_entry(cmd_tree, pinfo->num);
+	if (entry == NULL) {
+		/* Entry not found, treat as generic data */
+		proto_tree_add_item(tree, hf_params, tvb, *offset, param_size, ENC_NA);
+		*offset += param_size;
+		return;
+	}
 
 	switch (entry->command) {
 	case 0x12e: /* Create Primary */
@@ -1012,22 +1018,21 @@ dissect_response(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
 }
 
 static void
-dissect_tpm20_tpm_response(tvbuff_t *tvb, packet_info *pinfo _U_,
-	proto_tree *tree)
+dissect_tpm20_tpm_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-	gint offset = 0;
+	int offset = 0;
 	struct num_handles handl_map;
-	guint16 tag = tvb_get_guint16(tvb, 0, ENC_BIG_ENDIAN);
-	guint32 rc = tvb_get_guint32(tvb, 6, ENC_BIG_ENDIAN);
-	guint32 param_size;
+	uint16_t tag = tvb_get_uint16(tvb, 0, ENC_BIG_ENDIAN);
+	uint32_t rc = tvb_get_uint32(tvb, 6, ENC_BIG_ENDIAN);
+	uint32_t param_size;
 	unsigned int i;
+	char* str_rc = val_to_str(pinfo->pool, rc, responses, "Unknown (0x%02x)");
 
-	col_append_fstr(pinfo->cinfo, COL_INFO, ", Response Code %s",
-			val_to_str(rc, responses, "Unknown (0x%02x)"));
+	col_append_fstr(pinfo->cinfo, COL_INFO, ", Response Code %s", str_rc);
 
 	proto_item *item = proto_tree_add_item(tree, proto_tpm20_resp_header,
 						tvb, 0, -1, ENC_NA);
-	proto_item_append_text(item, ", %s", val_to_str(rc, responses, "Unknown (0x%02x)"));
+	proto_item_append_text(item, ", %s", str_rc);
 	proto_tree *header = proto_item_add_subtree(item, ett_tpm_response_header);
 
 	proto_tree_add_item(header, hf_tpm20_resp_tag, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -1068,7 +1073,7 @@ dissect_tpm20_tpm_response(tvbuff_t *tvb, packet_info *pinfo _U_,
 
 	if (tag == 0x8002) {
 		/* Dissect response params size and params */
-		param_size = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+		param_size = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_resp_param_size, tvb, offset, 4,
 				ENC_BIG_ENDIAN);
 		offset += 4;
@@ -1105,7 +1110,7 @@ dissect_tpm20(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	col_append_ports(pinfo->cinfo, COL_INFO, PT_NONE, pinfo->srcport,
 			 pinfo->destport);
 
-	gint length = tvb_reported_length(tvb);
+	int length = tvb_reported_length(tvb);
 	entry = (tpm_entry *)wmem_tree_lookup32(cmd_tree, pinfo->num);
 
 	if (entry == NULL) {
@@ -1183,7 +1188,7 @@ static hf_register_info hf[] = {
 	{ "Response rc", "tpm.resp.rc", FT_UINT32, BASE_HEX, VALS(responses),
 	   0x0, NULL, HFILL }},
 	{ &hf_tpm20_startup_type,
-	{ "Startup type", "tpm.statup.type", FT_UINT16, BASE_HEX, VALS(startup_types),
+	{ "Startup type", "tpm.startup.type", FT_UINT16, BASE_HEX, VALS(startup_types),
 	   0x0, NULL, HFILL }},
 	{ &hf_tpmi_dh_object,
 	{ "TPMI_DH_OBJECT", "tpm.handle.TPMI_DH_OBJECT", FT_UINT32, BASE_HEX, VALS(handles),
@@ -1206,7 +1211,7 @@ static hf_register_info hf[] = {
 	{ &hf_tpmi_rh_act,
 	{ "TPMI_RH_ACT", "tpm.handle.TPMI_RH_ACT", FT_UINT32, BASE_HEX, VALS(handles),
 	   0x0, NULL, HFILL }},
-	{ &hf_tpmi_rh_hierarhy,
+	{ &hf_tpmi_rh_hierarchy,
 	{ "TPMI_RH_HIERARCHY", "tpm.handle.TPMI_RH_HIERARCHY", FT_UINT32, BASE_HEX, VALS(hierarhies),
 	   0x0, NULL, HFILL }},
 	{ &hf_tpmi_rh_provision,
@@ -1218,7 +1223,7 @@ static hf_register_info hf[] = {
 	{ &hf_tpmi_rh_clear,
 	{ "TPMI_RH_CLEAR", "tpm.handle.TPMI_RH_CLEAR", FT_UINT32, BASE_HEX, VALS(handles),
 	   0x0, NULL, HFILL }},
-	{ &hf_tpmi_rh_hierarhy_auth,
+	{ &hf_tpmi_rh_hierarchy_auth,
 	{ "TPMI_RH_HIERARCHY_AUTH", "tpm.handle.TPMI_RH_HIERARCHY_AUTH", FT_UINT32, BASE_HEX, VALS(handles),
 	   0x0, NULL, HFILL }},
 	{ &hf_tpmi_rh_nv_auth,
@@ -1233,7 +1238,7 @@ static hf_register_info hf[] = {
 	{ &hf_tpmi_ht_handle,
 	{ "TPM_HANDLE", "tpm.handle.TPM_HANDLE", FT_UINT32, BASE_HEX, NULL,
 	   0x0, NULL, HFILL }},
-	{ &hf_tpmi_rh_endorsment,
+	{ &hf_tpmi_rh_endorsement,
 	{ "TPMI_RH_ENDORSEMENT", "tpm.handle.TPMI_RH_ENDORSEMENT", FT_UINT32, BASE_HEX, NULL,
 	   0x0, NULL, HFILL }},
 	{ &hf_auth_area_size,
@@ -1314,10 +1319,10 @@ static hf_register_info hf[] = {
 	{ &hf_tpm_name,
 	{ "TPM NAME", "tpm.name", FT_BYTES, BASE_ALLOW_ZERO | BASE_NONE, NULL,
 	   0x0, NULL, HFILL }},
-	{ &hf_tpm_sensitive_crate_size,
+	{ &hf_tpm_sensitive_create_size,
 	{ "TPM SENSITIVE CREATE SIZE", "tpm.sensitive_create_size", FT_UINT16, BASE_DEC, NULL,
 	   0x0, NULL, HFILL }},
-	{ &hf_tpm_sensitive_crate,
+	{ &hf_tpm_sensitive_create,
 	{ "TPM SENSITIVE CREATE", "tpm.sensitive_create", FT_BYTES, BASE_ALLOW_ZERO | BASE_NONE, NULL,
 	   0x0, NULL, HFILL }},
 	{ &hf_tpm_template_size,
@@ -1349,7 +1354,7 @@ static hf_register_info hf[] = {
 	   0x0, NULL, HFILL }},
 };
 
-static gint *ett[] = {
+static int *ett[] = {
 	&ett_tpm,
 	&ett_tpm_header,
 	&ett_tpm_response_header,
@@ -1380,14 +1385,12 @@ proto_register_tpm20(void)
 	expert_module_t* expert_mod = expert_register_protocol(proto_tpm20);
 	expert_register_field_array(expert_mod, ei, array_length(ei));
 	register_init_routine(tpm_init);
+	tpm20_handle = register_dissector("tpm", dissect_tpm20, proto_tpm20);
 }
 
 void
 proto_reg_handoff_tpm20(void)
 {
-	dissector_handle_t tpm20_handle;
-
-	tpm20_handle = create_dissector_handle(dissect_tpm20, proto_tpm20);
 	dissector_add_uint_range_with_preference("tcp.port", TCP_TPM_PORTS, tpm20_handle);
 }
 

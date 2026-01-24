@@ -39,14 +39,14 @@ void proto_reg_handoff_rtp_events(void);
 
 /* RTP Event Fields */
 
-static int proto_rtp_events = -1;
-static int rtp_event_tap = -1;
+static int proto_rtp_events;
+static int rtp_event_tap;
 
-static int hf_rtp_events_event = -1;	/* one byte */
-static int hf_rtp_events_end = -1;	/* one bit */
-static int hf_rtp_events_reserved = -1; /* one bit */
-static int hf_rtp_events_volume = -1;	/* six bits */
-static int hf_rtp_events_duration = -1; /* sixteen bits */
+static int hf_rtp_events_event;	/* one byte */
+static int hf_rtp_events_end;	/* one bit */
+static int hf_rtp_events_reserved; /* one bit */
+static int hf_rtp_events_volume;	/* six bits */
+static int hf_rtp_events_duration; /* sixteen bits */
 
 
 #define RTP_DTMF_0	0
@@ -352,7 +352,7 @@ static const value_string rtp_event_type_values[] =
     { 189,                           "MFC forward signal 14" }, // [RFC5244]
     { 190,                           "MFC forward signal 15" }, // [RFC5244]
     { 191,                           "MFC backward signal 1" }, // [RFC5244]
-    { 192,                           "MFC backward signal 2" }, // [RFC5244]
+    //{ 192,                           "MFC backward signal 2" }, // [RFC5244]
 
         //193	MFC backward signal 3[RFC5244]
         //194	MFC backward signal 4[RFC5244]
@@ -383,13 +383,16 @@ static const value_string rtp_event_type_values[] =
     { RTP_CISCO_NSE_MODEM_RELAY_IND ,      "Cisco NSE: Shift to modem relay mode"},
     { 0,               NULL },
 };
-value_string_ext rtp_event_type_values_ext = VALUE_STRING_EXT_INIT(rtp_event_type_values);
+static value_string_ext rtp_event_type_values_ext = VALUE_STRING_EXT_INIT(rtp_event_type_values);
 
 /* RTP Events fields defining a subtree */
 
-static gint ett_rtp_events           = -1;
+static int ett_rtp_events;
 
 static dissector_handle_t rtp_events_handle;
+
+/* Cached protocol identifier */
+static int proto_rtp;
 
 static struct _rtp_event_info rtp_event_info;
 
@@ -400,10 +403,10 @@ dissect_rtp_events( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 	proto_tree   *rtp_events_tree;
 	unsigned int  offset = 0;
 
-	struct _rtp_conversation_info *p_conv_data;
+	struct _rtp_packet_info *p_packet_data;
 
-	guint8 rtp_evt;
-	guint8 octet;
+	uint8_t rtp_evt;
+	uint8_t octet;
 	static int * const events[] = {
 		&hf_rtp_events_end,
 		&hf_rtp_events_reserved,
@@ -417,28 +420,28 @@ dissect_rtp_events( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 
 	/* Get event fields */
 
-	rtp_evt = tvb_get_guint8(tvb, offset );
+	rtp_evt = tvb_get_uint8(tvb, offset );
 
 	/* get tap info */
 	rtp_event_info.info_rtp_evt = rtp_evt;
 
-	p_conv_data = (struct _rtp_conversation_info *)p_get_proto_data(wmem_file_scope(), pinfo, proto_get_id_by_filter_name("rtp"), 0);
-	if (p_conv_data)
-		rtp_event_info.info_setup_frame_num = p_conv_data->frame_number;
+	p_packet_data = (struct _rtp_packet_info *)p_get_proto_data(wmem_file_scope(), pinfo, proto_rtp, RTP_CONVERSATION_PROTO_DATA);
+	if (p_packet_data)
+		rtp_event_info.info_setup_frame_num = p_packet_data->frame_number;
 	else
 		rtp_event_info.info_setup_frame_num = 0;
 
 
 	col_add_fstr( pinfo->cinfo, COL_INFO,
 		"Payload type=RTP Event, %s",
-		val_to_str_ext( rtp_evt, &rtp_event_type_values_ext, "Unknown (%u)" ));
+		val_to_str_ext(pinfo->pool, rtp_evt, &rtp_event_type_values_ext, "Unknown (%u)" ));
 
 	ti = proto_tree_add_item( tree, proto_rtp_events, tvb, offset, -1, ENC_NA );
 	rtp_events_tree = proto_item_add_subtree( ti, ett_rtp_events );
 
 	proto_tree_add_uint ( rtp_events_tree, hf_rtp_events_event, tvb, offset, 1, rtp_evt);
 	offset++;
-	octet = tvb_get_guint8(tvb, offset);
+	octet = tvb_get_uint8(tvb, offset);
 	proto_tree_add_bitmask_list(rtp_events_tree, tvb, offset, 1, events, ENC_NA);
 	offset++;
 
@@ -451,10 +454,10 @@ dissect_rtp_events( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 	/* set the end info for the tap */
 	if (octet & 0x80)
 	{
-		rtp_event_info.info_end = TRUE;
+		rtp_event_info.info_end = true;
 	} else
 	{
-		rtp_event_info.info_end = FALSE;
+		rtp_event_info.info_end = false;
 	}
 
 	/* Make end-of-event packets obvious in the info column */
@@ -540,7 +543,7 @@ proto_register_rtp_events(void)
 
 	};
 
-	static gint *ett[] =
+	static int *ett[] =
 	{
 		&ett_rtp_events,
 	};
@@ -558,6 +561,8 @@ proto_register_rtp_events(void)
 
 	rtp_events_handle = register_dissector("rtpevent", dissect_rtp_events, proto_rtp_events);
 	rtp_event_tap = register_tap("rtpevent");
+
+	register_external_value_string_ext("rtp_event_type_values_ext", &rtp_event_type_values_ext);
 }
 
 
@@ -568,6 +573,8 @@ proto_reg_handoff_rtp_events(void)
 	dissector_add_string("rtp_dyn_payload_type", "telephone-event", rtp_events_handle);
 	dissector_add_string("rtp_dyn_payload_type", "X-NSE", rtp_events_handle);
 	dissector_add_uint_range_with_preference("rtp.pt", RTP_EVENT_DEFAULT_PT_RANGE, rtp_events_handle);
+
+	proto_rtp = proto_get_id_by_filter_name("rtp");
 }
 
 /*

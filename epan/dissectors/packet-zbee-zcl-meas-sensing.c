@@ -68,31 +68,28 @@
 void proto_register_zbee_zcl_illum_meas(void);
 void proto_reg_handoff_zbee_zcl_illum_meas(void);
 
-/* Command Dissector Helpers */
-static void dissect_zcl_illum_meas_attr_data     (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-
 /* Private functions prototype */
-static void decode_illum_meas_value              (gchar *s, guint16 value);
-static void decode_illum_meas_min_value          (gchar *s, guint16 value);
-static void decode_illum_meas_max_value          (gchar *s, guint16 value);
-static void decode_illum_meas_tolerance          (gchar *s, guint16 value);
+static void decode_illum_meas_value              (char *s, uint16_t value);
+static void decode_illum_meas_min_value          (char *s, uint16_t value);
+static void decode_illum_meas_max_value          (char *s, uint16_t value);
+static void decode_illum_meas_tolerance          (char *s, uint16_t value);
 
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_illum_meas = -1;
+static int proto_zbee_zcl_illum_meas;
 
-static int hf_zbee_zcl_illum_meas_attr_id = -1;
-static int hf_zbee_zcl_illum_meas_measured_value = -1;
-static int hf_zbee_zcl_illum_meas_min_measured_value = -1;
-static int hf_zbee_zcl_illum_meas_max_measured_value = -1;
-static int hf_zbee_zcl_illum_meas_tolerance = -1;
-static int hf_zbee_zcl_illum_meas_sensor_type = -1;
+static int hf_zbee_zcl_illum_meas_attr_id;
+static int hf_zbee_zcl_illum_meas_measured_value;
+static int hf_zbee_zcl_illum_meas_min_measured_value;
+static int hf_zbee_zcl_illum_meas_max_measured_value;
+static int hf_zbee_zcl_illum_meas_tolerance;
+static int hf_zbee_zcl_illum_meas_sensor_type;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_illum_meas = -1;
+static int ett_zbee_zcl_illum_meas;
 
 /* Attributes */
 static const value_string zbee_zcl_illum_meas_attr_names[] = {
@@ -138,7 +135,7 @@ dissect_zbee_zcl_illum_meas(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tre
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_illum_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_illum_meas_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch ( attr_id ) {
@@ -169,7 +166,7 @@ dissect_zcl_illum_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset,
             break;
 
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 } /*dissect_zcl_illum_meas_attr_data*/
@@ -181,7 +178,7 @@ dissect_zcl_illum_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset,
  *@param value value to decode
 */
 static void
-decode_illum_meas_value(gchar *s, guint16 value)
+decode_illum_meas_value(char *s, uint16_t value)
 {
     if (value == ZBEE_ZCL_ATTR_ID_ILLUM_MEAS_TOO_LOW_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Value too low to be measured");
@@ -201,7 +198,7 @@ decode_illum_meas_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_illum_meas_min_value(gchar *s, guint16 value)
+decode_illum_meas_min_value(char *s, uint16_t value)
 {
     if ( (value < ZBEE_ZCL_ATTR_ID_ILLUM_MEAS_MIN_LO_VALUE) ||
          (value > ZBEE_ZCL_ATTR_ID_ILLUM_MEAS_MIN_HI_VALUE) )
@@ -219,7 +216,7 @@ decode_illum_meas_min_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_illum_meas_max_value(gchar *s, guint16 value)
+decode_illum_meas_max_value(char *s, uint16_t value)
 {
     if ( (value < ZBEE_ZCL_ATTR_ID_ILLUM_MEAS_MAX_LO_VALUE) ||
          (value > ZBEE_ZCL_ATTR_ID_ILLUM_MEAS_MAX_HI_VALUE) )
@@ -237,7 +234,7 @@ decode_illum_meas_max_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_illum_meas_tolerance(gchar *s, guint16 value)
+decode_illum_meas_tolerance(char *s, uint16_t value)
 {
     if (value > ZBEE_ZCL_ATTR_ID_ILLUM_MEAS_TOL_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
@@ -258,31 +255,31 @@ proto_register_zbee_zcl_illum_meas(void)
 
         { &hf_zbee_zcl_illum_meas_attr_id,
             { "Attribute", "zbee_zcl_meas_sensing.illummeas.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_illum_meas_attr_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_meas_measured_value,
             { "Measured Value", "zbee_zcl_meas_sensing.illummeas.attr.value", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_illum_meas_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_meas_min_measured_value,
             { "Min Measured Value", "zbee_zcl_meas_sensing.illummeas.attr.value.min", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_illum_meas_min_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_meas_max_measured_value,
             { "Max Measured Value", "zbee_zcl_meas_sensing.illummeas.attr.value.max", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_illum_meas_max_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_meas_tolerance,
             { "Tolerance", "zbee_zcl_meas_sensing.illummeas.attr.tolerance", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_illum_meas_tolerance),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_meas_sensor_type,
             { "Sensor Type", "zbee_zcl_meas_sensing.illummeas.attr.sensor_type", FT_UINT8, BASE_HEX, VALS(zbee_zcl_illum_meas_sensor_type_names),
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } }
     };
 
     /* ZCL Illuminance Measurement subtrees */
-    gint *ett[] = {
+    int *ett[] = {
         &ett_zbee_zcl_illum_meas
     };
 
@@ -312,7 +309,7 @@ proto_reg_handoff_zbee_zcl_illum_meas(void)
                             hf_zbee_zcl_illum_meas_attr_id,
                             hf_zbee_zcl_illum_meas_attr_id,
                             -1, -1,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_illum_meas_attr_data
+                            dissect_zcl_illum_meas_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_illum_meas*/
 
@@ -354,26 +351,23 @@ proto_reg_handoff_zbee_zcl_illum_meas(void)
 void proto_register_zbee_zcl_illum_level_sen(void);
 void proto_reg_handoff_zbee_zcl_illum_level_sen(void);
 
-/* Command Dissector Helpers */
-static void dissect_zcl_illum_level_sen_attr_data               (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-
 /* Private functions prototype */
-static void decode_illum_level_sen_target_level                 (gchar *s, guint16 value);
+static void decode_illum_level_sen_target_level                 (char *s, uint16_t value);
 
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_illum_level_sen = -1;
+static int proto_zbee_zcl_illum_level_sen;
 
-static int hf_zbee_zcl_illum_level_sen_attr_id = -1;
-static int hf_zbee_zcl_illum_level_sen_level_status = -1;
-static int hf_zbee_zcl_illum_level_sen_light_sensor_type = -1;
-static int hf_zbee_zcl_illum_level_sen_illum_target_level = -1;
+static int hf_zbee_zcl_illum_level_sen_attr_id;
+static int hf_zbee_zcl_illum_level_sen_level_status;
+static int hf_zbee_zcl_illum_level_sen_light_sensor_type;
+static int hf_zbee_zcl_illum_level_sen_illum_target_level;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_illum_level_sen = -1;
+static int ett_zbee_zcl_illum_level_sen;
 
 /* Attributes */
 static const value_string zbee_zcl_illum_level_sen_attr_names[] = {
@@ -424,7 +418,7 @@ dissect_zbee_zcl_illum_level_sen(tvbuff_t *tvb _U_, packet_info *pinfo _U_, prot
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_illum_level_sen_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_illum_level_sen_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch ( attr_id ) {
@@ -445,7 +439,7 @@ dissect_zcl_illum_level_sen_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *of
             break;
 
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 } /*dissect_zcl_illum_level_sen_attr_data*/
@@ -457,7 +451,7 @@ dissect_zcl_illum_level_sen_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *of
  *@param value value to decode
 */
 static void
-decode_illum_level_sen_target_level(gchar *s, guint16 value)
+decode_illum_level_sen_target_level(char *s, uint16_t value)
 {
     if (value == ZBEE_ZCL_ATTR_ID_ILLUM_LEVEL_SEN_TOO_LOW_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Value too low to be measured");
@@ -481,23 +475,23 @@ proto_register_zbee_zcl_illum_level_sen(void)
 
         { &hf_zbee_zcl_illum_level_sen_attr_id,
             { "Attribute", "zbee_zcl_meas_sensing.illumlevelsen.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_illum_level_sen_attr_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_level_sen_level_status,
             { "Level Status", "zbee_zcl_meas_sensing.illumlevelsen.attr.level_status", FT_UINT8, BASE_HEX, VALS(zbee_zcl_illum_level_sen_level_status_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_level_sen_light_sensor_type,
             { "Light Sensor Type", "zbee_zcl_meas_sensing.illumlevelsen.attr.light_sensor_type", FT_UINT8, BASE_HEX, VALS(zbee_zcl_illum_level_sen_sensor_type_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_illum_level_sen_illum_target_level,
             { "Target Level", "zbee_zcl_meas_sensing.illumlevelsen.attr.target_level", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_illum_level_sen_target_level),
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } }
     };
 
     /* ZCL Illuminance Level Sensing subtrees */
-    gint *ett[] = {
+    int *ett[] = {
         &ett_zbee_zcl_illum_level_sen
     };
 
@@ -527,7 +521,7 @@ proto_reg_handoff_zbee_zcl_illum_level_sen(void)
                             hf_zbee_zcl_illum_level_sen_attr_id,
                             hf_zbee_zcl_illum_level_sen_attr_id,
                             -1, -1,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_illum_level_sen_attr_data
+                            dissect_zcl_illum_level_sen_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_illum_level_sen*/
 
@@ -572,30 +566,27 @@ proto_reg_handoff_zbee_zcl_illum_level_sen(void)
 void proto_register_zbee_zcl_temp_meas(void);
 void proto_reg_handoff_zbee_zcl_temp_meas(void);
 
-/* Command Dissector Helpers */
-static void dissect_zcl_temp_meas_attr_data     (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-
 /* Private functions prototype */
-static void decode_temp_meas_value              (gchar *s, gint16 value);
-static void decode_temp_meas_min_value          (gchar *s, gint16 value);
-static void decode_temp_meas_max_value          (gchar *s, gint16 value);
-static void decode_temp_meas_tolerance          (gchar *s, guint16 value);
+static void decode_temp_meas_value              (char *s, int16_t value);
+static void decode_temp_meas_min_value          (char *s, int16_t value);
+static void decode_temp_meas_max_value          (char *s, int16_t value);
+static void decode_temp_meas_tolerance          (char *s, uint16_t value);
 
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_temp_meas = -1;
+static int proto_zbee_zcl_temp_meas;
 
-static int hf_zbee_zcl_temp_meas_attr_id = -1;
-static int hf_zbee_zcl_temp_meas_measured_value = -1;
-static int hf_zbee_zcl_temp_meas_min_measured_value = -1;
-static int hf_zbee_zcl_temp_meas_max_measured_value = -1;
-static int hf_zbee_zcl_temp_meas_tolerance = -1;
+static int hf_zbee_zcl_temp_meas_attr_id;
+static int hf_zbee_zcl_temp_meas_measured_value;
+static int hf_zbee_zcl_temp_meas_min_measured_value;
+static int hf_zbee_zcl_temp_meas_max_measured_value;
+static int hf_zbee_zcl_temp_meas_tolerance;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_temp_meas = -1;
+static int ett_zbee_zcl_temp_meas;
 
 /* Attributes */
 static const value_string zbee_zcl_temp_meas_attr_names[] = {
@@ -634,7 +625,7 @@ dissect_zbee_zcl_temp_meas(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_temp_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_temp_meas_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch ( attr_id ) {
@@ -660,7 +651,7 @@ dissect_zcl_temp_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, 
             break;
 
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 
@@ -673,9 +664,9 @@ dissect_zcl_temp_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, 
  *@param value value to decode
 */
 static void
-decode_temp_meas_value(gchar *s, gint16 value)
+decode_temp_meas_value(char *s, int16_t value)
 {
-    if (value == (gint16)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_INVALID_VALUE)
+    if (value == (int16_t)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_INVALID_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Invalid value");
     else
         snprintf(s, ITEM_LABEL_LENGTH, "%.2f [" UTF8_DEGREE_SIGN "C]", value/100.0);
@@ -690,10 +681,10 @@ decode_temp_meas_value(gchar *s, gint16 value)
  *@param value value to decode
 */
 static void
-decode_temp_meas_min_value(gchar *s, gint16 value)
+decode_temp_meas_min_value(char *s, int16_t value)
 {
-    if ( (value < (gint16)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_MIN_LO_VALUE) ||
-         (value > (gint16)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_MIN_HI_VALUE) )
+    if ( (value < (int16_t)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_MIN_LO_VALUE) ||
+         (value > (int16_t)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_MIN_HI_VALUE) )
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
     else
         snprintf(s, ITEM_LABEL_LENGTH, "%.2f [" UTF8_DEGREE_SIGN "C]", value/100.0);
@@ -708,9 +699,9 @@ decode_temp_meas_min_value(gchar *s, gint16 value)
  *@param value value to decode
 */
 static void
-decode_temp_meas_max_value(gchar *s, gint16 value)
+decode_temp_meas_max_value(char *s, int16_t value)
 {
-    if (value < (gint16)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_MAX_LO_VALUE)
+    if (value < (int16_t)ZBEE_ZCL_ATTR_ID_TEMP_MEAS_MAX_LO_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
     else
         snprintf(s, ITEM_LABEL_LENGTH, "%.2f [" UTF8_DEGREE_SIGN "C]", value/100.0);
@@ -725,7 +716,7 @@ decode_temp_meas_max_value(gchar *s, gint16 value)
  *@param value value to decode
 */
 static void
-decode_temp_meas_tolerance(gchar *s, guint16 value)
+decode_temp_meas_tolerance(char *s, uint16_t value)
 {
     if (value > ZBEE_ZCL_ATTR_ID_TEMP_MEAS_TOL_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
@@ -745,29 +736,29 @@ proto_register_zbee_zcl_temp_meas(void)
     static hf_register_info hf[] = {
 
         { &hf_zbee_zcl_temp_meas_attr_id,
-            { "Attribute", "zbee_zcl_meas_sensing.tempmeas.attr_idd", FT_UINT16, BASE_HEX, VALS(zbee_zcl_temp_meas_attr_names),
-            0x00, NULL, HFILL } },
+            { "Attribute", "zbee_zcl_meas_sensing.tempmeas.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_temp_meas_attr_names),
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_temp_meas_measured_value,
             { "Measured Value", "zbee_zcl_meas_sensing.tempmeas.attr.value", FT_INT16, BASE_CUSTOM, CF_FUNC(decode_temp_meas_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_temp_meas_min_measured_value,
             { "Min Measured Value", "zbee_zcl_meas_sensing.tempmeas.attr.value.min", FT_INT16, BASE_CUSTOM, CF_FUNC(decode_temp_meas_min_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_temp_meas_max_measured_value,
             { "Max Measured Value", "zbee_zcl_meas_sensing.tempmeas.attr.value.max", FT_INT16, BASE_CUSTOM, CF_FUNC(decode_temp_meas_max_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_temp_meas_tolerance,
             { "Tolerance", "zbee_zcl_meas_sensing.tempmeas.attr.tolerance", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_temp_meas_tolerance),
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } }
 
     };
 
     /* ZCL Temperature Measurement subtrees */
-    gint *ett[] = {
+    int *ett[] = {
         &ett_zbee_zcl_temp_meas
     };
 
@@ -795,7 +786,7 @@ proto_reg_handoff_zbee_zcl_temp_meas(void)
                             hf_zbee_zcl_temp_meas_attr_id,
                             hf_zbee_zcl_temp_meas_attr_id,
                             -1, -1,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_temp_meas_attr_data
+                            dissect_zcl_temp_meas_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_temp_meas*/
 
@@ -847,35 +838,32 @@ proto_reg_handoff_zbee_zcl_temp_meas(void)
 void proto_register_zbee_zcl_press_meas(void);
 void proto_reg_handoff_zbee_zcl_press_meas(void);
 
-/* Command Dissector Helpers */
-static void dissect_zcl_press_meas_attr_data     (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-
 /* Private functions prototype */
-static void decode_press_meas_value              (gchar *s, gint16 value);
-static void decode_press_meas_min_value          (gchar *s, gint16 value);
-static void decode_press_meas_max_value          (gchar *s, gint16 value);
-static void decode_press_meas_tolerance          (gchar *s, guint16 value);
+static void decode_press_meas_value              (char *s, int16_t value);
+static void decode_press_meas_min_value          (char *s, int16_t value);
+static void decode_press_meas_max_value          (char *s, int16_t value);
+static void decode_press_meas_tolerance          (char *s, uint16_t value);
 
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_press_meas = -1;
+static int proto_zbee_zcl_press_meas;
 
-static int hf_zbee_zcl_press_meas_attr_id = -1;
-static int hf_zbee_zcl_press_meas_measured_value = -1;
-static int hf_zbee_zcl_press_meas_min_measured_value = -1;
-static int hf_zbee_zcl_press_meas_max_measured_value = -1;
-static int hf_zbee_zcl_press_meas_tolerance = -1;
-static int hf_zbee_zcl_press_meas_scaled_value = -1;
-static int hf_zbee_zcl_press_meas_min_scaled_value = -1;
-static int hf_zbee_zcl_press_meas_max_scaled_value = -1;
-static int hf_zbee_zcl_press_meas_scaled_tolerance = -1;
-static int hf_zbee_zcl_press_meas_scale = -1;
+static int hf_zbee_zcl_press_meas_attr_id;
+static int hf_zbee_zcl_press_meas_measured_value;
+static int hf_zbee_zcl_press_meas_min_measured_value;
+static int hf_zbee_zcl_press_meas_max_measured_value;
+static int hf_zbee_zcl_press_meas_tolerance;
+static int hf_zbee_zcl_press_meas_scaled_value;
+static int hf_zbee_zcl_press_meas_min_scaled_value;
+static int hf_zbee_zcl_press_meas_max_scaled_value;
+static int hf_zbee_zcl_press_meas_scaled_tolerance;
+static int hf_zbee_zcl_press_meas_scale;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_press_meas = -1;
+static int ett_zbee_zcl_press_meas;
 
 /* Attributes */
 static const value_string zbee_zcl_press_meas_attr_names[] = {
@@ -919,7 +907,7 @@ dissect_zbee_zcl_press_meas(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tre
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_press_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_press_meas_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch ( attr_id ) {
@@ -970,7 +958,7 @@ dissect_zcl_press_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset,
             break;
 
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 } /*dissect_zcl_press_meas_attr_data*/
@@ -982,11 +970,11 @@ dissect_zcl_press_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset,
  *@param value value to decode
 */
 static void
-decode_press_meas_value(gchar *s, gint16 value)
+decode_press_meas_value(char *s, int16_t value)
 {
-    if (value == (gint16)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_INVALID_VALUE)
+    if (value == (int16_t)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_INVALID_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Invalid value");
-    if (value < (gint16)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_MIN_LO_VALUE)
+    if (value < (int16_t)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_MIN_LO_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
     else
         snprintf(s, ITEM_LABEL_LENGTH, "%d.%d [kPa]", value/10, value%10);
@@ -1001,9 +989,9 @@ decode_press_meas_value(gchar *s, gint16 value)
  *@param value value to decode
 */
 static void
-decode_press_meas_min_value(gchar *s, gint16 value)
+decode_press_meas_min_value(char *s, int16_t value)
 {
-    if (value > (gint16)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_MIN_HI_VALUE)
+    if (value > (int16_t)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_MIN_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
     else
         snprintf(s, ITEM_LABEL_LENGTH, "%d.%d [kPa]", value/10, value%10);
@@ -1018,9 +1006,9 @@ decode_press_meas_min_value(gchar *s, gint16 value)
  *@param value value to decode
 */
 static void
-decode_press_meas_max_value(gchar *s, gint16 value)
+decode_press_meas_max_value(char *s, int16_t value)
 {
-    if (value < (gint16)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_MAX_LO_VALUE)
+    if (value < (int16_t)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_MAX_LO_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
     else
         snprintf(s, ITEM_LABEL_LENGTH, "%d.%d [kPa]", value/10, value%10);
@@ -1035,9 +1023,9 @@ decode_press_meas_max_value(gchar *s, gint16 value)
  *@param value value to decode
 */
 static void
-decode_press_meas_tolerance(gchar *s, guint16 value)
+decode_press_meas_tolerance(char *s, uint16_t value)
 {
-    if (value > (guint16)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_TOL_HI_VALUE)
+    if (value > (uint16_t)ZBEE_ZCL_ATTR_ID_PRESS_MEAS_TOL_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
     else
          snprintf(s, ITEM_LABEL_LENGTH, "%d.%d [kPa]", value/10, value%10);
@@ -1056,48 +1044,48 @@ proto_register_zbee_zcl_press_meas(void)
 
         { &hf_zbee_zcl_press_meas_attr_id,
             { "Attribute", "zbee_zcl_meas_sensing.pressmeas.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_press_meas_attr_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_measured_value,
             { "Measured Value", "zbee_zcl_meas_sensing.pressmeas.attr.value", FT_INT16, BASE_CUSTOM, CF_FUNC(decode_press_meas_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_min_measured_value,
             { "Min Measured Value", "zbee_zcl_meas_sensing.pressmeas.attr.value.min", FT_INT16, BASE_CUSTOM, CF_FUNC(decode_press_meas_min_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_max_measured_value,
             { "Max Measured Value", "zbee_zcl_meas_sensing.pressmeas.attr.value.max", FT_INT16, BASE_CUSTOM, CF_FUNC(decode_press_meas_max_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_tolerance,
             { "Tolerance", "zbee_zcl_meas_sensing.pressmeas.attr.tolerance", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_press_meas_tolerance),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_scaled_value,
             { "Scaled Value", "zbee_zcl_meas_sensing.pressmeas.attr.scaled_value", FT_INT16, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_min_scaled_value,
             { "Min Scaled Value", "zbee_zcl_meas_sensing.pressmeas.attr.scaled_value.min", FT_INT16, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_max_scaled_value,
             { "Max Scaled Value", "zbee_zcl_meas_sensing.pressmeas.attr.scaled_value.max", FT_INT16, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_scaled_tolerance,
             { "Scaled Tolerance", "zbee_zcl_meas_sensing.pressmeas.attr.scaled_tolerance", FT_UINT16, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_press_meas_scale,
             { "Scale", "zbee_zcl_meas_sensing.pressmeas.attr.scale", FT_UINT8, BASE_DEC, NULL,
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } }
 
     };
 
     /* ZCL Pressure Measurement subtrees */
-    gint *ett[] = {
+    int *ett[] = {
         &ett_zbee_zcl_press_meas
     };
 
@@ -1125,7 +1113,7 @@ proto_reg_handoff_zbee_zcl_press_meas(void)
                             hf_zbee_zcl_press_meas_attr_id,
                             hf_zbee_zcl_press_meas_attr_id,
                             -1, -1,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_press_meas_attr_data
+                            dissect_zcl_press_meas_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_press_meas*/
 
@@ -1169,30 +1157,27 @@ proto_reg_handoff_zbee_zcl_press_meas(void)
 void proto_register_zbee_zcl_flow_meas(void);
 void proto_reg_handoff_zbee_zcl_flow_meas(void);
 
-/* Command Dissector Helpers */
-static void dissect_zcl_flow_meas_attr_data     (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-
 /* Private functions prototype */
-static void decode_flow_meas_value              (gchar *s, guint16 value);
-static void decode_flow_meas_min_value          (gchar *s, guint16 value);
-static void decode_flow_meas_max_value          (gchar *s, guint16 value);
-static void decode_flow_meas_tolerance          (gchar *s, guint16 value);
+static void decode_flow_meas_value              (char *s, uint16_t value);
+static void decode_flow_meas_min_value          (char *s, uint16_t value);
+static void decode_flow_meas_max_value          (char *s, uint16_t value);
+static void decode_flow_meas_tolerance          (char *s, uint16_t value);
 
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_flow_meas = -1;
+static int proto_zbee_zcl_flow_meas;
 
-static int hf_zbee_zcl_flow_meas_attr_id = -1;
-static int hf_zbee_zcl_flow_meas_measured_value = -1;
-static int hf_zbee_zcl_flow_meas_min_measured_value = -1;
-static int hf_zbee_zcl_flow_meas_max_measured_value = -1;
-static int hf_zbee_zcl_flow_meas_tolerance = -1;
+static int hf_zbee_zcl_flow_meas_attr_id;
+static int hf_zbee_zcl_flow_meas_measured_value;
+static int hf_zbee_zcl_flow_meas_min_measured_value;
+static int hf_zbee_zcl_flow_meas_max_measured_value;
+static int hf_zbee_zcl_flow_meas_tolerance;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_flow_meas = -1;
+static int ett_zbee_zcl_flow_meas;
 
 /* Attributes */
 static const value_string zbee_zcl_flow_meas_attr_names[] = {
@@ -1231,7 +1216,7 @@ dissect_zbee_zcl_flow_meas(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_flow_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_flow_meas_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch ( attr_id ) {
@@ -1257,7 +1242,7 @@ dissect_zcl_flow_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, 
             break;
 
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 } /*dissect_zcl_flow_meas_attr_data*/
@@ -1269,7 +1254,7 @@ dissect_zcl_flow_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, 
  *@param value value to decode
 */
 static void
-decode_flow_meas_value(gchar *s, guint16 value)
+decode_flow_meas_value(char *s, uint16_t value)
 {
     if (value == ZBEE_ZCL_ATTR_ID_FLOW_MEAS_TOO_LOW_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Value too low to be measured");
@@ -1289,7 +1274,7 @@ decode_flow_meas_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_flow_meas_min_value(gchar *s, guint16 value)
+decode_flow_meas_min_value(char *s, uint16_t value)
 {
     if ( /*(value < ZBEE_ZCL_ATTR_ID_FLOW_MEAS_MIN_LO_VALUE) ||*/
          (value > ZBEE_ZCL_ATTR_ID_FLOW_MEAS_MIN_HI_VALUE) )
@@ -1307,7 +1292,7 @@ decode_flow_meas_min_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_flow_meas_max_value(gchar *s, guint16 value)
+decode_flow_meas_max_value(char *s, uint16_t value)
 {
     if ( (value < ZBEE_ZCL_ATTR_ID_FLOW_MEAS_MAX_LO_VALUE) ||
          (value > ZBEE_ZCL_ATTR_ID_FLOW_MEAS_MAX_HI_VALUE) )
@@ -1325,7 +1310,7 @@ decode_flow_meas_max_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_flow_meas_tolerance(gchar *s, guint16 value)
+decode_flow_meas_tolerance(char *s, uint16_t value)
 {
     if (value > ZBEE_ZCL_ATTR_ID_FLOW_MEAS_TOL_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
@@ -1346,27 +1331,27 @@ proto_register_zbee_zcl_flow_meas(void)
 
         { &hf_zbee_zcl_flow_meas_attr_id,
             { "Attribute", "zbee_zcl_meas_sensing.flowmeas.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_flow_meas_attr_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_flow_meas_measured_value,
             { "Measured Value", "zbee_zcl_meas_sensing.flowmeas.attr.value", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_flow_meas_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_flow_meas_min_measured_value,
             { "Min Measured Value", "zbee_zcl_meas_sensing.flowmeas.attr.value.min", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_flow_meas_min_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_flow_meas_max_measured_value,
             { "Max Measured Value", "zbee_zcl_meas_sensing.flowmeas.attr.value.max", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_flow_meas_max_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_flow_meas_tolerance,
             { "Tolerance", "zbee_zcl_meas_sensing.flowmeas.attr.tolerance", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_flow_meas_tolerance),
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } }
     };
 
     /* ZCL Flow Measurement subtrees */
-    gint *ett[] = {
+    int *ett[] = {
         &ett_zbee_zcl_flow_meas
     };
 
@@ -1396,7 +1381,7 @@ proto_reg_handoff_zbee_zcl_flow_meas(void)
                             hf_zbee_zcl_flow_meas_attr_id,
                             hf_zbee_zcl_flow_meas_attr_id,
                             -1, -1,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_flow_meas_attr_data
+                            dissect_zcl_flow_meas_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_flow_meas*/
 
@@ -1440,30 +1425,27 @@ proto_reg_handoff_zbee_zcl_flow_meas(void)
 void proto_register_zbee_zcl_relhum_meas(void);
 void proto_reg_handoff_zbee_zcl_relhum_meas(void);
 
-/* Command Dissector Helpers */
-static void dissect_zcl_relhum_meas_attr_data     (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-
 /* Private functions prototype */
-static void decode_relhum_meas_value              (gchar *s, guint16 value);
-static void decode_relhum_meas_min_value          (gchar *s, guint16 value);
-static void decode_relhum_meas_max_value          (gchar *s, guint16 value);
-static void decode_relhum_meas_tolerance          (gchar *s, guint16 value);
+static void decode_relhum_meas_value              (char *s, uint16_t value);
+static void decode_relhum_meas_min_value          (char *s, uint16_t value);
+static void decode_relhum_meas_max_value          (char *s, uint16_t value);
+static void decode_relhum_meas_tolerance          (char *s, uint16_t value);
 
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_relhum_meas = -1;
+static int proto_zbee_zcl_relhum_meas;
 
-static int hf_zbee_zcl_relhum_meas_attr_id = -1;
-static int hf_zbee_zcl_relhum_meas_measured_value = -1;
-static int hf_zbee_zcl_relhum_meas_min_measured_value = -1;
-static int hf_zbee_zcl_relhum_meas_max_measured_value = -1;
-static int hf_zbee_zcl_relhum_meas_tolerance = -1;
+static int hf_zbee_zcl_relhum_meas_attr_id;
+static int hf_zbee_zcl_relhum_meas_measured_value;
+static int hf_zbee_zcl_relhum_meas_min_measured_value;
+static int hf_zbee_zcl_relhum_meas_max_measured_value;
+static int hf_zbee_zcl_relhum_meas_tolerance;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_relhum_meas = -1;
+static int ett_zbee_zcl_relhum_meas;
 
 /* Attributes */
 static const value_string zbee_zcl_relhum_meas_attr_names[] = {
@@ -1502,7 +1484,7 @@ dissect_zbee_zcl_relhum_meas(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tr
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_relhum_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_relhum_meas_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch ( attr_id ) {
@@ -1528,7 +1510,7 @@ dissect_zcl_relhum_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset
             break;
 
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 } /*dissect_zcl_relhum_meas_attr_data*/
@@ -1540,7 +1522,7 @@ dissect_zcl_relhum_meas_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset
  *@param value value to decode
 */
 static void
-decode_relhum_meas_value(gchar *s, guint16 value)
+decode_relhum_meas_value(char *s, uint16_t value)
 {
     if (value == ZBEE_ZCL_ATTR_ID_RELHUM_MEAS_INVALID_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Invalid value");
@@ -1557,7 +1539,7 @@ decode_relhum_meas_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_relhum_meas_min_value(gchar *s, guint16 value)
+decode_relhum_meas_min_value(char *s, uint16_t value)
 {
     if (value > ZBEE_ZCL_ATTR_ID_RELHUM_MEAS_MIN_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
@@ -1574,7 +1556,7 @@ decode_relhum_meas_min_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_relhum_meas_max_value(gchar *s, guint16 value)
+decode_relhum_meas_max_value(char *s, uint16_t value)
 {
     if (value > ZBEE_ZCL_ATTR_ID_RELHUM_MEAS_MAX_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
@@ -1591,7 +1573,7 @@ decode_relhum_meas_max_value(gchar *s, guint16 value)
  *@param value value to decode
 */
 static void
-decode_relhum_meas_tolerance(gchar *s, guint16 value)
+decode_relhum_meas_tolerance(char *s, uint16_t value)
 {
     if (value > ZBEE_ZCL_ATTR_ID_RELHUM_MEAS_TOL_HI_VALUE)
         snprintf(s, ITEM_LABEL_LENGTH, "Out of range");
@@ -1612,28 +1594,28 @@ proto_register_zbee_zcl_relhum_meas(void)
 
         { &hf_zbee_zcl_relhum_meas_attr_id,
             { "Attribute", "zbee_zcl_meas_sensing.relhummeas.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_relhum_meas_attr_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_relhum_meas_measured_value,
             { "Measured Value", "zbee_zcl_meas_sensing.relhummeas.attr.value", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_relhum_meas_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_relhum_meas_min_measured_value,
             { "Min Measured Value", "zbee_zcl_meas_sensing.relhummeas.attr.value.min", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_relhum_meas_min_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_relhum_meas_max_measured_value,
             { "Max Measured Value", "zbee_zcl_meas_sensing.relhummeas.attr.value.max", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_relhum_meas_max_value),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_relhum_meas_tolerance,
             { "Tolerance", "zbee_zcl_meas_sensing.relhummeas.attr.tolerance", FT_UINT16, BASE_CUSTOM, CF_FUNC(decode_relhum_meas_tolerance),
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } }
 
     };
 
     /* ZCL Relative Humidity Measurement subtrees */
-    gint *ett[] = {
+    int *ett[] = {
         &ett_zbee_zcl_relhum_meas
     };
 
@@ -1662,7 +1644,7 @@ proto_reg_handoff_zbee_zcl_relhum_meas(void)
                             hf_zbee_zcl_relhum_meas_attr_id,
                             hf_zbee_zcl_relhum_meas_attr_id,
                             -1, -1,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_relhum_meas_attr_data
+                            dissect_zcl_relhum_meas_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_relhum_meas*/
 
@@ -1680,12 +1662,16 @@ proto_reg_handoff_zbee_zcl_relhum_meas(void)
 /* Attributes */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_OCCUPANCY                      0x0000  /* Occupancy */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_OCC_SENSOR_TYPE                0x0001  /* Occupancy Sensor Type */
+#define ZBEE_ZCL_ATTR_ID_OCC_SEN_OCC_SENSOR_TYPE_BITMAP         0x0002  /* Occupancy Sensor Type Bitmap */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_OCC_TO_UNOCC_DELAY         0x0010  /* PIR Occupied to Unoccupied Delay */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_UNOCC_TO_OCC_DELAY         0x0011  /* PIR Unoccupied to Occupied Delay */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_UNOCC_TO_OCC_THOLD         0x0012  /* PIR Unoccupied to Occupied Threshold */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_OCC_TO_UNOCC_DELAY      0x0020  /* Ultrasonic Occupied to Unoccupied Threshold */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_UNOCC_TO_OCC_DELAY      0x0021  /* Ultrasonic Unoccupied to Occupied Delay */
 #define ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_UNOCC_TO_OCC_THOLD      0x0022  /* Ultrasonic Unoccupied to Occupied Threshold */
+#define ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_OCC_TO_UNOCC_DELAY    0x0030    /*  Physical Contact Occupied to Unoccupied Delay */
+#define ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_UNOCC_TO_OCC_DELAY    0x0031    /*  Physical Contact Unoccupied to Occupied Delay */
+#define ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_UNOCC_TO_OCC_THOLD    0x0032    /*  Physical Contact Unoccupied to Occupied Threshold */
 
 /* Server Commands Received - None */
 
@@ -1698,6 +1684,12 @@ proto_reg_handoff_zbee_zcl_relhum_meas(void)
 #define ZBEE_ZCL_OCC_SENSOR_TYPE_PIR                            0x00  /* PIR */
 #define ZBEE_ZCL_OCC_SENSOR_TYPE_USONIC                         0x01  /* Ultrasonic */
 #define ZBEE_ZCL_OCC_SENSOR_TYPE_PIR_AND_USONIC                 0x02  /* PIR and Ultrasonic */
+#define ZBEE_ZCL_OCC_SENSOR_TYPE_PHYSICAL_CONTACT               0x03  /* Physical Contact */
+
+/* Occupancy Sensor Type Bitmap Mask fields */
+#define ZBEE_ZCL_OCC_SENSOR_TYPE_BITMAP_PIR                     0x01  /* PIR */
+#define ZBEE_ZCL_OCC_SENSOR_TYPE_BITMAP_ULTRASONIC              0x02  /* Ultrasonic */
+#define ZBEE_ZCL_OCC_SENSOR_TYPE_BITMAP_PHYSICAL_CONTACT        0x04  /* Physical Contact */
 
 /*************************/
 /* Function Declarations */
@@ -1706,35 +1698,41 @@ proto_reg_handoff_zbee_zcl_relhum_meas(void)
 void proto_register_zbee_zcl_occ_sen(void);
 void proto_reg_handoff_zbee_zcl_occ_sen(void);
 
-/* Command Dissector Helpers */
-static void dissect_zcl_occ_sen_attr_data               (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_occ_sen = -1;
+static int proto_zbee_zcl_occ_sen;
 
-static int hf_zbee_zcl_occ_sen_attr_id = -1;
-static int hf_zbee_zcl_occ_sen_occupancy = -1;
-static int hf_zbee_zcl_occ_sen_occupancy_occupied = -1;
-static int hf_zbee_zcl_occ_sen_occ_sensor_type = -1;
+static int hf_zbee_zcl_occ_sen_attr_id;
+static int hf_zbee_zcl_occ_sen_occupancy;
+static int hf_zbee_zcl_occ_sen_occupancy_occupied;
+static int hf_zbee_zcl_occ_sen_occ_sensor_type;
+static int hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap;
+static int hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_pir;
+static int hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_ultrasonic;
+static int hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_physical_contact;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_occ_sen = -1;
-static gint ett_zbee_zcl_occ_sen_occupancy = -1;
+static int ett_zbee_zcl_occ_sen;
+static int ett_zbee_zcl_occ_sen_occupancy;
+static int ett_zbee_zcl_occ_sen_sensor_type_bitmap;
 
 /* Attributes */
 static const value_string zbee_zcl_occ_sen_attr_names[] = {
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_OCCUPANCY,                   "Occupancy" },
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_OCC_SENSOR_TYPE,             "Occupancy Sensor Type" },
+    { ZBEE_ZCL_ATTR_ID_OCC_SEN_OCC_SENSOR_TYPE_BITMAP,      "Occupancy Sensor Type Bitmap" },
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_OCC_TO_UNOCC_DELAY,      "PIR Occupied to Unoccupied Delay" },
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_UNOCC_TO_OCC_DELAY,      "PIR Unoccupied to Occupied Delay" },
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_UNOCC_TO_OCC_THOLD,      "PIR Unoccupied to Occupied Threshold" },
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_OCC_TO_UNOCC_DELAY,   "Ultrasonic Occupied to Unoccupied Threshold" },
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_UNOCC_TO_OCC_DELAY,   "Ultrasonic Unoccupied to Occupied Delay" },
     { ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_UNOCC_TO_OCC_THOLD,   "Ultrasonic Unoccupied to Occupied Threshold" },
+    { ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_OCC_TO_UNOCC_DELAY,     "Physical Contact Occupied to Unoccupied Delay" },
+    { ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_UNOCC_TO_OCC_DELAY,     "Physical Contact Unoccupied to Occupied Delay" },
+    { ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_UNOCC_TO_OCC_THOLD,     "Physical Contact Unoccupied to Occupied Threshold" },
     { 0, NULL }
 };
 
@@ -1774,10 +1772,17 @@ dissect_zbee_zcl_occ_sen(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_occ_sen_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_occ_sen_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     static int * const occupancy[] = {
         &hf_zbee_zcl_occ_sen_occupancy_occupied,
+        NULL
+    };
+
+    static int * const sensor_type_bitmap[] = {
+        &hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_pir,
+        &hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_ultrasonic,
+        &hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_physical_contact,
         NULL
     };
 
@@ -1794,14 +1799,22 @@ dissect_zcl_occ_sen_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, gu
             *offset += 1;
             break;
 
+        case ZBEE_ZCL_ATTR_ID_OCC_SEN_OCC_SENSOR_TYPE_BITMAP:
+            proto_tree_add_bitmask(tree, tvb, *offset, hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap, ett_zbee_zcl_occ_sen_sensor_type_bitmap, sensor_type_bitmap, ENC_LITTLE_ENDIAN);
+            *offset += 1;
+            break;
+
         case ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_OCC_TO_UNOCC_DELAY:
         case ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_UNOCC_TO_OCC_DELAY:
         case ZBEE_ZCL_ATTR_ID_OCC_SEN_PIR_UNOCC_TO_OCC_THOLD:
         case ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_OCC_TO_UNOCC_DELAY:
         case ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_UNOCC_TO_OCC_DELAY:
         case ZBEE_ZCL_ATTR_ID_OCC_SEN_USONIC_UNOCC_TO_OCC_THOLD:
+        case ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_OCC_TO_UNOCC_DELAY:
+        case ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_UNOCC_TO_OCC_DELAY:
+        case ZBEE_ZCL_ATTR_ID_OCC_SEN_PHYSICAL_CONTACT_UNOCC_TO_OCC_THOLD:
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 } /*dissect_zcl_occ_sen_attr_data*/
@@ -1817,24 +1830,40 @@ proto_register_zbee_zcl_occ_sen(void)
 
         { &hf_zbee_zcl_occ_sen_attr_id,
             { "Attribute", "zbee_zcl_meas_sensing.occsen.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_occ_sen_attr_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_occ_sen_occupancy,
             { "Occupancy", "zbee_zcl_meas_sensing.occsen.attr.occupancy", FT_UINT8, BASE_HEX, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_occ_sen_occupancy_occupied,
-            { "Occupied", "zbee_zcl_meas_sensing.occsen.attr.occupancy_occupied", FT_BOOLEAN, 8, TFS(&tfs_true_false),
+            { "Occupied", "zbee_zcl_meas_sensing.occsen.attr.occupancy_occupied", FT_BOOLEAN, 8, NULL,
             ZBEE_ZCL_OCCUPANCY_SENSED_OCC, NULL, HFILL } },
 
         { &hf_zbee_zcl_occ_sen_occ_sensor_type,
             { "Occupancy Sensor Type", "zbee_zcl_meas_sensing.occsen.attr.occ_sensor_type", FT_UINT8, BASE_HEX, VALS(zbee_zcl_occ_sen_sensor_type_names),
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } },
+
+        { &hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap,
+            { "Occupancy Sensor Type Bitmap", "zbee_zcl_meas_sensing.occsen.sensor_type_bitmap", FT_UINT8, BASE_HEX, NULL,
+            0x0, NULL, HFILL } },
+
+        { &hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_pir,
+            { "PIR", "zbee_zcl_meas_sensing.occsen.sensor_type_bitmap_pir", FT_BOOLEAN, 8, NULL,
+            ZBEE_ZCL_OCC_SENSOR_TYPE_BITMAP_PIR, NULL, HFILL } },
+
+        { &hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_ultrasonic,
+            { "Ultrasonic", "zbee_zcl_meas_sensing.occsen.sensor_type_bitmap_ultrasonic", FT_BOOLEAN, 8, NULL,
+            ZBEE_ZCL_OCC_SENSOR_TYPE_BITMAP_ULTRASONIC, NULL, HFILL } },
+
+        { &hf_zbee_zcl_occ_sen_occ_sensor_type_bitmap_physical_contact,
+            { "Physical Contact", "zbee_zcl_meas_sensing.occsen.sensor_type_bitmap_physical_contact", FT_BOOLEAN, 8, NULL,
+            ZBEE_ZCL_OCC_SENSOR_TYPE_BITMAP_PHYSICAL_CONTACT, NULL, HFILL } },
     };
 
 
     /* ZCL Occupancy Sensing subtrees */
-    static gint *ett[ZBEE_ZCL_OCC_SEN_NUM_ETT];
+    static int *ett[ZBEE_ZCL_OCC_SEN_NUM_ETT];
     ett[0] = &ett_zbee_zcl_occ_sen;
     ett[1] = &ett_zbee_zcl_occ_sen_occupancy;
 
@@ -1864,7 +1893,7 @@ proto_reg_handoff_zbee_zcl_occ_sen(void)
                             hf_zbee_zcl_occ_sen_attr_id,
                             hf_zbee_zcl_occ_sen_attr_id,
                             -1, -1,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_occ_sen_attr_data
+                            dissect_zcl_occ_sen_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_occ_sen*/
 
@@ -2039,32 +2068,31 @@ void proto_register_zbee_zcl_elec_mes(void);
 void proto_reg_handoff_zbee_zcl_elec_mes(void);
 
 /* Command Dissector Helpers */
-static void dissect_zcl_elec_mes_attr_data                              (proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr);
-static void dissect_zcl_elec_mes_get_measurement_profile_info           (tvbuff_t *tvb, proto_tree *tree, guint *offset);
-static void dissect_zcl_elec_mes_get_profile_info_response              (tvbuff_t *tvb, proto_tree *tree, guint *offset);
-static void dissect_zcl_elec_mes_get_measurement_profile_info_response  (tvbuff_t *tvb, proto_tree *tree, guint *offset);
+static void dissect_zcl_elec_mes_get_measurement_profile_info           (tvbuff_t *tvb, proto_tree *tree, unsigned *offset);
+static void dissect_zcl_elec_mes_get_profile_info_response              (tvbuff_t *tvb, proto_tree *tree, unsigned *offset);
+static void dissect_zcl_elec_mes_get_measurement_profile_info_response  (tvbuff_t *tvb, proto_tree *tree, unsigned *offset);
 
 /*************************/
 /* Global Variables      */
 /*************************/
 
 /* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_elec_mes = -1;
+static int proto_zbee_zcl_elec_mes;
 
-static int hf_zbee_zcl_elec_mes_srv_tx_cmd_id = -1;
-static int hf_zbee_zcl_elec_mes_srv_rx_cmd_id = -1;
-static int hf_zbee_zcl_elec_mes_attr_id = -1;
-static int hf_zbee_zcl_elec_mes_start_time = -1;
-static int hf_zbee_zcl_elec_mes_number_of_intervals = -1;
-static int hf_zbee_zcl_elec_mes_profile_count = -1;
-static int hf_zbee_zcl_elec_mes_profile_interval_period = -1;
-static int hf_zbee_zcl_elec_mes_max_number_of_intervals = -1;
-static int hf_zbee_zcl_elec_mes_status = -1;
-static int hf_zbee_zcl_elec_mes_number_of_intervals_delivered = -1;
-static int hf_zbee_zcl_elec_mes_intervals = -1;
+static int hf_zbee_zcl_elec_mes_srv_tx_cmd_id;
+static int hf_zbee_zcl_elec_mes_srv_rx_cmd_id;
+static int hf_zbee_zcl_elec_mes_attr_id;
+static int hf_zbee_zcl_elec_mes_start_time;
+static int hf_zbee_zcl_elec_mes_number_of_intervals;
+static int hf_zbee_zcl_elec_mes_profile_count;
+static int hf_zbee_zcl_elec_mes_profile_interval_period;
+static int hf_zbee_zcl_elec_mes_max_number_of_intervals;
+static int hf_zbee_zcl_elec_mes_status;
+static int hf_zbee_zcl_elec_mes_number_of_intervals_delivered;
+static int hf_zbee_zcl_elec_mes_intervals;
 
 /* Initialize the subtree pointers */
-static gint ett_zbee_zcl_elec_mes = -1;
+static int ett_zbee_zcl_elec_mes;
 
 /* Attributes */
 static const value_string zbee_zcl_elec_mes_attr_names[] = {
@@ -2251,9 +2279,9 @@ dissect_zbee_zcl_elec_mes(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 {
     proto_tree        *payload_tree;
     zbee_zcl_packet   *zcl;
-    guint             offset = 0;
-    guint8            cmd_id;
-    gint              rem_len;
+    unsigned          offset = 0;
+    uint8_t           cmd_id;
+    int               rem_len;
 
     /* Reject the packet if data is NULL */
     if (data == NULL)
@@ -2337,12 +2365,12 @@ dissect_zbee_zcl_elec_mes(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
  *@param client_attr ZCL client
 */
 static void
-dissect_zcl_elec_mes_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, guint16 attr_id, guint data_type, gboolean client_attr)
+dissect_zcl_elec_mes_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch ( attr_id ) {
         default:
-            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
             break;
     }
 } /*dissect_zcl_elec_mes_attr_data*/
@@ -2354,16 +2382,12 @@ dissect_zcl_elec_mes_attr_data(proto_tree *tree, tvbuff_t *tvb, guint *offset, g
  *@param tree pointer to data tree Wireshark uses to display packet.
  *@param offset pointer to offset from caller
 */
-static void dissect_zcl_elec_mes_get_measurement_profile_info(tvbuff_t *tvb, proto_tree *tree, guint *offset)
+static void dissect_zcl_elec_mes_get_measurement_profile_info(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
 {
-    nstime_t start_time;
-
     proto_tree_add_item(tree, hf_zbee_zcl_elec_mes_attr_id, tvb, *offset, 2, ENC_LITTLE_ENDIAN);
     *offset += 2;
 
-    start_time.secs = (time_t)tvb_get_letohl(tvb, *offset) + ZBEE_ZCL_NSTIME_UTC_OFFSET;
-    start_time.nsecs = 0;
-    proto_tree_add_time(tree, hf_zbee_zcl_elec_mes_start_time, tvb, *offset, 4, &start_time);
+    proto_tree_add_item(tree, hf_zbee_zcl_elec_mes_start_time, tvb, *offset, 4, ENC_TIME_ZBEE_ZCL|ENC_LITTLE_ENDIAN);
     *offset += 4;
 
     proto_tree_add_item(tree, hf_zbee_zcl_elec_mes_number_of_intervals, tvb, *offset, 1, ENC_NA);
@@ -2377,7 +2401,7 @@ static void dissect_zcl_elec_mes_get_measurement_profile_info(tvbuff_t *tvb, pro
  *@param tree pointer to data tree Wireshark uses to display packet.
  *@param offset pointer to offset from caller
 */
-static void dissect_zcl_elec_mes_get_profile_info_response(tvbuff_t *tvb, proto_tree *tree, guint *offset)
+static void dissect_zcl_elec_mes_get_profile_info_response(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
 {
     proto_tree_add_item(tree, hf_zbee_zcl_elec_mes_profile_count, tvb, *offset, 1, ENC_NA);
     *offset += 1;
@@ -2401,14 +2425,11 @@ static void dissect_zcl_elec_mes_get_profile_info_response(tvbuff_t *tvb, proto_
  *@param tree pointer to data tree Wireshark uses to display packet.
  *@param offset pointer to offset from caller
 */
-static void dissect_zcl_elec_mes_get_measurement_profile_info_response(tvbuff_t *tvb, proto_tree *tree, guint *offset)
+static void dissect_zcl_elec_mes_get_measurement_profile_info_response(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
 {
-    nstime_t start_time;
-    guint rem_len;
+    unsigned rem_len;
 
-    start_time.secs = (time_t)tvb_get_letohl(tvb, *offset) + ZBEE_ZCL_NSTIME_UTC_OFFSET;
-    start_time.nsecs = 0;
-    proto_tree_add_time(tree, hf_zbee_zcl_elec_mes_start_time, tvb, *offset, 4, &start_time);
+    proto_tree_add_item(tree, hf_zbee_zcl_elec_mes_start_time, tvb, *offset, 4, ENC_TIME_ZBEE_ZCL|ENC_LITTLE_ENDIAN);
     *offset += 4;
 
     proto_tree_add_item(tree, hf_zbee_zcl_elec_mes_status, tvb, *offset, 1, ENC_NA);
@@ -2439,51 +2460,51 @@ proto_register_zbee_zcl_elec_mes(void)
 
         { &hf_zbee_zcl_elec_mes_srv_tx_cmd_id,
             { "Command", "zbee_zcl_meas_sensing.elecmes.cmd.srv_tx.id", FT_UINT8, BASE_HEX, VALS(zbee_zcl_elec_mes_srv_tx_cmd_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_srv_rx_cmd_id,
             { "Command", "zbee_zcl_meas_sensing.elecmes.cmd.srv_rx.id", FT_UINT8, BASE_HEX, VALS(zbee_zcl_elec_mes_srv_rx_cmd_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_attr_id,
             { "Attribute", "zbee_zcl_meas_sensing.elecmes.attr_id", FT_UINT16, BASE_HEX | BASE_EXT_STRING, &zbee_zcl_elec_mes_attr_names_ext,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_start_time,
             { "Start Time", "zbee_zcl_meas_sensing.elecmes.start_time", FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_number_of_intervals,
             { "Number of Intervals", "zbee_zcl_meas_sensing.elecmes.number_of_intervals", FT_UINT8, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_profile_count,
             { "Profile Count", "zbee_zcl_meas_sensing.elecmes.profile_count", FT_UINT8, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_profile_interval_period,
             { "Profile Interval Period", "zbee_zcl_meas_sensing.elecmes.profile_interval_period", FT_UINT8, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_max_number_of_intervals,
             { "Max Number of Intervals", "zbee_zcl_meas_sensing.elecmes.max_number_of_intervals", FT_UINT8, BASE_DEC, VALS(zbee_zcl_elec_mes_profile_interval_period_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_status,
             { "Status", "zbee_zcl_meas_sensing.elecmes.status", FT_UINT8, BASE_HEX, VALS(zbee_zcl_elec_mes_status_names),
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_number_of_intervals_delivered,
             { "Number of Intervals Delivered", "zbee_zcl_meas_sensing.elecmes.number_of_intervals_delivered", FT_UINT8, BASE_DEC, NULL,
-            0x00, NULL, HFILL } },
+            0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_elec_mes_intervals,
             { "Intervals", "zbee_zcl_meas_sensing.elecmes.intervals", FT_BYTES, BASE_NONE, NULL,
-            0x00, NULL, HFILL } }
+            0x0, NULL, HFILL } }
     };
 
     /* ZCL Electrical Measurement subtrees */
-    static gint *ett[ZBEE_ZCL_ELEC_MES_NUM_ETT];
+    static int *ett[ZBEE_ZCL_ELEC_MES_NUM_ETT];
     ett[0] = &ett_zbee_zcl_elec_mes;
 
     /* Register the ZigBee ZCL Electrical Measurement cluster protocol name and description */
@@ -2513,7 +2534,7 @@ proto_reg_handoff_zbee_zcl_elec_mes(void)
                             -1,
                             hf_zbee_zcl_elec_mes_srv_rx_cmd_id,
                             hf_zbee_zcl_elec_mes_srv_tx_cmd_id,
-                            (zbee_zcl_fn_attr_data)dissect_zcl_elec_mes_attr_data
+                            dissect_zcl_elec_mes_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_elec_mes*/
 

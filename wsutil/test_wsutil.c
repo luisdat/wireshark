@@ -9,11 +9,15 @@
 #include "config.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <glib.h>
 #include <wsutil/utf8_entities.h>
 #include <wsutil/time_util.h>
+#include <wsutil/to_str.h>
 
 #include "inet_addr.h"
+
+#define PROGNAME "test_wsutil"
 
 static void test_inet_pton4_test1(void)
 {
@@ -46,7 +50,7 @@ struct in6_test {
     ws_in6_addr addr;
 };
 
-static struct in6_test in6_test1 = {
+static const struct in6_test in6_test1 = {
     .str = "2001:db8:ffaa:ddbb:1199:2288:3377:1",
     .addr = { { 0x20, 0x01, 0x0d, 0xb8, 0xff, 0xaa, 0xdd, 0xbb,
                 0x11, 0x99, 0x22, 0x88, 0x33, 0x77, 0x00, 0x01 } }
@@ -72,11 +76,28 @@ static void test_inet_ntop6_test1(void)
     g_assert_cmpstr(result, ==, in6_test1.str);
 }
 
+static void test_ip_addr_to_str_test1(void)
+{
+    char result[WS_INET_ADDRSTRLEN];
+    const char *expect;
+    ws_in4_addr addr;
+
+    addr = g_htonl(3325256904);
+    expect = "198.51.100.200";
+    ip_addr_to_str_buf(&addr, result, sizeof(result));
+
+    g_assert_cmpstr(result, ==, expect);
+}
+
 #include "str_util.h"
 
 static void test_format_size(void)
 {
     char *str;
+
+    str = format_size(10, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_SI);
+    g_assert_cmpstr(str, ==, "10 bytes");
+    g_free(str);
 
     str = format_size(10000, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_SI);
     g_assert_cmpstr(str, ==, "10 kB");
@@ -89,6 +110,46 @@ static void test_format_size(void)
     str = format_size(20971520, FORMAT_SIZE_UNIT_BITS, FORMAT_SIZE_PREFIX_IEC);
     g_assert_cmpstr(str, ==, "20 Mib");
     g_free(str);
+
+    str = format_size(INT64_MAX, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_SI);
+    g_assert_cmpstr(str, ==, "9223 PB");
+    g_free(str);
+
+    str = format_size(INT64_MAX, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_IEC);
+    g_assert_cmpstr(str, ==, "8191 PiB");
+    g_free(str);
+}
+
+static void test_format_units_case(int base, int exponent, uint16_t flags, const char *expect)
+{
+    char *result = format_units(NULL, pow(base, exponent), FORMAT_SIZE_UNIT_NONE, flags, 10);
+    g_assert_cmpstr(result, ==, expect);
+    g_free(result);
+}
+
+static void test_format_units(void)
+{
+    test_format_units_case(10, -21, FORMAT_SIZE_PREFIX_SI, "1e-21");
+    test_format_units_case(10, -21, FORMAT_SIZE_PREFIX_IEC, "1e-21");
+    test_format_units_case(10, -18, FORMAT_SIZE_PREFIX_SI, "1 a");
+    test_format_units_case(10, -18, FORMAT_SIZE_PREFIX_IEC, "1e-18");
+    test_format_units_case(10, -3, FORMAT_SIZE_PREFIX_SI, "1 m");
+    test_format_units_case(10, -3, FORMAT_SIZE_PREFIX_IEC, "0.001");
+    test_format_units_case(10, 0, FORMAT_SIZE_PREFIX_SI, "1");
+    test_format_units_case(10, 0, FORMAT_SIZE_PREFIX_IEC, "1");
+    test_format_units_case(10, 3, FORMAT_SIZE_PREFIX_SI, "1 k");
+    test_format_units_case(10, 3, FORMAT_SIZE_PREFIX_IEC, "1000");
+    test_format_units_case(2, 10, FORMAT_SIZE_PREFIX_SI, "1.024 k");
+    test_format_units_case(2, 10, FORMAT_SIZE_PREFIX_IEC, "1 Ki");
+    test_format_units_case(10, 6, FORMAT_SIZE_PREFIX_SI, "1 M");
+    test_format_units_case(2, 20, FORMAT_SIZE_PREFIX_SI, "1.048576 M");
+    test_format_units_case(2, 20, FORMAT_SIZE_PREFIX_IEC, "1 Mi");
+    test_format_units_case(10, 18, FORMAT_SIZE_PREFIX_SI, "1 E");
+    test_format_units_case(2, 60, FORMAT_SIZE_PREFIX_IEC, "1 Ei");
+    test_format_units_case(10, 20, FORMAT_SIZE_PREFIX_SI, "100 E");
+    test_format_units_case(10, 21, FORMAT_SIZE_PREFIX_SI, "1e+21");
+    test_format_units_case(2, 69, FORMAT_SIZE_PREFIX_IEC, "512 Ei");
+    test_format_units_case(10, 22, FORMAT_SIZE_PREFIX_IEC, "1e+22");
 }
 
 static void test_escape_string(void)
@@ -106,6 +167,15 @@ static void test_escape_string(void)
     const char s1[] = { 'a', 'b', 'c', '\0', 'e', 'f', 'g'};
     buf = ws_escape_null(NULL, s1, sizeof(s1), true);
     g_assert_cmpstr(buf, ==, "\"abc\\0efg\"");
+    wmem_free(NULL, buf);
+
+    const char s2[] = { 'a', 'b', 'c', '\0', '"', 'e', 'f', 'g'};
+    buf = ws_escape_null(NULL, s2, sizeof(s2), true);
+    g_assert_cmpstr(buf, ==, "\"abc\\0\\\"efg\"");
+    wmem_free(NULL, buf);
+
+    buf = ws_escape_csv(NULL, "CSV-style \" escape", true, '"', true, false);
+    g_assert_cmpstr(buf, ==, "\"CSV-style \"\" escape\"");
     wmem_free(NULL, buf);
 }
 
@@ -261,7 +331,7 @@ static void test_word_to_hex(void)
     static char buf[32];
     char *str;     /* String is not NULL terminated. */
 
-    str = guint8_to_hex(buf, 0x34);
+    str = uint8_to_hex(buf, 0x34);
     g_assert_true(str == buf + 2);
     g_assert_cmpint(str[-1], ==, '4');
     g_assert_cmpint(str[-2], ==, '3');
@@ -284,7 +354,7 @@ static void test_word_to_hex(void)
     g_assert_cmpint(str[-7], ==, '0');
     g_assert_cmpint(str[-8], ==, '0');
 
-    str = qword_to_hex(buf, G_GUINT64_CONSTANT(0xFEDCBA987654321));
+    str = qword_to_hex(buf, UINT64_C(0xFEDCBA987654321));
     g_assert_true(str == buf + 16);
     g_assert_cmpint(str[-1], ==, '1');
     g_assert_cmpint(str[-2], ==, '2');
@@ -308,7 +378,7 @@ static void test_bytes_to_str(void)
 {
     char *str;
 
-    const guint8 buf[] = { 1, 2, 3};
+    const uint8_t buf[] = { 1, 2, 3};
 
     str = bytes_to_str(NULL, buf, sizeof(buf));
     g_assert_cmpstr(str, ==, "010203");
@@ -319,7 +389,7 @@ static void test_bytes_to_str_punct(void)
 {
     char *str;
 
-    const guint8 buf[] = { 1, 2, 3};
+    const uint8_t buf[] = { 1, 2, 3};
 
     str = bytes_to_str_punct(NULL, buf, sizeof(buf), ':');
     g_assert_cmpstr(str, ==, "01:02:03");
@@ -330,7 +400,7 @@ static void test_bytes_to_str_punct_maxlen(void)
 {
     char *str;
 
-    const guint8 buf[] = { 1, 2, 3};
+    const uint8_t buf[] = { 1, 2, 3};
 
     str = bytes_to_str_punct_maxlen(NULL, buf, sizeof(buf), ':', 4);
     g_assert_cmpstr(str, ==, "01:02:03");
@@ -357,7 +427,7 @@ static void test_bytes_to_str_maxlen(void)
 {
     char *str;
 
-    const guint8 buf[] = { 1, 2, 3};
+    const uint8_t buf[] = { 1, 2, 3};
 
     str = bytes_to_str_maxlen(NULL, buf, sizeof(buf), 4);
     g_assert_cmpstr(str, ==, "010203");
@@ -384,7 +454,7 @@ static void test_bytes_to_string_trunc1(void)
 {
     char *str;
 
-    const guint8 buf[] = {
+    const uint8_t buf[] = {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA,
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA,
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA,
@@ -408,7 +478,7 @@ static void test_bytes_to_string_punct_trunc1(void)
 {
     char *str;
 
-    const guint8 buf[] = {
+    const uint8_t buf[] = {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA,
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA,
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA,
@@ -448,13 +518,13 @@ static void test_oct64_to_str_back(void)
 {
     char *str;
 
-    str = oct64_to_str_back(BACK_PTR, G_GUINT64_CONSTANT(13873797580070999420));
+    str = oct64_to_str_back(BACK_PTR, UINT64_C(13873797580070999420));
     g_assert_cmpstr(str, ==, "01402115026217563452574");
 
-    str = oct64_to_str_back(BACK_PTR, G_GUINT64_CONSTANT(7072159458371400691));
+    str = oct64_to_str_back(BACK_PTR, UINT64_C(7072159458371400691));
     g_assert_cmpstr(str, ==, "0610452670726711271763");
 
-    str = oct64_to_str_back(BACK_PTR, G_GUINT64_CONSTANT(12453513102400590374));
+    str = oct64_to_str_back(BACK_PTR, UINT64_C(12453513102400590374));
     g_assert_cmpstr(str, ==, "01263236102754220511046");
 }
 
@@ -476,13 +546,13 @@ static void test_hex64_to_str_back_len(void)
 {
     char *str;
 
-    str = hex64_to_str_back_len(BACK_PTR, G_GUINT64_CONSTANT(1), 16);
+    str = hex64_to_str_back_len(BACK_PTR, UINT64_C(1), 16);
     g_assert_cmpstr(str, ==, "0x0000000000000001");
 
-    str = hex64_to_str_back_len(BACK_PTR, G_GUINT64_CONSTANT(4294967295), 16);
+    str = hex64_to_str_back_len(BACK_PTR, UINT64_C(4294967295), 16);
     g_assert_cmpstr(str, ==, "0x00000000ffffffff");
 
-    str = hex64_to_str_back_len(BACK_PTR, G_GUINT64_CONSTANT(18446744073709551615), 16);
+    str = hex64_to_str_back_len(BACK_PTR, UINT64_C(18446744073709551615), 16);
     g_assert_cmpstr(str, ==, "0xffffffffffffffff");
 }
 
@@ -504,13 +574,13 @@ static void test_uint64_to_str_back(void)
 {
     char *str;
 
-    str = uint64_to_str_back(BACK_PTR, G_GUINT64_CONSTANT(585143757104211265));
+    str = uint64_to_str_back(BACK_PTR, UINT64_C(585143757104211265));
     g_assert_cmpstr(str, ==, "585143757104211265");
 
-    str = uint64_to_str_back(BACK_PTR, G_GUINT64_CONSTANT(7191580247919484847));
+    str = uint64_to_str_back(BACK_PTR, UINT64_C(7191580247919484847));
     g_assert_cmpstr(str, ==, "7191580247919484847");
 
-    str = uint64_to_str_back(BACK_PTR, G_GUINT64_CONSTANT(95778573911934485));
+    str = uint64_to_str_back(BACK_PTR, UINT64_C(95778573911934485));
     g_assert_cmpstr(str, ==, "95778573911934485");
 }
 
@@ -532,13 +602,13 @@ static void test_uint64_to_str_back_len(void)
 {
     char *str;
 
-    str = uint64_to_str_back_len(BACK_PTR, G_GUINT64_CONSTANT(1), 16);
+    str = uint64_to_str_back_len(BACK_PTR, UINT64_C(1), 16);
     g_assert_cmpstr(str, ==, "0000000000000001");
 
-    str = uint64_to_str_back_len(BACK_PTR, G_GUINT64_CONSTANT(4294967295), 16);
+    str = uint64_to_str_back_len(BACK_PTR, UINT64_C(4294967295), 16);
     g_assert_cmpstr(str, ==, "0000004294967295");
 
-    str = uint64_to_str_back_len(BACK_PTR, G_GUINT64_CONSTANT(18446744073709551615), 16);
+    str = uint64_to_str_back_len(BACK_PTR, UINT64_C(18446744073709551615), 16);
     g_assert_cmpstr(str, ==, "18446744073709551615");
 }
 
@@ -560,13 +630,13 @@ static void test_int64_to_str_back(void)
 {
     char *str;
 
-    str = int64_to_str_back(BACK_PTR, G_GINT64_CONSTANT(-9223372036854775807));
+    str = int64_to_str_back(BACK_PTR, INT64_C(-9223372036854775807));
     g_assert_cmpstr(str, ==, "-9223372036854775807");
 
-    str = int64_to_str_back(BACK_PTR, G_GINT64_CONSTANT(1));
+    str = int64_to_str_back(BACK_PTR, INT64_C(1));
     g_assert_cmpstr(str, ==, "1");
 
-    str = int64_to_str_back(BACK_PTR, G_GINT64_CONSTANT(9223372036854775807));
+    str = int64_to_str_back(BACK_PTR, INT64_C(9223372036854775807));
     g_assert_cmpstr(str, ==, "9223372036854775807");
 }
 
@@ -576,7 +646,7 @@ static void test_int64_to_str_back(void)
 void test_nstime_from_iso8601(void)
 {
     char *str;
-    size_t chars;
+    const char *endp;
     nstime_t result, expect;
     struct tm tm1;
 
@@ -593,8 +663,9 @@ void test_nstime_from_iso8601(void)
     str = "2013-05-30T23:45:25.349124";
     expect.secs = mktime(&tm1);
     expect.nsecs = 349124 * 1000;
-    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
-    g_assert_cmpuint(chars, ==, strlen(str));
+    endp = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_nonnull(endp);
+    g_assert(*endp == '\0');
     g_assert_cmpint(result.secs, ==, expect.secs);
     g_assert_cmpint(result.nsecs, ==, expect.nsecs);
 
@@ -602,8 +673,9 @@ void test_nstime_from_iso8601(void)
     str = "2013-05-30T23:45:25.349124Z";
     expect.secs = mktime_utc(&tm1);
     expect.nsecs = 349124 * 1000;
-    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
-    g_assert_cmpuint(chars, ==, strlen(str));
+    endp = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_nonnull(endp);
+    g_assert(*endp == '\0');
     g_assert_cmpint(result.secs, ==, expect.secs);
     g_assert_cmpint(result.nsecs, ==, expect.nsecs);
 
@@ -611,8 +683,9 @@ void test_nstime_from_iso8601(void)
     str = "2013-05-30T23:45:25.349124+01:00";
     expect.secs = mktime_utc(&tm1) - 1 * 60 * 60;
     expect.nsecs = 349124 * 1000;
-    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
-    g_assert_cmpuint(chars, ==, strlen(str));
+    endp = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_nonnull(endp);
+    g_assert(*endp == '\0');
     g_assert_cmpint(result.secs, ==, expect.secs);
     g_assert_cmpint(result.nsecs, ==, expect.nsecs);
 
@@ -620,8 +693,9 @@ void test_nstime_from_iso8601(void)
     str = "2013-05-30T23:45:25.349124+0100";
     expect.secs = mktime_utc(&tm1) - 1 * 60 * 60;
     expect.nsecs = 349124 * 1000;
-    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
-    g_assert_cmpuint(chars, ==, strlen(str));
+    endp = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_nonnull(endp);
+    g_assert(*endp == '\0');
     g_assert_cmpint(result.secs, ==, expect.secs);
     g_assert_cmpint(result.nsecs, ==, expect.nsecs);
 
@@ -629,8 +703,9 @@ void test_nstime_from_iso8601(void)
     str = "2013-05-30T23:45:25.349124+01";
     expect.secs = mktime_utc(&tm1) - 1 * 60 * 60;
     expect.nsecs = 349124 * 1000;
-    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
-    g_assert_cmpuint(chars, ==, strlen(str));
+    endp = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_nonnull(endp);
+    g_assert(*endp == '\0');
     g_assert_cmpint(result.secs, ==, expect.secs);
     g_assert_cmpint(result.nsecs, ==, expect.nsecs);
 }
@@ -776,12 +851,22 @@ static void test_getopt_opterr1(void)
     int argc;
 
 #ifdef _WIN32
+    DIAG_OFF(unreachable-code)
     g_test_skip("Not supported on Windows");
     return;
 #endif
 
     if (g_test_subprocess()) {
         const char *optstring = "ab";
+
+        /*
+         * Yes, this has a different command name from this
+         * program's name - and from the name in the error
+         * message that we're testing.  ws_getopt() and
+         * ws_getopt_long() use the name set by g_set_prgname(),
+         * not the argv[0] string, as the program name in the
+         * error message, just as other error message routines do.
+         */
         argv = new_argv(&argc, "/bin/ls", "-a", "-z", "path", (char *)NULL);
 
         ws_optind = 0;
@@ -805,14 +890,21 @@ static void test_getopt_opterr1(void)
 
     g_test_trap_subprocess(NULL, 0, 0);
     g_test_trap_assert_passed();
-    g_test_trap_assert_stderr("/bin/ls: unrecognized option: z\n");
+    g_test_trap_assert_stderr(PROGNAME ": unrecognized option: z\n");
+
+#ifdef _WIN32
+    DIAG_ON(unreachable-code)
+#endif
 }
 
 int main(int argc, char **argv)
 {
     int ret;
 
-    ws_log_init("test_wsutil", NULL);
+    /* Set the program name. */
+    g_set_prgname(PROGNAME);
+
+    ws_log_init(NULL, "Test Logging Debug Console");
 
     g_test_init(&argc, &argv, NULL);
 
@@ -822,6 +914,7 @@ int main(int argc, char **argv)
     g_test_add_func("/inet_addr/inet_ntop6", test_inet_ntop6_test1);
 
     g_test_add_func("/str_util/format_size", test_format_size);
+    g_test_add_func("/str_util/format_units", test_format_units);
     g_test_add_func("/str_util/escape_string", test_escape_string);
     g_test_add_func("/str_util/strconcat", test_strconcat);
     g_test_add_func("/str_util/strsplit", test_strsplit);
@@ -849,6 +942,7 @@ int main(int argc, char **argv)
     g_test_add_func("/to_str/uint64_to_str_back_len", test_uint64_to_str_back_len);
     g_test_add_func("/to_str/int_to_str_back", test_int_to_str_back);
     g_test_add_func("/to_str/int64_to_str_back", test_int64_to_str_back);
+    g_test_add_func("/to_str/ip_addr_to_str_test1", test_ip_addr_to_str_test1);
 
     g_test_add_func("/nstime/from_iso8601", test_nstime_from_iso8601);
 

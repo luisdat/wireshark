@@ -14,23 +14,21 @@
 #ifndef __W_PCAP_COMMON_H__
 #define __W_PCAP_COMMON_H__
 
-#include <glib.h>
 #include "wtap.h"
-#include "ws_symbol_export.h"
 
-extern guint wtap_max_snaplen_for_encap(int wtap_encap);
+extern unsigned wtap_max_snaplen_for_encap(int wtap_encap);
 
-extern int pcap_process_pseudo_header(FILE_T fh, gboolean is_nokia,
-    int wtap_encap, guint packet_size, wtap_rec *rec,
-    int *err, gchar **err_info);
+extern int pcap_process_pseudo_header(FILE_T fh, bool is_nokia,
+    int wtap_encap, unsigned packet_size, wtap_rec *rec,
+    int *err, char **err_info);
 
-extern void pcap_read_post_process(gboolean is_nokia, int wtap_encap,
-    wtap_rec *rec, guint8 *pd, gboolean bytes_swapped, int fcs_len);
+extern void pcap_read_post_process(bool is_nokia, int wtap_encap,
+    wtap_rec *rec, bool bytes_swapped, int fcs_len);
 
-extern int pcap_get_phdr_size(int encap,
+extern unsigned pcap_get_phdr_size(int encap,
     const union wtap_pseudo_header *pseudo_header);
 
-extern gboolean pcap_write_phdr(wtap_dumper *wdh, int wtap_encap,
+extern bool pcap_write_phdr(wtap_dumper *wdh, int wtap_encap,
     const union wtap_pseudo_header *pseudo_header, int *err);
 
 #endif

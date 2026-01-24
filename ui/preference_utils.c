@@ -21,32 +21,29 @@
 #include <epan/decode_as.h>
 #include <epan/uat-int.h>
 #include <ui/recent.h>
+#include <app/application_flavor.h>
 
 #ifdef HAVE_LIBPCAP
-#include "capture_opts.h"
-#include "ui/capture_globals.h"
+#include "ui/capture_opts.h"
 #endif
+#include "ui/capture_globals.h"
 
 #include "ui/preference_utils.h"
 #include "ui/simple_dialog.h"
 
-#ifdef HAVE_LIBPCAP
-gboolean auto_scroll_live;
-#endif
-
 /* Fill in capture options with values from the preferences */
 void
-prefs_to_capture_opts(void)
+prefs_to_capture_opts(capture_options* capture_opts _U_)
 {
 #ifdef HAVE_LIBPCAP
     /* Set promiscuous mode from the preferences setting. */
     /* the same applies to other preferences settings as well. */
-    global_capture_opts.default_options.promisc_mode = prefs.capture_prom_mode;
-    global_capture_opts.use_pcapng                   = prefs.capture_pcap_ng;
-    global_capture_opts.show_info                    = prefs.capture_show_info;
-    global_capture_opts.real_time_mode               = prefs.capture_real_time;
-    global_capture_opts.update_interval              = prefs.capture_update_interval;
-    auto_scroll_live                                 = prefs.capture_auto_scroll;
+    capture_opts->default_options.promisc_mode = prefs.capture_prom_mode;
+    capture_opts->default_options.monitor_mode = prefs.capture_monitor_mode;
+    capture_opts->use_pcapng                   = prefs.capture_pcap_ng;
+    capture_opts->show_info                    = prefs.capture_show_info;
+    capture_opts->real_time_mode               = prefs.capture_real_time;
+    capture_opts->update_interval              = prefs.capture_update_interval;
 #endif /* HAVE_LIBPCAP */
 }
 
@@ -59,14 +56,14 @@ prefs_main_write(void)
 
     /* Create the directory that holds personal configuration files, if
        necessary.  */
-    if (create_persconffile_dir(&pf_dir_path) == -1) {
+    if (create_persconffile_dir(application_configuration_environment_prefix(), &pf_dir_path) == -1) {
         simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK,
                 "Can't create directory\n\"%s\"\nfor preferences file: %s.", pf_dir_path,
                 g_strerror(errno));
         g_free(pf_dir_path);
     } else {
         /* Write the preferences out. */
-        err = write_prefs(&pf_path);
+        err = write_prefs(application_configuration_environment_prefix(), &pf_path);
         if (err != 0) {
             simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK,
                     "Can't open preferences file\n\"%s\": %s.", pf_path,
@@ -82,23 +79,18 @@ prefs_main_write(void)
 static unsigned int
 prefs_store_ext_helper(const char * module_name, const char *pref_name, const char *pref_value)
 {
-    module_t * module = NULL;
     pref_t * pref = NULL;
     unsigned int pref_changed = 0;
 
     if ( !prefs_is_registered_protocol(module_name))
         return 0;
 
-    module = prefs_find_module(module_name);
-    if ( !module )
-        return 0;
-
-    pref = prefs_find_preference(module, pref_name);
+    pref = prefs_find_preference(prefs_find_module(module_name), pref_name);
 
     if (!pref)
         return 0;
 
-    if (prefs_get_type(pref) == PREF_STRING )
+    if (prefs_get_type(pref) == PREF_STRING || prefs_get_type(pref) == PREF_DISSECTOR)
     {
         pref_changed |= prefs_set_string_value(pref, pref_value, pref_stashed);
         if ( !pref_changed || prefs_get_string_value(pref, pref_stashed) != 0 )
@@ -121,17 +113,17 @@ prefs_store_ext(const char * module_name, const char *pref_name, const char *pre
     {
         prefs_main_write();
         prefs_apply_all();
-        prefs_to_capture_opts();
+        prefs_to_capture_opts(&global_capture_opts);
         return changed_flags;
     }
 
     return 0;
 }
 
-gboolean
+bool
 prefs_store_ext_multiple(const char * module, GHashTable * pref_values)
 {
-    gboolean pref_changed = FALSE;
+    bool pref_changed = false;
     GList * keys = NULL;
 
     if ( !prefs_is_registered_protocol(module))
@@ -143,13 +135,13 @@ prefs_store_ext_multiple(const char * module, GHashTable * pref_values)
 
     for ( GList * key = keys; key != NULL; key = g_list_next(key) )
     {
-        gchar * pref_name = (gchar *)key->data;
-        gchar * pref_value = (gchar *) g_hash_table_lookup(pref_values, key->data);
+        char * pref_name = (char *)key->data;
+        char * pref_value = (char *) g_hash_table_lookup(pref_values, key->data);
 
         if ( pref_name && pref_value )
         {
             if ( prefs_store_ext_helper(module, pref_name, pref_value) )
-                pref_changed = TRUE;
+                pref_changed = true;
         }
     }
     g_list_free(keys);
@@ -158,18 +150,18 @@ prefs_store_ext_multiple(const char * module, GHashTable * pref_values)
     {
         prefs_main_write();
         prefs_apply_all();
-        prefs_to_capture_opts();
+        prefs_to_capture_opts(&global_capture_opts);
     }
 
-    return TRUE;
+    return true;
 }
 
-gint
-column_prefs_add_custom(gint fmt, const gchar *title, const gchar *custom_fields, gint position)
+int
+column_prefs_add_custom(int fmt, const char *title, const char *custom_fields, int position)
 {
     GList *clp;
     fmt_data *cfmt, *last_cfmt;
-    gint colnr;
+    int colnr;
 
     cfmt = g_new(fmt_data, 1);
     /*
@@ -181,17 +173,22 @@ column_prefs_add_custom(gint fmt, const gchar *title, const gchar *custom_fields
     cfmt->fmt = fmt;
     cfmt->custom_fields = g_strdup(custom_fields);
     cfmt->custom_occurrence = 0;
-    cfmt->resolved = TRUE;
+    if (column_prefs_custom_display_strings(custom_fields)) {
+        cfmt->display = COLUMN_DISPLAY_STRINGS;
+    } else {
+        cfmt->display = COLUMN_DISPLAY_VALUES;
+    }
 
     colnr = g_list_length(prefs.col_list);
 
     if (custom_fields) {
-        cfmt->visible = TRUE;
+        cfmt->visible = true;
         clp = g_list_last(prefs.col_list);
         last_cfmt = (fmt_data *) clp->data;
         if (position > 0 && position <= colnr) {
             /* Custom fields may be added at any position, depending on the given argument */
-            prefs.col_list = g_list_insert(prefs.col_list, cfmt, position);
+            colnr = position;
+            prefs.col_list = g_list_insert(prefs.col_list, cfmt, colnr);
         } else if (last_cfmt->fmt == COL_INFO) {
             /* Last column is COL_INFO, add custom column before this */
             colnr -= 1;
@@ -200,21 +197,22 @@ column_prefs_add_custom(gint fmt, const gchar *title, const gchar *custom_fields
             prefs.col_list = g_list_append(prefs.col_list, cfmt);
         }
     } else {
-        cfmt->visible = FALSE;  /* Will be set to TRUE in visible_toggled() when added to list */
+        cfmt->visible = false;  /* Will be set to true in visible_toggled() when added to list */
         prefs.col_list = g_list_append(prefs.col_list, cfmt);
     }
+    recent_insert_column(colnr);
 
     return colnr;
 }
 
-gint
-column_prefs_has_custom(const gchar *custom_field)
+int
+column_prefs_has_custom(const char *custom_field)
 {
     GList *clp;
     fmt_data *cfmt;
-    gint colnr = -1;
+    int colnr = -1;
 
-    for (gint i = 0; i < prefs.num_cols; i++) {
+    for (unsigned i = 0; i < prefs.num_cols; i++) {
         clp = g_list_nth(prefs.col_list, i);
         if (clp == NULL) /* Sanity check, invalid column requested */
             continue;
@@ -229,27 +227,53 @@ column_prefs_has_custom(const gchar *custom_field)
     return colnr;
 }
 
-gboolean
-column_prefs_custom_resolve(const gchar* custom_field)
+bool
+column_prefs_custom_display_strings(const char* custom_field)
 {
-    gchar **fields;
+    char **fields;
     header_field_info *hfi;
     bool resolve = false;
 
     fields = g_regex_split_simple(COL_CUSTOM_PRIME_REGEX, custom_field,
-                                  (GRegexCompileFlags) (G_REGEX_ANCHORED | G_REGEX_RAW),
-                                  G_REGEX_MATCH_ANCHORED);
+                                  (GRegexCompileFlags) (G_REGEX_RAW),
+                                  0);
 
-    for (guint i = 0; i < g_strv_length(fields); i++) {
+    for (unsigned i = 0; i < g_strv_length(fields); i++) {
         if (fields[i] && *fields[i]) {
             hfi = proto_registrar_get_byname(fields[i]);
-            if (hfi && ((hfi->type == FT_OID) || (hfi->type == FT_REL_OID) || (hfi->type == FT_ETHER) || (hfi->type == FT_IPv4) || (hfi->type == FT_IPv6) || (hfi->type == FT_FCWWN) || (hfi->type == FT_BOOLEAN) ||
+            if (hfi && ((hfi->type == FT_OID) || (hfi->type == FT_REL_OID) || (hfi->type == FT_ETHER) || (hfi->type == FT_BYTES) || (hfi->type == FT_IPv4) || (hfi->type == FT_IPv6) || (hfi->type == FT_FCWWN) || (hfi->type == FT_BOOLEAN) ||
                     ((hfi->strings != NULL) &&
-                     (IS_FT_INT(hfi->type) || IS_FT_UINT(hfi->type)))))
+                     (FT_IS_INT(hfi->type) || FT_IS_UINT(hfi->type)))))
                 {
-                    resolve = TRUE;
+                    resolve = true;
                     break;
                 }
+        }
+    }
+
+    g_strfreev(fields);
+
+    return resolve;
+}
+
+bool
+column_prefs_custom_display_details(const char* custom_field)
+{
+    char **fields;
+    header_field_info *hfi;
+    bool resolve = false;
+
+    fields = g_regex_split_simple(COL_CUSTOM_PRIME_REGEX, custom_field,
+                                  (GRegexCompileFlags) (G_REGEX_RAW),
+                                  0);
+
+    for (unsigned i = 0; i < g_strv_length(fields); i++) {
+        if (fields[i] && *fields[i]) {
+            hfi = proto_registrar_get_byname(fields[i]);
+            if (hfi && !(hfi->display & BASE_NO_DISPLAY_VALUE)) {
+                resolve = true;
+                break;
+            }
         }
     }
 
@@ -271,19 +295,21 @@ column_prefs_remove_link(GList *col_link)
     g_free(cfmt->custom_fields);
     g_free(cfmt);
     prefs.col_list = g_list_remove_link(prefs.col_list, col_link);
+    g_list_free_1(col_link);
 }
 
 void
-column_prefs_remove_nth(gint col)
+column_prefs_remove_nth(int col)
 {
     column_prefs_remove_link(g_list_nth(prefs.col_list, col));
+    recent_remove_column(col);
 }
 
-void save_migrated_uat(const char *uat_name, gboolean *old_pref)
+void save_migrated_uat(const char *uat_name, bool *old_pref)
 {
     char *err = NULL;
 
-    if (!uat_save(uat_get_table_by_name(uat_name), &err)) {
+    if (!uat_save(uat_get_table_by_name(uat_name), application_configuration_environment_prefix(), &err)) {
         ws_warning("Unable to save %s: %s", uat_name, err);
         g_free(err);
         return;
@@ -291,7 +317,7 @@ void save_migrated_uat(const char *uat_name, gboolean *old_pref)
 
     // Ensure that any old preferences are removed after successful migration.
     if (*old_pref) {
-        *old_pref = FALSE;
+        *old_pref = false;
         prefs_main_write();
     }
 }

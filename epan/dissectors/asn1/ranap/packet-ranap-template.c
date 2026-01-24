@@ -19,6 +19,7 @@
 #include <epan/asn1.h>
 #include <epan/prefs.h>
 #include <epan/proto_data.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-per.h"
@@ -30,11 +31,6 @@
 #include "packet-isup.h"
 #include "packet-s1ap.h"
 #include "packet-rtp.h"
-
-#ifdef _MSC_VER
-/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
-#pragma warning(disable:4146)
-#endif
 
 #define SCCP_SSN_RANAP 142
 
@@ -51,24 +47,24 @@ void proto_register_ranap(void);
 void proto_reg_handoff_ranap(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_ranap = -1;
+static int proto_ranap;
 
 /* initialise sub-dissector handles */
-static dissector_handle_t rrc_s_to_trnc_handle = NULL;
-static dissector_handle_t rrc_t_to_srnc_handle = NULL;
-static dissector_handle_t rrc_ho_to_utran_cmd = NULL;
-static dissector_handle_t bssgp_handle = NULL;
+static dissector_handle_t rrc_s_to_trnc_handle;
+static dissector_handle_t rrc_t_to_srnc_handle;
+static dissector_handle_t rrc_ho_to_utran_cmd;
+static dissector_handle_t bssgp_handle;
 
-static int hf_ranap_transportLayerAddress_ipv4 = -1;
-static int hf_ranap_transportLayerAddress_ipv6 = -1;
-static int hf_ranap_transportLayerAddress_nsap = -1;
+static int hf_ranap_transportLayerAddress_ipv4;
+static int hf_ranap_transportLayerAddress_ipv6;
+static int hf_ranap_transportLayerAddress_nsap;
 
 #include "packet-ranap-hf.c"
 
 /* Initialize the subtree pointers */
-static int ett_ranap = -1;
-static int ett_ranap_transportLayerAddress = -1;
-static int ett_ranap_transportLayerAddress_nsap = -1;
+static int ett_ranap;
+static int ett_ranap_transportLayerAddress;
+static int ett_ranap_transportLayerAddress_nsap;
 
 #include "packet-ranap-ett.c"
 
@@ -81,8 +77,8 @@ static int ett_ranap_transportLayerAddress_nsap = -1;
 
 typedef struct ranap_private_data_t
 {
-  guint32 transportLayerAddress_ipv4;
-  guint16 binding_id_port;
+  uint32_t transportLayerAddress_ipv4;
+  uint16_t binding_id_port;
   e212_number_type_t number_type;
 } ranap_private_data_t;
 
@@ -105,25 +101,25 @@ static void ranap_reset_private_data(packet_info *pinfo)
   p_remove_proto_data(pinfo->pool, pinfo, proto_ranap, 0);
 }
 
-static guint32 private_data_get_transportLayerAddress_ipv4(asn1_ctx_t *actx)
+static uint32_t private_data_get_transportLayerAddress_ipv4(asn1_ctx_t *actx)
 {
   ranap_private_data_t *private_data = (ranap_private_data_t*)ranap_get_private_data(actx);
   return private_data->transportLayerAddress_ipv4;
 }
 
-static void private_data_set_transportLayerAddress_ipv4(asn1_ctx_t *actx, guint32 transportLayerAddress_ipv4)
+static void private_data_set_transportLayerAddress_ipv4(asn1_ctx_t *actx, uint32_t transportLayerAddress_ipv4)
 {
   ranap_private_data_t *private_data = (ranap_private_data_t*)ranap_get_private_data(actx);
   private_data->transportLayerAddress_ipv4 = transportLayerAddress_ipv4;
 }
 
-static guint16 private_data_get_binding_id_port(asn1_ctx_t *actx)
+static uint16_t private_data_get_binding_id_port(asn1_ctx_t *actx)
 {
   ranap_private_data_t *private_data = (ranap_private_data_t*)ranap_get_private_data(actx);
   return private_data->binding_id_port;
 }
 
-static void private_data_set_binding_id_port(asn1_ctx_t *actx, guint16 binding_id_port)
+static void private_data_set_binding_id_port(asn1_ctx_t *actx, uint16_t binding_id_port)
 {
   ranap_private_data_t *private_data = (ranap_private_data_t*)ranap_get_private_data(actx);
   private_data->binding_id_port = binding_id_port;
@@ -133,10 +129,10 @@ static void private_data_set_binding_id_port(asn1_ctx_t *actx, guint16 binding_i
 
 
 /* Global variables */
-static guint32 ProcedureCode;
-static guint32 ProtocolIE_ID;
-static guint32 ProtocolExtensionID;
-static gboolean glbl_dissect_container = FALSE;
+static uint32_t ProcedureCode;
+static uint32_t ProtocolIE_ID;
+static uint32_t ProtocolExtensionID;
+static bool glbl_dissect_container;
 
 static dissector_handle_t ranap_handle;
 
@@ -146,7 +142,7 @@ static dissector_handle_t ranap_handle;
  * SuccessfulOutcome
  * UnsuccessfulOutcome
  * Outcome
- * As a workarond a value is added to the IE:id in the .cnf file.
+ * As a workaround a value is added to the IE:id in the .cnf file.
  * Example:
  * ResetResourceList                N rnsap.ies IMSG||id-IuSigConIdList  # no spaces are allowed in value as a space is delimiter
  * PDU type is stored in a global variable and can is used in the IE decoding section.
@@ -163,7 +159,7 @@ static dissector_handle_t ranap_handle;
 #define SOUT (2U<<16)
 #define SPECIAL (4U<<16)
 
-int pdu_type = 0; /* 0 means wildcard */
+int pdu_type; /* 0 means wildcard */
 
 /* Dissector tables */
 static dissector_table_t ranap_ies_dissector_table;
@@ -185,8 +181,8 @@ static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, pro
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
 static int dissect_OutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
 
-static int dissect_ranap_SourceRNC_ToTargetRNC_TransparentContainer(tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index);
-static int dissect_ranap_TargetRNC_ToSourceRNC_TransparentContainer(tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index);
+static unsigned dissect_ranap_SourceRNC_ToTargetRNC_TransparentContainer(tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index);
+static unsigned dissect_ranap_TargetRNC_ToSourceRNC_TransparentContainer(tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index);
 
 
 #include "packet-ranap-fn.c"
@@ -203,16 +199,16 @@ dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     case id_RelocationPreparation:
       if((ProtocolIE_ID == id_Source_ToTarget_TransparentContainer)||(ProtocolIE_ID == id_Target_ToSource_TransparentContainer)){
         key = SPECIAL | ProtocolIE_ID;
-        ret = (dissector_try_uint_new(ranap_ies_dissector_table, key, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+        ret = (dissector_try_uint_with_data(ranap_ies_dissector_table, key, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
         break;
       }
       /* Fall through */
     default:
       /* no special handling */
-      ret = (dissector_try_uint_new(ranap_ies_dissector_table, ProtocolIE_ID, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+      ret = (dissector_try_uint_with_data(ranap_ies_dissector_table, ProtocolIE_ID, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
       if (ret == 0) {
         key = pdu_type | ProtocolIE_ID;
-        ret = (dissector_try_uint_new(ranap_ies_dissector_table, key, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+        ret = (dissector_try_uint_with_data(ranap_ies_dissector_table, key, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
       }
       break;
   }
@@ -222,28 +218,28 @@ dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 static int
 dissect_ProtocolIEFieldPairFirstValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  return (dissector_try_uint_new(ranap_ies_p1_dissector_table, ProtocolIE_ID, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(ranap_ies_p1_dissector_table, ProtocolIE_ID, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
 dissect_ProtocolIEFieldPairSecondValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  return (dissector_try_uint_new(ranap_ies_p2_dissector_table, ProtocolIE_ID, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(ranap_ies_p2_dissector_table, ProtocolIE_ID, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
 dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  return (dissector_try_uint_new(ranap_extension_dissector_table, ProtocolExtensionID, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(ranap_extension_dissector_table, ProtocolExtensionID, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
 dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  gboolean ret;
+  bool ret;
 
   pdu_type = IMSG;
-  ret = dissector_try_uint_new(ranap_proc_imsg_dissector_table, ProcedureCode, tvb, pinfo, tree, FALSE, NULL);
+  ret = dissector_try_uint_with_data(ranap_proc_imsg_dissector_table, ProcedureCode, tvb, pinfo, tree, false, NULL);
   pdu_type = 0;
   return ret ? tvb_captured_length(tvb) : 0;
 }
@@ -251,10 +247,10 @@ dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 static int
 dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  gboolean ret;
+  bool ret;
 
   pdu_type = SOUT;
-  ret = dissector_try_uint_new(ranap_proc_sout_dissector_table, ProcedureCode, tvb, pinfo, tree, FALSE, NULL);
+  ret = dissector_try_uint_with_data(ranap_proc_sout_dissector_table, ProcedureCode, tvb, pinfo, tree, false, NULL);
   pdu_type = 0;
   return ret ? tvb_captured_length(tvb) : 0;
 }
@@ -262,13 +258,13 @@ dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 static int
 dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  return (dissector_try_uint_new(ranap_proc_uout_dissector_table, ProcedureCode, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(ranap_proc_uout_dissector_table, ProcedureCode, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
 dissect_OutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  return (dissector_try_uint_new(ranap_proc_out_dissector_table, ProcedureCode, tvb, pinfo, tree, FALSE, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(ranap_proc_out_dissector_table, ProcedureCode, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
@@ -302,7 +298,7 @@ dissect_ranap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
       sccp_msg_lcl->data.co.assoc->payload = SCCP_PLOAD_RANAP;
 
     if (! sccp_msg_lcl->data.co.label && ProcedureCode != 0xFFFFFFFF) {
-      const gchar* str = val_to_str(ProcedureCode, ranap_ProcedureCode_vals,"Unknown RANAP");
+      const char* str = val_to_str_const(ProcedureCode, ranap_ProcedureCode_vals, "Unknown RANAP");
       sccp_msg_lcl->data.co.label = wmem_strdup(wmem_file_scope(), str);
     }
   }
@@ -311,18 +307,18 @@ dissect_ranap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 }
 
 #define RANAP_MSG_MIN_LENGTH 7
-static gboolean
+static bool
 dissect_sccp_ranap_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-  guint8 temp;
-  guint16 word;
-  guint length;
+  uint8_t temp;
+  uint16_t word;
+  unsigned length;
   int offset;
 
   /* Is it a ranap packet?
    *
    * 4th octet should be the length of the rest of the message.
-   * 3th octed is the Criticality field
+   * 3th octet is the Criticality field
    * 2nd octet is the message-type e Z[0, 28]
    * 1st octet is the PDU type (with the extension bit)
    * (obviously there must be at least four octets)
@@ -334,53 +330,53 @@ dissect_sccp_ranap_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
   #define CRIT_OFFSET 2
   #define MSG_TYPE_OFFSET 1
   #define PDU_TYPE_OFFSET 0
-  if (tvb_captured_length(tvb) < RANAP_MSG_MIN_LENGTH) { return FALSE; }
+  if (tvb_captured_length(tvb) < RANAP_MSG_MIN_LENGTH) { return false; }
 
-  temp = tvb_get_guint8(tvb, PDU_TYPE_OFFSET);
+  temp = tvb_get_uint8(tvb, PDU_TYPE_OFFSET);
   if (temp & 0x1F) {
-    /* PDU Type byte is not 0x00 (initiatingMessage), 0x20 (succesfulOutcome),
-       0x40 (unsuccesfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
-    return FALSE;
+    /* PDU Type byte is not 0x00 (initiatingMessage), 0x20 (successfulOutcome),
+       0x40 (unsuccessfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
+    return false;
   }
 
-  temp = tvb_get_guint8(tvb, CRIT_OFFSET);
+  temp = tvb_get_uint8(tvb, CRIT_OFFSET);
   if (temp == 0xC0 || temp & 0x3F) {
     /* Criticality byte is not 0x00 (reject), 0x40 (ignore) or 0x80 (notify) */
-    return FALSE;
+    return false;
   }
 
   /* compute aligned PER length determinant without calling dissect_per_length_determinant()
      to avoid exceptions and info added to tree, info column and expert info */
   offset = LENGTH_OFFSET;
-  length = tvb_get_guint8(tvb, offset);
+  length = tvb_get_uint8(tvb, offset);
   offset += 1;
   if ((length & 0x80) == 0x80) {
     if ((length & 0xc0) == 0x80) {
       length &= 0x3f;
       length <<= 8;
-      length += tvb_get_guint8(tvb, offset);
+      length += tvb_get_uint8(tvb, offset);
       offset += 1;
     } else {
       length = 0;
     }
   }
   if (length!= (tvb_reported_length(tvb) - offset)){
-    return FALSE;
+    return false;
   }
 
-  temp = tvb_get_guint8(tvb, MSG_TYPE_OFFSET);
-  if (temp > RANAP_MAX_PC) { return FALSE; }
+  temp = tvb_get_uint8(tvb, MSG_TYPE_OFFSET);
+  if (temp > RANAP_MAX_PC) { return false; }
 
   /* Try to strengthen the heuristic further, by checking the byte following the length and the bitfield indicating extensions etc
    * which usually is a sequence-of length
    */
   word = tvb_get_ntohs(tvb, offset + 1);
   if (word > 0x1ff){
-    return FALSE;
+    return false;
   }
   dissect_ranap(tvb, pinfo, tree, data);
 
-  return TRUE;
+  return true;
 }
 
 /*--- proto_register_ranap -------------------------------------------*/
@@ -408,7 +404,7 @@ void proto_register_ranap(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_ranap,
     &ett_ranap_transportLayerAddress,
     &ett_ranap_transportLayerAddress_nsap,

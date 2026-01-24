@@ -14,16 +14,35 @@
 extern "C" {
 #endif /* __cplusplus */
 
-extern gboolean has_wpcap;
+#ifdef HAVE_LIBPCAP
+#ifdef __MINGW32__
+#include <_bsd_types.h>
+#endif
+#include <pcap/pcap.h>
+#endif
+
+extern bool has_npcap;
 
 extern void load_wpcap(void);
 
+/*
+ * This returns true if we loaded WinPcap; we don't support WinPcap anymore,
+ * so this doesn't mean we can capture (has_npcap is still false), but we can
+ * produce a more informative error message.
+ */
+extern bool caplibs_have_winpcap(void);
+
 /**
  * Check to see if npf.sys is running.
- * @return TRUE if npf.sys is running, FALSE if it's not or if there was
+ * @return true if npf.sys is running, false if it's not or if there was
  * an error checking its status.
  */
-gboolean npf_sys_is_running(void);
+bool npf_sys_is_running(void);
+
+#ifdef HAVE_LIBPCAP
+int
+ws_pcap_findalldevs_ex(const char *a, struct pcap_rmtauth *b, pcap_if_t **c, char *errbuf);
+#endif
 
 #ifdef __cplusplus
 }

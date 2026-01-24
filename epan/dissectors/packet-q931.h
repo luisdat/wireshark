@@ -15,29 +15,29 @@
 
 #include "ws_symbol_export.h"
 
-WS_DLL_PUBLIC void dissect_q931_bearer_capability_ie(tvbuff_t *, int, int,
+WS_DLL_PUBLIC void dissect_q931_bearer_capability_ie(tvbuff_t *, unsigned, unsigned,
     proto_tree *);
 
-extern void dissect_q931_cause_ie(tvbuff_t *, int, int,
-    proto_tree *, int, guint8 *,const value_string *);
+extern void dissect_q931_cause_ie(tvbuff_t *, packet_info*, unsigned, unsigned,
+    proto_tree *, int, uint8_t *,const value_string *);
 
-extern void dissect_q931_progress_indicator_ie(tvbuff_t *, int, int,
+extern void dissect_q931_progress_indicator_ie(tvbuff_t *, unsigned, unsigned,
     proto_tree *);
 
-WS_DLL_PUBLIC void dissect_q931_high_layer_compat_ie(tvbuff_t *, int, int,
+WS_DLL_PUBLIC void dissect_q931_high_layer_compat_ie(tvbuff_t *, unsigned, unsigned,
     proto_tree *);
 
-extern void dissect_q931_user_user_ie(tvbuff_t *tvb, packet_info *pinfo, int offset, int len,
+extern void dissect_q931_user_user_ie(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, unsigned len,
     proto_tree *tree);
 
 extern value_string_ext q931_cause_location_vals_ext;
 
 typedef struct _q931_packet_info {
-       gchar *calling_number;
-       gchar *called_number;
-       guint8 cause_value;
-       gint32 crv;
-       guint8 message_type;
+       char *calling_number;
+       char *called_number;
+       uint8_t cause_value;
+       int32_t crv;
+       uint8_t message_type;
 } q931_packet_info;
 
 /*
@@ -45,8 +45,8 @@ typedef struct _q931_packet_info {
  * without having to duplicate it. With MSVC and a
  * libwireshark.dll, we need a special declaration.
  */
-WS_DLL_PUBLIC value_string_ext q931_cause_code_vals_ext;
-WS_DLL_PUBLIC const value_string q931_message_type_vals[];
+extern value_string_ext q931_cause_code_vals_ext;
+extern const value_string q931_message_type_vals[];
 
 extern value_string_ext q931_protocol_discriminator_vals_ext;
 extern value_string_ext q931_progress_description_vals_ext;

@@ -36,8 +36,8 @@ ALLOWED_LICENSES = [
     'BSD (2 clause)',
     'BSD (2 clause) GPL (v2 or later)',
     'BSD (3 clause)',
+    'BSD (4 clause (University of California-Specific))',
     'GPL (v2 or later)',
-    'GPL (v3 or later) (with Bison parser exception)',
     'ISC',
     'ISC GPL (v2 or later)',
     'LGPL (v2 or later)',
@@ -52,8 +52,14 @@ ALLOWED_LICENSES = [
 
 
 PATH_SPECIFIC_ALLOWED_LICENSES = {
-    'caputils/airpcap.h': [
-        'BSD-3-Clause',
+    # Some of the libpcap include files (including pcap.h) have the
+    # 4-clause BSD license with an advertising clause for the Computer
+    # Systems Engineering Group at Lawrence Berkeley Laboratory.
+    # We have always distributed packages including the headers,
+    # so if this is a problem it's one even if these files aren't
+    # copied into our repository.
+    'libpcap/pcap': [
+        'BSD (4 clause)',
     ],
     'wsutil/strnatcmp.c': [
         'Zlib',
@@ -73,14 +79,11 @@ PATH_SPECIFIC_ALLOWED_LICENSES = {
     'doc/': [
         'UNKNOWN',
     ],
-    'docbook/custom_layer_chm.xsl': [
+    'doc/custom_layer_chm.xsl': [
         'UNKNOWN',
     ],
-    'docbook/custom_layer_single_html.xsl': [
+    'doc/custom_layer_single_html.xsl': [
         'UNKNOWN',
-    ],
-    'docbook/ws.css' : [
-        'UNKNOWN'
     ],
     'fix': [
         'UNKNOWN',
@@ -122,17 +125,8 @@ PATH_SPECIFIC_ALLOWED_LICENSES = {
     ],
     # Special IDL license that appears to be compatible as far as I (not a
     # lawyer) can tell. See
-    # https://www.wireshark.org/lists/wireshark-dev/201310/msg00234.html
+    # https://lists.wireshark.org/archives/wireshark-dev/201310/msg00234.html
     'epan/dissectors/pidl/idl_types.h': [
-        'UNKNOWN',
-    ],
-    # Written by Ronnie Sahlberg and correctly licensed, but cannot include
-    # a license header despite the file extension as they need to be
-    # parsed by the pidl tool
-    'epan/dissectors/pidl/mapi/request.cnf.c': [
-        'UNKNOWN',
-    ],
-    'epan/dissectors/pidl/mapi/response.cnf.c': [
         'UNKNOWN',
     ],
     # The following tools are under incompatible licenses (mostly GPLv3 or
@@ -149,8 +143,18 @@ PATH_SPECIFIC_ALLOWED_LICENSES = {
     '.gitlab/': [
         'UNKNOWN',
     ],
+    'wsutil/dtoa.c': [
+        'dtoa',
+    ],
+    'wsutil/dtoa.h': [
+        'dtoa',
+    ],
     'wsutil/safe-math.h': [ # Public domain (CC0)
         'UNKNOWN',
+    ],
+    # Bachmann M-module file example module
+    'test/captures/mfile_testapplication.m': [
+            'UNKNOWN',
     ],
 }
 
@@ -181,7 +185,7 @@ def check_licenses(options, args):
                                                     'licensecheck.pl'))
 
   licensecheck = subprocess.Popen([licensecheck_path,
-                                   '-l', '150',
+                                   '-l', '160',
                                    '-r', start_dir],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)

@@ -20,19 +20,16 @@
 #include <epan/strutil.h>
 #include <epan/asn1.h>
 #include <epan/prefs.h>
-#include <epan/sctpppids.h>
 #include <epan/expert.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-per.h"
 #include "packet-e212.h"
 #include "packet-sccp.h"
 #include "packet-lcsap.h"
+#include "packet-sctp.h"
 
-#ifdef _MSC_VER
-/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
-#pragma warning(disable:4146)
-#endif
 
 #define PNAME  "LCS Application Protocol"
 #define PSNAME "LCSAP"
@@ -45,30 +42,30 @@ void proto_reg_handoff_lcsap(void);
 #include "packet-lcsap-val.h"
 
 /* Initialize the protocol and registered fields */
-static int proto_lcsap  =   -1;
+static int proto_lcsap;
 
-static int hf_lcsap_pos_method = -1;
-static int hf_lcsap_pos_usage = -1;
-static int hf_lcsap_gnss_pos_method = -1;
-static int hf_lcsap_gnss_id = -1;
-static int hf_lcsap_gnss_pos_usage = -1;
+static int hf_lcsap_pos_method;
+static int hf_lcsap_pos_usage;
+static int hf_lcsap_gnss_pos_method;
+static int hf_lcsap_gnss_id;
+static int hf_lcsap_gnss_pos_usage;
 #include "packet-lcsap-hf.c"
 
 /* Initialize the subtree pointers */
-static int ett_lcsap = -1;
-static int ett_lcsap_plmnd_id = -1;
-static int ett_lcsap_imsi = -1;
-static int ett_lcsap_civic_address = -1;
+static int ett_lcsap;
+static int ett_lcsap_plmnd_id;
+static int ett_lcsap_imsi;
+static int ett_lcsap_civic_address;
 
 #include "packet-lcsap-ett.c"
 
-static expert_field ei_lcsap_civic_data_not_xml = EI_INIT;
+static expert_field ei_lcsap_civic_data_not_xml;
 
 /* Global variables */
-static guint32 ProcedureCode;
-static guint32 ProtocolIE_ID;
-static guint32 ProtocolExtensionID;
-static guint32 PayloadType = -1;
+static uint32_t ProcedureCode;
+static uint32_t ProtocolIE_ID;
+static uint32_t ProtocolExtensionID;
+static uint32_t PayloadType = -1;
 
 /* Dissector handles */
 static dissector_handle_t lcsap_handle;
@@ -275,7 +272,7 @@ void proto_register_lcsap(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_lcsap,
     &ett_lcsap_plmnd_id,
     &ett_lcsap_imsi,

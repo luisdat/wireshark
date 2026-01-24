@@ -28,6 +28,37 @@ check_include_file("sys/utsname.h"          HAVE_SYS_UTSNAME_H)
 check_include_file("sys/wait.h"             HAVE_SYS_WAIT_H)
 check_include_file("unistd.h"               HAVE_UNISTD_H)
 
+check_include_file("valgrind/valgrind.h"    HAVE_VALGRIND_H)
+
+# Check that the C compiler works on a trivial program.
+# Do this early on before more specific tests so we can give
+# an appropriate error message.
+if(NOT CMAKE_CROSSCOMPILING)
+	check_c_source_runs("
+		int main(void)
+		{
+			return 0;
+		}
+		"
+		COMPILER_RUNS
+	)
+	if(NOT COMPILER_RUNS)
+		if(WIN32)
+			message(FATAL_ERROR
+"${CMAKE_C_COMPILER} failed to compile and run a trivial test program. \
+This is likely a permissions error or the result of security software like \
+Windows Defender preventing untrusted code from running."
+			)
+		else()
+			message(FATAL_ERROR
+"${CMAKE_C_COMPILER} failed to compile and run a trivial test program. \
+This is likely a permissions error or the result of security software \
+preventing untrusted code from running."
+			)
+		endif()
+	endif()
+endif()
+
 #
 # On Linux, check for some additional headers, which we need as a
 # workaround for a bonding driver bug and for libpcap's current lack
@@ -83,6 +114,14 @@ endif()
 check_symbol_exists("clock_gettime"  "time.h"   HAVE_CLOCK_GETTIME)
 # Some platforms (macOS pre 10.15) are non-conformant with C11 and lack timespec_get()
 check_symbol_exists("timespec_get"   "time.h"   HAVE_TIMESPEC_GET)
+if(NOT MSVC)
+	check_symbol_exists("localtime_r"    "time.h"   HAVE_LOCALTIME_R)
+	check_symbol_exists("gmtime_r"       "time.h"   HAVE_GMTIME_R)
+	check_symbol_exists("timegm"         "time.h"   HAVE_TIMEGM)
+	check_symbol_exists("tzset"          "time.h"   HAVE_TZSET)
+	check_symbol_exists("tzname"         "time.h"   HAVE_TZNAME)
+	check_symbol_exists("getline"	     "stdio.h"  HAVE_GETLINE)
+endif()
 check_function_exists("getifaddrs"       HAVE_GETIFADDRS)
 check_function_exists("issetugid"        HAVE_ISSETUGID)
 check_function_exists("setresgid"        HAVE_SETRESGID)
@@ -97,7 +136,7 @@ if(UNIX)
 	cmake_push_check_state()
 	list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
 	check_symbol_exists("memmem"        "string.h"   HAVE_MEMMEM)
-	check_symbol_exists("strcasestr"    "string.h"   HAVE_STRCASESTR)
+	check_symbol_exists("memrchr"       "string.h"   HAVE_MEMRCHR)
 	check_symbol_exists("strerrorname_np" "string.h" HAVE_STRERRORNAME_NP)
 	check_symbol_exists("strptime"      "time.h"     HAVE_STRPTIME)
 	check_symbol_exists("vasprintf"     "stdio.h"    HAVE_VASPRINTF)
@@ -110,44 +149,79 @@ check_struct_has_member("struct stat"     st_blksize     sys/stat.h   HAVE_STRUC
 check_struct_has_member("struct stat"     st_birthtime   sys/stat.h   HAVE_STRUCT_STAT_ST_BIRTHTIME)
 check_struct_has_member("struct stat"     __st_birthtime sys/stat.h   HAVE_STRUCT_STAT___ST_BIRTHTIME)
 check_struct_has_member("struct tm"       tm_zone        time.h       HAVE_STRUCT_TM_TM_ZONE)
-
-#Symbols but NOT enums or types
-check_symbol_exists(tzname "time.h" HAVE_TZNAME)
+check_struct_has_member("struct tm"       tm_gmtoff      time.h       HAVE_STRUCT_TM_TM_GMTOFF)
 
 # Types
 include(CheckTypeSize)
 check_type_size("ssize_t"       SSIZE_T)
 
+# Unconditionally force use of 64-bit time_t on 32-bit platforms with glibc.
+check_symbol_exists(__GLIBC__	"time.h"	HAVE___GLIBC__)
+
+if(HAVE___GLIBC__ AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+	# _TIME_BITS=64 requires _FILE_OFFSET_BITS=64, which we should have
+	# already ensured is set by FindLFS, but this doesn't hurt
+	check_symbol_exists(_FILE_OFFSET_BITS	"time.h"	HAVE__FILE_OFFSET_BITS)
+	if (NOT HAVE__FILE_OFFSET_BITS)
+		list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_FILE_OFFSET_BITS=64)
+	endif()
+	check_symbol_exists(_TIME_BITS	"time.h"	HAVE__TIME_BITS)
+	if (NOT HAVE__TIME_BITS)
+		list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_TIME_BITS=64)
+	endif()
+endif()
+
+# Do we want to eventually just fail for non Y2038 compliant hosts (or all
+# less than 64-bit time_t hosts, if we don't want to consider theoretical
+# cases like unsigned 32 bit time_t?)
+# The only way to truly test this is to compile a program, especially
+# due to multiple architectures.
+#check_type_size("time_t"	TIME_T_SIZE)
+#if(TIME_T_SIZE_64 EQUAL 0)
+#	message("multiple architectures with possibly different time_t sizes.")
+#elseif(TIME_T_SIZE_64 LESS 8)
+#	message(FATAL_ERROR "time_t is less than 64-bit")
+#endif()
+
 #
 # Check if the libc vsnprintf() conforms to C99. If this fails we may
 # need to fall-back on GLib I/O.
 #
-check_c_source_runs("
-	#include <stdio.h>
-	int main(void)
-	{
-		/* Check that snprintf() and vsnprintf() don't return
-		 * -1 if the buffer is too small. C99 says this value
-		 * is the length that would be written not including
-		 * the nul byte. */
-		char buf[3];
-		return snprintf(buf, sizeof(buf), \"%s\", \"ABCDEF\") > 0 ? 0 : 1;
-	}"
-	HAVE_C99_VSNPRINTF
-)
-if (NOT HAVE_C99_VSNPRINTF)
-	message(FATAL_ERROR
+# If cross-compiling we can't check so just assume this requirement is met.
+#
+if(NOT CMAKE_CROSSCOMPILING)
+	check_c_source_runs("
+		#include <stdio.h>
+
+		#pragma GCC diagnostic push
+		#pragma GCC diagnostic ignored \"-Wall\"
+		int main(void)
+		{
+			/* Check that snprintf() and vsnprintf() don't return
+			* -1 if the buffer is too small. C99 says this value
+			* is the length that would be written not including
+			* the nul byte. */
+			char buf[3];
+			return snprintf(buf, sizeof(buf), \"%s\", \"ABCDEF\") > 0 ? 0 : 1;
+		}
+		#pragma GCC diagnostic pop"
+		HAVE_C99_VSNPRINTF
+	)
+	if (NOT HAVE_C99_VSNPRINTF)
+		message(FATAL_ERROR
 "Building Wireshark requires a C99 compliant vsnprintf() and this \
 target does not meet that requirement. Compiling for ${CMAKE_SYSTEM} \
 using ${CMAKE_C_COMPILER_ID}. Please report this issue to the Wireshark \
 developers at wireshark-dev@wireshark.org."
-	)
+		)
+	endif()
 endif()
 
 #
 # *If* we found libnl, check if we can use nl80211 stuff with it.
 #
 if (NL_FOUND)
+	# Base set of necessary features
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
@@ -160,6 +234,9 @@ if (NL_FOUND)
 		}"
 		HAVE_NL80211
 	)
+	# Check for optional features. At some point we can move the
+	# older ones to mandatory.
+	# SET_CHANNEL, Linux kernel 2.6.35 (August 2010)
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
@@ -167,6 +244,7 @@ if (NL_FOUND)
 		}"
 		HAVE_NL80211_CMD_SET_CHANNEL
 	)
+	# SPLIT_WIPHY_DUMP, Linux kernel 3.10 (June 2013)
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
@@ -174,12 +252,29 @@ if (NL_FOUND)
 		}"
 		HAVE_NL80211_SPLIT_WIPHY_DUMP
 	)
+	# VHT_CAPABILITY, Linux kernel 3.8 (February 2013)
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
 			enum nl80211_attrs x = NL80211_ATTR_VHT_CAPABILITY;
 		}"
 		HAVE_NL80211_VHT_CAPABILITY
+	)
+	# HE_CAPABILITY, Linux kernel 4.19 (October 2018)
+	check_c_source_compiles(
+		"#include <linux/nl80211.h>
+		int main(void) {
+			enum nl80211_attrs x = NL80211_ATTR_HE_CAPABILITY;
+		}"
+		HAVE_NL80211_HE_CAPABILITY
+	)
+	# EHT_CAPABILITY, Linux kernel 5.18 (May 2022)
+	check_c_source_compiles(
+		"#include <linux/nl80211.h>
+		int main(void) {
+			enum nl80211_attrs x = NL80211_ATTR_EHT_CAPABILITY;
+		}"
+		HAVE_NL80211_EHT_CAPABILITY
 	)
 endif()
 

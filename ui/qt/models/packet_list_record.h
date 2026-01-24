@@ -12,8 +12,6 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include "cfile.h"
 
 #include <epan/column.h>
@@ -57,10 +55,12 @@ public:
 
     inline int lineCount() { return lines_; }
     inline int lineCountChanged() { return line_count_changed_; }
+    inline void setRow(int row) { row_ = row; }
+    inline int row() const { return row_; }
 
 private:
     /** The column text for some columns */
-    static QCache<guint32, QStringList> col_text_cache_;
+    static QCache<uint32_t, QStringList> col_text_cache_;
 
     frame_data *fdata_;
     int lines_;
@@ -76,6 +76,7 @@ private:
     unsigned int conv_index_;
 
     bool read_failed_;
+    int row_;
 
     void dissect(capture_file *cap_file, bool dissect_columns, bool dissect_color = false);
     void cacheColumnStrings(column_info *cinfo);

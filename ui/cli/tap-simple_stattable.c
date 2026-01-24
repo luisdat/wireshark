@@ -30,11 +30,11 @@ simple_draw(void *arg)
 	stat_data_t* stat_data = (stat_data_t*)arg;
 	table_stat_t* stats = (table_stat_t*)stat_data->user_data;
 	size_t i;
-	guint table_index, element, field_index;
+	unsigned table_index, element, field_index;
 	stat_tap_table_item* field;
 	stat_tap_table* table;
 	stat_tap_table_item_type* field_data;
-	gchar fmt_string[250];
+	char fmt_string[250];
 
 	/* printing results */
 	printf("\n");
@@ -96,7 +96,7 @@ static void simple_finish(void *tapdata)
 	g_free(stat_data->user_data);
 }
 
-static void
+static bool
 init_stat_table(stat_tap_table_ui *stat_tap, const char *filter)
 {
 	GString *error_string;
@@ -116,11 +116,13 @@ init_stat_table(stat_tap_table_ui *stat_tap, const char *filter)
 /*		free_rtd_table(&ui->rtd.stat_table); */
 		cmdarg_err("Couldn't register tap: %s", error_string->str);
 		g_string_free(error_string, TRUE);
-		exit(1);
+		return false;
 	}
+
+	return true;
 }
 
-static void
+static bool
 simple_stat_init(const char *opt_arg, void* userdata)
 {
 	stat_tap_table_ui *stat_tap = (stat_tap_table_ui*)userdata;
@@ -132,13 +134,13 @@ simple_stat_init(const char *opt_arg, void* userdata)
 	{
 		cmdarg_err("%s", err);
 		g_free(err);
-		exit(1);
+		return false;
 	}
 
-	init_stat_table(stat_tap, filter);
+	return init_stat_table(stat_tap, filter);
 }
 
-gboolean
+bool
 register_simple_stat_tables(const void *key, void *value, void *userdata _U_)
 {
 	stat_tap_table_ui *stat_tap = (stat_tap_table_ui*)value;
@@ -152,7 +154,7 @@ register_simple_stat_tables(const void *key, void *value, void *userdata _U_)
 	ui_info.params = stat_tap->params;
 
 	register_stat_tap_ui(&ui_info, stat_tap);
-	return FALSE;
+	return false;
 }
 
 /*

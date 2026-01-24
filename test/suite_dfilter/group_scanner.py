@@ -2,13 +2,10 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import unittest
-import fixtures
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
-@fixtures.uses_fixtures
-class case_scanner(unittest.TestCase):
+class TestDfilterScanner:
     trace_file = "http.pcap"
 
     def test_dquote_1(self, checkDFilterCount):

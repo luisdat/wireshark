@@ -10,7 +10,6 @@
 #include "export_object_dialog.h"
 #include <ui_export_object_dialog.h>
 
-#include <ui/alert_box.h>
 #include <wsutil/utf8_entities.h>
 
 #include "main_application.h"
@@ -222,7 +221,7 @@ void ExportObjectDialog::on_buttonBox_clicked(QAbstractButton *button)
             QMimeDatabase mime_db;
             QMimeType mime_type = mime_db.mimeTypeForFile(temp, QMimeDatabase::MatchContent);
             if (mimeTypeIsPreviewable(mime_type.name())) {
-                QDesktopServices::openUrl(QUrl(QString("file:///").append(temp), QUrl::TolerantMode));
+                QDesktopServices::openUrl(QUrl(QStringLiteral("file:///").append(temp), QUrl::TolerantMode));
             } else {
                 desktop_show_in_folder(temp);
             }
@@ -244,7 +243,7 @@ void ExportObjectDialog::on_cmbContentType_currentIndexChanged(int index)
 
 void ExportObjectDialog::saveCurrentEntry(QString *tempFile)
 {
-    QDir path(mainApp->lastOpenDir());
+    QDir path(mainApp->openDialogInitialDir());
 
     QModelIndex proxyIndex = eo_ui_->objectTree->currentIndex();
     if (!proxyIndex.isValid())
@@ -279,7 +278,7 @@ void ExportObjectDialog::saveCurrentEntry(QString *tempFile)
 
 void ExportObjectDialog::saveAllEntries()
 {
-    QDir save_in_dir(mainApp->lastOpenDir());
+    QDir save_in_dir(mainApp->openDialogInitialDir());
     QString save_in_path;
 
     //

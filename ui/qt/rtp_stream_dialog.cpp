@@ -13,12 +13,12 @@
 #include "file.h"
 
 #include "epan/addr_resolv.h"
-#include <epan/rtp_pt.h>
 
 #include <wsutil/utf8_entities.h>
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "rtp_analysis_dialog.h"
+#include "progress_frame.h"
 #include "main_application.h"
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 
@@ -105,10 +105,10 @@ public:
         setText(src_port_col_, QString::number(calc.src_port));
         setText(dst_addr_col_, calc.dst_addr_str);
         setText(dst_port_col_, QString::number(calc.dst_port));
-        setText(ssrc_col_, QString("0x%1").arg(calc.ssrc, 0, 16));
+        setText(ssrc_col_, QStringLiteral("0x%1").arg(calc.ssrc, 0, 16));
         if (tod_) {
             QDateTime abs_dt = QDateTime::fromMSecsSinceEpoch(nstime_to_msec(&stream_info_->start_fd->abs_ts));
-            setText(start_time_col_, QString("%1")
+            setText(start_time_col_, QStringLiteral("%1")
                 .arg(abs_dt.toString("yyyy-MM-dd hh:mm:ss.zzz")));
         } else {
           setText(start_time_col_, QString::number(calc.start_time_ms, 'f', 6));
@@ -150,57 +150,80 @@ public:
             return QVariant();
         }
 
+        QVariant ret;
         rtpstream_info_calculate(stream_info_, &calc);
 
         switch(col) {
         case src_addr_col_:
-            return text(col);
+            ret = QVariant(text(col));
+            break;
         case src_port_col_:
-            return calc.src_port;
+            ret = calc.src_port;
+            break;
         case dst_addr_col_:
-            return text(col);
+            ret = text(col);
+            break;
         case dst_port_col_:
-            return calc.dst_port;
+            ret = calc.dst_port;
+            break;
         case ssrc_col_:
-            return calc.ssrc;
+            ret = calc.ssrc;
+            break;
         case start_time_col_:
-            return calc.start_time_ms;
+            ret = calc.start_time_ms;
+            break;
         case duration_col_:
-            return calc.duration_ms;
+            ret = calc.duration_ms;
+            break;
         case payload_col_:
-            return text(col);
+            ret = text(col);
+            break;
         case packets_col_:
-            return calc.packet_count;
+            ret = calc.packet_count;
+            break;
         case lost_col_:
-            return calc.lost_num;
+            ret = calc.lost_num;
+            break;
         case min_delta_col_:
-            return calc.min_delta;
+            ret = calc.min_delta;
+            break;
         case mean_delta_col_:
-            return calc.mean_delta;
+            ret = calc.mean_delta;
+            break;
         case max_delta_col_:
-            return calc.max_delta;
+            ret = calc.max_delta;
+            break;
         case min_jitter_col_:
-            return calc.min_jitter;
+            ret = calc.min_jitter;
+            break;
         case mean_jitter_col_:
-            return calc.mean_jitter;
+            ret = calc.mean_jitter;
+            break;
         case max_jitter_col_:
-            return calc.max_jitter;
+            ret = calc.max_jitter;
+            break;
         case status_col_:
-            return calc.problem ? "Problem" : "";
+            ret = calc.problem ? "Problem" : "";
+            break;
         case ssrc_fmt_col_:
-            return QString("0x%1").arg(calc.ssrc, 0, 16);
+            ret = QStringLiteral("0x%1").arg(calc.ssrc, 0, 16);
+            break;
         case lost_perc_col_:
-            return QString::number(calc.lost_perc, 'f', prefs.gui_decimal_places1);
+            ret = QString::number(calc.lost_perc, 'f', prefs.gui_decimal_places1);
+            break;
         default:
+            ret = QVariant();
             break;
         }
-        return QVariant();
+        rtpstream_info_calc_free(&calc);
+        return ret;
     }
 
     bool operator< (const QTreeWidgetItem &other) const
     {
         rtpstream_info_calc_t calc1;
         rtpstream_info_calc_t calc2;
+        bool ret;
 
         if (other.type() != rtp_stream_type_) return QTreeWidgetItem::operator <(other);
         const RtpStreamTreeWidgetItem &other_rstwi = dynamic_cast<const RtpStreamTreeWidgetItem&>(other);
@@ -219,11 +242,17 @@ public:
         case start_time_col_:
             rtpstream_info_calculate(stream_info_, &calc1);
             rtpstream_info_calculate(other_rstwi.stream_info_, &calc2);
-            return calc1.start_time_ms < calc2.start_time_ms;
+            ret = calc1.start_time_ms < calc2.start_time_ms;
+            rtpstream_info_calc_free(&calc1);
+            rtpstream_info_calc_free(&calc2);
+            return ret;
         case duration_col_:
             rtpstream_info_calculate(stream_info_, &calc1);
             rtpstream_info_calculate(other_rstwi.stream_info_, &calc2);
-            return calc1.duration_ms < calc2.duration_ms;
+            ret = calc1.duration_ms < calc2.duration_ms;
+            rtpstream_info_calc_free(&calc1);
+            rtpstream_info_calc_free(&calc2);
+            return ret;
         case payload_col_:
             return g_strcmp0(stream_info_->all_payload_type_names, other_rstwi.stream_info_->all_payload_type_names);
         case packets_col_:
@@ -235,7 +264,10 @@ public:
              * lost_num is displayed first and lost_perc in parenthesis,
              * so let's use the total number.
              */
-            return calc1.lost_num < calc2.lost_num;
+            ret = calc1.lost_num < calc2.lost_num;
+            rtpstream_info_calc_free(&calc1);
+            rtpstream_info_calc_free(&calc2);
+            return ret;
         case min_delta_col_:
             return stream_info_->rtp_stats.min_delta < other_rstwi.stream_info_->rtp_stats.min_delta;
         case mean_delta_col_:
@@ -256,14 +288,14 @@ public:
         return QTreeWidgetItem::operator <(other);
     }
 
-    void setTOD(gboolean tod)
+    void setTOD(bool tod)
     {
       tod_ = tod;
     }
 
 private:
     rtpstream_info_t *stream_info_;
-    gboolean tod_;
+    bool tod_;
 };
 
 
@@ -285,7 +317,7 @@ RtpStreamDialog *RtpStreamDialog::openRtpStreamDialog(QWidget &parent, CaptureFi
 }
 
 RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
-    WiresharkDialog(parent, cf),
+    RtpBaseDialog(parent, cf),
     ui(new Ui::RtpStreamDialog),
     need_redraw_(false)
 {
@@ -355,14 +387,14 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
     register_tap_listener_rtpstream(&tapinfo_, NULL, show_tap_registration_error);
     if (cap_file_.isValid() && cap_file_.capFile()->dfilter) {
         // Activate display filter checking
-        tapinfo_.apply_display_filter = true;
+        rtpstream_set_apply_display_filter(&tapinfo_, true);
         ui->displayFilterCheckBox->setChecked(true);
     }
 
+    connect(ui->displayFilterCheckBox, &QCheckBox::toggled,
+            this, &RtpStreamDialog::displayFilterCheckBoxToggled);
     connect(this, SIGNAL(updateFilter(QString, bool)),
             &parent, SLOT(filterPackets(QString, bool)));
-    connect(&parent, SIGNAL(displayFilterSuccess(bool)),
-            this, SLOT(displayFilterSuccess(bool)));
     connect(this, SIGNAL(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)),
             &parent, SLOT(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)));
     connect(this, SIGNAL(rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *>)),
@@ -376,10 +408,13 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
     connect(this, SIGNAL(rtpAnalysisDialogRemoveRtpStreams(QVector<rtpstream_id_t *>)),
             &parent, SLOT(rtpAnalysisDialogRemoveRtpStreams(QVector<rtpstream_id_t *>)));
 
-    /* Scan for RTP streams (redissect all packets) */
-    rtpstream_scan(&tapinfo_, cf.capFile(), NULL);
+    ProgressFrame::addToButtonBox(ui->buttonBox, &parent);
 
     updateWidgets();
+
+    if (cap_file_.isValid()) {
+        cap_file_.delayedRetapPackets();
+    }
 }
 
 RtpStreamDialog::~RtpStreamDialog()
@@ -387,6 +422,7 @@ RtpStreamDialog::~RtpStreamDialog()
     std::lock_guard<std::mutex> lock(mutex_);
     freeLastSelected();
     delete ui;
+    rtpstream_reset(&tapinfo_);
     remove_tap_listener_rtpstream(&tapinfo_);
     pinstance_ = nullptr;
 }
@@ -546,9 +582,9 @@ void RtpStreamDialog::updateStreams()
     // string_list is reverse ordered, so we must add
     // just first "to_insert_count" of streams
     GList *cur_stream = g_list_first(tapinfo_.strinfo_list);
-    guint tap_len = g_list_length(tapinfo_.strinfo_list);
-    guint tree_len = static_cast<guint>(ui->streamTreeWidget->topLevelItemCount());
-    guint to_insert_count = tap_len - tree_len;
+    unsigned tap_len = g_list_length(tapinfo_.strinfo_list);
+    unsigned tree_len = static_cast<unsigned>(ui->streamTreeWidget->topLevelItemCount());
+    unsigned to_insert_count = tap_len - tree_len;
 
     // Add any missing items
     while (cur_stream && cur_stream->data && to_insert_count) {
@@ -591,7 +627,7 @@ void RtpStreamDialog::updateWidgets()
     bool selected = ui->streamTreeWidget->selectedItems().count() > 0;
 
     QString hint = "<small><i>";
-    hint += tr("%1 streams").arg(ui->streamTreeWidget->topLevelItemCount());
+    hint += tr("%Ln stream(s)", "", ui->streamTreeWidget->topLevelItemCount());
 
     if (selected) {
         int tot_packets = 0;
@@ -601,9 +637,8 @@ void RtpStreamDialog::updateWidgets()
                 tot_packets += rsti->streamInfo()->packet_count;
             }
         }
-        hint += tr(", %1 selected, %2 total packets")
-                .arg(ui->streamTreeWidget->selectedItems().count())
-                .arg(tot_packets);
+        hint += tr(", %1 selected, %Ln total packet(s)", "", tot_packets)
+                .arg(ui->streamTreeWidget->selectedItems().count());
     }
 
     hint += ". Right-click for more options.";
@@ -658,8 +693,8 @@ QList<QVariant> RtpStreamDialog::streamRowData(int row) const
 
     // Add additional columns to export
     if (row < 0) {
-        row_data << QString("SSRC formatted");
-        row_data << QString("Lost percentage");
+        row_data << QStringLiteral("SSRC formatted");
+        row_data << QStringLiteral("Lost percentage");
     } else {
         RtpStreamTreeWidgetItem *rsti = static_cast<RtpStreamTreeWidgetItem*>(ui->streamTreeWidget->topLevelItem(row));
         if (rsti) {
@@ -716,7 +751,7 @@ void RtpStreamDialog::on_actionCopyAsCsv_triggered()
             if (!v.isValid()) {
                 rdsl << "\"\"";
             } else if (v.userType() == QMetaType::QString) {
-                rdsl << QString("\"%1\"").arg(v.toString());
+                rdsl << QStringLiteral("\"%1\"").arg(v.toString());
             } else {
                 rdsl << v.toString();
             }
@@ -750,15 +785,15 @@ void RtpStreamDialog::on_actionExportAsRtpDump_triggered()
     rtpstream_info_t *stream_info = rsti->streamInfo();
     if (stream_info) {
         QString file_name;
-        QDir path(mainApp->lastOpenDir());
-        QString save_file = path.canonicalPath() + "/" + cap_file_.fileBaseName();
+        QDir path(mainApp->openDialogInitialDir());
+        QString save_file = QStringLiteral("%1/%2").arg(path.canonicalPath(), cap_file_.fileBaseName());
         QString extension;
         file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save RTPDump As…")),
-                                                 save_file, "RTPDump Format (*.rtpdump)", &extension);
+                                                 save_file, "RTPDump Format (*.rtp)", &extension);
 
         if (file_name.length() > 0) {
-            gchar *dest_file = qstring_strdup(file_name);
-            gboolean save_ok = rtpstream_save(&tapinfo_, cap_file_.capFile(), stream_info, dest_file);
+            char *dest_file = qstring_strdup(file_name);
+            bool save_ok = rtpstream_save(&tapinfo_, cap_file_.capFile(), stream_info, dest_file);
             g_free(dest_file);
             // else error dialog?
             if (save_ok) {
@@ -904,13 +939,13 @@ void RtpStreamDialog::on_buttonBox_helpRequested()
     mainApp->helpTopicAction(HELP_TELEPHONY_RTP_STREAMS_DIALOG);
 }
 
-void RtpStreamDialog::on_displayFilterCheckBox_toggled(bool checked _U_)
+void RtpStreamDialog::displayFilterCheckBoxToggled(bool checked)
 {
     if (!cap_file_.isValid()) {
         return;
     }
 
-    tapinfo_.apply_display_filter = checked;
+    rtpstream_set_apply_display_filter(&tapinfo_, checked);
 
     cap_file_.retapPackets();
 }
@@ -997,13 +1032,6 @@ void RtpStreamDialog::rtpAnalysisRemove()
     if (ui->streamTreeWidget->selectedItems().count() < 1) return;
 
     emit rtpAnalysisDialogRemoveRtpStreams(getSelectedRtpIds());
-}
-
-void RtpStreamDialog::displayFilterSuccess(bool success)
-{
-    if (success && ui->displayFilterCheckBox->isChecked()) {
-        cap_file_.retapPackets();
-    }
 }
 
 void RtpStreamDialog::invertSelection()

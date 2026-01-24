@@ -21,6 +21,10 @@ DisplayInformation/notificationIndicator displayInformation_notificationIndicato
 Reject/problem/invoke invokeproblem
 Action8/invoke action8_invoke
 
+#.USE_VALS_EXT
+Parms
+#.END
+
 #.OMIT_ASSIGNMENT Remote-Operations-Information-Objects
 Bind
 Unbind
@@ -31,12 +35,12 @@ ERROR.&ParameterType
 OPERATION.&ArgumentType
 OPERATION.&ResultType
 
-# This table creates the value_sting to name AIN operation codes and errors
+# This table creates the value_string to name AIN operation codes and errors
 # in file packet-ain-table.c which is included in the template file
 #
 #.TABLE_HDR
 /* AIN OPERATIONS */
-const value_string ain_opr_code_strings[] = {
+static const value_string ain_opr_code_strings[] = {
 #.TABLE_BODY OPERATION.&operationCode
   { %(&operationCode)-40s, "%(_ident)s" },
 #.TABLE_FTR
@@ -58,7 +62,7 @@ static const value_string ain_err_code_string_vals[] = {
 # in file packet-ain-table2.c which is included in the template file
 #
 #.TABLE2_HDR
-static int dissect_invokeData(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx) {
+static unsigned dissect_invokeData(proto_tree *tree, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx) {
 
   switch(opcode){
 #.TABLE2_BODY OPERATION.&ArgumentType
@@ -67,8 +71,8 @@ static int dissect_invokeData(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_
       break;
 #.TABLE2_FTR
     default:
-      proto_tree_add_expert_format(tree, actx->pinfo, &ei_ain_unknown_invokeData,
-                                   tvb, offset, -1, "Unknown invokeData %d", opcode);
+      proto_tree_add_expert_format_remaining(tree, actx->pinfo, &ei_ain_unknown_invokeData,
+                                   tvb, offset, "Unknown invokeData %d", opcode);
       /* todo call the asn.1 dissector */
       break;
   }
@@ -76,7 +80,7 @@ static int dissect_invokeData(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_
 }
 #.END
 #.TABLE2_HDR
-static int dissect_returnResultData(proto_tree *tree, tvbuff_t *tvb, int offset,asn1_ctx_t *actx) {
+static unsigned dissect_returnResultData(proto_tree *tree, tvbuff_t *tvb, unsigned offset,asn1_ctx_t *actx) {
   switch(opcode){
 #.TABLE2_BODY OPERATION.&ResultType
     case %(&operationCode)s:  /* %(_ident)s */
@@ -84,14 +88,14 @@ static int dissect_returnResultData(proto_tree *tree, tvbuff_t *tvb, int offset,
       break;
 #.TABLE2_FTR
   default:
-    proto_tree_add_expert_format(tree, actx->pinfo, &ei_ain_unknown_returnResultData,
-                                 tvb, offset, -1, "Unknown returnResultData %d", opcode);
+    proto_tree_add_expert_format_remaining(tree, actx->pinfo, &ei_ain_unknown_returnResultData,
+                                 tvb, offset, "Unknown returnResultData %d", opcode);
   }
   return offset;
 }
 #.END
 #.TABLE2_HDR
-static int dissect_returnErrorData(proto_tree *tree, tvbuff_t *tvb, int offset,asn1_ctx_t *actx) {
+static unsigned dissect_returnErrorData(proto_tree *tree, tvbuff_t *tvb, unsigned offset,asn1_ctx_t *actx) {
   switch(errorCode) {
 #.TABLE2_BODY ERROR.&ParameterType
     case %(&errorCode)s:  /* %(_ident)s */
@@ -99,8 +103,8 @@ static int dissect_returnErrorData(proto_tree *tree, tvbuff_t *tvb, int offset,a
       break;
 #.TABLE2_FTR
   default:
-    proto_tree_add_expert_format(tree, actx->pinfo, &ei_ain_unknown_returnErrorData,
-                                 tvb, offset, -1, "Unknown returnErrorData %d", opcode);
+    proto_tree_add_expert_format_remaining(tree, actx->pinfo, &ei_ain_unknown_returnErrorData,
+                                 tvb, offset, "Unknown returnErrorData %d", opcode);
   }
   return offset;
 }
@@ -109,7 +113,7 @@ static int dissect_returnErrorData(proto_tree *tree, tvbuff_t *tvb, int offset,a
 # Create a table of opcode and corresponding args and res
 #.TABLE11_HDR
 typedef struct _ain_op_t {
-  gint32 opcode;
+  int32_t opcode;
   dissector_t arg_pdu;
   dissector_t res_pdu;
 } ain_op_t;
@@ -123,7 +127,7 @@ static const ain_op_t ain_op_tab[] = {
 
 #.TABLE11_HDR
 typedef struct _ain_err_t {
-  gint32 errcode;
+  int32_t errcode;
   dissector_t err_pdu;
 } ain_err_t;
 
@@ -140,11 +144,11 @@ static const ain_err_t ain_err_tab[] = {
   %(DEFAULT_BODY)s
     if (ain_opcode_type == AIN_OPCODE_RETURN_ERROR){
       errorCode = opcode;
-      col_append_str(actx->pinfo->cinfo, COL_INFO, val_to_str(errorCode, ain_err_code_string_vals, "Unknown AIN error (%%u)"));
+      col_append_str(actx->pinfo->cinfo, COL_INFO, val_to_str(actx->pinfo->pool, errorCode, ain_err_code_string_vals, "Unknown AIN error (%%u)"));
       col_append_str(actx->pinfo->cinfo, COL_INFO, " ");
       col_set_fence(actx->pinfo->cinfo, COL_INFO);
     }else{
-      col_append_str(actx->pinfo->cinfo, COL_INFO, val_to_str(opcode, ain_opr_code_strings, "Unknown AIN (%%u)"));
+      col_append_str(actx->pinfo->cinfo, COL_INFO, val_to_str(actx->pinfo->pool, opcode, ain_opr_code_strings, "Unknown AIN (%%u)"));
       col_append_str(actx->pinfo->cinfo, COL_INFO, " ");
       col_set_fence(actx->pinfo->cinfo, COL_INFO);
     }
@@ -199,7 +203,7 @@ static const ain_err_t ain_err_tab[] = {
 
   proto_tree_add_item(subtree, hf_ain_numbering_plan, parameter_tvb, 1, 1, ENC_BIG_ENDIAN);
 
-  proto_tree_add_item(subtree, hf_ain_bcd_digits, parameter_tvb, 2, tvb_reported_length_remaining(parameter_tvb, 2), ENC_BCD_DIGITS_0_9);
+  proto_tree_add_item(subtree, hf_ain_bcd_digits, parameter_tvb, 2, tvb_reported_length_remaining(parameter_tvb, 2), ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
 
 #.FN_BODY CarrierFormat VAL_PTR = &parameter_tvb
   tvbuff_t *parameter_tvb;
@@ -218,7 +222,7 @@ static const ain_err_t ain_err_tab[] = {
   proto_tree_add_item(subtree, hf_ain_nr_digits, parameter_tvb, 1, 1, ENC_BIG_ENDIAN);
 
   /* 2nd Digit 1st Digit .. */
-  proto_tree_add_item(subtree, hf_ain_carrier_bcd_digits, parameter_tvb, 2, tvb_reported_length_remaining(parameter_tvb, 2), ENC_BCD_DIGITS_0_9);
+  proto_tree_add_item(subtree, hf_ain_carrier_bcd_digits, parameter_tvb, 2, tvb_reported_length_remaining(parameter_tvb, 2), ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
 
 #.FN_BODY AMAslpID VAL_PTR = &parameter_tvb
   tvbuff_t *parameter_tvb;
@@ -231,7 +235,7 @@ static const ain_err_t ain_err_tab[] = {
 
   subtree = proto_item_add_subtree(actx->created_item, ett_ain_amaslpid);
 
-  proto_tree_add_item(subtree, hf_ain_amaslpid, parameter_tvb, 0, tvb_reported_length_remaining(parameter_tvb, 0), ENC_BCD_DIGITS_0_9);
+  proto_tree_add_item(subtree, hf_ain_amaslpid, parameter_tvb, 0, tvb_reported_length_remaining(parameter_tvb, 0), ENC_BCD_DIGITS_0_9|ENC_LITTLE_ENDIAN);
 
 #.FIELD_ATTR
 DisplayInformation/notificationIndicator ABBREV=displayInformation.notificationIndicator

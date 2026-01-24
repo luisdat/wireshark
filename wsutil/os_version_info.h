@@ -11,14 +11,20 @@
 #ifndef __WSUTIL_OS_VERSION_INFO_H__
 #define __WSUTIL_OS_VERSION_INFO_H__
 
-#include "ws_symbol_export.h"
+#include <wireshark.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
-/*
- * Get the OS version, and append it to a GString.
+/**
+ * @brief Appends the operating system version information to a GString.
+ *
+ * Retrieves the current operating system's version details and appends them
+ * to the provided GString. This may include the OS name, version number,
+ * and build information depending on platform support.
+ *
+ * @param str Pointer to a GString where the OS version info will be appended.
  */
 WS_DLL_PUBLIC void get_os_version_info(GString *str);
 

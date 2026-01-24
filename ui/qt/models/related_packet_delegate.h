@@ -26,13 +26,15 @@ class RelatedPacketDelegate : public QStyledItemDelegate
 public:
     RelatedPacketDelegate(QWidget *parent = 0);
     void clear();
-    void setCurrentFrame(guint32 current_frame);
+    void setCurrentFrame(uint32_t current_frame);
     void setConversation(struct conversation *conv);
 
 public slots:
     void addRelatedFrame(int frame_num, ft_framenum_type_t framenum_type = FT_FRAMENUM_NONE);
 
 protected:
+    void initStyleOption(QStyleOptionViewItem *option,
+                   const QModelIndex &index) const;
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
                const QModelIndex &index) const;
     QSize sizeHint(const QStyleOptionViewItem &option,
@@ -41,7 +43,7 @@ protected:
 private:
     QHash<int, ft_framenum_type_t> related_frames_;
     struct conversation *conv_;
-    guint32 current_frame_;
+    uint32_t current_frame_;
 
     void drawArrow(QPainter *painter, const QPoint tail, const QPoint head, int head_size) const;
     void drawChevrons(QPainter *painter, const QPoint tail, const QPoint head, int head_size) const;

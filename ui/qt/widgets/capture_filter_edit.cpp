@@ -9,11 +9,9 @@
 
 #include "config.h"
 
-#include <glib.h>
-
 #include <epan/proto.h>
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 
 #include <ui/capture_globals.h>
 #include <wsutil/filter_files.h>
@@ -32,6 +30,7 @@
 #include <QPainter>
 #include <QStringListModel>
 #include <QStyleOptionFrame>
+#include <QTimer>
 
 #include <ui/qt/utils/qt_ui_utils.h>
 
@@ -132,6 +131,17 @@ CaptureFilterEdit::CaptureFilterEdit(QWidget *parent, bool plain) :
 
     setConflict(false);
 
+    QString buttonStyle = QStringLiteral(
+        "QToolButton {"
+        "  border: none;"
+        "  background: transparent;" // Disables platform style on Windows.
+        "  padding: 0 0 0 0;"
+        "}"
+        "QToolButton::menu-indicator {"
+        "  image: none;"
+        "}"
+    );
+
     if (!plain_) {
         bookmark_button_ = new StockIconToolButton(this, "x-capture-filter-bookmark");
         bookmark_button_->setCursor(Qt::ArrowCursor);
@@ -139,28 +149,14 @@ CaptureFilterEdit::CaptureFilterEdit(QWidget *parent, bool plain) :
         bookmark_button_->setPopupMode(QToolButton::InstantPopup);
         bookmark_button_->setToolTip(tr("Manage saved bookmarks."));
         bookmark_button_->setIconSize(QSize(14, 14));
-        bookmark_button_->setStyleSheet(
-                    "QToolButton {"
-                    "  border: none;"
-                    "  background: transparent;" // Disables platform style on Windows.
-                    "  padding: 0 0 0 0;"
-                    "}"
-                    "QToolButton::menu-indicator { image: none; }"
-            );
+        bookmark_button_->setStyleSheet(buttonStyle);
         connect(bookmark_button_, &StockIconToolButton::clicked, this, &CaptureFilterEdit::bookmarkClicked);
 
         clear_button_ = new StockIconToolButton(this, "x-filter-clear");
         clear_button_->setCursor(Qt::ArrowCursor);
         clear_button_->setToolTip(QString());
         clear_button_->setIconSize(QSize(14, 14));
-        clear_button_->setStyleSheet(
-                "QToolButton {"
-                "  border: none;"
-                "  background: transparent;" // Disables platform style on Windows.
-                "  padding: 0 0 0 0;"
-                "  margin-left: 1px;"
-                "}"
-                );
+        clear_button_->setStyleSheet(buttonStyle);
         connect(clear_button_, &StockIconToolButton::clicked, this, &CaptureFilterEdit::clearFilter);
     }
 
@@ -175,27 +171,21 @@ CaptureFilterEdit::CaptureFilterEdit(QWidget *parent, bool plain) :
         apply_button_->setEnabled(false);
         apply_button_->setToolTip(tr("Apply this filter string to the display."));
         apply_button_->setIconSize(QSize(24, 14));
-        apply_button_->setStyleSheet(
-                "QToolButton {"
-                "  border: none;"
-                "  background: transparent;" // Disables platform style on Windows.
-                "  padding: 0 0 0 0;"
-                "}"
-                );
+        apply_button_->setStyleSheet(buttonStyle);
         connect(apply_button_, &StockIconToolButton::clicked, this, &CaptureFilterEdit::applyCaptureFilter);
     }
 #endif
     connect(this, &CaptureFilterEdit::returnPressed, this, &CaptureFilterEdit::applyCaptureFilter);
 
     int frameWidth = style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
-    QSize bksz;
+    QSize bksz(0, 0);
     if (bookmark_button_) bksz = bookmark_button_->sizeHint();
-    QSize cbsz;
+    QSize cbsz(0, 0);
     if (clear_button_) cbsz = clear_button_->sizeHint();
-    QSize apsz;
+    QSize apsz(0, 0);
     if (apply_button_) apsz = apply_button_->sizeHint();
 
-    setStyleSheet(QString(
+    setStyleSheet(QStringLiteral(
             "CaptureFilterEdit {"
             "  padding-left: %1px;"
             "  margin-left: %2px;"
@@ -204,19 +194,18 @@ CaptureFilterEdit::CaptureFilterEdit(QWidget *parent, bool plain) :
             )
             .arg(frameWidth + 1)
             .arg(bksz.width())
-            .arg(cbsz.width() + apsz.width() + frameWidth + 1)
+            .arg(cbsz.width() + apsz.width() + frameWidth + 2)
             );
 
     QComboBox *cf_combo = qobject_cast<QComboBox *>(parent);
     if (cf_combo) {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
         connect(cf_combo, static_cast<void (QComboBox::*)(const QString &)>(&QComboBox::textActivated),
                 this, &CaptureFilterEdit::textEdited);
-#else
-        connect(cf_combo, static_cast<void (QComboBox::*)(const QString &)>(&QComboBox::activated),
-                this, &CaptureFilterEdit::textEdited);
-#endif
     }
+
+    line_edit_timer_ = new QTimer(this);
+    line_edit_timer_->setSingleShot(true);
+    connect(line_edit_timer_, &QTimer::timeout, this, &CaptureFilterEdit::updateFilter);
 
     syntax_thread_ = new QThread;
     syntax_worker_ = new CaptureFilterSyntaxWorker;
@@ -244,7 +233,7 @@ void CaptureFilterEdit::paintEvent(QPaintEvent *evt) {
     SyntaxLineEdit::paintEvent(evt);
 
     if (bookmark_button_) {
-        // Draw the right border by hand. We could try to do this in the
+        // Draw the borders by hand. We could try to do this in the
         // style sheet but it's a pain.
 #ifdef Q_OS_MAC
         QColor divider_color = Qt::gray;
@@ -256,14 +245,23 @@ void CaptureFilterEdit::paintEvent(QPaintEvent *evt) {
         QRect cr = contentsRect();
         QSize bksz = bookmark_button_->size();
         painter.drawLine(bksz.width(), cr.top(), bksz.width(), cr.bottom() + 1);
+
+        if (!text().isEmpty()) {
+            int xpos = cr.width() - 4;
+            if (clear_button_ && clear_button_->isVisible())
+                xpos -= clear_button_->width();
+            if (apply_button_ && apply_button_->isVisible())
+                xpos -= apply_button_->width();
+            painter.drawLine(xpos, cr.top(), xpos, cr.bottom() + 1);
+        }
     }
 }
 
 void CaptureFilterEdit::resizeEvent(QResizeEvent *)
 {
-    QSize cbsz;
+    QSize cbsz(0, 0);
     if (clear_button_) cbsz = clear_button_->sizeHint();
-    QSize apsz;
+    QSize apsz(0, 0);
     if (apply_button_) apsz = apply_button_->sizeHint();
 
     int frameWidth = style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
@@ -294,7 +292,7 @@ void CaptureFilterEdit::setConflict(bool conflict)
                       " Typing a filter here will override them. Doing nothing will"
                       " preserve them.</p>"));
     } else {
-        placeholder_text_ = QString(tr("Enter a capture filter %1")).arg(UTF8_HORIZONTAL_ELLIPSIS);
+        placeholder_text_ = tr("Enter a capture filter %1").arg(UTF8_HORIZONTAL_ELLIPSIS);
         setToolTip(QString());
     }
     setPlaceholderText(placeholder_text_);
@@ -308,7 +306,7 @@ QPair<const QString, bool> CaptureFilterEdit::getSelectedFilter()
 #ifdef HAVE_LIBPCAP
     int selected_devices = 0;
 
-    for (guint i = 0; i < global_capture_opts.all_ifaces->len; i++) {
+    for (unsigned i = 0; i < global_capture_opts.all_ifaces->len; i++) {
         interface_t *device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
         if (device->selected) {
             selected_devices++;
@@ -371,15 +369,21 @@ void CaptureFilterEdit::checkFilter(const QString& filter)
     }
 
     if (empty) {
+        line_edit_timer_->stop();
         setFilterSyntaxState(filter, Empty, QString());
     } else {
-        emit captureFilterChanged(filter);
+        line_edit_timer_->start(prefs.gui_debounce_timer);
     }
 }
 
 void CaptureFilterEdit::checkFilter()
 {
     checkFilter(text());
+}
+
+void CaptureFilterEdit::updateFilter()
+{
+    emit captureFilterChanged(text());
 }
 
 void CaptureFilterEdit::updateBookmarkMenu()
@@ -411,7 +415,7 @@ void CaptureFilterEdit::updateBookmarkMenu()
         QModelIndex nameIdx = model.index(row, FilterListModel::ColumnName);
         QString name = nameIdx.data().toString();
         QString expr = model.index(row, FilterListModel::ColumnExpression).data().toString();
-        QString prep_text = QString("%1: %2").arg(name).arg(expr);
+        QString prep_text = QStringLiteral("%1: %2").arg(name).arg(expr);
 
         prep_text = bb_menu->fontMetrics().elidedText(prep_text, Qt::ElideRight, one_em * 40);
         QAction * prep_action = bb_menu->addAction(prep_text);

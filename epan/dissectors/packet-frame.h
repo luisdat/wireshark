@@ -11,9 +11,22 @@
 
 #include "ws_symbol_export.h"
 
+#include <wiretap/wtap_opttypes.h>
+
+#include <epan/packet_info.h>
+#include <epan/proto.h>
+
+/*
+ * Structure passed to custom binary option dissectors.
+ * PUBLIC_HEADER: This should be in the "install" target.
+ */
+struct custom_binary_opt_data {
+	wtap_optval_t *optval;
+};
+
 /*
  * Routine used to register frame end routine.  The routine should only
- * be registred when the dissector is used in the frame, not in the
+ * be registered when the dissector is used in the frame, not in the
  * proto_register_XXX function.
  */
 void

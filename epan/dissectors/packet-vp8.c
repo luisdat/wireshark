@@ -20,6 +20,8 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 void proto_reg_handoff_vp8(void);
 void proto_register_vp8(void);
@@ -38,70 +40,70 @@ void proto_register_vp8(void);
 #define BIT_567_MASK            0x0E
 #define BIT_45678_MASK          0x1F
 #define BIT_12_MASK             0xC0
-#define BIT_NO_MASK             0xFF
+#define BIT_NO_MASK             0x0
 
-#define BIT_2BYTE_NO_MASK       0xFFFF
-#define BIT_3BYTE_NO_MASK       0xFFFFFF
+#define BIT_2BYTE_NO_MASK       0x0
+#define BIT_3BYTE_NO_MASK       0x0
 #define BIT_EXT_PICTURE_MASK    0x7FFF
-#define BIT_PARTITION_SIZE_MASK 0xE0FFFF
+#define BIT_PARTITION_SIZE_MASK 0xFFFFE0
 
 static dissector_handle_t vp8_handle;
 
 /* Initialize the protocol and registered fields */
-static int proto_vp8 = -1;
-static int hf_vp8_pld_x_bit = -1;
-static int hf_vp8_pld_r_bit = -1;
-static int hf_vp8_pld_n_bit = -1;
-static int hf_vp8_pld_s_bit = -1;
-static int hf_vp8_pld_part_id = -1;
-static int hf_vp8_pld_i_bit = -1;
-static int hf_vp8_pld_l_bit = -1;
-static int hf_vp8_pld_t_bit = -1;
-static int hf_vp8_pld_k_bit = -1;
-static int hf_vp8_pld_rsv_a = -1;
-static int hf_vp8_pld_picture_id = -1;
-static int hf_vp8_pld_extended_picture_id = -1;
-static int hf_vp8_pld_tl0picidx = -1;
-static int hf_vp8_pld_tid = -1;
-static int hf_vp8_pld_y_bit = -1;
-static int hf_vp8_pld_keyidx = -1;
+static int proto_vp8;
+static int hf_vp8_pld_x_bit;
+static int hf_vp8_pld_r_bit;
+static int hf_vp8_pld_n_bit;
+static int hf_vp8_pld_s_bit;
+static int hf_vp8_pld_part_id;
+static int hf_vp8_pld_i_bit;
+static int hf_vp8_pld_l_bit;
+static int hf_vp8_pld_t_bit;
+static int hf_vp8_pld_k_bit;
+static int hf_vp8_pld_rsv_a;
+static int hf_vp8_pld_picture_id;
+static int hf_vp8_pld_extended_picture_id;
+static int hf_vp8_pld_tl0picidx;
+static int hf_vp8_pld_tid;
+static int hf_vp8_pld_y_bit;
+static int hf_vp8_pld_keyidx;
 
 /* payload header fields */
-static int hf_vp8_hdr_frametype = -1;
-static int hf_vp8_hdr_version = -1;
-static int hf_vp8_hdr_show_bit = -1;
-static int hf_vp8_hdr_first_partition_size = -1;
+static int hf_vp8_hdr_frametype;
+static int hf_vp8_hdr_version;
+static int hf_vp8_hdr_show_bit;
+static int hf_vp8_hdr_first_partition_size;
 
 /* keyframe fields */
-static int hf_vp8_keyframe_start_code = -1;
-static int hf_vp8_keyframe_width = -1;
-static int hf_vp8_keyframe_horizontal_scale = -1;
-static int hf_vp8_keyframe_height = -1;
-static int hf_vp8_keyframe_vertical_scale = -1;
+static int hf_vp8_keyframe_start_code;
+static int hf_vp8_keyframe_width;
+static int hf_vp8_keyframe_horizontal_scale;
+static int hf_vp8_keyframe_height;
+static int hf_vp8_keyframe_vertical_scale;
 
 /* Initialize the subtree pointers */
-static int ett_vp8 = -1;
-static int ett_vp8_payload_descriptor = -1;
-static int ett_vp8_payload_header = -1;
-static int ett_vp8_payload = -1;
-static int ett_vp8_keyframe = -1;
+static int ett_vp8;
+static int ett_vp8_payload_descriptor;
+static int ett_vp8_payload_header;
+static int ett_vp8_payload;
+static int ett_vp8_keyframe;
 
-static expert_field ei_vp8_startcode = EI_INIT;
-static expert_field ei_vp8_undecoded = EI_INIT;
-static expert_field ei_vp8_continuation = EI_INIT;
-static expert_field ei_vp8_first_partition_split = EI_INIT;
-static expert_field ei_vp8_first_partition_plus = EI_INIT;
-
-static void
-dissect_vp8_payload_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, gint *offset, gboolean *hasHeader);
+static expert_field ei_vp8_startcode;
+static expert_field ei_vp8_undecoded;
+static expert_field ei_vp8_continuation;
+static expert_field ei_vp8_first_partition_split;
+static expert_field ei_vp8_first_partition_plus;
 
 static void
-dissect_vp8_payload_header(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, gint *offset, gint *frametype, gint *partition1_size);
+dissect_vp8_payload_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, unsigned *offset, bool *hasHeader);
 
 static void
-dissect_vp8_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *vp8_tree, gint *offset, gint *frametype, gint *partition1_size);
+dissect_vp8_payload_header(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, unsigned *offset, unsigned*frametype, unsigned *partition1_size);
 
-static gint *ett[] = {
+static void
+dissect_vp8_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *vp8_tree, unsigned *offset, unsigned*frametype, unsigned *partition1_size);
+
+static int *ett[] = {
     &ett_vp8,
     &ett_vp8_payload_descriptor,
     &ett_vp8_payload_header,
@@ -175,9 +177,9 @@ dissect_vp8(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 
     proto_item *item;
-    gint offset = 0, frametype = 0, partition1_size = -1;
+    unsigned offset = 0, frametype = 0, partition1_size = 0;
     proto_tree *vp8_tree;
-    gboolean hasHeader = FALSE;
+    bool hasHeader = false;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "VP8");
 
@@ -195,16 +197,16 @@ dissect_vp8(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     dissect_vp8_payload(tvb, pinfo, vp8_tree, &offset, &frametype, &partition1_size);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " - %s",
-        val_to_str(frametype, vp8_type_values, "Unknown Type (%u)"));
+        val_to_str(pinfo->pool, frametype, vp8_type_values, "Unknown Type (%u)"));
 
     return tvb_captured_length(tvb);
 }
 
 static void
-dissect_vp8_payload_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, gint *offset, gboolean *hasHeader)
+dissect_vp8_payload_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, unsigned *offset, bool *hasHeader)
 {
     proto_item *item_descriptor;
-    guint8      extended_bit, s_bit, partId;
+    uint8_t     extended_bit, s_bit, partId;
     proto_tree *vp8_payload_descriptor_tree;
 
 /*
@@ -233,17 +235,17 @@ The first octets after the RTP header are the VP8 payload descriptor,
     proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_n_bit,   tvb, *offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_s_bit,   tvb, *offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_part_id, tvb, *offset, 1, ENC_BIG_ENDIAN);
-    extended_bit = tvb_get_guint8(tvb, *offset) & BIT_1_MASK;
-    s_bit  = tvb_get_guint8(tvb, *offset) & BIT_4_MASK;
-    partId = tvb_get_guint8(tvb, *offset) & BIT_5678_MASK;
+    extended_bit = tvb_get_uint8(tvb, *offset) & BIT_1_MASK;
+    s_bit  = tvb_get_uint8(tvb, *offset) & BIT_4_MASK;
+    partId = tvb_get_uint8(tvb, *offset) & BIT_5678_MASK;
 
     if ((s_bit > 0) && (partId == 0)) {
-        *hasHeader=TRUE;
+        *hasHeader=true;
     }
 
     if (extended_bit)
     {
-        guint8 i_bit, l_bit, t_bit, k_bit;
+        uint8_t i_bit, l_bit, t_bit, k_bit;
         (*offset)++;
         proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_i_bit, tvb, *offset, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_l_bit, tvb, *offset, 1, ENC_BIG_ENDIAN);
@@ -251,14 +253,14 @@ The first octets after the RTP header are the VP8 payload descriptor,
         proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_k_bit, tvb, *offset, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_rsv_a, tvb, *offset, 1, ENC_BIG_ENDIAN);
 
-        i_bit = tvb_get_guint8(tvb, *offset) & BIT_1_MASK;
-        l_bit = tvb_get_guint8(tvb, *offset) & BIT_2_MASK;
-        t_bit = tvb_get_guint8(tvb, *offset) & BIT_3_MASK;
-        k_bit = tvb_get_guint8(tvb, *offset) & BIT_4_MASK;
+        i_bit = tvb_get_uint8(tvb, *offset) & BIT_1_MASK;
+        l_bit = tvb_get_uint8(tvb, *offset) & BIT_2_MASK;
+        t_bit = tvb_get_uint8(tvb, *offset) & BIT_3_MASK;
+        k_bit = tvb_get_uint8(tvb, *offset) & BIT_4_MASK;
         if (i_bit)
         {
             (*offset)++;
-            if(tvb_get_guint8(tvb, *offset) & BIT_1_MASK)
+            if(tvb_get_uint8(tvb, *offset) & BIT_1_MASK)
             {
                 proto_tree_add_item(vp8_payload_descriptor_tree, hf_vp8_pld_extended_picture_id, tvb, *offset, 2, ENC_BIG_ENDIAN);
                 (*offset)++;
@@ -288,11 +290,11 @@ The first octets after the RTP header are the VP8 payload descriptor,
 }
 
 static void
-dissect_vp8_payload_header(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, gint *offset, gint *frametype, gint *partition1_size)
+dissect_vp8_payload_header(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *vp8_tree, unsigned *offset, unsigned*frametype, unsigned *partition1_size)
 {
     proto_item *item_header;
     proto_tree *vp8_payload_header_tree;
-    gint size0, size1, size2;
+    int size0, size1, size2;
 
 /*
 The first three octets of an encoded VP8 frame are referred to as an
@@ -332,40 +334,37 @@ The first three octets of an encoded VP8 frame are referred to as an
     proto_tree_add_item(vp8_payload_header_tree, hf_vp8_hdr_version,   tvb, *offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(vp8_payload_header_tree, hf_vp8_hdr_show_bit,  tvb, *offset, 1, ENC_BIG_ENDIAN);
 
-    *frametype = tvb_get_guint8(tvb, *offset) & BIT_8_MASK;
+    *frametype = tvb_get_uint8(tvb, *offset) & BIT_8_MASK;
 
-    size0 = (tvb_get_guint8(tvb, *offset) & BIT_123_MASK) >> 5;
-    size1 = tvb_get_guint8(tvb, *offset + 1);
-    size2 = tvb_get_guint8(tvb, *offset + 2);
+    size0 = (tvb_get_uint8(tvb, *offset) & BIT_123_MASK) >> 5;
+    size1 = tvb_get_uint8(tvb, *offset + 1);
+    size2 = tvb_get_uint8(tvb, *offset + 2);
     (*partition1_size) = size0 + (size1*8) + (size2*2048);
     proto_tree_add_uint(vp8_payload_header_tree, hf_vp8_hdr_first_partition_size, tvb, *offset, 3, *partition1_size);
-    (*offset)++;
-    (*offset)++;
-    (*offset)++;
-
+    (*offset) += 3;
 }
 
 static void
-dissect_vp8_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *vp8_tree, gint *offset, gint *frametype, gint *partition1_size)
+dissect_vp8_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *vp8_tree, unsigned *offset, unsigned*frametype, unsigned *partition1_size)
 {
     proto_tree *vp8_payload_tree;
     proto_item *payload_item;
-    gint remainder;
+    unsigned remainder;
 
     vp8_payload_tree = proto_tree_add_subtree(vp8_tree, tvb, *offset, -1, ett_vp8_payload, &payload_item, "Payload");
 
     if (*frametype == 0)
     {
-        guint16 width, height;
-        gint start1, start2, start3, horizontal_scale, vertical_scale;
+        uint16_t width, height;
+        unsigned start1, start2, start3, horizontal_scale, vertical_scale;
         proto_tree *vp8_keyframe_tree;
 
         vp8_keyframe_tree = proto_tree_add_subtree(vp8_payload_tree, tvb, *offset, -1, ett_vp8_keyframe, NULL, "Keyframe header");
 
         proto_tree_add_item(vp8_keyframe_tree, hf_vp8_keyframe_start_code, tvb, *offset, 3, ENC_BIG_ENDIAN);
-        start1 = tvb_get_guint8(tvb, *offset);
-        start2 = tvb_get_guint8(tvb, *offset + 1);
-        start3 = tvb_get_guint8(tvb, *offset + 2);
+        start1 = tvb_get_uint8(tvb, *offset);
+        start2 = tvb_get_uint8(tvb, *offset + 1);
+        start3 = tvb_get_uint8(tvb, *offset + 2);
 
         /* check start code is correct */
         if ((start1 != 0x9d) || (start2 != 0x01) || (start3 != 0x2a))
@@ -393,23 +392,23 @@ dissect_vp8_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *vp8_tree, gin
     }
 
     remainder = tvb_reported_length_remaining(tvb, (*offset));
-    if ((*partition1_size) == -1)
+    if ((*partition1_size) == 0)
     {
         /*no header, continuation?*/
-        proto_tree_add_expert_format(vp8_payload_tree, pinfo, &ei_vp8_continuation, tvb, *offset, -1, "Continuation of partition fragment (%d bytes)", remainder);
+        proto_tree_add_expert_format_remaining(vp8_payload_tree, pinfo, &ei_vp8_continuation, tvb, *offset, "Continuation of partition fragment (%d bytes)", remainder);
     }
     else
     {
         if (remainder < *partition1_size)
         {
             /* partition size has already been added to vp8 header tree, but it would be useful to provide additional explanation */
-            proto_tree_add_expert_format(vp8_payload_tree, pinfo, &ei_vp8_first_partition_split, tvb, *offset, -1,
+            proto_tree_add_expert_format_remaining(vp8_payload_tree, pinfo, &ei_vp8_first_partition_split, tvb, *offset,
                 "First partition is split with %d bytes in this packet and %d bytes in subsequent frames", remainder, ((*partition1_size)-remainder));
         }
         else
         {
             (*offset)= (*offset) + (*partition1_size);
-            proto_tree_add_expert_format(vp8_payload_tree, pinfo, &ei_vp8_first_partition_plus, tvb, *offset, -1,
+            proto_tree_add_expert_format_remaining(vp8_payload_tree, pinfo, &ei_vp8_first_partition_plus, tvb, *offset,
                                 "This frame contains all of first partition (%d bytes) and also %d bytes from other partitions",
                                 *partition1_size, remainder);
         }
@@ -481,7 +480,7 @@ proto_register_vp8(void)
         },
         { &hf_vp8_pld_extended_picture_id,
             { "Extended Picture ID",           "vp8.pld.pictureid",
-            FT_UINT8, BASE_DEC, NULL, BIT_EXT_PICTURE_MASK,
+            FT_UINT16, BASE_DEC, NULL, BIT_EXT_PICTURE_MASK,
             NULL, HFILL }
         },
         { &hf_vp8_pld_tl0picidx,
@@ -521,7 +520,7 @@ proto_register_vp8(void)
         },
         { &hf_vp8_hdr_first_partition_size,
             { "First partition size",           "vp8.hdr.partition_size",
-            FT_UINT8, BASE_DEC, NULL, BIT_PARTITION_SIZE_MASK,
+            FT_UINT24, BASE_DEC, NULL, BIT_PARTITION_SIZE_MASK,
             NULL, HFILL }
         },
         { &hf_vp8_keyframe_start_code,
@@ -560,11 +559,7 @@ proto_register_vp8(void)
         { &ei_vp8_first_partition_plus, { "vp8.first_partition_plus", PI_REASSEMBLE, PI_CHAT, "This frame contains all of first partition and also bytes from other partitions", EXPFILL }},
     };
 
-    proto_vp8 = proto_register_protocol (
-        "VP8", /* name       */
-        "VP8",      /* short name */
-        "vp8"       /* abbrev     */
-        );
+    proto_vp8 = proto_register_protocol ("VP8", "VP8", "vp8");
 
     proto_register_field_array(proto_vp8, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));

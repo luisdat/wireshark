@@ -176,7 +176,7 @@ void ExportObjectModel::saveAllEntries(QString path)
         if (entry == NULL)
             continue;
 
-        guint count = 0;
+        unsigned count = 0;
         QString filename;
 
         do {
@@ -208,6 +208,9 @@ void ExportObjectModel::resetObjects()
     export_object_gui_reset_cb reset_cb = get_eo_reset_func(eo_);
 
     beginResetModel();
+    foreach (QVariant v, objects_) {
+        eo_free_entry(VariantPointer<export_object_entry_t>::asPtr(v));
+    }
     objects_.clear();
     endResetModel();
 
@@ -276,14 +279,28 @@ bool ExportObjectProxyModel::lessThan(const QModelIndex &source_left, const QMod
 
 void ExportObjectProxyModel::setContentFilterString(QString filter_)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     contentFilter_ = filter_;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 void ExportObjectProxyModel::setTextFilterString(QString filter_)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     textFilter_ = filter_;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 bool ExportObjectProxyModel::filterAcceptsRow(int source_row, const QModelIndex &/*source_parent*/) const

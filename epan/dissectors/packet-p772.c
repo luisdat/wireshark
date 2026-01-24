@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-p772.c                                                              */
-/* asn2wrs.py -b -C -L -p p772 -c ./p772.cnf -s ./packet-p772-template -D . -O ../.. MMSAbstractService.asn MMSInformationObjects.asn MMSOtherNotificationTypeExtensions.asn MMSObjectIdentifiers.asn MMSHeadingExtensions.asn MMSUpperBounds.asn MMSExtendedBodyPartTypes.asn MMSPerRecipientSpecifierExtensions.asn */
+/* asn2wrs.py -b -q -L -p p772 -c ./p772.cnf -s ./packet-p772-template -D . -O ../.. MMSAbstractService.asn MMSInformationObjects.asn MMSOtherNotificationTypeExtensions.asn MMSObjectIdentifiers.asn MMSHeadingExtensions.asn MMSUpperBounds.asn MMSExtendedBodyPartTypes.asn MMSPerRecipientSpecifierExtensions.asn */
 
 /* packet-p772.c
  * Routines for STANAG 4406 (X.400 Military Message Extensions)  packet dissection
@@ -18,12 +18,12 @@
 
 #include <epan/packet.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 
 #include "packet-x509if.h"
 
-#include "packet-p772.h"
 #include "packet-p1.h"
 #include "packet-p22.h"
 
@@ -36,7 +36,7 @@ void proto_reg_handoff_p772(void);
 
 
 /* Initialize the protocol and registered fields */
-static int proto_p772 = -1;
+static int proto_p772;
 
 #define id_mmhs                        "1.3.26.0.4406.0"
 #define id_mod                         id_mmhs".0"
@@ -144,115 +144,115 @@ static int proto_p772 = -1;
 #define ub_military_bigstring          128
 #define ub_data_size                   65535
 
-static int hf_p772_InformationObject_PDU = -1;    /* InformationObject */
-static int hf_p772_Acp127NotificationResponse_PDU = -1;  /* Acp127NotificationResponse */
-static int hf_p772_ExemptedAddressSeq_PDU = -1;   /* ExemptedAddressSeq */
-static int hf_p772_ExtendedAuthorisationInfo_PDU = -1;  /* ExtendedAuthorisationInfo */
-static int hf_p772_DistributionCodes_PDU = -1;    /* DistributionCodes */
-static int hf_p772_HandlingInstructions_PDU = -1;  /* HandlingInstructions */
-static int hf_p772_MessageInstructions_PDU = -1;  /* MessageInstructions */
-static int hf_p772_CodressMessage_PDU = -1;       /* CodressMessage */
-static int hf_p772_OriginatorReference_PDU = -1;  /* OriginatorReference */
-static int hf_p772_PrimaryPrecedence_PDU = -1;    /* PrimaryPrecedence */
-static int hf_p772_CopyPrecedence_PDU = -1;       /* CopyPrecedence */
-static int hf_p772_MessageType_PDU = -1;          /* MessageType */
-static int hf_p772_AddressListDesignatorSeq_PDU = -1;  /* AddressListDesignatorSeq */
-static int hf_p772_OtherRecipientDesignatorSeq_PDU = -1;  /* OtherRecipientDesignatorSeq */
-static int hf_p772_PilotInformationSeq_PDU = -1;  /* PilotInformationSeq */
-static int hf_p772_Acp127MessageIdentifier_PDU = -1;  /* Acp127MessageIdentifier */
-static int hf_p772_OriginatorPlad_PDU = -1;       /* OriginatorPlad */
-static int hf_p772_SecurityInformationLabels_PDU = -1;  /* SecurityInformationLabels */
-static int hf_p772_PriorityLevelQualifier_PDU = -1;  /* PriorityLevelQualifier */
-static int hf_p772_ADatP3Parameters_PDU = -1;     /* ADatP3Parameters */
-static int hf_p772_ADatP3Data_PDU = -1;           /* ADatP3Data */
-static int hf_p772_CorrectionsParameters_PDU = -1;  /* CorrectionsParameters */
-static int hf_p772_CorrectionsData_PDU = -1;      /* CorrectionsData */
-static int hf_p772_ForwardedEncryptedParameters_PDU = -1;  /* ForwardedEncryptedParameters */
-static int hf_p772_ForwardedEncryptedData_PDU = -1;  /* ForwardedEncryptedData */
-static int hf_p772_MMMessageParameters_PDU = -1;  /* MMMessageParameters */
-static int hf_p772_MMMessageData_PDU = -1;        /* MMMessageData */
-static int hf_p772_ACP127DataParameters_PDU = -1;  /* ACP127DataParameters */
-static int hf_p772_ACP127DataData_PDU = -1;       /* ACP127DataData */
-static int hf_p772_Acp127NotificationType_PDU = -1;  /* Acp127NotificationType */
-static int hf_p772_mm = -1;                       /* IPM */
-static int hf_p772_mn = -1;                       /* IPN */
-static int hf_p772_acp127_notification_type = -1;  /* Acp127NotificationType */
-static int hf_p772_receipt_time = -1;             /* ReceiptTimeField */
-static int hf_p772_addressListIndicator = -1;     /* AddressListIndicator */
-static int hf_p772_acp127_recipient = -1;         /* Acp127Recipient */
-static int hf_p772_acp127_supp_info = -1;         /* Acp127SuppInfo */
-static int hf_p772_AddressListIndicator_item = -1;  /* AddressListDesignator */
-static int hf_p772_ExemptedAddressSeq_item = -1;  /* ExemptedAddress */
-static int hf_p772_sics = -1;                     /* SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic */
-static int hf_p772_sics_item = -1;                /* Sic */
-static int hf_p772_dist_Extensions = -1;          /* SEQUENCE_OF_DistributionExtensionField */
-static int hf_p772_dist_Extensions_item = -1;     /* DistributionExtensionField */
-static int hf_p772_dist_type = -1;                /* OBJECT_IDENTIFIER */
-static int hf_p772_dist_value = -1;               /* T_dist_value */
-static int hf_p772_HandlingInstructions_item = -1;  /* MilitaryString */
-static int hf_p772_MessageInstructions_item = -1;  /* MilitaryString */
-static int hf_p772_message_type_type = -1;        /* TypeMessage */
-static int hf_p772_identifier = -1;               /* MessageIdentifier */
-static int hf_p772_AddressListDesignatorSeq_item = -1;  /* AddressListDesignator */
-static int hf_p772_address_list_type = -1;        /* AddressListType */
-static int hf_p772_listName = -1;                 /* ORDescriptor */
-static int hf_p772_notificationRequest = -1;      /* AddressListRequest */
-static int hf_p772_replyRequest = -1;             /* AddressListRequest */
-static int hf_p772_OtherRecipientDesignatorSeq_item = -1;  /* OtherRecipientDesignator */
-static int hf_p772_other_recipient_type = -1;     /* OtherRecipientType */
-static int hf_p772_designator = -1;               /* MilitaryString */
-static int hf_p772_PilotInformationSeq_item = -1;  /* PilotInformation */
-static int hf_p772_pilotPrecedence = -1;          /* MMHSPrecedence */
-static int hf_p772_pilotRecipient = -1;           /* SEQUENCE_OF_ORDescriptor */
-static int hf_p772_pilotRecipient_item = -1;      /* ORDescriptor */
-static int hf_p772_pilotSecurity = -1;            /* SecurityLabel */
-static int hf_p772_pilotHandling = -1;            /* SEQUENCE_OF_MilitaryString */
-static int hf_p772_pilotHandling_item = -1;       /* MilitaryString */
-static int hf_p772_content_security_label = -1;   /* SecurityLabel */
-static int hf_p772_heading_security_label = -1;   /* SecurityLabel */
-static int hf_p772_body_part_security_labels = -1;  /* SEQUENCE_OF_BodyPartSecurityLabel */
-static int hf_p772_body_part_security_labels_item = -1;  /* BodyPartSecurityLabel */
-static int hf_p772_body_part_security_label = -1;  /* SecurityLabel */
-static int hf_p772_body_part_sequence_number = -1;  /* BodyPartSequenceNumber */
-static int hf_p772_lineOriented = -1;             /* IA5String */
-static int hf_p772_setOriented = -1;              /* T_setOriented */
-static int hf_p772_setOriented_item = -1;         /* IA5String */
-static int hf_p772_delivery_time = -1;            /* MessageDeliveryTime */
-static int hf_p772_delivery_envelope = -1;        /* OtherMessageDeliveryFields */
+static int hf_p772_InformationObject_PDU;         /* InformationObject */
+static int hf_p772_Acp127NotificationResponse_PDU;  /* Acp127NotificationResponse */
+static int hf_p772_ExemptedAddressSeq_PDU;        /* ExemptedAddressSeq */
+static int hf_p772_ExtendedAuthorisationInfo_PDU;  /* ExtendedAuthorisationInfo */
+static int hf_p772_DistributionCodes_PDU;         /* DistributionCodes */
+static int hf_p772_HandlingInstructions_PDU;      /* HandlingInstructions */
+static int hf_p772_MessageInstructions_PDU;       /* MessageInstructions */
+static int hf_p772_CodressMessage_PDU;            /* CodressMessage */
+static int hf_p772_OriginatorReference_PDU;       /* OriginatorReference */
+static int hf_p772_PrimaryPrecedence_PDU;         /* PrimaryPrecedence */
+static int hf_p772_CopyPrecedence_PDU;            /* CopyPrecedence */
+static int hf_p772_MessageType_PDU;               /* MessageType */
+static int hf_p772_AddressListDesignatorSeq_PDU;  /* AddressListDesignatorSeq */
+static int hf_p772_OtherRecipientDesignatorSeq_PDU;  /* OtherRecipientDesignatorSeq */
+static int hf_p772_PilotInformationSeq_PDU;       /* PilotInformationSeq */
+static int hf_p772_Acp127MessageIdentifier_PDU;   /* Acp127MessageIdentifier */
+static int hf_p772_OriginatorPlad_PDU;            /* OriginatorPlad */
+static int hf_p772_SecurityInformationLabels_PDU;  /* SecurityInformationLabels */
+static int hf_p772_PriorityLevelQualifier_PDU;    /* PriorityLevelQualifier */
+static int hf_p772_ADatP3Parameters_PDU;          /* ADatP3Parameters */
+static int hf_p772_ADatP3Data_PDU;                /* ADatP3Data */
+static int hf_p772_CorrectionsParameters_PDU;     /* CorrectionsParameters */
+static int hf_p772_CorrectionsData_PDU;           /* CorrectionsData */
+static int hf_p772_ForwardedEncryptedParameters_PDU;  /* ForwardedEncryptedParameters */
+static int hf_p772_ForwardedEncryptedData_PDU;    /* ForwardedEncryptedData */
+static int hf_p772_MMMessageParameters_PDU;       /* MMMessageParameters */
+static int hf_p772_MMMessageData_PDU;             /* MMMessageData */
+static int hf_p772_ACP127DataParameters_PDU;      /* ACP127DataParameters */
+static int hf_p772_ACP127DataData_PDU;            /* ACP127DataData */
+static int hf_p772_Acp127NotificationType_PDU;    /* Acp127NotificationType */
+static int hf_p772_mm;                            /* IPM */
+static int hf_p772_mn;                            /* IPN */
+static int hf_p772_acp127_notification_type;      /* Acp127NotificationType */
+static int hf_p772_receipt_time;                  /* ReceiptTimeField */
+static int hf_p772_addressListIndicator;          /* AddressListIndicator */
+static int hf_p772_acp127_recipient;              /* Acp127Recipient */
+static int hf_p772_acp127_supp_info;              /* Acp127SuppInfo */
+static int hf_p772_AddressListIndicator_item;     /* AddressListDesignator */
+static int hf_p772_ExemptedAddressSeq_item;       /* ExemptedAddress */
+static int hf_p772_sics;                          /* SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic */
+static int hf_p772_sics_item;                     /* Sic */
+static int hf_p772_dist_Extensions;               /* SEQUENCE_OF_DistributionExtensionField */
+static int hf_p772_dist_Extensions_item;          /* DistributionExtensionField */
+static int hf_p772_dist_type;                     /* OBJECT_IDENTIFIER */
+static int hf_p772_dist_value;                    /* T_dist_value */
+static int hf_p772_HandlingInstructions_item;     /* MilitaryString */
+static int hf_p772_MessageInstructions_item;      /* MilitaryString */
+static int hf_p772_message_type_type;             /* TypeMessage */
+static int hf_p772_identifier;                    /* MessageIdentifier */
+static int hf_p772_AddressListDesignatorSeq_item;  /* AddressListDesignator */
+static int hf_p772_address_list_type;             /* AddressListType */
+static int hf_p772_listName;                      /* ORDescriptor */
+static int hf_p772_notificationRequest;           /* AddressListRequest */
+static int hf_p772_replyRequest;                  /* AddressListRequest */
+static int hf_p772_OtherRecipientDesignatorSeq_item;  /* OtherRecipientDesignator */
+static int hf_p772_other_recipient_type;          /* OtherRecipientType */
+static int hf_p772_designator;                    /* MilitaryString */
+static int hf_p772_PilotInformationSeq_item;      /* PilotInformation */
+static int hf_p772_pilotPrecedence;               /* MMHSPrecedence */
+static int hf_p772_pilotRecipient;                /* SEQUENCE_OF_ORDescriptor */
+static int hf_p772_pilotRecipient_item;           /* ORDescriptor */
+static int hf_p772_pilotSecurity;                 /* SecurityLabel */
+static int hf_p772_pilotHandling;                 /* SEQUENCE_OF_MilitaryString */
+static int hf_p772_pilotHandling_item;            /* MilitaryString */
+static int hf_p772_content_security_label;        /* SecurityLabel */
+static int hf_p772_heading_security_label;        /* SecurityLabel */
+static int hf_p772_body_part_security_labels;     /* SEQUENCE_OF_BodyPartSecurityLabel */
+static int hf_p772_body_part_security_labels_item;  /* BodyPartSecurityLabel */
+static int hf_p772_body_part_security_label;      /* SecurityLabel */
+static int hf_p772_body_part_sequence_number;     /* BodyPartSequenceNumber */
+static int hf_p772_lineOriented;                  /* IA5String */
+static int hf_p772_setOriented;                   /* T_setOriented */
+static int hf_p772_setOriented_item;              /* IA5String */
+static int hf_p772_delivery_time;                 /* MessageDeliveryTime */
+static int hf_p772_delivery_envelope;             /* OtherMessageDeliveryFields */
 /* named bits */
-static int hf_p772_Acp127NotificationType_acp127_nn = -1;
-static int hf_p772_Acp127NotificationType_acp127_pn = -1;
-static int hf_p772_Acp127NotificationType_acp127_tn = -1;
+static int hf_p772_Acp127NotificationType_acp127_nn;
+static int hf_p772_Acp127NotificationType_acp127_pn;
+static int hf_p772_Acp127NotificationType_acp127_tn;
 
 /* Initialize the subtree pointers */
-static gint ett_p772 = -1;
-static gint ett_p772_InformationObject = -1;
-static gint ett_p772_Acp127NotificationResponse = -1;
-static gint ett_p772_AddressListIndicator = -1;
-static gint ett_p772_ExemptedAddressSeq = -1;
-static gint ett_p772_DistributionCodes = -1;
-static gint ett_p772_SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic = -1;
-static gint ett_p772_SEQUENCE_OF_DistributionExtensionField = -1;
-static gint ett_p772_DistributionExtensionField = -1;
-static gint ett_p772_HandlingInstructions = -1;
-static gint ett_p772_MessageInstructions = -1;
-static gint ett_p772_MessageType = -1;
-static gint ett_p772_AddressListDesignatorSeq = -1;
-static gint ett_p772_AddressListDesignator = -1;
-static gint ett_p772_OtherRecipientDesignatorSeq = -1;
-static gint ett_p772_OtherRecipientDesignator = -1;
-static gint ett_p772_PilotInformationSeq = -1;
-static gint ett_p772_PilotInformation = -1;
-static gint ett_p772_SEQUENCE_OF_ORDescriptor = -1;
-static gint ett_p772_SEQUENCE_OF_MilitaryString = -1;
-static gint ett_p772_SecurityInformationLabels = -1;
-static gint ett_p772_SEQUENCE_OF_BodyPartSecurityLabel = -1;
-static gint ett_p772_BodyPartSecurityLabel = -1;
-static gint ett_p772_ADatP3Data = -1;
-static gint ett_p772_T_setOriented = -1;
-static gint ett_p772_ForwardedEncryptedParameters = -1;
-static gint ett_p772_MMMessageParameters = -1;
-static gint ett_p772_Acp127NotificationType = -1;
+static int ett_p772;
+static int ett_p772_InformationObject;
+static int ett_p772_Acp127NotificationResponse;
+static int ett_p772_AddressListIndicator;
+static int ett_p772_ExemptedAddressSeq;
+static int ett_p772_DistributionCodes;
+static int ett_p772_SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic;
+static int ett_p772_SEQUENCE_OF_DistributionExtensionField;
+static int ett_p772_DistributionExtensionField;
+static int ett_p772_HandlingInstructions;
+static int ett_p772_MessageInstructions;
+static int ett_p772_MessageType;
+static int ett_p772_AddressListDesignatorSeq;
+static int ett_p772_AddressListDesignator;
+static int ett_p772_OtherRecipientDesignatorSeq;
+static int ett_p772_OtherRecipientDesignator;
+static int ett_p772_PilotInformationSeq;
+static int ett_p772_PilotInformation;
+static int ett_p772_SEQUENCE_OF_ORDescriptor;
+static int ett_p772_SEQUENCE_OF_MilitaryString;
+static int ett_p772_SecurityInformationLabels;
+static int ett_p772_SEQUENCE_OF_BodyPartSecurityLabel;
+static int ett_p772_BodyPartSecurityLabel;
+static int ett_p772_ADatP3Data;
+static int ett_p772_T_setOriented;
+static int ett_p772_ForwardedEncryptedParameters;
+static int ett_p772_MMMessageParameters;
+static int ett_p772_Acp127NotificationType;
 
 
 static const ber_choice_t InformationObject_choice[] = {
@@ -261,8 +261,8 @@ static const ber_choice_t InformationObject_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_InformationObject(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_InformationObject(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  InformationObject_choice, hf_index, ett_p772_InformationObject,
                                  NULL);
@@ -278,8 +278,8 @@ static int * const Acp127NotificationType_bits[] = {
   NULL
 };
 
-static int
-dissect_p772_Acp127NotificationType(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_Acp127NotificationType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     Acp127NotificationType_bits, 3, hf_index, ett_p772_Acp127NotificationType,
                                     NULL);
@@ -295,8 +295,8 @@ static const value_string p772_AddressListType_vals[] = {
 };
 
 
-static int
-dissect_p772_AddressListType(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_AddressListType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -312,8 +312,8 @@ static const value_string p772_AddressListRequest_vals[] = {
 };
 
 
-static int
-dissect_p772_AddressListRequest(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_AddressListRequest(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -329,8 +329,8 @@ static const ber_sequence_t AddressListDesignator_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_AddressListDesignator(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_AddressListDesignator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               AddressListDesignator_set, hf_index, ett_p772_AddressListDesignator);
 
@@ -342,8 +342,8 @@ static const ber_sequence_t AddressListIndicator_sequence_of[1] = {
   { &hf_p772_AddressListIndicator_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_p772_AddressListDesignator },
 };
 
-static int
-dissect_p772_AddressListIndicator(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_AddressListIndicator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       AddressListIndicator_sequence_of, hf_index, ett_p772_AddressListIndicator);
 
@@ -352,8 +352,8 @@ dissect_p772_AddressListIndicator(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, 
 
 
 
-static int
-dissect_p772_Acp127Recipient(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_Acp127Recipient(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_restricted_string(implicit_tag, BER_UNI_TAG_PrintableString,
                                                         actx, tree, tvb, offset,
                                                         1, ub_military_bigstring, hf_index, NULL);
@@ -363,8 +363,8 @@ dissect_p772_Acp127Recipient(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int o
 
 
 
-static int
-dissect_p772_Acp127SuppInfo(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_Acp127SuppInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_restricted_string(implicit_tag, BER_UNI_TAG_PrintableString,
                                                         actx, tree, tvb, offset,
                                                         1, ub_military_bigstring, hf_index, NULL);
@@ -382,8 +382,8 @@ static const ber_sequence_t Acp127NotificationResponse_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_Acp127NotificationResponse(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_Acp127NotificationResponse(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               Acp127NotificationResponse_set, hf_index, ett_p772_Acp127NotificationResponse);
 
@@ -392,8 +392,8 @@ dissect_p772_Acp127NotificationResponse(gboolean implicit_tag _U_, tvbuff_t *tvb
 
 
 
-static int
-dissect_p772_ExemptedAddress(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ExemptedAddress(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_p22_ORDescriptor(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -404,8 +404,8 @@ static const ber_sequence_t ExemptedAddressSeq_sequence_of[1] = {
   { &hf_p772_ExemptedAddressSeq_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_p772_ExemptedAddress },
 };
 
-static int
-dissect_p772_ExemptedAddressSeq(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ExemptedAddressSeq(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       ExemptedAddressSeq_sequence_of, hf_index, ett_p772_ExemptedAddressSeq);
 
@@ -414,8 +414,8 @@ dissect_p772_ExemptedAddressSeq(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, in
 
 
 
-static int
-dissect_p772_ExtendedAuthorisationInfo(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ExtendedAuthorisationInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_UTCTime(implicit_tag, actx, tree, tvb, offset, hf_index, NULL, NULL);
 
   return offset;
@@ -423,8 +423,8 @@ dissect_p772_ExtendedAuthorisationInfo(gboolean implicit_tag _U_, tvbuff_t *tvb 
 
 
 
-static int
-dissect_p772_Sic(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_Sic(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_restricted_string(implicit_tag, BER_UNI_TAG_PrintableString,
                                                         actx, tree, tvb, offset,
                                                         lb_military_sic, ub_military_sic, hf_index, NULL);
@@ -437,8 +437,8 @@ static const ber_sequence_t SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic_se
   { &hf_p772_sics_item      , BER_CLASS_UNI, BER_UNI_TAG_PrintableString, BER_FLAGS_NOOWNTAG, dissect_p772_Sic },
 };
 
-static int
-dissect_p772_SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                                   1, ub_military_number_of_sics, SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic_sequence_of, hf_index, ett_p772_SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic);
 
@@ -447,8 +447,8 @@ dissect_p772_SEQUENCE_SIZE_1_ub_military_number_of_sics_OF_Sic(gboolean implicit
 
 
 
-static int
-dissect_p772_OBJECT_IDENTIFIER(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 
   return offset;
@@ -456,8 +456,8 @@ dissect_p772_OBJECT_IDENTIFIER(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int
 
 
 
-static int
-dissect_p772_T_dist_value(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_T_dist_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 /* XXX: not implemented */
   offset = dissect_unknown_ber(actx->pinfo, tvb, offset, tree);
 
@@ -472,8 +472,8 @@ static const ber_sequence_t DistributionExtensionField_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_DistributionExtensionField(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_DistributionExtensionField(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    DistributionExtensionField_sequence, hf_index, ett_p772_DistributionExtensionField);
 
@@ -485,8 +485,8 @@ static const ber_sequence_t SEQUENCE_OF_DistributionExtensionField_sequence_of[1
   { &hf_p772_dist_Extensions_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_p772_DistributionExtensionField },
 };
 
-static int
-dissect_p772_SEQUENCE_OF_DistributionExtensionField(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_SEQUENCE_OF_DistributionExtensionField(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_DistributionExtensionField_sequence_of, hf_index, ett_p772_SEQUENCE_OF_DistributionExtensionField);
 
@@ -500,8 +500,8 @@ static const ber_sequence_t DistributionCodes_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_DistributionCodes(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_DistributionCodes(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               DistributionCodes_set, hf_index, ett_p772_DistributionCodes);
 
@@ -510,8 +510,8 @@ dissect_p772_DistributionCodes(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int
 
 
 
-static int
-dissect_p772_MilitaryString(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_MilitaryString(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_restricted_string(implicit_tag, BER_UNI_TAG_PrintableString,
                                                         actx, tree, tvb, offset,
                                                         1, ub_military_string, hf_index, NULL);
@@ -524,8 +524,8 @@ static const ber_sequence_t HandlingInstructions_sequence_of[1] = {
   { &hf_p772_HandlingInstructions_item, BER_CLASS_UNI, BER_UNI_TAG_PrintableString, BER_FLAGS_NOOWNTAG, dissect_p772_MilitaryString },
 };
 
-static int
-dissect_p772_HandlingInstructions(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_HandlingInstructions(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       HandlingInstructions_sequence_of, hf_index, ett_p772_HandlingInstructions);
 
@@ -537,8 +537,8 @@ static const ber_sequence_t MessageInstructions_sequence_of[1] = {
   { &hf_p772_MessageInstructions_item, BER_CLASS_UNI, BER_UNI_TAG_PrintableString, BER_FLAGS_NOOWNTAG, dissect_p772_MilitaryString },
 };
 
-static int
-dissect_p772_MessageInstructions(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_MessageInstructions(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       MessageInstructions_sequence_of, hf_index, ett_p772_MessageInstructions);
 
@@ -547,8 +547,8 @@ dissect_p772_MessageInstructions(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, i
 
 
 
-static int
-dissect_p772_CodressMessage(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_CodressMessage(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -557,8 +557,8 @@ dissect_p772_CodressMessage(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int of
 
 
 
-static int
-dissect_p772_OriginatorReference(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_OriginatorReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_p772_MilitaryString(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -579,8 +579,8 @@ static const value_string p772_MMHSPrecedence_vals[] = {
 };
 
 
-static int
-dissect_p772_MMHSPrecedence(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_MMHSPrecedence(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -602,14 +602,13 @@ static const value_string p772_PrimaryPrecedence_vals[] = {
 };
 
 
-static int
-dissect_p772_PrimaryPrecedence(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int precedence = -1;
+static unsigned
+dissect_p772_PrimaryPrecedence(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  int32_t precedence;
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                &precedence);
+                                                (uint32_t*)&precedence);
 
-  if(precedence != -1)
-   col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (primary=%s)", val_to_str(precedence, p772_PrimaryPrecedence_vals, "precedence(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (primary=%s)", val_to_str(actx->pinfo->pool, precedence, p772_PrimaryPrecedence_vals, "precedence(%d)"));
 
 
   return offset;
@@ -630,14 +629,13 @@ static const value_string p772_CopyPrecedence_vals[] = {
 };
 
 
-static int
-dissect_p772_CopyPrecedence(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int precedence = -1;
+static unsigned
+dissect_p772_CopyPrecedence(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  int32_t precedence;
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                &precedence);
+                                                (uint32_t*)&precedence);
 
-  if(precedence != -1)
-   col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (copy=%s)", val_to_str(precedence, p772_CopyPrecedence_vals, "precedence(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " (copy=%s)", val_to_str(actx->pinfo->pool, precedence, p772_CopyPrecedence_vals, "precedence(%d)"));
 
   return offset;
 }
@@ -652,8 +650,8 @@ static const value_string p772_TypeMessage_vals[] = {
 };
 
 
-static int
-dissect_p772_TypeMessage(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_TypeMessage(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -662,8 +660,8 @@ dissect_p772_TypeMessage(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offse
 
 
 
-static int
-dissect_p772_MessageIdentifier(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_MessageIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_p772_MilitaryString(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -676,8 +674,8 @@ static const ber_sequence_t MessageType_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_MessageType(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_MessageType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               MessageType_set, hf_index, ett_p772_MessageType);
 
@@ -689,8 +687,8 @@ static const ber_sequence_t AddressListDesignatorSeq_sequence_of[1] = {
   { &hf_p772_AddressListDesignatorSeq_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_p772_AddressListDesignator },
 };
 
-static int
-dissect_p772_AddressListDesignatorSeq(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_AddressListDesignatorSeq(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       AddressListDesignatorSeq_sequence_of, hf_index, ett_p772_AddressListDesignatorSeq);
 
@@ -705,8 +703,8 @@ static const value_string p772_OtherRecipientType_vals[] = {
 };
 
 
-static int
-dissect_p772_OtherRecipientType(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_OtherRecipientType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -720,8 +718,8 @@ static const ber_sequence_t OtherRecipientDesignator_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_OtherRecipientDesignator(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_OtherRecipientDesignator(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               OtherRecipientDesignator_set, hf_index, ett_p772_OtherRecipientDesignator);
 
@@ -733,8 +731,8 @@ static const ber_sequence_t OtherRecipientDesignatorSeq_sequence_of[1] = {
   { &hf_p772_OtherRecipientDesignatorSeq_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_p772_OtherRecipientDesignator },
 };
 
-static int
-dissect_p772_OtherRecipientDesignatorSeq(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_OtherRecipientDesignatorSeq(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       OtherRecipientDesignatorSeq_sequence_of, hf_index, ett_p772_OtherRecipientDesignatorSeq);
 
@@ -746,8 +744,8 @@ static const ber_sequence_t SEQUENCE_OF_ORDescriptor_sequence_of[1] = {
   { &hf_p772_pilotRecipient_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_p22_ORDescriptor },
 };
 
-static int
-dissect_p772_SEQUENCE_OF_ORDescriptor(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_SEQUENCE_OF_ORDescriptor(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_ORDescriptor_sequence_of, hf_index, ett_p772_SEQUENCE_OF_ORDescriptor);
 
@@ -759,8 +757,8 @@ static const ber_sequence_t SEQUENCE_OF_MilitaryString_sequence_of[1] = {
   { &hf_p772_pilotHandling_item, BER_CLASS_UNI, BER_UNI_TAG_PrintableString, BER_FLAGS_NOOWNTAG, dissect_p772_MilitaryString },
 };
 
-static int
-dissect_p772_SEQUENCE_OF_MilitaryString(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_SEQUENCE_OF_MilitaryString(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_MilitaryString_sequence_of, hf_index, ett_p772_SEQUENCE_OF_MilitaryString);
 
@@ -776,8 +774,8 @@ static const ber_sequence_t PilotInformation_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_PilotInformation(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_PilotInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PilotInformation_sequence, hf_index, ett_p772_PilotInformation);
 
@@ -789,8 +787,8 @@ static const ber_sequence_t PilotInformationSeq_sequence_of[1] = {
   { &hf_p772_PilotInformationSeq_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_p772_PilotInformation },
 };
 
-static int
-dissect_p772_PilotInformationSeq(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_PilotInformationSeq(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       PilotInformationSeq_sequence_of, hf_index, ett_p772_PilotInformationSeq);
 
@@ -799,8 +797,8 @@ dissect_p772_PilotInformationSeq(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, i
 
 
 
-static int
-dissect_p772_Acp127MessageIdentifier(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_Acp127MessageIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_p772_MilitaryString(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -808,8 +806,8 @@ dissect_p772_Acp127MessageIdentifier(gboolean implicit_tag _U_, tvbuff_t *tvb _U
 
 
 
-static int
-dissect_p772_OriginatorPlad(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_OriginatorPlad(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_p772_MilitaryString(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -817,8 +815,8 @@ dissect_p772_OriginatorPlad(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int of
 
 
 
-static int
-dissect_p772_BodyPartSequenceNumber(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_BodyPartSequenceNumber(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -832,8 +830,8 @@ static const ber_sequence_t BodyPartSecurityLabel_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_BodyPartSecurityLabel(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_BodyPartSecurityLabel(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               BodyPartSecurityLabel_set, hf_index, ett_p772_BodyPartSecurityLabel);
 
@@ -845,8 +843,8 @@ static const ber_sequence_t SEQUENCE_OF_BodyPartSecurityLabel_sequence_of[1] = {
   { &hf_p772_body_part_security_labels_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_p772_BodyPartSecurityLabel },
 };
 
-static int
-dissect_p772_SEQUENCE_OF_BodyPartSecurityLabel(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_SEQUENCE_OF_BodyPartSecurityLabel(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_BodyPartSecurityLabel_sequence_of, hf_index, ett_p772_SEQUENCE_OF_BodyPartSecurityLabel);
 
@@ -861,8 +859,8 @@ static const ber_sequence_t SecurityInformationLabels_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_SecurityInformationLabels(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_SecurityInformationLabels(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SecurityInformationLabels_sequence, hf_index, ett_p772_SecurityInformationLabels);
 
@@ -877,8 +875,8 @@ static const value_string p772_PriorityLevelQualifier_vals[] = {
 };
 
 
-static int
-dissect_p772_PriorityLevelQualifier(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_PriorityLevelQualifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                   NULL);
 
@@ -887,8 +885,8 @@ dissect_p772_PriorityLevelQualifier(gboolean implicit_tag _U_, tvbuff_t *tvb _U_
 
 
 
-static int
-dissect_p772_ADatP3Parameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ADatP3Parameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -897,8 +895,8 @@ dissect_p772_ADatP3Parameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int 
 
 
 
-static int
-dissect_p772_IA5String(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_IA5String(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_IA5String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -911,8 +909,8 @@ static const ber_sequence_t T_setOriented_sequence_of[1] = {
   { &hf_p772_setOriented_item, BER_CLASS_UNI, BER_UNI_TAG_IA5String, BER_FLAGS_NOOWNTAG, dissect_p772_IA5String },
 };
 
-static int
-dissect_p772_T_setOriented(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_T_setOriented(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       T_setOriented_sequence_of, hf_index, ett_p772_T_setOriented);
 
@@ -932,8 +930,8 @@ static const ber_choice_t ADatP3Data_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_ADatP3Data(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ADatP3Data(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ADatP3Data_choice, hf_index, ett_p772_ADatP3Data,
                                  NULL);
@@ -943,8 +941,8 @@ dissect_p772_ADatP3Data(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset
 
 
 
-static int
-dissect_p772_CorrectionsParameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_CorrectionsParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -953,8 +951,8 @@ dissect_p772_CorrectionsParameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_,
 
 
 
-static int
-dissect_p772_CorrectionsData(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_CorrectionsData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_IA5String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -969,8 +967,8 @@ static const ber_sequence_t ForwardedEncryptedParameters_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_ForwardedEncryptedParameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ForwardedEncryptedParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               ForwardedEncryptedParameters_set, hf_index, ett_p772_ForwardedEncryptedParameters);
 
@@ -979,8 +977,8 @@ dissect_p772_ForwardedEncryptedParameters(gboolean implicit_tag _U_, tvbuff_t *t
 
 
 
-static int
-dissect_p772_ForwardedEncryptedData(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ForwardedEncryptedData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     NULL, 0, hf_index, -1,
                                     NULL);
@@ -995,8 +993,8 @@ static const ber_sequence_t MMMessageParameters_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static int
-dissect_p772_MMMessageParameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_MMMessageParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               MMMessageParameters_set, hf_index, ett_p772_MMMessageParameters);
 
@@ -1005,8 +1003,8 @@ dissect_p772_MMMessageParameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, i
 
 
 
-static int
-dissect_p772_MMMessageData(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_MMMessageData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_p22_IPM(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -1014,8 +1012,8 @@ dissect_p772_MMMessageData(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int off
 
 
 
-static int
-dissect_p772_ACP127DataParameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ACP127DataParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -1024,8 +1022,8 @@ dissect_p772_ACP127DataParameters(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, 
 
 
 
-static int
-dissect_p772_ACP127DataData(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static unsigned
+dissect_p772_ACP127DataData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_restricted_string(implicit_tag, BER_UNI_TAG_IA5String,
                                                         actx, tree, tvb, offset,
                                                         1, ub_data_size, hf_index, NULL);
@@ -1036,213 +1034,213 @@ dissect_p772_ACP127DataData(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int of
 /*--- PDUs ---*/
 
 static int dissect_InformationObject_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_InformationObject(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_InformationObject_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_InformationObject(false, tvb, offset, &asn1_ctx, tree, hf_p772_InformationObject_PDU);
   return offset;
 }
 static int dissect_Acp127NotificationResponse_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_Acp127NotificationResponse(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_Acp127NotificationResponse_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_Acp127NotificationResponse(false, tvb, offset, &asn1_ctx, tree, hf_p772_Acp127NotificationResponse_PDU);
   return offset;
 }
 static int dissect_ExemptedAddressSeq_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ExemptedAddressSeq(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ExemptedAddressSeq_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ExemptedAddressSeq(false, tvb, offset, &asn1_ctx, tree, hf_p772_ExemptedAddressSeq_PDU);
   return offset;
 }
 static int dissect_ExtendedAuthorisationInfo_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ExtendedAuthorisationInfo(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ExtendedAuthorisationInfo_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ExtendedAuthorisationInfo(false, tvb, offset, &asn1_ctx, tree, hf_p772_ExtendedAuthorisationInfo_PDU);
   return offset;
 }
 static int dissect_DistributionCodes_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_DistributionCodes(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_DistributionCodes_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_DistributionCodes(false, tvb, offset, &asn1_ctx, tree, hf_p772_DistributionCodes_PDU);
   return offset;
 }
 static int dissect_HandlingInstructions_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_HandlingInstructions(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_HandlingInstructions_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_HandlingInstructions(false, tvb, offset, &asn1_ctx, tree, hf_p772_HandlingInstructions_PDU);
   return offset;
 }
 static int dissect_MessageInstructions_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_MessageInstructions(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_MessageInstructions_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_MessageInstructions(false, tvb, offset, &asn1_ctx, tree, hf_p772_MessageInstructions_PDU);
   return offset;
 }
 static int dissect_CodressMessage_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_CodressMessage(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_CodressMessage_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_CodressMessage(false, tvb, offset, &asn1_ctx, tree, hf_p772_CodressMessage_PDU);
   return offset;
 }
 static int dissect_OriginatorReference_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_OriginatorReference(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_OriginatorReference_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_OriginatorReference(false, tvb, offset, &asn1_ctx, tree, hf_p772_OriginatorReference_PDU);
   return offset;
 }
 static int dissect_PrimaryPrecedence_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_PrimaryPrecedence(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_PrimaryPrecedence_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_PrimaryPrecedence(false, tvb, offset, &asn1_ctx, tree, hf_p772_PrimaryPrecedence_PDU);
   return offset;
 }
 static int dissect_CopyPrecedence_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_CopyPrecedence(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_CopyPrecedence_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_CopyPrecedence(false, tvb, offset, &asn1_ctx, tree, hf_p772_CopyPrecedence_PDU);
   return offset;
 }
 static int dissect_MessageType_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_MessageType(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_MessageType_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_MessageType(false, tvb, offset, &asn1_ctx, tree, hf_p772_MessageType_PDU);
   return offset;
 }
 static int dissect_AddressListDesignatorSeq_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_AddressListDesignatorSeq(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_AddressListDesignatorSeq_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_AddressListDesignatorSeq(false, tvb, offset, &asn1_ctx, tree, hf_p772_AddressListDesignatorSeq_PDU);
   return offset;
 }
 static int dissect_OtherRecipientDesignatorSeq_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_OtherRecipientDesignatorSeq(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_OtherRecipientDesignatorSeq_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_OtherRecipientDesignatorSeq(false, tvb, offset, &asn1_ctx, tree, hf_p772_OtherRecipientDesignatorSeq_PDU);
   return offset;
 }
 static int dissect_PilotInformationSeq_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_PilotInformationSeq(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_PilotInformationSeq_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_PilotInformationSeq(false, tvb, offset, &asn1_ctx, tree, hf_p772_PilotInformationSeq_PDU);
   return offset;
 }
 static int dissect_Acp127MessageIdentifier_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_Acp127MessageIdentifier(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_Acp127MessageIdentifier_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_Acp127MessageIdentifier(false, tvb, offset, &asn1_ctx, tree, hf_p772_Acp127MessageIdentifier_PDU);
   return offset;
 }
 static int dissect_OriginatorPlad_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_OriginatorPlad(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_OriginatorPlad_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_OriginatorPlad(false, tvb, offset, &asn1_ctx, tree, hf_p772_OriginatorPlad_PDU);
   return offset;
 }
 static int dissect_SecurityInformationLabels_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_SecurityInformationLabels(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_SecurityInformationLabels_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_SecurityInformationLabels(false, tvb, offset, &asn1_ctx, tree, hf_p772_SecurityInformationLabels_PDU);
   return offset;
 }
 static int dissect_PriorityLevelQualifier_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_PriorityLevelQualifier(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_PriorityLevelQualifier_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_PriorityLevelQualifier(false, tvb, offset, &asn1_ctx, tree, hf_p772_PriorityLevelQualifier_PDU);
   return offset;
 }
 static int dissect_ADatP3Parameters_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ADatP3Parameters(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ADatP3Parameters_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ADatP3Parameters(false, tvb, offset, &asn1_ctx, tree, hf_p772_ADatP3Parameters_PDU);
   return offset;
 }
 static int dissect_ADatP3Data_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ADatP3Data(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ADatP3Data_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ADatP3Data(false, tvb, offset, &asn1_ctx, tree, hf_p772_ADatP3Data_PDU);
   return offset;
 }
 static int dissect_CorrectionsParameters_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_CorrectionsParameters(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_CorrectionsParameters_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_CorrectionsParameters(false, tvb, offset, &asn1_ctx, tree, hf_p772_CorrectionsParameters_PDU);
   return offset;
 }
 static int dissect_CorrectionsData_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_CorrectionsData(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_CorrectionsData_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_CorrectionsData(false, tvb, offset, &asn1_ctx, tree, hf_p772_CorrectionsData_PDU);
   return offset;
 }
 static int dissect_ForwardedEncryptedParameters_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ForwardedEncryptedParameters(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ForwardedEncryptedParameters_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ForwardedEncryptedParameters(false, tvb, offset, &asn1_ctx, tree, hf_p772_ForwardedEncryptedParameters_PDU);
   return offset;
 }
 static int dissect_ForwardedEncryptedData_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ForwardedEncryptedData(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ForwardedEncryptedData_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ForwardedEncryptedData(false, tvb, offset, &asn1_ctx, tree, hf_p772_ForwardedEncryptedData_PDU);
   return offset;
 }
 static int dissect_MMMessageParameters_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_MMMessageParameters(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_MMMessageParameters_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_MMMessageParameters(false, tvb, offset, &asn1_ctx, tree, hf_p772_MMMessageParameters_PDU);
   return offset;
 }
 static int dissect_MMMessageData_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_MMMessageData(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_MMMessageData_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_MMMessageData(false, tvb, offset, &asn1_ctx, tree, hf_p772_MMMessageData_PDU);
   return offset;
 }
 static int dissect_ACP127DataParameters_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ACP127DataParameters(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ACP127DataParameters_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ACP127DataParameters(false, tvb, offset, &asn1_ctx, tree, hf_p772_ACP127DataParameters_PDU);
   return offset;
 }
 static int dissect_ACP127DataData_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_ACP127DataData(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_ACP127DataData_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_ACP127DataData(false, tvb, offset, &asn1_ctx, tree, hf_p772_ACP127DataData_PDU);
   return offset;
 }
 static int dissect_Acp127NotificationType_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  int offset = 0;
+  unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_p772_Acp127NotificationType(FALSE, tvb, offset, &asn1_ctx, tree, hf_p772_Acp127NotificationType_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_p772_Acp127NotificationType(false, tvb, offset, &asn1_ctx, tree, hf_p772_Acp127NotificationType_PDU);
   return offset;
 }
 
@@ -1258,7 +1256,7 @@ dissect_p772(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 	proto_item *item=NULL;
 	proto_tree *tree=NULL;
 	asn1_ctx_t asn1_ctx;
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 	if (parent_tree) {
 		item = proto_tree_add_item(parent_tree, proto_p772, tvb, 0, -1, ENC_NA);
@@ -1268,7 +1266,7 @@ dissect_p772(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "P772");
 	col_set_str(pinfo->cinfo, COL_INFO, "Military");
 
-	dissect_p772_InformationObject(TRUE, tvb, offset, &asn1_ctx , tree, -1);
+	dissect_p772_InformationObject(true, tvb, offset, &asn1_ctx , tree, -1);
 	return tvb_captured_length(tvb);
 }
 
@@ -1469,7 +1467,7 @@ void proto_register_p772(void) {
         FT_STRING, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_p772_message_type_type,
-      { "type", "p772.type",
+      { "type", "p772.message_type_type",
         FT_INT32, BASE_DEC, VALS(p772_TypeMessage_vals), 0,
         "TypeMessage", HFILL }},
     { &hf_p772_identifier,
@@ -1481,7 +1479,7 @@ void proto_register_p772(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_p772_address_list_type,
-      { "type", "p772.type",
+      { "type", "p772.address_list_type",
         FT_INT32, BASE_DEC, VALS(p772_AddressListType_vals), 0,
         "AddressListType", HFILL }},
     { &hf_p772_listName,
@@ -1501,7 +1499,7 @@ void proto_register_p772(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_p772_other_recipient_type,
-      { "type", "p772.type",
+      { "type", "p772.other_recipient_type",
         FT_INT32, BASE_DEC, VALS(p772_OtherRecipientType_vals), 0,
         "OtherRecipientType", HFILL }},
     { &hf_p772_designator,
@@ -1595,7 +1593,7 @@ void proto_register_p772(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_p772,
     &ett_p772_InformationObject,
     &ett_p772_Acp127NotificationResponse,

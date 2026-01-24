@@ -73,7 +73,7 @@ QVariant FilesetEntryModel::data(const QModelIndex &index, int role) const
             break;
         }
     } else if (role == Qt::ToolTipRole) {
-        return QString(tr("Open this capture file"));
+        return tr("Open this capture file");
     } else if (role == Qt::TextAlignmentRole) {
         switch (index.column()) {
         case Size:
@@ -121,14 +121,13 @@ void FilesetEntryModel::clear()
 }
 
 QString FilesetEntryModel::nameToDate(const char *name) const {
+    char *date;
     QString dn;
 
-    if (!fileset_filename_match_pattern(name))
+    if (fileset_filename_match_pattern(name, NULL, NULL, &date) == FILESET_NO_MATCH)
         return NULL;
 
-    dn = name;
-    dn.remove(QRegularExpression(".*_"));
-    dn.truncate(14);
+    dn = gchar_free_to_qstring(date);
     dn.insert(4, '-');
     dn.insert(7, '-');
     dn.insert(10, ' ');
@@ -145,7 +144,7 @@ QString FilesetEntryModel::time_tToString(time_t clock) const
     // yyyy-MM-dd HH:mm:ss
     // The equivalent QDateTime call is pretty slow here, possibly related to QTBUG-21678
     // and/or QTBUG-41714.
-    return QString("%1-%2-%3 %4:%5:%6")
+    return QStringLiteral("%1-%2-%3 %4:%5:%6")
             .arg(local->tm_year + 1900, 4, 10, QChar('0'))
             .arg(local->tm_mon+1, 2, 10, QChar('0'))
             .arg(local->tm_mday, 2, 10, QChar('0'))

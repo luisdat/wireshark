@@ -12,7 +12,6 @@ ADD_CUSTOM_CMAKE_INCLUDE()
 set(CRYPT_HEADER_FILES
 	dot11decrypt_debug.h
 	dot11decrypt_int.h
-	dot11decrypt_interop.h
 	dot11decrypt_system.h
 	dot11decrypt_user.h
 	dot11decrypt_util.h
@@ -25,6 +24,8 @@ set(CRYPT_FILES
 	dot11decrypt.c
 	dot11decrypt_tkip.c
 	dot11decrypt_util.c
+	dot11decrypt_wep.c
+	dot11decrypt_ws.c
 	${CUSTOM_CRYPT_SRC}
 )
 

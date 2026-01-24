@@ -1376,7 +1376,7 @@
 #define ZBEE_MFG_POLY_CONTROL               "Poly-Control APS"
 #define ZBEE_MFG_EASTFIELD_LIGHT            "Eastfield Lighting Co., Ltd Shenzhen"
 #define ZBEE_MFG_IP_DATATEL                 "IP Datatel, Inc."
-#define ZBEE_MFG_LUMI_UNITED_TECH           "Lumi United Techology, Ltd Shenzhen"
+#define ZBEE_MFG_LUMI_UNITED_TECH           "Lumi United Technology, Ltd Shenzhen"
 #define ZBEE_MFG_SENGLED_OPTOELEC           "Sengled Optoelectronics Corp"
 #define ZBEE_MFG_REMOTE_SOLUTION            "Remote Solution Co., Ltd."
 #define ZBEE_MFG_ABB_GENWAY_XIAMEN          "ABB Genway Xiamen Electrical Equipment Co., Ltd."
@@ -1644,6 +1644,7 @@
 #define ZBEE_PROTOABBREV_ZCL_APPLEVTALT     "zbee_zcl_ha.applevtalt"
 #define ZBEE_PROTOABBREV_ZCL_APPLIDT        "zbee_zcl_ha.applident"
 #define ZBEE_PROTOABBREV_ZCL_APPLSTATS      "zbee_zcl_ha.applstats"
+#define ZBEE_PROTOABBREV_ZCL_DIAGNOSTICS    "zbee_zcl_ha.diagnostics"
 #define ZBEE_PROTOABBREV_ZCL_METIDT         "zbee_zcl_ha.metidt"
 #define ZBEE_PROTOABBREV_ZCL_IAS_ZONE       "zbee_zcl_ias.zone"
 #define ZBEE_PROTOABBREV_ZCL_IAS_ACE        "zbee_zcl_ias.ace"
@@ -1691,10 +1692,12 @@
 #define ZBEE_PROTOABBREV_ZCL_SUB_GHZ           "zbee_zcl_se.sub_ghz"
 #define ZBEE_PROTOABBREV_ZCL_SHADE_CONFIG      "zbee_zcl_closures.shade_config"
 #define ZBEE_PROTOABBREV_ZCL_DOOR_LOCK         "zbee_zcl_closures.door_lock"
+#define ZBEE_PROTOABBREV_ZCL_WINDOW_COVERING   "zbee_zcl_closures.window_covering"
 #define ZBEE_PROTOABBREV_ZCL_COLOR_CONTROL     "zbee_zcl_lighting.color_ctrl"
 #define ZBEE_PROTOABBREV_ZCL_BALLAST_CONFIG    "zbee_zcl_lighting.ballast_ctrl"
 #define ZBEE_PROTOABBREV_ZCL_TOUCHLINK         "zbee_zcl_general.touchlink"
 #define ZBEE_PROTOABBREV_ZCL_GP                "zbee_zcl_general.gp"
+#define ZBEE_PROTOABBREV_ZCL_GENERIC_TUNNEL    "zbee_zcl_proto_iface.generic_tunnel"
 
 /* ZigBee Vendor Sub IE Fields */
 #define ZBEE_ZIGBEE_IE_ID_MASK                      0xFFC0
@@ -1751,7 +1754,7 @@
 
 /* Helper Functions */
 /* Helper Functions */
-extern guint zbee_get_bit_field(guint input, guint mask);
+extern unsigned zbee_get_bit_field(unsigned input, unsigned mask);
 
 #endif /* PACKET_ZBEE_H */
 

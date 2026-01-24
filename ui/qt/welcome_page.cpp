@@ -9,20 +9,20 @@
 
 #include "config.h"
 
-#include <glib.h>
-
 #include <epan/prefs.h>
 
 #include "ui/capture_globals.h"
 #include "ui/urls.h"
 
-#include "wsutil/version_info.h"
+#include <app/application_flavor.h>
 
 #include "welcome_page.h"
 #include <ui_welcome_page.h>
 #include <ui/qt/utils/tango_colors.h>
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
+#include <ui/qt/models/recentcapturefiles_list_model.h>
+#include <ui/qt/utils/workspace_state.h>
 #include "main_application.h"
 
 #include <QClipboard>
@@ -55,7 +55,6 @@ WelcomePage::WelcomePage(QWidget *parent) :
 {
     welcome_ui_->setupUi(this);
 
-    recent_files_ = welcome_ui_->recentList;
 
     welcome_ui_->captureFilterComboBox->setEnabled(false);
 
@@ -63,34 +62,58 @@ WelcomePage::WelcomePage(QWidget *parent) :
 
     updateStyleSheets();
 
+    /* Handle Recent Capture Files List */
+    // In welcome_page.cpp or wherever the list is created
+    auto *model = new RecentCaptureFilesListModel(this);
+    auto *proxyModel = new RecentCaptureFilesReverseProxyModel(this);
+    proxyModel->setSourceModel(model);
+
+    welcome_ui_->recentCaptureFiles->setVisible(true);
+    welcome_ui_->recentCaptureFiles->setModel(proxyModel);
+    welcome_ui_->recentCaptureFiles->setItemDelegate(new RecentCaptureFilesDelegate(welcome_ui_->recentCaptureFiles));
+    welcome_ui_->recentCaptureFiles->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(welcome_ui_->recentCaptureFiles, &QListView::activated,
+        this, [this]() {
+            QModelIndex index = welcome_ui_->recentCaptureFiles->currentIndex();
+            if (index.isValid()) {
+                QString cfile = index.data(RecentCaptureFilesListModel::FilenameRole).toString();
+                emit recentFileActivated(cfile);
+            }
+        });
+    connect(welcome_ui_->recentCaptureFiles, &QListView::customContextMenuRequested,
+        this, &WelcomePage::showCaptureFilesContextMenu);
+
+    if (WorkspaceState::instance()->recentCaptureFiles().size() > 0) {
+        welcome_ui_->recentLabel->setVisible(true);
+        welcome_ui_->recentCaptureFiles->setVisible(true);
+    } else {
+        welcome_ui_->recentLabel->setVisible(false);
+        welcome_ui_->recentCaptureFiles->setVisible(false);
+    }
 
 #ifdef Q_OS_MAC
-    recent_files_->setAttribute(Qt::WA_MacShowFocusRect, false);
+    welcome_ui_->recentCaptureFiles->setAttribute(Qt::WA_MacShowFocusRect, false);
 #endif
 
-    welcome_ui_->openFrame->hide();
-    recent_files_->setTextElideMode(Qt::ElideLeft);
+    welcome_ui_->recentCaptureFiles->setTextElideMode(Qt::ElideLeft);
 
-    welcome_ui_->recentList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(recent_files_, SIGNAL(customContextMenuRequested(QPoint)),
-            this, SLOT(showRecentContextMenu(QPoint)));
-
-    connect(mainApp, SIGNAL(updateRecentCaptureStatus(const QString &, qint64, bool)), this, SLOT(updateRecentCaptures()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(appInitialized()));
-    connect(mainApp, SIGNAL(localInterfaceListChanged()), this, SLOT(interfaceListChanged()));
-    connect(welcome_ui_->interfaceFrame, SIGNAL(itemSelectionChanged()),
-            welcome_ui_->captureFilterComboBox, SIGNAL(interfacesChanged()));
-    connect(welcome_ui_->interfaceFrame, SIGNAL(typeSelectionChanged()),
-                    this, SLOT(interfaceListChanged()));
-    connect(welcome_ui_->interfaceFrame, SIGNAL(itemSelectionChanged()), this, SLOT(interfaceSelected()));
-    connect(welcome_ui_->captureFilterComboBox->lineEdit(), SIGNAL(textEdited(QString)),
-            this, SLOT(captureFilterTextEdited(QString)));
-    connect(welcome_ui_->captureFilterComboBox, SIGNAL(captureFilterSyntaxChanged(bool)),
-            this, SIGNAL(captureFilterSyntaxChanged(bool)));
-    connect(welcome_ui_->captureFilterComboBox, SIGNAL(startCapture()),
-            this, SLOT(captureStarting()));
-    connect(recent_files_, SIGNAL(itemActivated(QListWidgetItem *)), this, SLOT(openRecentItem(QListWidgetItem *)));
-    updateRecentCaptures();
+    connect(mainApp, &MainApplication::appInitialized, this, &WelcomePage::appInitialized);
+    connect(mainApp, &MainApplication::localInterfaceListChanged, this, &WelcomePage::interfaceListChanged);
+#ifdef HAVE_LIBPCAP
+    connect(mainApp, &MainApplication::scanLocalInterfaces,
+            welcome_ui_->interfaceFrame, &InterfaceFrame::scanLocalInterfaces);
+#endif
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::itemSelectionChanged,
+            welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::interfacesChanged);
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::typeSelectionChanged,
+                    this, &WelcomePage::interfaceListChanged);
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::itemSelectionChanged, this, &WelcomePage::interfaceSelected);
+    connect(welcome_ui_->captureFilterComboBox->lineEdit(), &QLineEdit::textEdited,
+            this, &WelcomePage::captureFilterTextEdited);
+    connect(welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::captureFilterSyntaxChanged,
+            this, &WelcomePage::captureFilterSyntaxChanged);
+    connect(welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::startCapture,
+            this, &WelcomePage::captureStarting);
 
     splash_overlay_ = new SplashOverlay(this);
 }
@@ -130,17 +153,27 @@ void WelcomePage::interfaceListChanged()
     welcome_ui_->btnInterfaceType->setMenu(welcome_ui_->interfaceFrame->getSelectionMenu());
 }
 
+QString WelcomePage::getReleaseLabel()
+{
+    return tr("You are running Wireshark ");
+}
+
+QString WelcomePage::getReleaseLabelGlue()
+{
+    return tr("You are sniffing the glue that holds the Internet together using Wireshark ");
+}
+
 void WelcomePage::setReleaseLabel()
 {
     // XXX Add a "check for updates" link?
     QString full_release;
     QDate today = QDate::currentDate();
     if ((today.month() == 4 && today.day() == 1) || (today.month() == 7 && today.day() == 14)) {
-        full_release = tr("You are sniffing the glue that holds the Internet together using Wireshark ");
+        full_release = getReleaseLabelGlue();
     } else {
-        full_release = tr("You are running Wireshark ");
+        full_release = getReleaseLabel();
     }
-    full_release += get_ws_vcs_version_info();
+    full_release += application_get_vcs_version_info();
     full_release += ".";
 #ifdef HAVE_SOFTWARE_UPDATE
     if (prefs.gui_update_enabled) {
@@ -184,7 +217,7 @@ void WelcomePage::captureFilterTextEdited(const QString capture_filter)
     if (global_capture_opts.num_selected > 0) {
         interface_t *device;
 
-        for (guint i = 0; i < global_capture_opts.all_ifaces->len; i++) {
+        for (unsigned i = 0; i < global_capture_opts.all_ifaces->len; i++) {
             device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
             if (!device->selected) {
                 continue;
@@ -261,77 +294,6 @@ void WelcomePage::captureStarting()
     emit startCapture(QStringList());
 }
 
-void WelcomePage::updateRecentCaptures() {
-    QString itemLabel;
-    QListWidgetItem *rfItem;
-    QFont rfFont;
-    QString selectedFilename;
-
-    if (!recent_files_->selectedItems().isEmpty()) {
-        rfItem = recent_files_->selectedItems().first();
-        selectedFilename = rfItem->data(Qt::UserRole).toString();
-    }
-
-    if (mainApp->recentItems().count() == 0) {
-       // Recent menu has been cleared, remove all recent files.
-       while (recent_files_->count()) {
-          delete recent_files_->item(0);
-       }
-    }
-
-    int rfRow = 0;
-    foreach (recent_item_status *ri, mainApp->recentItems()) {
-        itemLabel = ri->filename;
-
-        if (rfRow >= recent_files_->count()) {
-            recent_files_->addItem(itemLabel);
-        }
-
-        itemLabel.append(" (");
-        if (ri->accessible) {
-            if (ri->size/1024/1024/1024 > 10) {
-                itemLabel.append(QString("%1 GB").arg(ri->size/1024/1024/1024));
-            } else if (ri->size/1024/1024 > 10) {
-                itemLabel.append(QString("%1 MB").arg(ri->size/1024/1024));
-            } else if (ri->size/1024 > 10) {
-                itemLabel.append(QString("%1 KB").arg(ri->size/1024));
-            } else {
-                itemLabel.append(QString("%1 Bytes").arg(ri->size));
-            }
-        } else {
-            itemLabel.append(tr("not found"));
-        }
-        itemLabel.append(")");
-        rfFont.setItalic(!ri->accessible);
-        rfItem = recent_files_->item(rfRow);
-        rfItem->setText(itemLabel);
-        rfItem->setData(Qt::AccessibleTextRole, itemLabel);
-        rfItem->setData(Qt::UserRole, ri->filename);
-        rfItem->setFlags(ri->accessible ? Qt::ItemIsSelectable | Qt::ItemIsEnabled : Qt::NoItemFlags);
-        rfItem->setFont(rfFont);
-        if (ri->filename == selectedFilename) {
-            rfItem->setSelected(true);
-        }
-        rfRow++;
-    }
-
-    int row = recent_files_->count();
-    while (row > 0 && (row > (int) prefs.gui_recent_files_count_max || row > rfRow)) {
-        row--;
-        delete recent_files_->item(row);
-    }
-    if (recent_files_->count() > 0) {
-        welcome_ui_->openFrame->animatedShow();
-    } else {
-        welcome_ui_->openFrame->animatedHide();
-    }
-}
-
-void WelcomePage::openRecentItem(QListWidgetItem *item) {
-    QString cfPath = item->data(Qt::UserRole).toString();
-    emit recentFileActivated(cfPath);
-}
-
 void WelcomePage::resizeEvent(QResizeEvent *event)
 {
     if (splash_overlay_)
@@ -366,64 +328,36 @@ void WelcomePage::changeEvent(QEvent* event)
     QFrame::changeEvent(event);
 }
 
-void WelcomePage::showRecentContextMenu(QPoint pos)
+void WelcomePage::showCaptureFilesContextMenu(QPoint pos)
 {
-    QListWidgetItem *li = recent_files_->itemAt(pos);
-    if (!li) return;
+    QModelIndex index = welcome_ui_->recentCaptureFiles->indexAt(pos);
+    if (!index.isValid()) return;
 
     QMenu *recent_ctx_menu = new QMenu(this);
     recent_ctx_menu->setAttribute(Qt::WA_DeleteOnClose);
 
-    QString cf_path = li->data(Qt::UserRole).toString();
+    QModelIndex sourceIndex = static_cast<QSortFilterProxyModel*>(welcome_ui_->recentCaptureFiles->model())->mapToSource(index);
+    RecentCaptureFilesListModel *model = static_cast<RecentCaptureFilesListModel*>(
+        static_cast<QSortFilterProxyModel*>(welcome_ui_->recentCaptureFiles->model())->sourceModel());
+
+    QString filePath = model->data(sourceIndex, RecentCaptureFilesListModel::FilenameRole).toString();
+    bool accessible = model->data(sourceIndex, RecentCaptureFilesListModel::AccessibleRole).toBool();
 
     QAction *show_action = recent_ctx_menu->addAction(show_in_str_);
-    show_action->setData(cf_path);
-    connect(show_action, SIGNAL(triggered(bool)), this, SLOT(showRecentFolder()));
+    show_action->setEnabled(accessible);
+    connect(show_action, &QAction::triggered, this, [filePath]{ desktop_show_in_folder(filePath); });
 
     QAction *copy_action = recent_ctx_menu->addAction(tr("Copy file path"));
-    copy_action->setData(cf_path);
-    connect(copy_action, SIGNAL(triggered(bool)), this, SLOT(copyRecentPath()));
+    connect(copy_action, &QAction::triggered, this, [filePath]{ mainApp->clipboard()->setText(filePath); });
 
     recent_ctx_menu->addSeparator();
 
     QAction *remove_action = recent_ctx_menu->addAction(tr("Remove from list"));
-    remove_action->setData(cf_path);
-    connect(remove_action, SIGNAL(triggered(bool)), this, SLOT(removeRecentPath()));
+    connect(remove_action, &QAction::triggered, this, [filePath]{
+        WorkspaceState::instance()->removeRecentCaptureFile(filePath);
+    });
 
-    recent_ctx_menu->popup(recent_files_->mapToGlobal(pos));
-}
-
-void WelcomePage::showRecentFolder()
-{
-    QAction *ria = qobject_cast<QAction*>(sender());
-    if (!ria) return;
-
-    QString cf_path = ria->data().toString();
-    if (cf_path.isEmpty()) return;
-
-    desktop_show_in_folder(cf_path);
-}
-
-void WelcomePage::copyRecentPath()
-{
-    QAction *ria = qobject_cast<QAction*>(sender());
-    if (!ria) return;
-
-    QString cf_path = ria->data().toString();
-    if (cf_path.isEmpty()) return;
-
-    mainApp->clipboard()->setText(cf_path);
-}
-
-void WelcomePage::removeRecentPath()
-{
-    QAction *ria = qobject_cast<QAction*>(sender());
-    if (!ria) return;
-
-    QString cf_path = ria->data().toString();
-    if (cf_path.isEmpty()) return;
-
-    mainApp->removeRecentItem(cf_path);
+    recent_ctx_menu->popup(welcome_ui_->recentCaptureFiles->viewport()->mapToGlobal(pos));
 }
 
 void WelcomePage::on_captureLabel_clicked()
@@ -438,7 +372,7 @@ void WelcomePage::on_helpLabel_clicked()
 
 void WelcomePage::updateStyleSheets()
 {
-    QString welcome_ss = QString(
+    QString welcome_ss = QStringLiteral(
                 "WelcomePage {"
                 "  padding: 1em;"
                 " }"
@@ -451,7 +385,7 @@ void WelcomePage::updateStyleSheets()
                 "}"
                 );
 #if !defined(Q_OS_WIN)
-    welcome_ss += QString(
+    welcome_ss += QStringLiteral(
                 "QAbstractItemView:item:hover {"
                 "  background-color: %1;"
                 "  color: palette(text);"
@@ -461,7 +395,7 @@ void WelcomePage::updateStyleSheets()
 #endif
     setStyleSheet(welcome_ss);
 
-    QString banner_ss = QString(
+    QString banner_ss = QStringLiteral(
                 "QLabel {"
                 "  border-radius: 0.33em;"
                 "  color: %1;"
@@ -473,7 +407,7 @@ void WelcomePage::updateStyleSheets()
             .arg(QColor(tango_sky_blue_2).name());   // Background color
     welcome_ui_->mainWelcomeBanner->setStyleSheet(banner_ss);
 
-    QString title_button_ss = QString(
+    QString title_button_ss = QStringLiteral(
             "QLabel {"
             "  color: %1;"
             "}"
@@ -495,7 +429,7 @@ void WelcomePage::updateStyleSheets()
         // - Add one or more classes, e.g. "note" or "warning" similar to
         //   SyntaxLineEdit, which we can then expose vi #defines.
         // - Just expose direct color values via #defines.
-        QString flavor_ss = QString(
+        QString flavor_ss = QStringLiteral(
                     "QLabel {"
                     "  border-radius: 0.25em;"
                     "  color: %1;"
@@ -514,15 +448,15 @@ void WelcomePage::updateStyleSheets()
     welcome_ui_->recentLabel->setStyleSheet(title_button_ss);
     welcome_ui_->helpLabel->setStyleSheet(title_button_ss);
 
-    recent_files_->setStyleSheet(
-            "QListWidget::item {"
+    welcome_ui_->recentCaptureFiles->setStyleSheet(
+            "QListView::item {"
             "  padding-top: 0.2em;"
             "  padding-bottom: 0.2em;"
             "}"
-            "QListWidget::item::first {"
+            "QListView::item::first {"
             "  padding-top: 0;"
             "}"
-            "QListWidget::item::last {"
+            "QListView::item::last {"
             "  padding-bottom: 0;"
             "}"
             );

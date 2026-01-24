@@ -43,7 +43,7 @@ void next_tvb_add_handle(next_tvb_list_t *list, tvbuff_t *tvb, proto_tree *tree,
   list->count++;
 }
 
-void next_tvb_add_uint(next_tvb_list_t *list, tvbuff_t *tvb, proto_tree *tree, dissector_table_t table, guint32 uint_val) {
+void next_tvb_add_uint(next_tvb_list_t *list, tvbuff_t *tvb, proto_tree *tree, dissector_table_t table, uint32_t uint_val) {
   next_tvb_item_t *item;
 
   item = wmem_new(list->pool, next_tvb_item_t);
@@ -65,7 +65,7 @@ void next_tvb_add_uint(next_tvb_list_t *list, tvbuff_t *tvb, proto_tree *tree, d
   list->count++;
 }
 
-void next_tvb_add_string(next_tvb_list_t *list, tvbuff_t *tvb, proto_tree *tree, dissector_table_t table, const gchar *string) {
+void next_tvb_add_string(next_tvb_list_t *list, tvbuff_t *tvb, proto_tree *tree, dissector_table_t table, const char *string) {
   next_tvb_item_t *item;
 
   item = wmem_new(list->pool, next_tvb_item_t);
@@ -101,7 +101,7 @@ void next_tvb_call(next_tvb_list_t *list, packet_info *pinfo, proto_tree *tree, 
           dissector_try_uint(item->table, item->uint_val, item->tvb, pinfo, (item->tree) ? item->tree : tree);
           break;
         case NTVB_STRING:
-          dissector_try_string(item->table, item->string, item->tvb, pinfo, (item->tree) ? item->tree : tree, NULL);
+          dissector_try_string_with_data(item->table, item->string, item->tvb, pinfo, (item->tree) ? item->tree : tree, true, NULL);
           break;
       }
     }

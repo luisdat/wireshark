@@ -3,13 +3,10 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import unittest
-import fixtures
-from suite_dfilter.dfiltertest import *
+# from suite_dfilter.dfiltertest import *
 
 
-@fixtures.uses_fixtures
-class case_string(unittest.TestCase):
+class TestDfilterString:
     trace_file = "http.pcap"
 
     def test_eq_1(self, checkDFilterCount):
@@ -100,14 +97,6 @@ class case_string(unittest.TestCase):
         dfilter = 'http.request.method[-2] == "D"'
         checkDFilterCount(dfilter, 0)
 
-    def xxxtest_stringz_1(self):
-            return self.DFilterCount(pkt_tftp,
-                    'tftp.type == "octet"', 1)
-
-    def xxxtest_stringz_2(self):
-            return self.DFilterCount(pkt_tftp,
-                    'tftp.type == "junk"', 0)
-
     def test_contains_1(self, checkDFilterCount):
         dfilter = 'http.request.method contains "E"'
         checkDFilterCount(dfilter, 1)
@@ -184,8 +173,20 @@ class case_string(unittest.TestCase):
         dfilter = 'tcp.checksum.status == "Unverified" || tcp.checksum.status == "Good"'
         checkDFilterCount(dfilter, 1)
 
-@fixtures.uses_fixtures
-class case_stringz(unittest.TestCase):
+    def test_value_string_2(self, checkDFilterCount):
+        dfilter = 'tcp.checksum.status matches "unverified|good"'
+        checkDFilterCount(dfilter, 1)
+
+    def test_value_string_3(self, checkDFilterSucceed):
+        dfilter = 'tcp.checksum.status == Unverified'
+        checkDFilterSucceed(dfilter, 'Writing value strings without double quotes is deprecated')
+
+    def test_value_string_4(self, checkDFilterCount):
+        # Implicit conversion to value string with contains
+        dfilter = 'ip.proto contains "P"'
+        checkDFilterCount(dfilter, 1)
+
+class TestDfilterStringz:
     trace_file = "tftp.pcap"
 
     def test_stringz_1(self, checkDFilterCount):
@@ -199,3 +200,45 @@ class case_stringz(unittest.TestCase):
     def test_stringz_3(self, checkDFilterCount):
         dfilter = 'tftp.type == junk'
         checkDFilterCount(dfilter, 0)
+
+class TestDfilterStringIndex:
+    trace_file = "data-utf8.pcap"
+
+    def test_index_1(self, checkDFilterCount):
+        dfilter = 'data.text[3] == "á"'
+        prefs = "data.show_as_text:true"
+        checkDFilterCount(dfilter, 1, prefs)
+
+    def test_index_2(self, checkDFilterCount):
+        dfilter = 'data.text[3] == "a"'
+        prefs = "data.show_as_text:true"
+        checkDFilterCount(dfilter, 0, prefs)
+
+    def test_index_3(self, checkDFilterCount):
+        dfilter = 'data.text[40:] == "cão preguiçoso"'
+        prefs = "data.show_as_text:true"
+        checkDFilterCount(dfilter, 1, prefs)
+
+    def test_index_4(self, checkDFilterCount):
+        # Byte offset
+        dfilter = '@data.text[41:] == "cão preguiçoso"'
+        prefs = "data.show_as_text:true"
+        checkDFilterCount(dfilter, 1, prefs)
+
+    def test_index_5(self, checkDFilterCount):
+        # Byte offset
+        dfilter = '@data.text[41:] == 63:c3:a3:6f:20:70:72:65:67:75:69:c3:a7:6f:73:6f'
+        prefs = "data.show_as_text:true"
+        checkDFilterCount(dfilter, 1, prefs)
+
+    def test_strlen_1(self, checkDFilterCount):
+        dfilter = 'len(data.text) == 54'
+        prefs = "data.show_as_text:true"
+        checkDFilterCount(dfilter, 1, prefs)
+
+    def test_strlen_2(self, checkDFilterCount):
+        # Byte length
+        dfilter = 'len(@data.text) == 57'
+        prefs = "data.show_as_text:true"
+        checkDFilterCount(dfilter, 1, prefs)
+

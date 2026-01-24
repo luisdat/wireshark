@@ -19,52 +19,52 @@
 void proto_register_epm (void);
 void proto_reg_handoff_epm (void);
 
-static int proto_epm3 = -1;
-static int proto_epm4 = -1;
+static int proto_epm3;
+static int proto_epm4;
 
-static int hf_epm_opnum = -1;
-static int hf_epm_inquiry_type = -1;
-static int hf_epm_object = -1;
-static int hf_epm_if_id = -1;
-static int hf_epm_ver_maj = -1;
-static int hf_epm_ver_min = -1;
-static int hf_epm_ver_opt = -1;
-static int hf_epm_hnd = -1;
-static int hf_epm_max_ents = -1;
-static int hf_epm_num_ents = -1;
-static int hf_epm_uuid = -1;
-static int hf_epm_uuid_version = -1;
-static int hf_epm_tower_length = -1;
-/* static int hf_epm_tower_data = -1; */
-static int hf_epm_max_towers = -1;
-static int hf_epm_num_towers = -1;
-static int hf_epm_rc = -1;
-static int hf_epm_replace = -1;
-static int hf_epm_tower_num_floors = -1;
-static int hf_epm_tower_rhs_len = -1;
-static int hf_epm_tower_lhs_len = -1;
-static int hf_epm_tower_proto_id = -1;
-static int hf_epm_annotation = -1;
-static int hf_epm_ann_offset = -1;
-static int hf_epm_ann_len = -1;
-static int hf_epm_proto_named_pipes = -1;
-static int hf_epm_proto_netbios_name = -1;
-static int hf_epm_proto_ip = -1;
-static int hf_epm_proto_udp_port = -1;
-static int hf_epm_proto_tcp_port = -1;
-static int hf_epm_proto_http_port = -1;
+static int hf_epm_opnum;
+static int hf_epm_inquiry_type;
+static int hf_epm_object;
+static int hf_epm_if_id;
+static int hf_epm_ver_maj;
+static int hf_epm_ver_min;
+static int hf_epm_ver_opt;
+static int hf_epm_hnd;
+static int hf_epm_max_ents;
+static int hf_epm_num_ents;
+static int hf_epm_uuid;
+static int hf_epm_uuid_version;
+static int hf_epm_tower_length;
+/* static int hf_epm_tower_data; */
+static int hf_epm_max_towers;
+static int hf_epm_num_towers;
+static int hf_epm_rc;
+static int hf_epm_replace;
+static int hf_epm_tower_num_floors;
+static int hf_epm_tower_rhs_len;
+static int hf_epm_tower_lhs_len;
+static int hf_epm_tower_proto_id;
+static int hf_epm_annotation;
+static int hf_epm_ann_offset;
+static int hf_epm_ann_len;
+static int hf_epm_proto_named_pipes;
+static int hf_epm_proto_netbios_name;
+static int hf_epm_proto_ip;
+static int hf_epm_proto_udp_port;
+static int hf_epm_proto_tcp_port;
+static int hf_epm_proto_http_port;
 
-static gint ett_epm = -1;
-static gint ett_epm_tower_floor = -1;
-static gint ett_epm_entry = -1;
+static int ett_epm;
+static int ett_epm_tower_floor;
+static int ett_epm_entry;
 
-static expert_field ei_epm_proto_undecoded = EI_INIT;
+static expert_field ei_epm_proto_undecoded;
 
 
 /* the UUID is identical for interface versions 3 and 4 */
 static e_guid_t uuid_epm = { 0xe1af8308, 0x5d1f, 0x11c9, { 0x91, 0xa4, 0x08, 0x00, 0x2b, 0x14, 0xa0, 0xfa } };
-static guint16  ver_epm3 = 3;
-static guint16  ver_epm4 = 4;
+static uint16_t ver_epm3 = 3;
+static uint16_t ver_epm4 = 4;
 
 
 
@@ -81,13 +81,13 @@ static const value_string ep_service[] = {
       [size_is(tower_len)] char tower[];
    } twr_t, *twr_p_t;
 */
-static int epm_dissect_tower (tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info *di, guint8 *drep);
+static unsigned epm_dissect_tower (tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep);
 
 
-static int
-epm_dissect_pointer_IF_ID(tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_pointer_IF_ID(tvbuff_t *tvb, unsigned offset,
                           packet_info *pinfo, proto_tree *tree,
-                          dcerpc_info *di, guint8 *drep)
+                          dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_uuid_t (tvb, offset, pinfo, tree, di, drep,
                                  di->hf_index, NULL);
@@ -98,20 +98,20 @@ epm_dissect_pointer_IF_ID(tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_pointer_UUID(tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_pointer_UUID(tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_uuid_t (tvb, offset, pinfo, tree, di, drep,
                                  di->hf_index, NULL);
     return offset;
 }
 
-static int
-epm_dissect_ept_lookup_rqst (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_lookup_rqst (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep,
                                  hf_epm_inquiry_type, NULL);
@@ -136,16 +136,16 @@ epm_dissect_ept_lookup_rqst (tvbuff_t *tvb, int offset,
 }
 
 
-static int
-epm_dissect_ept_entry_t(tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_entry_t(tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *parent_tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     proto_item *item=NULL;
     proto_tree *tree=NULL;
     int old_offset=offset;
-    guint32 len;
-    const guint8 *str;
+    uint32_t len;
+    const uint8_t *str;
 
     if(di->conformant_run){
         return offset;
@@ -181,10 +181,10 @@ epm_dissect_ept_entry_t(tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_ept_entry_t_array(tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_entry_t_array(tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_ucvarray(tvb, offset, pinfo, tree, di, drep,
                              epm_dissect_ept_entry_t);
@@ -192,10 +192,10 @@ epm_dissect_ept_entry_t_array(tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_ept_lookup_resp (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_lookup_resp (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_ctx_hnd (tvb, offset, pinfo, tree, di, drep,
                                   hf_epm_hnd, NULL);
@@ -213,10 +213,10 @@ epm_dissect_ept_lookup_resp (tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_uuid (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_uuid (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_uuid_t (tvb, offset, pinfo, tree, di, drep,
                                   hf_epm_uuid, NULL);
@@ -294,15 +294,15 @@ static const value_string proto_id_vals[] = {
 /* XXX this function assumes LE encoding. can not use the NDR routines
    since they assume padding.
 */
-static int
-epm_dissect_tower_data (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_tower_data (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep _U_)
+                             dcerpc_info *di, uint8_t *drep _U_)
 {
-    guint16 num_floors, ii;
+    uint16_t num_floors, ii;
     const char *uuid_name;
-    guint8   u8little_endian = DREP_LITTLE_ENDIAN;
-    const guint8 *str;
+    uint8_t  u8little_endian = DREP_LITTLE_ENDIAN;
+    const uint8_t *str;
 
     if(di->conformant_run){
         return offset;
@@ -316,8 +316,8 @@ epm_dissect_tower_data (tvbuff_t *tvb, int offset,
         proto_item *it = NULL;
         proto_tree *tr = NULL;
         int old_offset = offset;
-        guint16 len;
-        guint8 proto_id;
+        uint16_t len;
+        uint8_t proto_id;
         e_guid_t uuid;
         proto_item *pi;
 
@@ -327,14 +327,14 @@ epm_dissect_tower_data (tvbuff_t *tvb, int offset,
         proto_tree_add_uint(tr, hf_epm_tower_lhs_len, tvb, offset, 2, len);
         offset += 2;
 
-        proto_id = tvb_get_guint8(tvb, offset);
+        proto_id = tvb_get_uint8(tvb, offset);
         proto_tree_add_uint(tr, hf_epm_tower_proto_id, tvb, offset, 1, proto_id);
 
         switch(proto_id){
         case PROTO_ID_UUID:
             dcerpc_tvb_get_uuid (tvb, offset+1, &u8little_endian, &uuid);
 
-            uuid_name = guids_get_uuid_name(&uuid, pinfo->pool);
+            uuid_name = guids_get_guid_name(&uuid, pinfo->pool);
 
             if(uuid_name != NULL) {
                 proto_tree_add_guid_format (tr, hf_epm_uuid, tvb, offset+1, 16, (e_guid_t *) &uuid,
@@ -357,7 +357,7 @@ epm_dissect_tower_data (tvbuff_t *tvb, int offset,
             proto_tree_add_item(tr, hf_epm_uuid_version, tvb, offset+17, 2, ENC_BIG_ENDIAN); /* Major/minor bytes treated as big endian */
 
             {
-                guint16 version = tvb_get_ntohs(tvb, offset+17);
+                uint16_t version = tvb_get_ntohs(tvb, offset+17);
                 const char *service = dcerpc_get_proto_name(&uuid, version);
                 if (service || uuid_name) {
                     const char *s = service ? service : uuid_name;
@@ -369,8 +369,8 @@ epm_dissect_tower_data (tvbuff_t *tvb, int offset,
                                            uuid.data4[2], uuid.data4[3],
                                            uuid.data4[4], uuid.data4[5],
                                            uuid.data4[6], uuid.data4[7],
-                                           tvb_get_guint8(tvb, offset+17),
-                                           tvb_get_guint8(tvb, offset+18));
+                                           tvb_get_uint8(tvb, offset+17),
+                                           tvb_get_uint8(tvb, offset+18));
                 }
             }
             break;
@@ -445,9 +445,9 @@ epm_dissect_tower_data (tvbuff_t *tvb, int offset,
 }
 
 static void
-epm_fmt_uuid_version( gchar *result, guint32 revision )
+epm_fmt_uuid_version( char *result, uint32_t revision )
 {
-   snprintf( result, ITEM_LABEL_LENGTH, "%d.%02d", (guint8)(( revision & 0xFF00 ) >> 8), (guint8)(revision & 0xFF) );
+   snprintf( result, ITEM_LABEL_LENGTH, "%d.%02d", (uint8_t)(( revision & 0xFF00 ) >> 8), (uint8_t)(revision & 0xFF) );
 }
 
 /* typedef struct {
@@ -455,12 +455,12 @@ epm_fmt_uuid_version( gchar *result, guint32 revision )
       [size_is(tower_len)] char tower[];
    } twr_t, *twr_p_t;
 */
-static int
-epm_dissect_tower (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_tower (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
-    guint3264 len;
+    uint3264_t len;
 
     if(di->conformant_run){
         return offset;
@@ -476,20 +476,20 @@ epm_dissect_tower (tvbuff_t *tvb, int offset,
 
     return offset;
 }
-static int
-epm_dissect_tower_pointer (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_tower_pointer (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_pointer(tvb, offset, pinfo, tree, di, drep,
                              epm_dissect_tower, NDR_POINTER_PTR,
                              "Tower pointer:", -1);
     return offset;
 }
-static int
-epm_dissect_tower_array (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_tower_array (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_ucvarray(tvb, offset, pinfo, tree, di, drep,
                              epm_dissect_tower_pointer);
@@ -497,10 +497,10 @@ epm_dissect_tower_array (tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_ept_map_rqst (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_map_rqst (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     /* [in, ptr] uuid_p_t object */
     offset = dissect_ndr_pointer(tvb, offset, pinfo, tree, di, drep,
@@ -523,10 +523,10 @@ epm_dissect_ept_map_rqst (tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_ept_map_resp (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_map_resp (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     /* [in, out] ept_lookup_handle_t *entry_handle */
     offset = dissect_ndr_ctx_hnd (tvb, offset, pinfo, tree, di, drep,
@@ -548,10 +548,10 @@ epm_dissect_ept_map_resp (tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_ept_entry_t_ucarray(tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_entry_t_ucarray(tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_ucarray(tvb, offset, pinfo, tree, di, drep,
                              epm_dissect_ept_entry_t);
@@ -559,10 +559,10 @@ epm_dissect_ept_entry_t_ucarray(tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_ept_insert_rqst (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_insert_rqst (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep,
                                  hf_epm_num_ents, NULL);
@@ -579,10 +579,10 @@ epm_dissect_ept_insert_rqst (tvbuff_t *tvb, int offset,
 
 
 
-static int
-epm_dissect_ept_insert_resp (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_insert_resp (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     /* [out] error_status_t *status */
     offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep,
@@ -592,10 +592,10 @@ epm_dissect_ept_insert_resp (tvbuff_t *tvb, int offset,
 }
 
 
-static int
-epm_dissect_ept_delete_rqst (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_delete_rqst (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep,
                                  hf_epm_num_ents, NULL);
@@ -609,10 +609,10 @@ epm_dissect_ept_delete_rqst (tvbuff_t *tvb, int offset,
 
 
 
-static int
-epm_dissect_ept_delete_resp (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_delete_resp (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     /* [out] error_status_t *status */
     offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep,
@@ -623,10 +623,10 @@ epm_dissect_ept_delete_resp (tvbuff_t *tvb, int offset,
 
 
 
-static int
-epm_dissect_ept_lookup_handle_free_rqst (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_lookup_handle_free_rqst (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     /* [in, out] ept_lookup_handle_t *entry_handle */
     offset = dissect_ndr_ctx_hnd (tvb, offset, pinfo, tree, di, drep,
@@ -635,10 +635,10 @@ epm_dissect_ept_lookup_handle_free_rqst (tvbuff_t *tvb, int offset,
     return offset;
 }
 
-static int
-epm_dissect_ept_lookup_handle_free_resp (tvbuff_t *tvb, int offset,
+static unsigned
+epm_dissect_ept_lookup_handle_free_resp (tvbuff_t *tvb, unsigned offset,
                              packet_info *pinfo, proto_tree *tree,
-                             dcerpc_info *di, guint8 *drep)
+                             dcerpc_info *di, uint8_t *drep)
 {
     /* [in, out] ept_lookup_handle_t *entry_handle */
     offset = dissect_ndr_ctx_hnd (tvb, offset, pinfo, tree, di, drep,
@@ -651,7 +651,7 @@ epm_dissect_ept_lookup_handle_free_resp (tvbuff_t *tvb, int offset,
 }
 
 
-static dcerpc_sub_dissector epm_dissectors[] = {
+static const dcerpc_sub_dissector epm_dissectors[] = {
     { 0, "Insert",
         epm_dissect_ept_insert_rqst,
         epm_dissect_ept_insert_resp },
@@ -728,11 +728,11 @@ proto_register_epm (void)
         { &hf_epm_tower_num_floors,
           { "Number of floors", "epm.tower.num_floors", FT_UINT16, BASE_DEC, NULL, 0x0, "Number of floors in tower", HFILL }},
         { &hf_epm_proto_udp_port,
-          { "UDP Port", "epm.proto.udp_port", FT_UINT16, BASE_DEC, NULL, 0x0, "UDP Port where this service can be found", HFILL }},
+          { "UDP Port", "epm.proto.udp_port", FT_UINT16, BASE_PT_UDP, NULL, 0x0, "UDP Port where this service can be found", HFILL }},
         { &hf_epm_proto_tcp_port,
-          { "TCP Port", "epm.proto.tcp_port", FT_UINT16, BASE_DEC, NULL, 0x0, "TCP Port where this service can be found", HFILL }},
+          { "TCP Port", "epm.proto.tcp_port", FT_UINT16, BASE_PT_TCP, NULL, 0x0, "TCP Port where this service can be found", HFILL }},
         { &hf_epm_proto_http_port,
-          { "TCP Port", "epm.proto.http_port", FT_UINT16, BASE_DEC, NULL, 0x0, "TCP Port where this service can be found", HFILL }},
+          { "TCP Port", "epm.proto.http_port", FT_UINT16, BASE_PT_TCP, NULL, 0x0, "TCP Port where this service can be found", HFILL }},
         { &hf_epm_tower_rhs_len,
           { "RHS Length", "epm.tower.rhs.len", FT_UINT16, BASE_DEC, NULL, 0x0, "Length of RHS data", HFILL }},
         { &hf_epm_tower_lhs_len,
@@ -742,7 +742,7 @@ proto_register_epm (void)
         { &hf_epm_tower_proto_id,
           { "Protocol", "epm.tower.proto_id", FT_UINT8, BASE_HEX, VALS(proto_id_vals), 0x0, "Protocol identifier", HFILL }}
     };
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_epm,
         &ett_epm_tower_floor,
         &ett_epm_entry

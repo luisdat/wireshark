@@ -29,31 +29,31 @@
 void proto_register_krb4(void);
 void proto_reg_handoff_krb4(void);
 
-static int proto_krb4 = -1;
-static int hf_krb4_version = -1;
-static int hf_krb4_auth_msg_type = -1;
-static int hf_krb4_m_type = -1;
-static int hf_krb4_byte_order = -1;
-static int hf_krb4_name = -1;
-static int hf_krb4_instance = -1;
-static int hf_krb4_realm = -1;
-static int hf_krb4_time_sec = -1;
-static int hf_krb4_exp_date = -1;
-static int hf_krb4_req_date = -1;
-static int hf_krb4_lifetime = -1;
-static int hf_krb4_s_name = -1;
-static int hf_krb4_s_instance = -1;
-static int hf_krb4_kvno = -1;
-static int hf_krb4_length = -1;
-static int hf_krb4_ticket_length = -1;
-static int hf_krb4_request_length = -1;
-static int hf_krb4_ticket_blob = -1;
-static int hf_krb4_request_blob = -1;
-static int hf_krb4_encrypted_blob = -1;
-static int hf_krb4_unknown_transarc_blob = -1;
+static int proto_krb4;
+static int hf_krb4_version;
+static int hf_krb4_auth_msg_type;
+static int hf_krb4_m_type;
+static int hf_krb4_byte_order;
+static int hf_krb4_name;
+static int hf_krb4_instance;
+static int hf_krb4_realm;
+static int hf_krb4_time_sec;
+static int hf_krb4_exp_date;
+static int hf_krb4_req_date;
+static int hf_krb4_lifetime;
+static int hf_krb4_s_name;
+static int hf_krb4_s_instance;
+static int hf_krb4_kvno;
+static int hf_krb4_length;
+static int hf_krb4_ticket_length;
+static int hf_krb4_request_length;
+static int hf_krb4_ticket_blob;
+static int hf_krb4_request_blob;
+static int hf_krb4_encrypted_blob;
+static int hf_krb4_unknown_transarc_blob;
 
-static gint ett_krb4 = -1;
-static gint ett_krb4_auth_msg_type = -1;
+static int ett_krb4;
+static int ett_krb4_auth_msg_type;
 
 static dissector_handle_t krb4_handle;
 
@@ -92,16 +92,16 @@ static const value_string m_type_vals[] = {
 static int
 dissect_krb4_string(packet_info *pinfo _U_, int hf_index, proto_tree *tree, tvbuff_t *tvb, int offset)
 {
-	gint length;
+	int length;
 	proto_tree_add_item_ret_length(tree, hf_index, tvb, offset, -1, ENC_ASCII|ENC_NA, &length);
 
 	return offset + length;
 }
 
 static int
-dissect_krb4_kdc_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, const guint encoding, int version)
+dissect_krb4_kdc_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, const unsigned encoding, int version)
 {
-	guint8   lifetime;
+	uint8_t  lifetime;
 
 	if(version==TRANSARC_SPECIAL_VERSION){
 		proto_tree_add_item(tree, hf_krb4_unknown_transarc_blob, tvb, offset, 8, ENC_NA);
@@ -122,7 +122,7 @@ dissect_krb4_kdc_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, in
 	offset+=4;
 
 	/* lifetime */
-	lifetime=tvb_get_guint8(tvb, offset);
+	lifetime=tvb_get_uint8(tvb, offset);
 	proto_tree_add_uint_format_value(tree, hf_krb4_lifetime, tvb, offset, 1, lifetime, "%d (%d minutes)", lifetime, lifetime*5);
 	offset++;
 
@@ -137,9 +137,9 @@ dissect_krb4_kdc_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, in
 
 
 static int
-dissect_krb4_kdc_reply(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, const guint encoding)
+dissect_krb4_kdc_reply(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, const unsigned encoding)
 {
-	guint32  length;
+	uint32_t length;
 
 	/* Name */
 	offset=dissect_krb4_string(pinfo, hf_krb4_name, tree, tvb, offset);
@@ -178,10 +178,10 @@ dissect_krb4_kdc_reply(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int 
 
 
 static int
-dissect_krb4_appl_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, const guint encoding)
+dissect_krb4_appl_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, const unsigned encoding)
 {
-	guint8   tlen, rlen;
-	guint8   lifetime;
+	uint8_t  tlen, rlen;
+	uint8_t  lifetime;
 
 	/* kvno */
 	proto_tree_add_item(tree, hf_krb4_kvno, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -191,12 +191,12 @@ dissect_krb4_appl_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, i
 	offset=dissect_krb4_string(pinfo, hf_krb4_realm, tree, tvb, offset);
 
 	/* ticket length */
-	tlen=tvb_get_guint8(tvb, offset);
+	tlen=tvb_get_uint8(tvb, offset);
 	proto_tree_add_item(tree, hf_krb4_ticket_length, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset++;
 
 	/* request length */
-	rlen=tvb_get_guint8(tvb, offset);
+	rlen=tvb_get_uint8(tvb, offset);
 	proto_tree_add_item(tree, hf_krb4_request_length, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset++;
 
@@ -213,7 +213,7 @@ dissect_krb4_appl_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, i
 	offset+=4;
 
 	/* lifetime */
-	lifetime=tvb_get_guint8(tvb, offset);
+	lifetime=tvb_get_uint8(tvb, offset);
 	proto_tree_add_uint_format_value(tree, hf_krb4_lifetime, tvb, offset, 1, lifetime, "%d (%d minutes)", lifetime, lifetime*5);
 	offset++;
 
@@ -233,47 +233,47 @@ dissect_krb4_auth_msg_type(packet_info *pinfo, proto_tree *parent_tree, tvbuff_t
 {
 	proto_tree *tree;
 	proto_item *item;
-	guint8      auth_msg_type;
+	uint32_t     auth_msg_type;
+	char       *str_type;
 
-	auth_msg_type=tvb_get_guint8(tvb, offset);
-	item = proto_tree_add_item(parent_tree, hf_krb4_auth_msg_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+	item = proto_tree_add_item_ret_uint(parent_tree, hf_krb4_auth_msg_type, tvb, offset, 1, ENC_BIG_ENDIAN, &auth_msg_type);
 	tree = proto_item_add_subtree(item, ett_krb4_auth_msg_type);
+
+	str_type = val_to_str(pinfo->pool, auth_msg_type >> 1, m_type_vals, "Unknown (0x%04x)");
 
 	/* m_type */
 	proto_tree_add_item(tree, hf_krb4_m_type, tvb, offset, 1, ENC_BIG_ENDIAN);
 	col_append_fstr(pinfo->cinfo, COL_INFO, "%s%s",
-	   (version==TRANSARC_SPECIAL_VERSION)?"TRANSARC-":"",
-	    val_to_str(auth_msg_type>>1, m_type_vals, "Unknown (0x%04x)"));
+	   (version==TRANSARC_SPECIAL_VERSION)?"TRANSARC-":"", str_type);
 	proto_item_append_text(item, " %s%s",
-	   (version==TRANSARC_SPECIAL_VERSION)?"TRANSARC-":"",
-	   val_to_str(auth_msg_type>>1, m_type_vals, "Unknown (0x%04x)"));
+	   (version==TRANSARC_SPECIAL_VERSION)?"TRANSARC-":"", str_type);
 
 	/* byte order */
 	proto_tree_add_item(tree, hf_krb4_byte_order, tvb, offset, 1, ENC_BIG_ENDIAN);
-	proto_item_append_text(item, " (%s)", val_to_str(auth_msg_type&0x01, byte_order_vals, "Unknown (0x%04x)"));
+	proto_item_append_text(item, " (%s)", val_to_str(pinfo->pool, auth_msg_type&0x01, byte_order_vals, "Unknown (0x%04x)"));
 
 	offset++;
 	return offset;
 }
 
-static gboolean
+static int
 dissect_krb4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data _U_)
 {
 	proto_tree *tree;
 	proto_item *item;
-	guint8      version, opcode;
+	uint8_t     version, opcode;
 	int         offset = 0;
-	guint       encoding;
+	unsigned    encoding;
 
 	/* this should better have the value 4 or it might be a weirdo
 	 * Transarc AFS special unknown thing.
 	 */
-	version=tvb_get_guint8(tvb, offset);
+	version=tvb_get_uint8(tvb, offset);
 	if((version!=4)&&(version!=TRANSARC_SPECIAL_VERSION)){
-		return FALSE;
+		return 0;
 	}
 
-	opcode=tvb_get_guint8(tvb, offset+1);
+	opcode=tvb_get_uint8(tvb, offset+1);
 	switch(opcode>>1){
 	case AUTH_MSG_KDC_REQUEST:
 	case AUTH_MSG_KDC_REPLY:
@@ -286,7 +286,7 @@ dissect_krb4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *d
 	case AUTH_MSG_DIE:
 		break;
 	default:
-		return FALSE;
+		return 0;
 	}
 
 	/* create a tree for krb4 */
@@ -306,13 +306,13 @@ dissect_krb4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *d
 	encoding = opcode&0x01 ? ENC_LITTLE_ENDIAN : ENC_BIG_ENDIAN;
 	switch(opcode>>1){
 	case AUTH_MSG_KDC_REQUEST:
-		dissect_krb4_kdc_request(pinfo, tree, tvb, offset, encoding, version);
+		offset = dissect_krb4_kdc_request(pinfo, tree, tvb, offset, encoding, version);
 		break;
 	case AUTH_MSG_KDC_REPLY:
-		dissect_krb4_kdc_reply(pinfo, tree, tvb, offset, encoding);
+		offset = dissect_krb4_kdc_reply(pinfo, tree, tvb, offset, encoding);
 		break;
 	case AUTH_MSG_APPL_REQUEST:
-		dissect_krb4_appl_request(pinfo, tree, tvb, offset, encoding);
+		offset = dissect_krb4_appl_request(pinfo, tree, tvb, offset, encoding);
 		break;
 	case AUTH_MSG_APPL_REQUEST_MUTUAL:
 	case AUTH_MSG_ERR_REPLY:
@@ -322,7 +322,7 @@ dissect_krb4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *d
 	case AUTH_MSG_DIE:
 		break;
 	}
-	return TRUE;
+	return offset;
 }
 
 void
@@ -414,13 +414,12 @@ proto_register_krb4(void)
 		    FT_BYTES, BASE_NONE, NULL, 0x00,
 		    "Unknown blob only present in Transarc packets", HFILL }},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_krb4,
 		&ett_krb4_auth_msg_type,
 	};
 
-	proto_krb4 = proto_register_protocol("Kerberos v4",
-					     "KRB4", "krb4");
+	proto_krb4 = proto_register_protocol("Kerberos v4", "KRB4", "krb4");
 	krb4_handle = register_dissector("krb4", dissect_krb4, proto_krb4);
 	proto_register_field_array(proto_krb4, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));

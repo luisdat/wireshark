@@ -16,11 +16,17 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 import argparse
-import io
 import re
 import subprocess
-import sys
 
+have_pyuca = False
+try:
+    from pyuca import Collator
+    have_pyuca = True
+except ModuleNotFoundError:
+    import sys
+    sys.stderr.write('pyuca module not found. Sorting names using the built-in locale module.\n')
+    import locale
 
 def get_git_authors():
     '''
@@ -29,7 +35,7 @@ def get_git_authors():
     '''
     GIT_LINE_REGEX = r"^\s*\d+\s+([^<]*)\s*<([^>]*)>"
     cmd = "git --no-pager shortlog --email --summary HEAD".split(' ')
-    # check_output is used for Python 3.4 compatability
+    # check_output is used for Python 3.4 compatibility
     git_cmd_output = subprocess.check_output(cmd, universal_newlines=True, encoding='utf-8')
 
     git_authors = []
@@ -42,7 +48,10 @@ def get_git_authors():
         # Try to lower how much spam people get:
         email = email.replace('@', '[AT]')
         git_authors.append((name, email))
-    return git_authors
+    if have_pyuca:
+        c = Collator()
+        return sorted(git_authors, key=lambda x: c.sort_key(x[0]))
+    return sorted(git_authors, key=lambda x: locale.strxfrm(x[0].casefold()))
 
 
 def extract_contributors(authors_content):
@@ -107,7 +116,7 @@ def generate_git_contributors_text(contributors_emails, git_authors_emails):
     return "\n".join(output_lines)
 
 
-# Read authos file until we find gitlog entries, then stop
+# Read authors file until we find gitlog entries, then stop
 def read_authors(parsed_args):
     lines = []
     with open(parsed_args.authors[0], 'r', encoding='utf-8') as fh:

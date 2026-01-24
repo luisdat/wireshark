@@ -111,6 +111,17 @@ extern "C" {
   #endif
 #endif
 
+/* This applies to both Clang and GCC, and any other compiler that claims
+ * GNU C support. The version is GCC specific, we just assume Clang understands
+ * this warning. */
+#if defined(__clang__) || WS_IS_AT_LEAST_GNUC_VERSION(14,1)
+  #define DIAG_OFF_TYPE_LIMITS() DIAG_OFF(type-limits)
+  #define DIAG_ON_TYPE_LIMITS() DIAG_ON(type-limits)
+#else
+  #define DIAG_OFF_TYPE_LIMITS()
+  #define DIAG_ON_TYPE_LIMITS()
+#endif
+
 #ifndef DIAG_OFF
   /*
    * This is none of the above; we don't have any way to turn diagnostics
@@ -140,7 +151,7 @@ extern "C" {
 #endif
 
 /*
- * Suppress complaints about narrowing converstions and about signed vs.
+ * Suppress complaints about narrowing conversations and about signed vs.
  * unsigned comparison.
  *
  * XXX - this is done solely to squelch complaints from code generated
@@ -223,13 +234,28 @@ extern "C" {
 
 /* Disable Lemon warnings. */
 #if defined(_MSC_VER)
-  #define DIAG_OFF_LEMON()
-  #define DIAG_ON_LEMON()
+  /*
+   * Suppress:
+   *
+   *   warning C4100: unreferenced formal parameter
+   *
+   * Note https://gitlab.kitware.com/cmake/cmake/-/issues/18736
+   * makes it better to suppress MSVC warnings here than in CMake.
+   */
+  #define DIAG_OFF_LEMON() \
+    __pragma(warning(push)) \
+    __pragma(warning(disable:4100))
+  #define DIAG_ON_LEMON() \
+    __pragma(warning(pop))
 #else
   #define DIAG_OFF_LEMON() \
-    DIAG_OFF_CLANG(unreachable-code)
+    DIAG_OFF_CLANG(unreachable-code) \
+    DIAG_OFF_TYPE_LIMITS() \
+    DIAG_OFF(unused-parameter)
   #define DIAG_ON_LEMON() \
-    DIAG_ON_CLANG(unreachable-code)
+    DIAG_ON_CLANG(unreachable-code) \
+    DIAG_ON_TYPE_LIMITS() \
+    DIAG_ON(unused-parameter)
 #endif
 
 /*
@@ -244,13 +270,25 @@ extern "C" {
    * __GNUC__; if it does, __GNUC__ should suffice.
    */
   #define DIAG_OFF_CAST_AWAY_CONST DIAG_OFF(cast-qual)
-  #define DIAG_ON_CAST_AWAY_CONST DIAG_OFF(cast-qual)
+  #define DIAG_ON_CAST_AWAY_CONST DIAG_ON(cast-qual)
 #elif defined(_MSC_VER)
   #define DIAG_OFF_CAST_AWAY_CONST
   #define DIAG_ON_CAST_AWAY_CONST
 #else
   #define DIAG_OFF_CAST_AWAY_CONST
   #define DIAG_ON_CAST_AWAY_CONST
+#endif
+
+/*
+ * This warning is only supported by GCC since version 7.1 (and not
+ * Clang or other compilers that claim GNU C support).
+ */
+#if WS_GCC_VERSION >= 70100
+  #define DIAG_OFF_STRINGOP_OVERFLOW() DIAG_OFF(stringop-overflow=)
+  #define DIAG_ON_STRINGOP_OVERFLOW() DIAG_ON(stringop-overflow=)
+#else
+  #define DIAG_OFF_STRINGOP_OVERFLOW()
+  #define DIAG_ON_STRINGOP_OVERFLOW()
 #endif
 
 /*

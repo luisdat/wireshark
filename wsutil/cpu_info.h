@@ -11,12 +11,20 @@
 #ifndef __WSUTIL_CPU_INFO_H__
 #define __WSUTIL_CPU_INFO_H__
 
-#include "ws_symbol_export.h"
+#include <wireshark.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
+/**
+ * @brief Append detailed CPU information to a GString buffer.
+ *
+ * Retrieves system-specific CPU details such as model name, architecture,
+ * core count, and feature flags, and appends them to the provided `GString`.
+ *
+ * @param str Pointer to a `GString` buffer where CPU information will be appended.
+ */
 WS_DLL_PUBLIC void get_cpu_info(GString *str);
 
 #ifdef __cplusplus

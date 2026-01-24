@@ -15,6 +15,8 @@
 #include <ui/qt/models/astringlist_list_model.h>
 
 #include <QDialog>
+#include <QLabel>
+#include <QTabWidget>
 #include <QAbstractItemModel>
 #include <QModelIndex>
 #include <QHash>
@@ -53,16 +55,6 @@ private:
     QStringList typeNames_;
 };
 
-class ShortcutListModel : public AStringListListModel
-{
-    Q_OBJECT
-public:
-    explicit ShortcutListModel(QObject * parent = Q_NULLPTR);
-
-protected:
-    virtual QStringList headerColumns() const;
-};
-
 class FolderListModel : public AStringListListModel
 {
     Q_OBJECT
@@ -79,11 +71,18 @@ class AboutDialog : public QDialog
 
 public:
     explicit AboutDialog(QWidget *parent = 0);
-    ~AboutDialog();
+    virtual ~AboutDialog();
 
 protected:
     virtual bool event(QEvent *event);
     virtual void showEvent(QShowEvent *);
+    const char* getVCSVersion();
+
+    // UI getters
+    QLabel* labelLogo() const;
+    QLabel* labelTitle() const;
+    QTabWidget* tabWidget() const;
+    QWidget* tabWireshark() const;
 
 private:
     void updateWiresharkText();

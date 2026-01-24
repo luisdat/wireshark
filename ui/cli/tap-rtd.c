@@ -34,8 +34,8 @@ rtd_draw(void *arg)
 {
 	rtd_data_t* rtd_data = (rtd_data_t*)arg;
 	rtd_t* rtd = (rtd_t*)rtd_data->user_data;
-	gchar* tmp_str;
-	guint i, j;
+	char* tmp_str;
+	unsigned i, j;
 
 	/* printing results */
 	printf("\n");
@@ -51,7 +51,7 @@ rtd_draw(void *arg)
 		printf("Type    | Messages   |    Min RTD    |    Max RTD    |    Avg RTD    | Min in Frame | Max in Frame |\n");
 		for (i=0; i<rtd_data->stat_table.time_stats[0].num_timestat; i++) {
 			if (rtd_data->stat_table.time_stats[0].rtd[i].num) {
-				tmp_str = val_to_str_wmem(NULL, i, rtd->vs_type, "Other (%d)");
+				tmp_str = val_to_str(NULL, i, rtd->vs_type, "Other (%d)");
 				printf("%s | %7u    | %8.2f msec | %8.2f msec | %8.2f msec |  %10u  |  %10u  |\n",
 						tmp_str, rtd_data->stat_table.time_stats[0].rtd[i].num,
 						nstime_to_msec(&(rtd_data->stat_table.time_stats[0].rtd[i].min)), nstime_to_msec(&(rtd_data->stat_table.time_stats[0].rtd[i].max)),
@@ -68,7 +68,7 @@ rtd_draw(void *arg)
 		for (i=0; i<rtd_data->stat_table.num_rtds; i++) {
 			for (j=0; j<rtd_data->stat_table.time_stats[i].num_timestat; j++) {
 				if (rtd_data->stat_table.time_stats[i].rtd[j].num) {
-					tmp_str = val_to_str_wmem(NULL, i, rtd->vs_type, "Other (%d)");
+					tmp_str = val_to_str(NULL, i, rtd->vs_type, "Other (%d)");
 					printf("%s | %7u    | %8.2f msec | %8.2f msec | %8.2f msec |  %10u  |  %10u  |  %10u  |  %10u  | %4u (%4.2f%%) | %4u (%4.2f%%)  |\n",
 							tmp_str, rtd_data->stat_table.time_stats[i].rtd[j].num,
 							nstime_to_msec(&(rtd_data->stat_table.time_stats[i].rtd[j].min)), nstime_to_msec(&(rtd_data->stat_table.time_stats[i].rtd[j].max)),
@@ -88,7 +88,7 @@ rtd_draw(void *arg)
 	printf("=====================================================================================================\n");
 }
 
-static void
+static bool
 init_rtd_tables(register_rtd_t* rtd, const char *filter)
 {
 	GString *error_string;
@@ -107,11 +107,13 @@ init_rtd_tables(register_rtd_t* rtd, const char *filter)
 		free_rtd_table(&ui->rtd.stat_table);
 		cmdarg_err("Couldn't register srt tap: %s", error_string->str);
 		g_string_free(error_string, TRUE);
-		exit(1);
+		return false;
 	}
+
+	return true;
 }
 
-static void
+static bool
 dissector_rtd_init(const char *opt_arg, void* userdata)
 {
 	register_rtd_t *rtd = (register_rtd_t*)userdata;
@@ -123,19 +125,19 @@ dissector_rtd_init(const char *opt_arg, void* userdata)
 	{
 		cmdarg_err("%s", err);
 		g_free(err);
-		exit(1);
+		return false;
 	}
 
-	init_rtd_tables(rtd, filter);
+	return init_rtd_tables(rtd, filter);
 }
 
 /* Set GUI fields for register_rtd list */
-gboolean
+bool
 register_rtd_tables(const void *key _U_, void *value, void *userdata _U_)
 {
 	register_rtd_t *rtd = (register_rtd_t*)value;
 	stat_tap_ui ui_info;
-	gchar *cli_string;
+	char *cli_string;
 
 	cli_string = rtd_table_get_tap_string(rtd);
 	ui_info.group = REGISTER_STAT_GROUP_RESPONSE_TIME;
@@ -146,7 +148,7 @@ register_rtd_tables(const void *key _U_, void *value, void *userdata _U_)
 	ui_info.params = NULL;
 	register_stat_tap_ui(&ui_info, rtd);
 	g_free(cli_string);
-	return FALSE;
+	return false;
 }
 
 /*

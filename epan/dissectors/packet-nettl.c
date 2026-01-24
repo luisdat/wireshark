@@ -16,21 +16,22 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/ipproto.h>
 #include <wiretap/nettl.h>
+#include "data-iana.h"
+
 
 void proto_register_nettl(void);
 void proto_reg_handoff_nettl(void);
 
 /* Initialize the protocol and registered fields */
 
-static int proto_nettl = -1;
+static int proto_nettl;
 
-static int hf_nettl_subsys = -1;
-static int hf_nettl_devid = -1;
-static int hf_nettl_kind = -1;
-static int hf_nettl_pid = -1;
-static int hf_nettl_uid = -1;
+static int hf_nettl_subsys;
+static int hf_nettl_devid;
+static int hf_nettl_kind;
+static int hf_nettl_pid;
+static int hf_nettl_uid;
 
 static dissector_handle_t nettl_handle;
 static dissector_handle_t eth_withoutfcs_handle;
@@ -47,7 +48,7 @@ static dissector_table_t tcp_subdissector_table;
 
 /* Initialize the subtree pointers */
 
-static gint ett_nettl = -1;
+static int ett_nettl;
 
 /* General declarations and macros */
 
@@ -242,7 +243,7 @@ dissect_nettl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
             break;
         case WTAP_ENCAP_NETTL_RAW_ICMPV6:
             if (!dissector_try_uint(ip_proto_dissector_table,
-                                    IP_PROTO_ICMPV6, tvb, pinfo, tree))
+                                    IP_PROTO_IPV6_ICMP, tvb, pinfo, tree))
                 call_data_dissector(tvb, pinfo, tree);
             break;
         case WTAP_ENCAP_NETTL_X25:
@@ -304,7 +305,7 @@ proto_register_nettl(void)
 
     /* Setup protocol subtree array */
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_nettl
     };
 

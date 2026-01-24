@@ -46,9 +46,9 @@ private slots:
 /** Register function to register dissectors that support RTD for Qt.
  *
  * @param key is unused
- * @param value register_rtd_t* representing dissetor RTD table
+ * @param value register_rtd_t* representing dissector RTD table
  * @param userdata is unused
  */
-gboolean register_response_time_delay_tables(const void *key, void *value, void *userdata);
+bool register_response_time_delay_tables(const void *key, void *value, void *userdata);
 
 #endif // __RESPONSE_TIME_DELAY_DIALOG_H__

@@ -31,13 +31,13 @@ typedef struct _export_object_list_gui_t {
     register_eo_t* eo;
 } export_object_list_gui_t;
 
-static GHashTable* eo_opts = NULL;
+static GHashTable* eo_opts;
 
-static gboolean
+static bool
 list_exportobject_protocol(const void *key, void *value _U_, void *userdata _U_)
 {
-    fprintf(stderr, "     %s\n", (const gchar*)key);
-    return FALSE;
+    fprintf(stderr, "     %s\n", (const char*)key);
+    return false;
 }
 
 void eo_list_object_types(void)
@@ -45,9 +45,9 @@ void eo_list_object_types(void)
     eo_iterate_tables(list_exportobject_protocol, NULL);
 }
 
-gboolean eo_tap_opt_add(const char *option_string)
+bool eo_tap_opt_add(const char *option_string)
 {
-    gchar** splitted;
+    char** splitted;
 
     if (!eo_opts)
         eo_opts = g_hash_table_new(g_str_hash,g_str_equal);
@@ -62,7 +62,7 @@ gboolean eo_tap_opt_add(const char *option_string)
     }
     else
     {
-        gchar* dir = (gchar*)g_hash_table_lookup(eo_opts, splitted[0]);
+        char* dir = (char*)g_hash_table_lookup(eo_opts, splitted[0]);
 
         /* Since we're saving all objects from a protocol,
             it can only be listed once */
@@ -70,7 +70,7 @@ gboolean eo_tap_opt_add(const char *option_string)
             g_hash_table_insert(eo_opts, splitted[0], splitted[1]);
 
             g_free(splitted);
-            return TRUE;
+            return true;
         }
         else
         {
@@ -79,7 +79,7 @@ gboolean eo_tap_opt_add(const char *option_string)
     }
 
     g_strfreev(splitted);
-    return FALSE;
+    return false;
 }
 
 static void
@@ -105,10 +105,10 @@ eo_draw(void *tapdata)
     export_object_list_gui_t *object_list = (export_object_list_gui_t*)tap_object->gui_data;
     GSList *slist = object_list->entries;
     export_object_entry_t *entry;
-    gchar* save_in_path = (gchar*)g_hash_table_lookup(eo_opts, proto_get_protocol_filter_name(get_eo_proto_id(object_list->eo)));
+    char* save_in_path = (char*)g_hash_table_lookup(eo_opts, proto_get_protocol_filter_name(get_eo_proto_id(object_list->eo)));
     GString *safe_filename = NULL;
-    gchar *save_as_fullpath = NULL;
-    guint count = 0;
+    char *save_as_fullpath = NULL;
+    unsigned count = 0;
 
     if (!g_file_test(save_in_path, G_FILE_TEST_IS_DIR)) {
         /* If the destination directory (or its parents) do not exist, create them. */
@@ -147,7 +147,35 @@ eo_draw(void *tapdata)
 }
 
 static void
-exportobject_handler(gpointer key, gpointer value _U_, gpointer user_data _U_)
+object_list_free_entry(void *data)
+{
+    eo_free_entry((export_object_entry_t *)data);
+}
+
+/* Reset our listener state for a new capture */
+static void
+eo_reset(void *tapdata)
+{
+    export_object_list_t *tap_object = (export_object_list_t *)tapdata;
+    export_object_list_gui_t *object_list = (export_object_list_gui_t*)tap_object->gui_data;
+
+    g_slist_free_full(g_steal_pointer(&object_list->entries), object_list_free_entry);
+}
+
+/* Clean up our listener state, tapping is done */
+static void
+eo_finish(void *tapdata)
+{
+    export_object_list_t *tap_object = (export_object_list_t *)tapdata;
+    export_object_list_gui_t *object_list = (export_object_list_gui_t*)tap_object->gui_data;
+
+    g_slist_free_full(g_steal_pointer(&object_list->entries), object_list_free_entry);
+    g_free(object_list);
+    g_free(tap_object);
+}
+
+static void
+exportobject_handler(void *key, void *value _U_, void *user_data _U_)
 {
     GString *error_msg;
     export_object_list_t *tap_data;
@@ -171,8 +199,8 @@ exportobject_handler(gpointer key, gpointer value _U_, gpointer user_data _U_)
     object_list->eo = eo;
 
     /* Data will be gathered via a tap callback */
-    error_msg = register_tap_listener(get_eo_tap_listener_name(eo), tap_data, NULL, 0,
-                      NULL, get_eo_packet_func(eo), eo_draw, NULL);
+    error_msg = register_tap_listener(get_eo_tap_listener_name(eo), tap_data, NULL, TL_REQUIRES_NOTHING,
+                      eo_reset, get_eo_packet_func(eo), eo_draw, eo_finish);
 
     if (error_msg) {
         cmdarg_err("Can't register %s tap: %s", (const char*)key, error_msg->str);

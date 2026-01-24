@@ -11,10 +11,6 @@ indent_size = 2
 indent_style = tab
 indent_size = tab
 
-[dot11decrypt_wep.[ch]]
-indent_style = tab
-indent_size = tab
-
 [base64.[ch]]
 indent_style = tab
 indent_size = tab
@@ -83,9 +79,6 @@ indent_size = 2
 indent_style = tab
 indent_size = tab
 
-[strptime.[ch]]
-indent_size = 2
-
 [tempfile.[ch]]
 indent_size = 2
 
@@ -100,8 +93,9 @@ indent_size = tab
 [type_util.[ch]]
 indent_size = 2
 
-[u3.[ch]]
-indent_size = 2
+[version_info.[ch]]
+indent_style = tab
+indent_size = tab
 
 [ws_getopt.[ch]]
 indent_style = tab
@@ -114,5 +108,7 @@ indent_size = tab
 [ws_mempbrk_sse42.[ch]]
 indent_size = 2
 
-[wsgetopt.[ch]]
-indent_size = 2
+[ws_strptime.[ch]]
+indent_style = tab
+indent_size = tab
+

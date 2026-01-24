@@ -12,7 +12,7 @@ FindWSWinLibs("libpcap-*" "PCAP_HINTS")
 #
 # First, try pkg-config on platforms other than Windows.
 #
-if(NOT WIN32)
+if(NOT USE_REPOSITORY)
   find_package(PkgConfig)
   pkg_search_module(PC_PCAP libpcap)
 endif()
@@ -95,26 +95,63 @@ if(NOT PC_PCAP_FOUND AND NOT WIN32)
 endif()
 
 #
+# CMake 3.25 adds a VALIDATOR option to find_path and find_library
+# that makes it easier to only find includes and libraries that have
+# necessary symbols and functions.
+#
+#function(pcap_include_check validator_result_var item)
+#  cmake_push_check_state()
+#  set( CMAKE_REQUIRED_INCLUDES "${item}" )
+#
+#  include(CheckSymbolExists)
+#
+#  # libpcap 1.5.0 (2013-11-07)
+#  check_symbol_exists(PCAP_ERROR_PROMISC_PERM_DENIED "pcap/pcap.h" HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
+#
+#  if (NOT HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
+#    set(${validator_result_var} FALSE PARENT_SCOPE)
+#  endif()
+#
+#  cmake_pop_check_state()
+#endfunction()
+
+#
 # Locate the actual include directory. For pkg-config the
 # PC_PCAP_INCLUDE_DIRS variable could be empty if the default
 # header search path is sufficient to locate the header file.
 # For macOS, the directory returned by pcap-config is wrong, so
 # this will make sure to find a valid path.
 #
-find_path(PCAP_INCLUDE_DIR
-  NAMES
-    pcap/pcap.h
-    pcap.h
-  HINTS
-    ${PC_PCAP_INCLUDE_DIRS}
-    ${PCAP_CONFIG_INCLUDE_DIRS}
-    "${PCAP_HINTS}/Include"
-)
+if (WIN32 AND (CMAKE_CROSSCOMPILING OR USE_MSYSTEM))
+  # For cross-compiling, just use the internal headers.
+  # We have to turn off the sysroot.
+  find_path(PCAP_INCLUDE_DIR
+    NAMES
+      pcap/pcap.h
+    PATHS
+      "${CMAKE_SOURCE_DIR}/libpcap"
+    NO_DEFAULT_PATH
+    NO_CMAKE_FIND_ROOT_PATH
+    #VALIDATOR pcap_include_check
+  )
+else()
+  find_path(PCAP_INCLUDE_DIR
+    NAMES
+      pcap/pcap.h
+    HINTS
+      ${PC_PCAP_INCLUDE_DIRS}
+      ${PCAP_CONFIG_INCLUDE_DIRS}
+      "${PCAP_HINTS}/Include"
+    PATHS
+      "${CMAKE_SOURCE_DIR}/libpcap"
+    #VALIDATOR pcap_include_check
+  )
+endif()
 
 # On Windows we load wpcap.dll explicitly and probe its functions in
 # capture\capture-wpcap.c. We don't want to link with pcap.lib since
 # that would bring in the non-capturing (null) pcap.dll from the vcpkg
-# library.
+# library, similarly the non-capturing libpcap.dll from the MSYS2 library.
 if(WIN32)
   set(_pkg_required_vars PCAP_INCLUDE_DIR)
 else()
@@ -187,35 +224,81 @@ if(PCAP_FOUND)
 
   if(WIN32)
     #
-    # Prepopulate some values. WinPcap 3.1 and later, and Npcap, have these
-    # in their SDK, and compilation checks on Windows can be slow.  We check
-    # whether they're present at run time, when we load wpcap.dll, and work
-    # around their absence or report an error.
+    # Prepopulate some values. Npcap has these in its SDK, and compilation
+    # checks on Windows can be slow.  We check whether they're present at run
+    # time, when we load wpcap.dll, and work around their absence or report
+    # an error.
     #
-    set(HAVE_PCAP_FREECODE TRUE)
-    set(HAVE_PCAP_CREATE TRUE)
-    set(HAVE_PCAP_FREE_DATALINKS TRUE)
+    set(HAVE_PCAP_INIT TRUE)
     set(HAVE_PCAP_OPEN TRUE)
     set(HAVE_PCAP_SETSAMPLING TRUE)
     set(HAVE_PCAP_SET_TSTAMP_PRECISION TRUE)
-    set(HAVE_PCAP_SET_TSTAMP_TYPE TRUE)
   else(WIN32)
     #
-    # Make sure we have at least libpcap 0.8, because we require at
-    # least libpcap 0.8's APIs.
+    # Make sure we have at least libpcap 1.5, because we require at
+    # least libpcap 1.5's APIs.
     #
-    # We check whether pcap_lib_version is defined in the pcap header,
-    # using it as a proxy for all the 0.8 API's.  if not, we fail.
+    # We check whether pcap_set_tstamp_precision is defined in the pcap header,
+    # using it as a proxy for all the 1.5 API's.  if not, we fail.
     #
-    check_symbol_exists( pcap_lib_version ${PCAP_INCLUDE_DIR}/pcap.h HAVE_PCAP_LIB_VERSION )
-    if( NOT HAVE_PCAP_LIB_VERSION )
-      message(FATAL_ERROR "You need libpcap 0.8 or later")
-    endif( NOT HAVE_PCAP_LIB_VERSION )
+    check_function_exists( "pcap_set_tstamp_precision" HAVE_PCAP_SET_TSTAMP_PRECISION )
+    if( NOT HAVE_PCAP_SET_TSTAMP_PRECISION )
+      message(FATAL_ERROR "You need libpcap 1.5 or later")
+    endif()
 
-    check_function_exists( "pcap_freecode" HAVE_PCAP_FREECODE )
-    check_function_exists( "pcap_create" HAVE_PCAP_CREATE )
-    check_function_exists( "pcap_free_datalinks" HAVE_PCAP_FREE_DATALINKS )
-    check_function_exists( "pcap_open" HAVE_PCAP_OPEN )
+    # pcap_init was introduced in libpcap 1.10, so if it is present we can
+    # assume other things about libpcap, even though, at least for the moment,
+    # we don't use pcap_init itself on non-Windows.
+    check_function_exists( "pcap_init" HAVE_PCAP_INIT )
+
+    #
+    # macOS Sonoma's libpcap includes stub versions of the remote-
+    # capture APIs.  They are exported as "weakly linked symbols".
+    #
+    # Xcode 15 offers only a macOS Sonoma SDK, which has a .tbd
+    # file for libpcap that claims it includes those APIs.  (Newer
+    # versions of macOS don't provide the system shared libraries,
+    # they only provide the dyld shared cache containing those
+    # libraries, so the OS provides SDKs that include a .tbd file
+    # to use when linking.)
+    #
+    # This means that check_function_exists() will think that
+    # the remote-capture APIs are present, including pcap_open().
+    #
+    # However, they are *not* present in macOS Ventura and earlier,
+    # which means that building on Ventura with Xcode 15 produces
+    # executables that fail to start because one of those APIs
+    # isn't found in the system libpcap.
+    #
+    # Protecting calls to those APIs with __builtin_available()
+    # does not prevent this, because the libpcap header files
+    # in the Sonoma SDK mark them as being first available
+    # in macOS 10.13, just like all the other routines introduced
+    # in libpcap 1.9, even though they're only available if libpcap
+    # is built with remote capture enabled or stub routines are
+    # provided.  (A fix to enable this has been checked into the
+    # libpcap repository, and may end up in a later version of
+    # the SDK.)
+    #
+    # Given all that, and given that the versions of the
+    # remote-capture APIs in Sonoma are stubs that always fail,
+    # there doesn't seem to be any point in checking for pcap_open()
+    # if we're linking against the Apple libpcap.
+    #
+    # However, if we're *not* linking against the Apple libpcap,
+    # we should check for it, so that we can use it if it's present.
+    #
+    # So we check for pcap_open if 1) this isn't macOS or 2) the
+    # the libpcap we found is not a system library, meaning that
+    # its path begins neither with /usr/lib (meaning it's a system
+    # dylib) nor /Application/Xcode.app (meaning it's a file in
+    # the Xcode SDK).
+    #
+    if( NOT APPLE OR NOT
+       (PCAP_LIBRARY MATCHES "/usr/lib/.*" OR
+        PCAP_LIBRARY MATCHES "/Application/Xcode.app/.*"))
+      check_function_exists( "pcap_open" HAVE_PCAP_OPEN )
+    endif()
     if( HAVE_PCAP_OPEN )
       #
       # XXX - this *should* be checked for independently of checking
@@ -238,23 +321,16 @@ if(PCAP_FOUND)
       #
       check_function_exists( "pcap_setsampling" HAVE_PCAP_SETSAMPLING )
     endif( HAVE_PCAP_OPEN )
-  endif(WIN32)
-
-  if( HAVE_PCAP_CREATE )
-    #
-    # If we have pcap_create(), we have pcap_set_buffer_size(), and
-    # can set the capture buffer size.
-    #
-    # Otherwise, if this is Windows, we have pcap_setbuff(), and can
-    # set the capture buffer size.
-    #
-    set( CAN_SET_CAPTURE_BUFFER_SIZE TRUE )
   endif()
-  check_function_exists( "pcap_set_tstamp_precision" HAVE_PCAP_SET_TSTAMP_PRECISION )
-  check_function_exists( "pcap_set_tstamp_type" HAVE_PCAP_SET_TSTAMP_TYPE )
+
   # Remote pcap checks
   if( HAVE_PCAP_OPEN )
     set( HAVE_PCAP_REMOTE 1 )
+  endif()
+
+  check_symbol_exists(PCAP_ERROR_PROMISC_PERM_DENIED "pcap/pcap.h" HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
+  if( NOT HAVE_PCAP_ERROR_PROMISC_PERM_DENIED )
+    message(FATAL_ERROR "You need libpcap 1.5 or later")
   endif()
 
   cmake_pop_check_state()

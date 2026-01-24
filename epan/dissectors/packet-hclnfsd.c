@@ -41,65 +41,65 @@ void proto_reg_handoff_hclnfsd(void);
 #define HCLNFSDPROC_CANCEL_PRJOB      32
 #define HCLNFSDPROC_ZAP_LOCKS	     105
 
-static int proto_hclnfsd = -1;
-static int hf_hclnfsd_procedure_v1 = -1;
-static int hf_hclnfsd_request_type = -1;
-static int hf_hclnfsd_device = -1;
-/* static int hf_hclnfsd_login = -1; */
-static int hf_hclnfsd_lockname = -1;
-static int hf_hclnfsd_unknown_data = -1;
-static int hf_hclnfsd_lockowner = -1;
-static int hf_hclnfsd_printername = -1;
-static int hf_hclnfsd_filename = -1;
-static int hf_hclnfsd_fileext = -1;
-static int hf_hclnfsd_grpname = -1;
-static int hf_hclnfsd_hostname = -1;
-static int hf_hclnfsd_username = -1;
-static int hf_hclnfsd_queuename = -1;
-static int hf_hclnfsd_queuecomment = -1;
-static int hf_hclnfsd_queuestatus = -1;
-static int hf_hclnfsd_numphysicalprinters = -1;
-static int hf_hclnfsd_printqueuenumber = -1;
-static int hf_hclnfsd_printparams = -1;
-static int hf_hclnfsd_status = -1;
-static int hf_hclnfsd_sequence = -1;
-static int hf_hclnfsd_server_ip = -1;
-static int hf_hclnfsd_host_ip = -1;
-static int hf_hclnfsd_gid = -1;
-static int hf_hclnfsd_uid = -1;
-static int hf_hclnfsd_cookie = -1;
-static int hf_hclnfsd_mode = -1;
-static int hf_hclnfsd_access = -1;
-static int hf_hclnfsd_exclusive = -1;
-static int hf_hclnfsd_offset = -1;
-static int hf_hclnfsd_length = -1;
-static int hf_hclnfsd_jobstatus = -1;
-static int hf_hclnfsd_timesubmitted = -1;
-static int hf_hclnfsd_size = -1;
-static int hf_hclnfsd_copies = -1;
-static int hf_hclnfsd_auth_ident_obscure = -1;
+static int proto_hclnfsd;
+static int hf_hclnfsd_procedure_v1;
+static int hf_hclnfsd_request_type;
+static int hf_hclnfsd_device;
+/* static int hf_hclnfsd_login; */
+static int hf_hclnfsd_lockname;
+static int hf_hclnfsd_unknown_data;
+static int hf_hclnfsd_lockowner;
+static int hf_hclnfsd_printername;
+static int hf_hclnfsd_filename;
+static int hf_hclnfsd_fileext;
+static int hf_hclnfsd_grpname;
+static int hf_hclnfsd_hostname;
+static int hf_hclnfsd_username;
+static int hf_hclnfsd_queuename;
+static int hf_hclnfsd_queuecomment;
+static int hf_hclnfsd_queuestatus;
+static int hf_hclnfsd_numphysicalprinters;
+static int hf_hclnfsd_printqueuenumber;
+static int hf_hclnfsd_printparams;
+static int hf_hclnfsd_status;
+static int hf_hclnfsd_sequence;
+static int hf_hclnfsd_server_ip;
+static int hf_hclnfsd_host_ip;
+static int hf_hclnfsd_gid;
+static int hf_hclnfsd_uid;
+static int hf_hclnfsd_cookie;
+static int hf_hclnfsd_mode;
+static int hf_hclnfsd_access;
+static int hf_hclnfsd_exclusive;
+static int hf_hclnfsd_offset;
+static int hf_hclnfsd_length;
+static int hf_hclnfsd_jobstatus;
+static int hf_hclnfsd_timesubmitted;
+static int hf_hclnfsd_size;
+static int hf_hclnfsd_copies;
+static int hf_hclnfsd_auth_ident_obscure;
 
 /* Generated from convert_proto_tree_add_text.pl */
-static int hf_hclnfsd_job_id = -1;
-static int hf_hclnfsd_print_queues = -1;
-static int hf_hclnfsd_print_jobs = -1;
-static int hf_hclnfsd_gids = -1;
-static int hf_hclnfsd_uids = -1;
-static int hf_hclnfsd_password = -1;
+static int hf_hclnfsd_job_id;
+static int hf_hclnfsd_print_queues;
+static int hf_hclnfsd_print_jobs;
+static int hf_hclnfsd_gids;
+static int hf_hclnfsd_uids;
+static int hf_hclnfsd_password;
 
-static gint ett_hclnfsd = -1;
-static gint ett_hclnfsd_gids = -1;
-static gint ett_hclnfsd_groups = -1;
-static gint ett_hclnfsd_uids = -1;
-static gint ett_hclnfsd_usernames = -1;
-static gint ett_hclnfsd_printqueues = -1;
-static gint ett_hclnfsd_printjob = -1;
-static gint ett_hclnfsd_auth_ident = -1;
+static int ett_hclnfsd;
+static int ett_hclnfsd_gids;
+static int ett_hclnfsd_groups;
+static int ett_hclnfsd_uids;
+static int ett_hclnfsd_usernames;
+static int ett_hclnfsd_printqueues;
+static int ett_hclnfsd_printjob;
+static int ett_hclnfsd_auth_ident;
 
 static int
 dissect_hclnfsd_gids(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
-	guint32 ngids, ngids_i;
+	uint32_t ngids, ngids_i;
 	proto_tree *gidtree = NULL;
 	proto_item *giditem = NULL;
 
@@ -137,13 +137,13 @@ dissect_hclnfsd_spool_inquire_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 
 static int
-dissect_hclnfsd_spool_file_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_spool_file_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_printername, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_printername, offset, NULL);
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_filename, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_filename, offset, NULL);
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_hclnfsd_fileext, offset);
 
@@ -183,7 +183,7 @@ hclnfsd_decode_obscure(wmem_allocator_t *pool, const char *ident, int ident_len)
 static int
 dissect_hclnfsd_authorize_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint32 request_type;
+	uint32_t request_type;
 	const char *ident = NULL;
 	char *ident_decoded;
 	char *username = NULL;
@@ -202,7 +202,7 @@ dissect_hclnfsd_authorize_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 			4, request_type);
 	offset += 4;
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_device, offset,
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_device, offset,
 		NULL);
 
 	ident_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
@@ -210,7 +210,7 @@ dissect_hclnfsd_authorize_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 	if (ident_tree)
 	{
-		newoffset = dissect_rpc_string(tvb, ident_tree,
+		newoffset = dissect_rpc_string(tvb, pinfo, ident_tree,
 			hf_hclnfsd_auth_ident_obscure, offset, &ident);
 
 		if (ident)
@@ -238,7 +238,7 @@ dissect_hclnfsd_authorize_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 static int
 dissect_hclnfsd_authorize_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	guint32 status;
+	uint32_t status;
 	int offset = 0;
 
 	status = tvb_get_ntohl(tvb, offset);
@@ -261,9 +261,9 @@ dissect_hclnfsd_authorize_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
 }
 
 static int
-dissect_hclnfsd_grp_name_to_numb_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_grp_name_to_numb_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	return dissect_rpc_string(tvb, tree, hf_hclnfsd_grpname, 0, NULL);
+	return dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_grpname, 0, NULL);
 }
 
 static int
@@ -281,9 +281,9 @@ dissect_hclnfsd_grp_to_number_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 
 static int
-dissect_hclnfsd_grp_to_number_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_grp_to_number_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	return dissect_rpc_string(tvb, tree, hf_hclnfsd_grpname, 0, NULL);
+	return dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_grpname, 0, NULL);
 }
 
 
@@ -299,16 +299,16 @@ dissect_hclnfsd_return_host_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
 
 
 static int
-dissect_hclnfsd_return_host_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_return_host_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	return dissect_rpc_string(tvb, tree, hf_hclnfsd_hostname, 0, NULL);
+	return dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_hostname, 0, NULL);
 }
 
 
 static int
 dissect_hclnfsd_uid_to_name_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	guint32 nuids, nuids_i;
+	uint32_t nuids, nuids_i;
 	proto_tree *uidtree = NULL;
 	proto_item *uiditem = NULL;
 	int offset = 0;
@@ -331,9 +331,9 @@ dissect_hclnfsd_uid_to_name_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
 
 
 static int
-dissect_hclnfsd_uid_to_name_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_uid_to_name_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint32 nusers, nusers_i;
+	uint32_t nusers, nusers_i;
 	proto_tree *usertree = NULL;
 	proto_item *useritem = NULL;
 	int offset = 0;
@@ -352,7 +352,7 @@ dissect_hclnfsd_uid_to_name_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
 		return offset;
 
 	for (nusers_i = 0; nusers_i < nusers; nusers_i++)
-		offset = dissect_rpc_string(tvb, usertree,
+		offset = dissect_rpc_string(tvb, pinfo, usertree,
 			hf_hclnfsd_username, offset, NULL);
 
 	return offset;
@@ -360,9 +360,9 @@ dissect_hclnfsd_uid_to_name_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
 
 
 static int
-dissect_hclnfsd_name_to_uid_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_name_to_uid_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	return dissect_rpc_string(tvb, tree, hf_hclnfsd_username, 0, NULL);
+	return dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_username, 0, NULL);
 }
 
 
@@ -376,7 +376,7 @@ dissect_hclnfsd_name_to_uid_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
 static int
 dissect_hclnfsd_share_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-	guint32 request_type;
+	uint32_t request_type;
 	int offset = 0;
 
 	proto_tree_add_item_ret_uint(tree, hf_hclnfsd_request_type, tvb, offset,
@@ -385,11 +385,11 @@ dissect_hclnfsd_share_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_hclnfsd_cookie, offset);
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_lockname, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_lockname, offset, NULL);
 
 	offset = dissect_nfs3_fh(tvb, offset, pinfo, tree, "Filehandle", NULL, (rpc_call_info_value*)data);
 
-	offset = dissect_rpc_data(tvb, tree, hf_hclnfsd_unknown_data, offset);
+	offset = dissect_rpc_data(tvb, pinfo, tree, hf_hclnfsd_unknown_data, offset);
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_hclnfsd_mode, offset);
 
@@ -404,7 +404,7 @@ dissect_hclnfsd_share_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 static int
 dissect_hclnfsd_share_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	guint32 request_type;
+	uint32_t request_type;
 	int offset = 0;
 
 	request_type = tvb_get_ntohl(tvb, offset);
@@ -446,11 +446,11 @@ dissect_hclnfsd_lock_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_hclnfsd_exclusive, offset);
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_lockname, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_lockname, offset, NULL);
 
 	offset = dissect_nfs3_fh(tvb, offset, pinfo, tree, "Filehandle", NULL, (rpc_call_info_value*)data);
 
-	offset = dissect_rpc_data(tvb, tree, hf_hclnfsd_lockowner, offset);
+	offset = dissect_rpc_data(tvb, pinfo, tree, hf_hclnfsd_lockowner, offset);
 
 	offset += 4;  /* unused, skip */
 
@@ -465,7 +465,7 @@ dissect_hclnfsd_lock_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 static int
 dissect_hclnfsd_lock_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	guint32 request_type;
+	uint32_t request_type;
 	int offset = 0;
 
 	proto_tree_add_item_ret_uint(tree, hf_hclnfsd_request_type, tvb, offset,
@@ -480,10 +480,10 @@ dissect_hclnfsd_lock_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 
 
 static int
-dissect_hclnfsd_remove_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_remove_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_lockname, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_lockname, offset, NULL);
 
 	offset += 4;  /* skip unused */
 
@@ -499,11 +499,11 @@ dissect_hclnfsd_unlock_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_hclnfsd_cookie, offset);
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_lockname, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_lockname, offset, NULL);
 
 	offset = dissect_nfs3_fh(tvb, offset, pinfo, tree, "Filehandle", NULL, (rpc_call_info_value*)data);
 
-	offset = dissect_rpc_data(tvb, tree, hf_hclnfsd_unknown_data, offset);
+	offset = dissect_rpc_data(tvb, pinfo, tree, hf_hclnfsd_unknown_data, offset);
 
 	offset += 4;  /* skip unused */
 
@@ -522,9 +522,9 @@ dissect_hclnfsd_unlock_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 
 
 static int
-dissect_hclnfsd_get_printers_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_get_printers_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint nqueues, nqueues_i;
+	unsigned nqueues, nqueues_i;
 	proto_item *queuesitem = NULL;
 	proto_tree *queuestree = NULL;
 	int offset = 0;
@@ -543,11 +543,11 @@ dissect_hclnfsd_get_printers_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 	for (nqueues_i = 0; nqueues_i < nqueues; nqueues_i++)
 	{
 		/* create new item for print queue */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_hclnfsd_queuename, offset, NULL);
 
 		/* create subtree on new item with print queue comment */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_hclnfsd_queuecomment, offset, NULL);
 	}
 
@@ -556,22 +556,22 @@ dissect_hclnfsd_get_printers_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 
 
 static int
-dissect_hclnfsd_get_printq_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_get_printq_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_queuename, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_queuename, offset, NULL);
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_username, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_username, offset, NULL);
 
 	return offset;
 }
 
 
 static int
-dissect_hclnfsd_get_printq_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_hclnfsd_get_printq_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	guint datafollows;
+	unsigned datafollows;
 	proto_item *queueitem = NULL;
 	proto_tree *queuetree = NULL;
 	proto_item *jobitem;
@@ -580,7 +580,7 @@ dissect_hclnfsd_get_printq_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_hclnfsd_printqueuenumber, offset);
 
-	offset = dissect_rpc_string(tvb, tree, hf_hclnfsd_queuecomment, offset, NULL);
+	offset = dissect_rpc_string(tvb, pinfo, tree, hf_hclnfsd_queuecomment, offset, NULL);
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_hclnfsd_queuestatus, offset);
 
@@ -601,10 +601,10 @@ dissect_hclnfsd_get_printq_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
 
 		jobtree = proto_item_add_subtree(jobitem, ett_hclnfsd_printjob);
 
-		offset = dissect_rpc_string(tvb, jobtree,
+		offset = dissect_rpc_string(tvb, pinfo, jobtree,
 			hf_hclnfsd_username, offset, NULL);
 
-		offset = dissect_rpc_string(tvb, jobtree,
+		offset = dissect_rpc_string(tvb, pinfo, jobtree,
 			hf_hclnfsd_printparams, offset, NULL);
 
 		offset = dissect_rpc_uint32(tvb, jobtree, hf_hclnfsd_queuestatus, offset);
@@ -613,7 +613,7 @@ dissect_hclnfsd_get_printq_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
 		offset = dissect_rpc_uint32(tvb, jobtree, hf_hclnfsd_timesubmitted, offset);
 		offset = dissect_rpc_uint32(tvb, jobtree, hf_hclnfsd_size, offset);
 		offset = dissect_rpc_uint32(tvb, jobtree, hf_hclnfsd_copies, offset);
-		offset = dissect_rpc_string(tvb, jobtree, hf_hclnfsd_queuecomment, offset, NULL);
+		offset = dissect_rpc_string(tvb, pinfo, jobtree, hf_hclnfsd_queuecomment, offset, NULL);
 
 		datafollows = tvb_get_ntohl(tvb, offset);
 		offset += 4;
@@ -872,7 +872,7 @@ proto_register_hclnfsd(void)
 		    NULL, HFILL }
 		},
 	};
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_hclnfsd,
 		&ett_hclnfsd_gids,
 		&ett_hclnfsd_groups,

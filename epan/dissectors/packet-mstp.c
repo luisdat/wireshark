@@ -24,6 +24,8 @@
 #include <epan/expert.h>
 #include <epan/address_types.h>
 #include <epan/to_str.h>
+#include <epan/crc16-tvb.h>
+#include <epan/exceptions.h>
 #include "packet-mstp.h"
 
 void proto_register_mstp(void);
@@ -65,24 +67,24 @@ bacnet_mstp_frame_type_name[] = {
 
 static dissector_table_t subdissector_table;
 
-static int proto_mstp = -1;
+static int proto_mstp;
 
-static gint ett_bacnet_mstp = -1;
-static gint ett_bacnet_mstp_checksum = -1;
+static int ett_bacnet_mstp;
+static int ett_bacnet_mstp_checksum;
 
-static int hf_mstp_preamble_55 = -1;
-static int hf_mstp_preamble_FF = -1;
-static int hf_mstp_frame_type = -1;
-static int hf_mstp_frame_destination = -1;
-static int hf_mstp_frame_source = -1;
-static int hf_mstp_frame_vendor_id = -1;
-static int hf_mstp_frame_pdu_len = -1;
-static int hf_mstp_frame_crc8 = -1;
-static int hf_mstp_frame_crc16 = -1;
-static int hf_mstp_frame_checksum_status = -1;
+static int hf_mstp_preamble_55;
+static int hf_mstp_preamble_FF;
+static int hf_mstp_frame_type;
+static int hf_mstp_frame_destination;
+static int hf_mstp_frame_source;
+static int hf_mstp_frame_vendor_id;
+static int hf_mstp_frame_pdu_len;
+static int hf_mstp_frame_crc8;
+static int hf_mstp_frame_crc16;
+static int hf_mstp_frame_checksum_status;
 
-static expert_field ei_mstp_frame_pdu_len = EI_INIT;
-static expert_field ei_mstp_frame_checksum_bad = EI_INIT;
+static expert_field ei_mstp_frame_pdu_len;
+static expert_field ei_mstp_frame_checksum_bad;
 
 static int mstp_address_type = -1;
 
@@ -93,12 +95,12 @@ static dissector_handle_t mstp_handle;
 /* Return value is updated CRC */
 /*  The ^ operator means exclusive OR. */
 /* Note: This function is copied directly from the BACnet standard. */
-static guint8
+static uint8_t
 CRC_Calc_Header(
-	guint8 dataValue,
-	guint8 crcValue)
+	uint8_t dataValue,
+	uint8_t crcValue)
 {
-	guint16 crc;
+	uint16_t crc;
 
 	crc = crcValue ^ dataValue; /* XOR C7..C0 with D7..D0 */
 
@@ -112,32 +114,11 @@ CRC_Calc_Header(
 }
 #endif
 
-#if defined(BACNET_MSTP_CHECKSUM_VALIDATE)
-/* Accumulate "dataValue" into the CRC in crcValue. */
-/*  Return value is updated CRC */
-/*  The ^ operator means exclusive OR. */
-/* Note: This function is copied directly from the BACnet standard. */
-static guint16
-CRC_Calc_Data(
-	guint8 dataValue,
-	guint16 crcValue)
-{
-	guint16 crcLow;
-
-	crcLow = (crcValue & 0xff) ^ dataValue;     /* XOR C7..C0 with D7..D0 */
-
-	/* Exclusive OR the terms in the table (top down) */
-	return (crcValue >> 8) ^ (crcLow << 8) ^ (crcLow << 3)
-		^ (crcLow << 12) ^ (crcLow >> 4)
-		^ (crcLow & 0x0f) ^ ((crcLow & 0x0f) << 7);
-}
-#endif
-
 /* Common frame type text */
-const gchar *
-mstp_frame_type_text(guint32 val)
+const char *
+mstp_frame_type_text(wmem_allocator_t* scope, uint32_t val)
 {
-	return val_to_str(val,
+	return val_to_str(scope, val,
 		bacnet_mstp_frame_type_name,
 		"Unknown Frame Type (%u)");
 }
@@ -147,17 +128,17 @@ static int mstp_str_len(const address* addr _U_)
 	return 5;
 }
 
-static int mstp_to_str(const address* addr, gchar *buf, int buf_len _U_)
+static int mstp_to_str(const address* addr, char *buf, int buf_len _U_)
 {
 	*buf++ = '0';
 	*buf++ = 'x';
-	buf = bytes_to_hexstr(buf, (const guint8 *)addr->data, 1);
+	buf = bytes_to_hexstr(buf, (const uint8_t *)addr->data, 1);
 	*buf = '\0'; /* NULL terminate */
 
 	return mstp_str_len(addr);
 }
 
-static const char* mstp_col_filter_str(const address* addr _U_, gboolean is_src)
+static const char* mstp_col_filter_str(const address* addr _U_, bool is_src)
 {
 	if (is_src)
 		return "mstp.src";
@@ -170,31 +151,31 @@ static int mstp_len(void)
 	return 1;
 }
 
-static guint32 calc_data_crc32(guint8 dataValue, guint32 crc32kValue)
+static uint32_t calc_data_crc32(uint8_t dataValue, uint32_t crc32kValue)
 {
-  guint8 data;
-  guint8 b;
-  guint32 crc;
+	uint8_t data;
+	uint8_t b;
+	uint32_t crc;
 
-  data = dataValue;
-  crc = crc32kValue;
+	data = dataValue;
+	crc = crc32kValue;
 
-  for (b = 0; b < 8; b++)
-  {
-    if ((data & 1) ^ (crc & 1))
-    {
-      crc >>= 1;
-      crc ^= 0xEB31D82E;
-    }
-    else
-    {
-      crc >>= 1;
-    }
+	for (b = 0; b < 8; b++)
+	{
+		if ((data & 1) ^ (crc & 1))
+		{
+			crc >>= 1;
+			crc ^= 0xEB31D82E;
+		}
+		else
+		{
+			crc >>= 1;
+		}
 
-    data >>= 1;
-  }
+		data >>= 1;
+	}
 
-  return crc;
+	return crc;
 }
 
 /*
@@ -204,42 +185,43 @@ static guint32 calc_data_crc32(guint8 dataValue, guint32 crc32kValue)
 * Returns the length of the encoded data or zero if error.
 * The length of the encoded value is always smaller or equal to 'length'.
 */
-static gsize cobs_decode(guint8 *to, const guint8 *from, gsize length, guint8 mask)
+static size_t cobs_decode(uint8_t *to, const uint8_t *from, size_t length, uint8_t mask)
 {
-  gsize read_index = 0;
-  gsize write_index = 0;
-  guint8 code;
-  guint8 last_code;
+	size_t read_index = 0;
+	size_t write_index = 0;
+	uint8_t code;
+	uint8_t last_code;
 
-  while (read_index < length)
-  {
-    code = from[read_index] ^ mask;
-    last_code = code;
-    /*
-     * A code octet equal to zero or greater than the length is illegal.
-     */
-    if (code == 0 || read_index + code > length)
-      return 0;
+	while (read_index < length)
+	{
+		code = from[read_index] ^ mask;
+		last_code = code;
+		/*
+		 * A code octet equal to zero or greater than the length is illegal.
+		 */
+		if (code == 0 || read_index + code > length)
+			return 0;
 
-    read_index++;
-    /*
-     * Decode data octets. The code octet is included in the length, but the
-     * terminating zero octet is not. (Note that a data octet of zero should not
-     * occur here since the whole point of COBS encoding is to remove zeroes.)
-     */
-    while (--code > 0)
-      to[write_index++] = from[read_index++] ^ mask;
+		read_index++;
+		/*
+		 * Decode data octets. The code octet is included in the length,
+		 * but the terminating zero octet is not. (Note that a data octet
+		 * of zero should not occur here since the whole point of COBS
+		 * encoding is to remove zeroes.)
+		 */
+		while (--code > 0)
+			to[write_index++] = from[read_index++] ^ mask;
 
-    /*
-    * Restore the implicit zero at the end of each decoded block
-    * except when it contains exactly 254 non-zero octets or the
-    * end of data has been reached.
-    */
-    if ((last_code != 255) && (read_index < length))
-      to[write_index++] = 0;
-  }
+		/*
+		 * Restore the implicit zero at the end of each decoded block
+		 * except when it contains exactly 254 non-zero octets or the
+		 * end of data has been reached.
+		 */
+		if ((last_code != 255) && (read_index < length))
+			to[write_index++] = 0;
+	}
 
-  return write_index;
+	return write_index;
 }
 
 #define SIZEOF_ENC_CRC 5
@@ -253,79 +235,77 @@ static gsize cobs_decode(guint8 *to, const guint8 *from, gsize length, guint8 ma
 * Returns length of decoded Data in octets or zero if error.
 * NOTE: Safe to call with 'output' <= 'input' (decodes in place).
 */
-static gsize cobs_frame_decode(guint8 *to, const guint8 *from, gsize length)
+static size_t cobs_frame_decode(uint8_t *to, const uint8_t *from, size_t length)
 {
-  gsize data_len;
-  gsize crc_len;
-  guint32 crc32K;
-  guint32 i;
+	size_t data_len;
+	size_t crc_len;
+	uint32_t crc32K;
+	uint32_t i;
 
-  /* Must have enough room for the encoded CRC-32K value. */
-  if (length < SIZEOF_ENC_CRC)
-    return 0;
+	/* Must have enough room for the encoded CRC-32K value. */
+	if (length < SIZEOF_ENC_CRC)
+		return 0;
 
-  /*
-  * Calculate the CRC32K over the Encoded Data octets before decoding.
-  * NOTE: Adjust 'length' by removing size of Encoded CRC-32K field.
-  */
-  data_len = length - SIZEOF_ENC_CRC;
-  crc32K = CRC32K_INITIAL_VALUE;
-  for (i = 0; i < data_len; i++)
-    crc32K = calc_data_crc32(from[i], crc32K);
+	/*
+	 * Calculate the CRC32K over the Encoded Data octets before decoding.
+	 * NOTE: Adjust 'length' by removing size of Encoded CRC-32K field.
+	 */
+	data_len = length - SIZEOF_ENC_CRC;
+	crc32K = CRC32K_INITIAL_VALUE;
+	for (i = 0; i < data_len; i++)
+		crc32K = calc_data_crc32(from[i], crc32K);
 
-  data_len = cobs_decode(to, from, data_len, MSTP_PREAMBLE_X55);
-  /*
-  * Decode the Encoded CRC-32K field and append to data.
-  */
-  crc_len = cobs_decode((guint8 *)(to + data_len),
-    (guint8 *)(from + length - SIZEOF_ENC_CRC),
-    SIZEOF_ENC_CRC, MSTP_PREAMBLE_X55);
+	data_len = cobs_decode(to, from, data_len, MSTP_PREAMBLE_X55);
+	/*
+	 * Decode the Encoded CRC-32K field and append to data.
+	 */
+	crc_len = cobs_decode((uint8_t *)(to + data_len),
+		(uint8_t *)(from + length - SIZEOF_ENC_CRC),
+		SIZEOF_ENC_CRC, MSTP_PREAMBLE_X55);
 
-  /*
-  * Sanity check length of decoded CRC32K.
-  */
-  if (crc_len != sizeof(guint32))
-    return 0;
+	/*
+	 * Sanity check length of decoded CRC32K.
+	 */
+	if (crc_len != sizeof(uint32_t))
+		return 0;
 
-  /*
-  * Verify CRC32K of incoming frame.
-  */
-  for (i = 0; i < crc_len; i++)
-    crc32K = calc_data_crc32((to + data_len)[i], crc32K);
+	/*
+	 * Verify CRC32K of incoming frame.
+	 */
+	for (i = 0; i < crc_len; i++)
+		crc32K = calc_data_crc32((to + data_len)[i], crc32K);
 
-  if (crc32K == CRC32K_RESIDUE)
-    return data_len;
+	if (crc32K == CRC32K_RESIDUE)
+		return data_len;
 
-  return 0;
+	return 0;
 }
 
 /* dissects a BACnet MS/TP frame */
 /* preamble 0x55 0xFF is not included in Cimetrics U+4 output */
 void
 dissect_mstp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-	proto_tree *subtree, gint offset)
+	proto_tree *subtree, int offset)
 {
-	guint8 mstp_frame_type = 0;
-	guint16 mstp_frame_pdu_len = 0;
-	guint16 mstp_tvb_pdu_len = 0;
-	guint16 vendorid = 0;
+	uint8_t mstp_frame_type = 0;
+	uint32_t mstp_frame_pdu_len = 0; /* PDU length reported in the header */
+	uint16_t mstp_tvb_pdu_len = 0; /* Reported space in parent tvb for PDU */
+	uint16_t vendorid = 0;
 	tvbuff_t *next_tvb = NULL;
 	proto_item *item;
 #if defined(BACNET_MSTP_CHECKSUM_VALIDATE)
 	/* used to calculate the crc value */
-	guint8 crc8 = 0xFF;
-	guint16 crc16 = 0xFFFF;
-	guint8 crcdata;
-	guint16 i; /* loop counter */
-	guint16 max_len = 0;
+	uint8_t crc8 = 0xFF;
+	uint16_t crc16 = 0xFFFF;
+	uint8_t crcdata;
+	uint16_t i; /* loop counter */
 #endif
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BACnet");
 	col_set_str(pinfo->cinfo, COL_INFO, "BACnet MS/TP");
-	mstp_frame_type = tvb_get_guint8(tvb, offset);
-	mstp_frame_pdu_len = tvb_get_ntohs(tvb, offset+3);
+	mstp_frame_type = tvb_get_uint8(tvb, offset);
 	col_append_fstr(pinfo->cinfo, COL_INFO, " %s",
-			mstp_frame_type_text(mstp_frame_type));
+			mstp_frame_type_text(pinfo->pool, mstp_frame_type));
 
 	/* Add the items to the tree */
 	proto_tree_add_item(subtree, hf_mstp_frame_type, tvb,
@@ -334,19 +314,20 @@ dissect_mstp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 			offset+1, 1, ENC_LITTLE_ENDIAN);
 	proto_tree_add_item(subtree, hf_mstp_frame_source, tvb,
 			offset+2, 1, ENC_LITTLE_ENDIAN);
-	item = proto_tree_add_item(subtree, hf_mstp_frame_pdu_len, tvb,
-			offset+3, 2, ENC_BIG_ENDIAN);
+	item = proto_tree_add_item_ret_uint(subtree, hf_mstp_frame_pdu_len, tvb,
+			offset+3, 2, ENC_BIG_ENDIAN, &mstp_frame_pdu_len);
 	mstp_tvb_pdu_len = tvb_reported_length_remaining(tvb, offset+6);
 	/* check the length - which does not include the crc16 checksum */
-	if (mstp_tvb_pdu_len > 2) {
-		if (mstp_frame_pdu_len > (mstp_tvb_pdu_len-2)) {
+	if (mstp_frame_pdu_len > 0) {
+		if (mstp_frame_pdu_len + 2 > mstp_tvb_pdu_len) {
+			/* We should get a ContainedBoundsError later. */
 			expert_add_info(pinfo, item, &ei_mstp_frame_pdu_len);
 		}
 	}
 #if defined(BACNET_MSTP_CHECKSUM_VALIDATE)
 	/* calculate checksum to validate */
 	for (i = 0; i < 5; i++) {
-		crcdata = tvb_get_guint8(tvb, offset+i);
+		crcdata = tvb_get_uint8(tvb, offset+i);
 		crc8 = CRC_Calc_Header(crcdata, crc8);
 	}
 	crc8 = ~crc8;
@@ -354,50 +335,50 @@ dissect_mstp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 							ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
 #else
 	proto_tree_add_checksum(subtree, tvb, offset+5, hf_mstp_frame_crc8, hf_mstp_frame_checksum_status, &ei_mstp_frame_checksum_bad, pinfo, 0,
-							PROTO_CHECKSUM_NO_FLAGS);
+							ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
 #endif
 
 	/* dissect BACnet PDU if there is one */
 	offset += 6;
 
-  if (mstp_frame_type == MSTP_BACNET_EXTENDED_DATA_EXPECTING_REPLY ||
-      mstp_frame_type == MSTP_BACNET_EXTENDED_DATA_NOT_EXPECTING_REPLY) {
-    /* handle extended frame types differently because their data need to
-       be 'decoded' first */
-    guint8 *decode_base;
-    tvbuff_t *decoded_tvb;
-    guint16 decoded_len = mstp_frame_pdu_len;
+	if (mstp_frame_type == MSTP_BACNET_EXTENDED_DATA_EXPECTING_REPLY ||
+	    mstp_frame_type == MSTP_BACNET_EXTENDED_DATA_NOT_EXPECTING_REPLY) {
+		/* handle extended frame types differently because their data need to
+		   be 'decoded' first */
+		uint8_t *decode_base;
+		tvbuff_t *decoded_tvb;
 
-    decode_base = (guint8 *)tvb_memdup(pinfo->pool, tvb, offset, mstp_frame_pdu_len + 2);
-    decoded_len = (guint16)cobs_frame_decode(decode_base, decode_base, decoded_len + 2);
-    if (decoded_len > 0) {
-      decoded_tvb = tvb_new_real_data(decode_base, decoded_len, decoded_len);
-      tvb_set_child_real_data_tvbuff(tvb, decoded_tvb);
-      add_new_data_source(pinfo, decoded_tvb, "Decoded Data");
+	       /* For COBS-encoded frames, the encoded CRC-32K is always 5
+		* octets long, but the length field is two octets less than
+		* the sum of the encoded data and encoded CRC-32K to maintain
+		* backward compatibility with devices that do not know about
+		* extended frames. (They can skip the frames as unknown.) */
+		uint32_t encoded_len = mstp_frame_pdu_len + 2;
+		uint32_t decoded_len = 0;
 
-      if (!(dissector_try_uint(subdissector_table, (vendorid << 16) + mstp_frame_type,
-        decoded_tvb, pinfo, tree))) {
-        /* Unknown function - dissect the payload as data */
-        call_data_dissector(decoded_tvb, pinfo, tree);
-      }
+		decode_base = (uint8_t *)tvb_memdup(pinfo->pool, tvb, offset, encoded_len);
+		/* XXX - Add the decoded CRC-32K to the tree, pass or fail? */
+		decoded_len = (uint32_t)cobs_frame_decode(decode_base, decode_base, encoded_len);
+		if (decoded_len > 0) {
+			decoded_tvb = tvb_new_real_data(decode_base, decoded_len, decoded_len);
+			tvb_set_child_real_data_tvbuff(tvb, decoded_tvb);
+			add_new_data_source(pinfo, decoded_tvb, "Decoded Data");
 
-      proto_tree_add_checksum(subtree, tvb, offset + mstp_frame_pdu_len, hf_mstp_frame_crc16, hf_mstp_frame_checksum_status, &ei_mstp_frame_checksum_bad,
-        pinfo, tvb_get_ntohs(tvb, offset + mstp_frame_pdu_len), ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
-    } else {
-      next_tvb = tvb_new_subset_length(tvb, offset,
-        mstp_tvb_pdu_len);
-      call_data_dissector(next_tvb, pinfo, tree);
-      proto_tree_add_checksum(subtree, tvb, offset + mstp_frame_pdu_len, hf_mstp_frame_crc16, hf_mstp_frame_checksum_status, &ei_mstp_frame_checksum_bad, pinfo, 0,
-        ENC_BIG_ENDIAN, PROTO_CHECKSUM_NO_FLAGS);
-    }
-  }
-  else if (mstp_tvb_pdu_len > 2) {
-		/* remove the 16-bit crc checksum bytes */
-		mstp_tvb_pdu_len -= 2;
+			if (!(dissector_try_uint(subdissector_table, (vendorid << 16) + mstp_frame_type, decoded_tvb, pinfo, tree))) {
+				/* Unknown function - dissect the payload as data */
+				call_data_dissector(decoded_tvb, pinfo, tree);
+			}
+		} else {
+			next_tvb = tvb_new_subset_length(tvb, offset, encoded_len);
+			call_data_dissector(next_tvb, pinfo, tree);
+		}
+	}
+	else if (mstp_frame_pdu_len) {
+		/* frame_pdu_len does not include the 16-bit crc bytes */
 		if (mstp_frame_type < 128) {
 			vendorid = 0;
 			next_tvb = tvb_new_subset_length(tvb, offset,
-				mstp_tvb_pdu_len);
+				mstp_frame_pdu_len);
 		} else {
 			/* With Vendor ID */
 			vendorid = tvb_get_ntohs(tvb, offset);
@@ -406,9 +387,14 @@ dissect_mstp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 			proto_tree_add_item(subtree, hf_mstp_frame_vendor_id, tvb,
 				offset, 2, ENC_BIG_ENDIAN);
 
+			if (mstp_frame_pdu_len < 2) {
+				expert_add_info_format(pinfo, item, &ei_mstp_frame_pdu_len, "Length field value is not large enough for Vendor ID");
+				/* Remaining length can't be negative. */
+				THROW(ReportedBoundsError);
+			}
 			/* NPDU - call the Vendor specific dissector */
-			next_tvb = tvb_new_subset_length_caplen(tvb, offset+2,
-				mstp_tvb_pdu_len-2, mstp_frame_pdu_len);
+			next_tvb = tvb_new_subset_length(tvb, offset+2,
+				mstp_frame_pdu_len - 2);
 		}
 
 		if (!(dissector_try_uint(subdissector_table, (vendorid<<16) + mstp_frame_type,
@@ -418,12 +404,7 @@ dissect_mstp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		}
 #if defined(BACNET_MSTP_CHECKSUM_VALIDATE)
 		/* 16-bit checksum - calculate to validate */
-		max_len = MIN(mstp_frame_pdu_len, mstp_tvb_pdu_len);
-		for (i = 0; i < max_len; i++) {
-			crcdata = tvb_get_guint8(tvb, offset+i);
-			crc16 = CRC_Calc_Data(crcdata, crc16);
-		}
-		crc16 = ~crc16;
+		crc16 = crc16_ccitt_tvb_offset(tvb, offset, mstp_frame_pdu_len);
 		/* convert it to on-the-wire format */
 		crc16 = g_htons(crc16);
 
@@ -441,11 +422,11 @@ dissect_mstp_wtap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 {
 	proto_item *ti;
 	proto_tree *subtree;
-	gint offset = 0;
+	int offset = 0;
 #ifdef BACNET_MSTP_SUMMARY_IN_TREE
-	guint8 mstp_frame_type = 0;
-	guint8 mstp_frame_source = 0;
-	guint8 mstp_frame_destination = 0;
+	uint8_t mstp_frame_type = 0;
+	uint8_t mstp_frame_source = 0;
+	uint8_t mstp_frame_destination = 0;
 #endif
 
 	/* set the MS/TP MAC address in the source/destination */
@@ -455,13 +436,13 @@ dissect_mstp_wtap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	copy_address_shallow(&pinfo->src, &pinfo->dl_src);
 
 #ifdef BACNET_MSTP_SUMMARY_IN_TREE
-	mstp_frame_type = tvb_get_guint8(tvb, offset+2);
-	mstp_frame_destination = tvb_get_guint8(tvb, offset+3);
-	mstp_frame_source = tvb_get_guint8(tvb, offset+4);
+	mstp_frame_type = tvb_get_uint8(tvb, offset+2);
+	mstp_frame_destination = tvb_get_uint8(tvb, offset+3);
+	mstp_frame_source = tvb_get_uint8(tvb, offset+4);
 	ti = proto_tree_add_protocol_format(tree, proto_mstp, tvb, offset, 8,
 		"BACnet MS/TP, Src (%u), Dst (%u), %s",
 		mstp_frame_source, mstp_frame_destination,
-		mstp_frame_type_text(mstp_frame_type));
+		mstp_frame_type_text(pinfo->pool, mstp_frame_type));
 #else
 	ti = proto_tree_add_item(tree, proto_mstp, tvb, offset, 8, ENC_NA);
 #endif
@@ -530,7 +511,7 @@ proto_register_mstp(void)
 		},
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_bacnet_mstp,
 		&ett_bacnet_mstp_checksum
 	};
@@ -542,8 +523,7 @@ proto_register_mstp(void)
 
 	expert_module_t* expert_mstp;
 
-	proto_mstp = proto_register_protocol("BACnet MS/TP",
-	    "BACnet MS/TP", "mstp");
+	proto_mstp = proto_register_protocol("BACnet MS/TP", "BACnet MS/TP", "mstp");
 
 	proto_register_field_array(proto_mstp, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));

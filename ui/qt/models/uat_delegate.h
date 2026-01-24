@@ -15,8 +15,7 @@
 #define UAT_DELEGATE_H
 
 #include <config.h>
-#include <glib.h>
-#include <epan/uat-int.h>
+#include <epan/uat.h>
 
 #include <QStyledItemDelegate>
 #include <QModelIndex>

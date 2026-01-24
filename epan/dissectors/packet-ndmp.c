@@ -27,6 +27,8 @@
 #include "packet-scsi.h"
 #include <epan/prefs.h>
 #include <epan/reassemble.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 void proto_register_ndmp(void);
 void proto_reg_handoff_ndmp(void);
@@ -35,226 +37,226 @@ void proto_reg_handoff_ndmp(void);
 
 static  dissector_handle_t ndmp_handle;
 
-static int proto_ndmp = -1;
-static int hf_ndmp_request_frame = -1;
-static int hf_ndmp_response_frame = -1;
-static int hf_ndmp_time = -1;
-static int hf_ndmp_lastfrag = -1;
-static int hf_ndmp_fraglen = -1;
-static int hf_ndmp_version = -1;
-static int hf_ndmp_header = -1;
-static int hf_ndmp_sequence = -1;
-static int hf_ndmp_reply_sequence = -1;
-static int hf_ndmp_timestamp = -1;
-static int hf_ndmp_msgtype = -1;
-static int hf_ndmp_msg = -1;
-static int hf_ndmp_error = -1;
-static int hf_ndmp_hostname = -1;
-static int hf_ndmp_os_type = -1;
-static int hf_ndmp_os_vers = -1;
-static int hf_ndmp_hostid = -1;
-static int hf_ndmp_addr_types = -1;
-static int hf_ndmp_addr_type = -1;
-static int hf_ndmp_auth_type = -1;
-static int hf_ndmp_auth_types = -1;
-static int hf_ndmp_auth_challenge = -1;
-static int hf_ndmp_auth_digest = -1;
-static int hf_ndmp_auth_id = -1;
-static int hf_ndmp_auth_password = -1;
-static int hf_ndmp_butype_info = -1;
-static int hf_ndmp_butype_name = -1;
-static int hf_ndmp_butype_default_env = -1;
-static int hf_ndmp_butype_attr = -1;
-static int hf_ndmp_butype_attr_backup_file_history = -1;
-static int hf_ndmp_butype_attr_backup_filelist = -1;
-static int hf_ndmp_butype_attr_recover_filelist = -1;
-static int hf_ndmp_butype_attr_backup_direct = -1;
-static int hf_ndmp_butype_attr_recover_direct = -1;
-static int hf_ndmp_butype_attr_backup_incremental = -1;
-static int hf_ndmp_butype_attr_recover_incremental = -1;
-static int hf_ndmp_butype_attr_backup_utf8 = -1;
-static int hf_ndmp_butype_attr_recover_utf8 = -1;
-static int hf_ndmp_butype_env_name = -1;
-static int hf_ndmp_butype_env_value = -1;
-static int hf_ndmp_tcp_env_name = -1;
-static int hf_ndmp_tcp_env_value = -1;
-static int hf_ndmp_tcp_default_env = -1;
-static int hf_ndmp_tcp_addr_list = -1;
-static int hf_ndmp_fs_info = -1;
-static int hf_ndmp_fs_invalid = -1;
-static int hf_ndmp_fs_invalid_total_size = -1;
-static int hf_ndmp_fs_invalid_used_size = -1;
-static int hf_ndmp_fs_invalid_avail_size = -1;
-static int hf_ndmp_fs_invalid_total_inodes = -1;
-static int hf_ndmp_fs_invalid_used_inodes = -1;
-static int hf_ndmp_fs_fs_type = -1;
-static int hf_ndmp_fs_logical_device = -1;
-static int hf_ndmp_fs_physical_device = -1;
-static int hf_ndmp_fs_total_size = -1;
-static int hf_ndmp_fs_used_size = -1;
-static int hf_ndmp_fs_avail_size = -1;
-static int hf_ndmp_fs_total_inodes = -1;
-static int hf_ndmp_fs_used_inodes = -1;
-static int hf_ndmp_fs_env = -1;
-static int hf_ndmp_fs_env_name = -1;
-static int hf_ndmp_fs_env_value = -1;
-static int hf_ndmp_fs_status = -1;
-static int hf_ndmp_tape_info = -1;
-static int hf_ndmp_tape_model = -1;
-static int hf_ndmp_tape_dev_cap = -1;
-static int hf_ndmp_tape_device = -1;
-static int hf_ndmp_tape_open_mode = -1;
-static int hf_ndmp_tape_attr = -1;
-static int hf_ndmp_tape_attr_rewind = -1;
-static int hf_ndmp_tape_attr_unload = -1;
-static int hf_ndmp_tape_capability = -1;
-static int hf_ndmp_tape_capability_name = -1;
-static int hf_ndmp_tape_capability_value = -1;
-static int hf_ndmp_scsi_info = -1;
-static int hf_ndmp_scsi_model = -1;
-static int hf_ndmp_server_vendor = -1;
-static int hf_ndmp_server_product = -1;
-static int hf_ndmp_server_revision = -1;
-static int hf_ndmp_scsi_device = -1;
-static int hf_ndmp_scsi_controller = -1;
-static int hf_ndmp_scsi_id = -1;
-static int hf_ndmp_scsi_lun = -1;
-static int hf_ndmp_execute_cdb_flags = -1;
-static int hf_ndmp_execute_cdb_flags_data_in = -1;
-static int hf_ndmp_execute_cdb_flags_data_out = -1;
-static int hf_ndmp_execute_cdb_timeout = -1;
-static int hf_ndmp_execute_cdb_datain_len = -1;
-static int hf_ndmp_execute_cdb_cdb_len = -1;
-/* static int hf_ndmp_execute_cdb_dataout = -1; */
-static int hf_ndmp_execute_cdb_status = -1;
-static int hf_ndmp_execute_cdb_dataout_len = -1;
-/* static int hf_ndmp_execute_cdb_datain = -1; */
-static int hf_ndmp_execute_cdb_sns_len = -1;
-static int hf_ndmp_tape_invalid = -1;
-static int hf_ndmp_tape_invalid_file_num = -1;
-static int hf_ndmp_tape_invalid_soft_errors = -1;
-static int hf_ndmp_tape_invalid_block_size = -1;
-static int hf_ndmp_tape_invalid_block_no = -1;
-static int hf_ndmp_tape_invalid_total_space = -1;
-static int hf_ndmp_tape_invalid_space_remain = -1;
-static int hf_ndmp_tape_invalid_partition = -1;
-static int hf_ndmp_tape_flags = -1;
-static int hf_ndmp_tape_flags_no_rewind = -1;
-static int hf_ndmp_tape_flags_write_protect = -1;
-static int hf_ndmp_tape_flags_error = -1;
-static int hf_ndmp_tape_flags_unload = -1;
-static int hf_ndmp_tape_file_num = -1;
-static int hf_ndmp_tape_soft_errors = -1;
-static int hf_ndmp_tape_block_size = -1;
-static int hf_ndmp_tape_block_no = -1;
-static int hf_ndmp_tape_total_space = -1;
-static int hf_ndmp_tape_space_remain = -1;
-static int hf_ndmp_tape_partition = -1;
-static int hf_ndmp_tape_mtio_op = -1;
-static int hf_ndmp_count = -1;
-static int hf_ndmp_resid_count = -1;
-static int hf_ndmp_mover_state = -1;
-static int hf_ndmp_mover_pause = -1;
-static int hf_ndmp_halt = -1;
-static int hf_ndmp_halt_reason = -1;
-static int hf_ndmp_record_size = -1;
-static int hf_ndmp_record_num = -1;
-static int hf_ndmp_data_written = -1;
-static int hf_ndmp_seek_position = -1;
-static int hf_ndmp_bytes_left_to_read = -1;
-static int hf_ndmp_window_offset = -1;
-static int hf_ndmp_window_length = -1;
-static int hf_ndmp_addr_ip = -1;
-static int hf_ndmp_addr_tcp = -1;
-static int hf_ndmp_addr_fcal_loop_id = -1;
-static int hf_ndmp_addr_ipc = -1;
-static int hf_ndmp_mover_mode = -1;
-static int hf_ndmp_file_name = -1;
-static int hf_ndmp_nt_file_name = -1;
-static int hf_ndmp_dos_file_name = -1;
-static int hf_ndmp_log_type = -1;
-static int hf_ndmp_log_message_id = -1;
-static int hf_ndmp_log_message = -1;
-static int hf_ndmp_connected = -1;
-static int hf_ndmp_connected_reason = -1;
-static int hf_ndmp_data = -1;
-static int hf_ndmp_files = -1;
-static int hf_ndmp_file_fs_type = -1;
-static int hf_ndmp_file_names = -1;
-static int hf_ndmp_file_stats = -1;
-static int hf_ndmp_file_node = -1;
-static int hf_ndmp_file_parent = -1;
-static int hf_ndmp_file_fh_info = -1;
-static int hf_ndmp_file_invalid = -1;
-static int hf_ndmp_file_invalid_atime = -1;
-static int hf_ndmp_file_invalid_ctime = -1;
-static int hf_ndmp_file_invalid_group = -1;
-static int hf_ndmp_file_type = -1;
-static int hf_ndmp_file_mtime = -1;
-static int hf_ndmp_file_atime = -1;
-static int hf_ndmp_file_ctime = -1;
-static int hf_ndmp_file_owner = -1;
-static int hf_ndmp_file_group = -1;
-static int hf_ndmp_file_fattr = -1;
-static int hf_ndmp_file_size = -1;
-static int hf_ndmp_file_links = -1;
-static int hf_ndmp_dirs = -1;
-static int hf_ndmp_nodes = -1;
-static int hf_ndmp_nlist = -1;
-static int hf_ndmp_bu_original_path = -1;
-static int hf_ndmp_bu_destination_dir = -1;
-static int hf_ndmp_bu_new_name = -1;
-static int hf_ndmp_bu_other_name = -1;
-static int hf_ndmp_state_invalid = -1;
-static int hf_ndmp_state_invalid_ebr = -1;
-static int hf_ndmp_state_invalid_etr = -1;
-static int hf_ndmp_bu_operation = -1;
-static int hf_ndmp_data_state = -1;
-static int hf_ndmp_data_halted = -1;
-static int hf_ndmp_data_bytes_processed = -1;
-static int hf_ndmp_data_est_bytes_remain = -1;
-static int hf_ndmp_data_est_time_remain = -1;
-static int hf_ndmp_ex_class_id = -1;
-static int hf_ndmp_class_list = -1;
-static int hf_ndmp_ext_version = -1;
-static int hf_ndmp_ext_version_list = -1;
-static int hf_ndmp_class_version = -1;
-static int hf_ndmp_ex_class_version = -1;
+static int proto_ndmp;
+static int hf_ndmp_request_frame;
+static int hf_ndmp_response_frame;
+static int hf_ndmp_time;
+static int hf_ndmp_lastfrag;
+static int hf_ndmp_fraglen;
+static int hf_ndmp_version;
+static int hf_ndmp_header;
+static int hf_ndmp_sequence;
+static int hf_ndmp_reply_sequence;
+static int hf_ndmp_timestamp;
+static int hf_ndmp_msgtype;
+static int hf_ndmp_msg;
+static int hf_ndmp_error;
+static int hf_ndmp_hostname;
+static int hf_ndmp_os_type;
+static int hf_ndmp_os_vers;
+static int hf_ndmp_hostid;
+static int hf_ndmp_addr_types;
+static int hf_ndmp_addr_type;
+static int hf_ndmp_auth_type;
+static int hf_ndmp_auth_types;
+static int hf_ndmp_auth_challenge;
+static int hf_ndmp_auth_digest;
+static int hf_ndmp_auth_id;
+static int hf_ndmp_auth_password;
+static int hf_ndmp_butype_info;
+static int hf_ndmp_butype_name;
+static int hf_ndmp_butype_default_env;
+static int hf_ndmp_butype_attr;
+static int hf_ndmp_butype_attr_backup_file_history;
+static int hf_ndmp_butype_attr_backup_filelist;
+static int hf_ndmp_butype_attr_recover_filelist;
+static int hf_ndmp_butype_attr_backup_direct;
+static int hf_ndmp_butype_attr_recover_direct;
+static int hf_ndmp_butype_attr_backup_incremental;
+static int hf_ndmp_butype_attr_recover_incremental;
+static int hf_ndmp_butype_attr_backup_utf8;
+static int hf_ndmp_butype_attr_recover_utf8;
+static int hf_ndmp_butype_env_name;
+static int hf_ndmp_butype_env_value;
+static int hf_ndmp_tcp_env_name;
+static int hf_ndmp_tcp_env_value;
+static int hf_ndmp_tcp_default_env;
+static int hf_ndmp_tcp_addr_list;
+static int hf_ndmp_fs_info;
+static int hf_ndmp_fs_invalid;
+static int hf_ndmp_fs_invalid_total_size;
+static int hf_ndmp_fs_invalid_used_size;
+static int hf_ndmp_fs_invalid_avail_size;
+static int hf_ndmp_fs_invalid_total_inodes;
+static int hf_ndmp_fs_invalid_used_inodes;
+static int hf_ndmp_fs_fs_type;
+static int hf_ndmp_fs_logical_device;
+static int hf_ndmp_fs_physical_device;
+static int hf_ndmp_fs_total_size;
+static int hf_ndmp_fs_used_size;
+static int hf_ndmp_fs_avail_size;
+static int hf_ndmp_fs_total_inodes;
+static int hf_ndmp_fs_used_inodes;
+static int hf_ndmp_fs_env;
+static int hf_ndmp_fs_env_name;
+static int hf_ndmp_fs_env_value;
+static int hf_ndmp_fs_status;
+static int hf_ndmp_tape_info;
+static int hf_ndmp_tape_model;
+static int hf_ndmp_tape_dev_cap;
+static int hf_ndmp_tape_device;
+static int hf_ndmp_tape_open_mode;
+static int hf_ndmp_tape_attr;
+static int hf_ndmp_tape_attr_rewind;
+static int hf_ndmp_tape_attr_unload;
+static int hf_ndmp_tape_capability;
+static int hf_ndmp_tape_capability_name;
+static int hf_ndmp_tape_capability_value;
+static int hf_ndmp_scsi_info;
+static int hf_ndmp_scsi_model;
+static int hf_ndmp_server_vendor;
+static int hf_ndmp_server_product;
+static int hf_ndmp_server_revision;
+static int hf_ndmp_scsi_device;
+static int hf_ndmp_scsi_controller;
+static int hf_ndmp_scsi_id;
+static int hf_ndmp_scsi_lun;
+static int hf_ndmp_execute_cdb_flags;
+static int hf_ndmp_execute_cdb_flags_data_in;
+static int hf_ndmp_execute_cdb_flags_data_out;
+static int hf_ndmp_execute_cdb_timeout;
+static int hf_ndmp_execute_cdb_datain_len;
+static int hf_ndmp_execute_cdb_cdb_len;
+/* static int hf_ndmp_execute_cdb_dataout; */
+static int hf_ndmp_execute_cdb_status;
+static int hf_ndmp_execute_cdb_dataout_len;
+/* static int hf_ndmp_execute_cdb_datain; */
+static int hf_ndmp_execute_cdb_sns_len;
+static int hf_ndmp_tape_invalid;
+static int hf_ndmp_tape_invalid_file_num;
+static int hf_ndmp_tape_invalid_soft_errors;
+static int hf_ndmp_tape_invalid_block_size;
+static int hf_ndmp_tape_invalid_block_no;
+static int hf_ndmp_tape_invalid_total_space;
+static int hf_ndmp_tape_invalid_space_remain;
+static int hf_ndmp_tape_invalid_partition;
+static int hf_ndmp_tape_flags;
+static int hf_ndmp_tape_flags_no_rewind;
+static int hf_ndmp_tape_flags_write_protect;
+static int hf_ndmp_tape_flags_error;
+static int hf_ndmp_tape_flags_unload;
+static int hf_ndmp_tape_file_num;
+static int hf_ndmp_tape_soft_errors;
+static int hf_ndmp_tape_block_size;
+static int hf_ndmp_tape_block_no;
+static int hf_ndmp_tape_total_space;
+static int hf_ndmp_tape_space_remain;
+static int hf_ndmp_tape_partition;
+static int hf_ndmp_tape_mtio_op;
+static int hf_ndmp_count;
+static int hf_ndmp_resid_count;
+static int hf_ndmp_mover_state;
+static int hf_ndmp_mover_pause;
+static int hf_ndmp_halt;
+static int hf_ndmp_halt_reason;
+static int hf_ndmp_record_size;
+static int hf_ndmp_record_num;
+static int hf_ndmp_data_written;
+static int hf_ndmp_seek_position;
+static int hf_ndmp_bytes_left_to_read;
+static int hf_ndmp_window_offset;
+static int hf_ndmp_window_length;
+static int hf_ndmp_addr_ip;
+static int hf_ndmp_addr_tcp;
+static int hf_ndmp_addr_fcal_loop_id;
+static int hf_ndmp_addr_ipc;
+static int hf_ndmp_mover_mode;
+static int hf_ndmp_file_name;
+static int hf_ndmp_nt_file_name;
+static int hf_ndmp_dos_file_name;
+static int hf_ndmp_log_type;
+static int hf_ndmp_log_message_id;
+static int hf_ndmp_log_message;
+static int hf_ndmp_connected;
+static int hf_ndmp_connected_reason;
+static int hf_ndmp_data;
+static int hf_ndmp_files;
+static int hf_ndmp_file_fs_type;
+static int hf_ndmp_file_names;
+static int hf_ndmp_file_stats;
+static int hf_ndmp_file_node;
+static int hf_ndmp_file_parent;
+static int hf_ndmp_file_fh_info;
+static int hf_ndmp_file_invalid;
+static int hf_ndmp_file_invalid_atime;
+static int hf_ndmp_file_invalid_ctime;
+static int hf_ndmp_file_invalid_group;
+static int hf_ndmp_file_type;
+static int hf_ndmp_file_mtime;
+static int hf_ndmp_file_atime;
+static int hf_ndmp_file_ctime;
+static int hf_ndmp_file_owner;
+static int hf_ndmp_file_group;
+static int hf_ndmp_file_fattr;
+static int hf_ndmp_file_size;
+static int hf_ndmp_file_links;
+static int hf_ndmp_dirs;
+static int hf_ndmp_nodes;
+static int hf_ndmp_nlist;
+static int hf_ndmp_bu_original_path;
+static int hf_ndmp_bu_destination_dir;
+static int hf_ndmp_bu_new_name;
+static int hf_ndmp_bu_other_name;
+static int hf_ndmp_state_invalid;
+static int hf_ndmp_state_invalid_ebr;
+static int hf_ndmp_state_invalid_etr;
+static int hf_ndmp_bu_operation;
+static int hf_ndmp_data_state;
+static int hf_ndmp_data_halted;
+static int hf_ndmp_data_bytes_processed;
+static int hf_ndmp_data_est_bytes_remain;
+static int hf_ndmp_data_est_time_remain;
+static int hf_ndmp_ex_class_id;
+static int hf_ndmp_class_list;
+static int hf_ndmp_ext_version;
+static int hf_ndmp_ext_version_list;
+static int hf_ndmp_class_version;
+static int hf_ndmp_ex_class_version;
 
-static int hf_ndmp_fragment_data = -1;
-static int hf_ndmp_fragments = -1;
-static int hf_ndmp_fragment = -1;
-static int hf_ndmp_fragment_overlap = -1;
-static int hf_ndmp_fragment_overlap_conflicts = -1;
-static int hf_ndmp_fragment_multiple_tails = -1;
-static int hf_ndmp_fragment_too_long_fragment = -1;
-static int hf_ndmp_fragment_error = -1;
-static int hf_ndmp_fragment_count = -1;
-static int hf_ndmp_reassembled_in = -1;
-static int hf_ndmp_reassembled_length = -1;
+static int hf_ndmp_fragment_data;
+static int hf_ndmp_fragments;
+static int hf_ndmp_fragment;
+static int hf_ndmp_fragment_overlap;
+static int hf_ndmp_fragment_overlap_conflicts;
+static int hf_ndmp_fragment_multiple_tails;
+static int hf_ndmp_fragment_too_long_fragment;
+static int hf_ndmp_fragment_error;
+static int hf_ndmp_fragment_count;
+static int hf_ndmp_reassembled_in;
+static int hf_ndmp_reassembled_length;
 
-static gint ett_ndmp = -1;
-static gint ett_ndmp_fraghdr = -1;
-static gint ett_ndmp_header = -1;
-static gint ett_ndmp_butype_attrs = -1;
-static gint ett_ndmp_fs_invalid = -1;
-static gint ett_ndmp_tape_attr = -1;
-static gint ett_ndmp_execute_cdb_flags = -1;
-static gint ett_ndmp_execute_cdb_cdb = -1;
-static gint ett_ndmp_execute_cdb_sns = -1;
-static gint ett_ndmp_execute_cdb_payload = -1;
-static gint ett_ndmp_tape_invalid = -1;
-static gint ett_ndmp_tape_flags = -1;
-static gint ett_ndmp_addr = -1;
-static gint ett_ndmp_file = -1;
-static gint ett_ndmp_file_name = -1;
-static gint ett_ndmp_file_stats = -1;
-static gint ett_ndmp_file_invalids = -1;
-static gint ett_ndmp_state_invalids = -1;
-static gint ett_ndmp_fragment = -1;
-static gint ett_ndmp_fragments = -1;
+static int ett_ndmp;
+static int ett_ndmp_fraghdr;
+static int ett_ndmp_header;
+static int ett_ndmp_butype_attrs;
+static int ett_ndmp_fs_invalid;
+static int ett_ndmp_tape_attr;
+static int ett_ndmp_execute_cdb_flags;
+static int ett_ndmp_execute_cdb_cdb;
+static int ett_ndmp_execute_cdb_sns;
+static int ett_ndmp_execute_cdb_payload;
+static int ett_ndmp_tape_invalid;
+static int ett_ndmp_tape_flags;
+static int ett_ndmp_addr;
+static int ett_ndmp_file;
+static int ett_ndmp_file_name;
+static int ett_ndmp_file_stats;
+static int ett_ndmp_file_invalids;
+static int ett_ndmp_state_invalids;
+static int ett_ndmp_fragment;
+static int ett_ndmp_fragments;
 
-static expert_field ei_ndmp_msg = EI_INIT;
+static expert_field ei_ndmp_msg;
 
 static const fragment_items ndmp_frag_items = {
 	/* Fragment subtrees */
@@ -295,22 +297,22 @@ static const enum_val_t ndmp_protocol_versions[] = {
 	{ NULL, NULL, 0 }
 };
 
-static gint ndmp_default_protocol_version = NDMP_PROTOCOL_V4;
+static int ndmp_default_protocol_version = NDMP_PROTOCOL_V4;
 
 typedef struct _ndmp_frag_info {
-	guint32 first_seq;
-	guint16 offset;
+	uint32_t first_seq;
+	uint16_t offset;
 } ndmp_frag_info;
 
 typedef struct _ndmp_task_data_t {
-	guint32 request_frame;
-	guint32 response_frame;
+	uint32_t request_frame;
+	uint32_t response_frame;
 	nstime_t ndmp_time;
 	itlq_nexus_t *itlq;
 } ndmp_task_data_t;
 
 typedef struct _ndmp_conv_data_t {
-	guint8 version;
+	uint8_t version;
 	wmem_map_t *tasks;	/* indexed by Sequence# */
 	wmem_tree_t *itl;	/* indexed by packet# */
 	wmem_map_t *fragsA; 	/* indexed by Sequence# */
@@ -318,11 +320,11 @@ typedef struct _ndmp_conv_data_t {
 	ndmp_task_data_t *task;
 	conversation_t *conversation;
 } ndmp_conv_data_t;
-static ndmp_conv_data_t *ndmp_conv_data=NULL;
+static ndmp_conv_data_t *ndmp_conv_data;
 static proto_tree *top_tree;
 
 static itl_nexus_t *
-get_itl_nexus(packet_info *pinfo, gboolean create_new)
+get_itl_nexus(packet_info *pinfo, bool create_new)
 {
 	itl_nexus_t *itl;
 
@@ -335,7 +337,7 @@ get_itl_nexus(packet_info *pinfo, gboolean create_new)
 	return itl;
 }
 
-static guint8
+static uint8_t
 get_ndmp_protocol_version(void)
 {
 	if(!ndmp_conv_data || (ndmp_conv_data->version==NDMP_PROTOCOL_UNKNOWN)){
@@ -345,19 +347,19 @@ get_ndmp_protocol_version(void)
 }
 
 struct ndmp_header {
-	guint32	seq;
-	guint32 timestamp;
-	guint32 type;
-	guint32 msg;
-	guint32 rep_seq;
-	guint32 err;
+	uint32_t	seq;
+	uint32_t timestamp;
+	uint32_t type;
+	uint32_t msg;
+	uint32_t rep_seq;
+	uint32_t err;
 };
 
 /* desegmentation of NDMP packets */
-static gboolean ndmp_desegment = TRUE;
+static bool ndmp_desegment = true;
 
 /* defragmentation of fragmented NDMP records */
-static gboolean ndmp_defragment = TRUE;
+static bool ndmp_defragment = true;
 
 #define NDMP_MESSAGE_REQUEST	0x00
 #define NDMP_MESSAGE_REPLY	0x01
@@ -505,8 +507,8 @@ static const value_string msg_vals[] = {
 	{NDMP_CONFIG_GET_TAPE_INFO, 	"CONFIG_GET_TAPE_INFO"},
 	{NDMP_CONFIG_GET_SCSI_INFO, 	"CONFIG_GET_SCSI_INFO"},
 	{NDMP_CONFIG_GET_SERVER_INFO, 	"CONFIG_GET_SERVER_INFO"},
-	{NDMP_CONFIG_GET_EXT_LIST, 	"CONFIG_GET_EXT_LIST"},
 	{NDMP_CONFIG_SET_EXT_LIST, 	"CONFIG_SET_EXT_LIST"},
+	{NDMP_CONFIG_GET_EXT_LIST, 	"CONFIG_GET_EXT_LIST"},
 	{NDMP_SCSI_OPEN, 		"SCSI_OPEN"},
 	{NDMP_SCSI_CLOSE, 		"SCSI_CLOSE"},
 	{NDMP_SCSI_GET_STATE, 		"SCSI_GET_STATE"},
@@ -556,15 +558,15 @@ static const value_string msg_vals[] = {
 	{0, NULL}
 };
 
-static gboolean
+static bool
 check_ndmp_rm(tvbuff_t *tvb, packet_info *pinfo)
 {
-	guint len;
-	guint32 tmp;
+	unsigned len;
+	uint32_t tmp;
 
 	/* verify that the tcp port is 10000, ndmp always runs on port 10000*/
 	if ((pinfo->srcport!=TCP_PORT_NDMP)&&(pinfo->destport!=TCP_PORT_NDMP)) {
-		return FALSE;
+		return false;
 	}
 
 	/* check that the header looks sane */
@@ -575,25 +577,25 @@ check_ndmp_rm(tvbuff_t *tvb, packet_info *pinfo)
 	if(len>=4){
 		tmp=(tvb_get_ntohl(tvb, 0)&RPC_RM_FRAGLEN);
 		if( (tmp<1)||(tmp>1000000) ){
-			return FALSE;
+			return false;
 		}
 	}
 
-	return TRUE;
+	return true;
 }
 
-static gboolean
+static bool
 check_ndmp_hdr(tvbuff_t *tvb )
 {
-	guint len;
-	guint32 tmp;
+	unsigned len;
+	uint32_t tmp;
 
 	len=tvb_captured_length(tvb);
 
 	/* If the length is less than 24, it isn't a valid
 	   header */
 	if (len<24){
-		return FALSE;
+		return false;
 	}
 
 	/* check the timestamp,  timestamps are valid if they
@@ -602,7 +604,7 @@ check_ndmp_hdr(tvbuff_t *tvb )
 	if(len>=8){
 		tmp=tvb_get_ntohl(tvb, 4);
 		if( (tmp<0x12ceec50)||(tmp>0x70dc1ed0) ){
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -610,7 +612,7 @@ check_ndmp_hdr(tvbuff_t *tvb )
 	if(len>=12){
 		tmp=tvb_get_ntohl(tvb, 8);
 		if( tmp>1 ){
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -618,7 +620,7 @@ check_ndmp_hdr(tvbuff_t *tvb )
 	if(len>=16){
 		tmp=tvb_get_ntohl(tvb, 12);
 		if( (tmp>0xa09) || (tmp==0) ){
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -626,18 +628,18 @@ check_ndmp_hdr(tvbuff_t *tvb )
 	if(len>=24){
 		tmp=tvb_get_ntohl(tvb, 20);
 		if( (tmp>0x17) ){
-			return FALSE;
+			return false;
 		}
 	}
 
-	return TRUE;
+	return true;
 }
 
-static int
-dissect_connect_open_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_connect_open_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
+		proto_tree *tree, uint32_t seq _U_)
 {
-	guint32 version;
+	uint32_t version;
 
 	/* version number */
 	proto_tree_add_item(tree, hf_ndmp_version, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -648,19 +650,18 @@ dissect_connect_open_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_error(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_error(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
-	guint32 err;
+	uint32_t err;
 
 	/* error */
-	err=tvb_get_ntohl(tvb, offset);
-	proto_tree_add_item(tree, hf_ndmp_error, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item_ret_uint(tree, hf_ndmp_error, tvb, offset, 4, ENC_BIG_ENDIAN, &err);
 	if(err) {
 		col_append_fstr(pinfo->cinfo, COL_INFO,
 			" NDMP Error:%s ",
-			val_to_str(err, error_vals,
+			val_to_str(pinfo->pool, err, error_vals,
 			"Unknown NDMP error code %#x"));
 	}
 
@@ -669,27 +670,27 @@ dissect_error(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_ndmp_get_host_info_reply(tvbuff_t *tvb, int offset,
-		packet_info *pinfo, proto_tree *tree, guint32 seq)
+static unsigned
+dissect_ndmp_get_host_info_reply(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo, proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
 
 	/* hostname */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_hostname, offset, NULL);
 
 	/* os type */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_os_type, offset, NULL);
 
 	/* os version */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_os_vers, offset, NULL);
 
 	/* hostid */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_hostid, offset, NULL);
 
 	return offset;
@@ -708,8 +709,7 @@ static const value_string addr_type_vals[] = {
 };
 
 static int
-dissect_ndmp_addr_type(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_)
+dissect_ndmp_addr_type(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	proto_tree_add_item(tree, hf_ndmp_addr_type, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
@@ -717,17 +717,15 @@ dissect_ndmp_addr_type(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_ndmp_addr_msg(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_ndmp_addr_msg(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, uint32_t seq _U_)
 {
 	/*address type*/
 	return dissect_ndmp_addr_type(tvb, offset, pinfo, tree, NULL);
 }
 
-static int
-dissect_ndmp_config_get_connection_type_reply(tvbuff_t *tvb, int offset,
-		packet_info *pinfo, proto_tree *tree, guint32 seq)
+static unsigned
+dissect_ndmp_config_get_connection_type_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -749,8 +747,7 @@ static const value_string auth_type_vals[] = {
 	{0,NULL}
 };
 static int
-dissect_auth_type(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_)
+dissect_auth_type(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	proto_tree_add_item(tree, hf_ndmp_auth_type, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
@@ -758,19 +755,17 @@ dissect_auth_type(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_get_auth_type_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_get_auth_type_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, uint32_t seq _U_)
 {
 	/* auth type */
 	return dissect_auth_type(tvb, offset, pinfo, tree, NULL);
 }
 
-static int
-dissect_auth_attr_msg(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_auth_attr_msg(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree, uint32_t seq _U_)
 {
-	guint type;
+	unsigned type;
 
 	type=tvb_get_ntohl(tvb,offset);
 
@@ -792,9 +787,8 @@ dissect_auth_attr_msg(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_ndmp_config_get_auth_attr_reply(tvbuff_t *tvb, int offset,
-		packet_info *pinfo, proto_tree *tree, guint32 seq)
+static unsigned
+dissect_ndmp_config_get_auth_attr_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset = dissect_error(tvb, offset, pinfo, tree, seq);
@@ -806,15 +800,14 @@ dissect_ndmp_config_get_auth_attr_reply(tvbuff_t *tvb, int offset,
 }
 
 static int
-dissect_default_env(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_)
+dissect_default_env(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* name */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_butype_env_name, offset, NULL);
 
 	/* value */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_butype_env_value, offset, NULL);
 
 	return offset;
@@ -857,8 +850,8 @@ static const true_false_string tfs_butype_attr_recover_utf8 = {
 	"Recover using UTF8",
 	"Normal recover. Do NOT use utf8"
 };
-static int
-dissect_butype_attrs(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_butype_attrs(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const attribute_flags[] = {
@@ -874,17 +867,17 @@ dissect_butype_attrs(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_butype_attr, ett_ndmp_butype_attrs, attribute_flags, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_butype_attr, ett_ndmp_butype_attrs, attribute_flags, ENC_BIG_ENDIAN);
 
 	offset += 4;
 	return offset;
 }
 
 static int
-dissect_butype_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_butype_info(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/*butype name*/
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_butype_name, offset, NULL);
 
 	/* default env */
@@ -897,9 +890,9 @@ dissect_butype_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *t
 	return offset;
 }
 
-static int
-dissect_get_butype_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_get_butype_info_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -931,8 +924,8 @@ static const true_false_string tfs_fs_invalid_used_inodes = {
 	"Used inode count is INVALID",
 	"Used inode count is VALID"
 };
-static int
-dissect_fs_invalid(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_fs_invalid(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const invalid_flags[] = {
@@ -944,43 +937,42 @@ dissect_fs_invalid(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_fs_invalid, ett_ndmp_fs_invalid, invalid_flags, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_fs_invalid, ett_ndmp_fs_invalid, invalid_flags, ENC_BIG_ENDIAN);
 
 	offset+=4;
 	return offset;
 }
 
 static int
-dissect_fs_env(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_)
+dissect_fs_env(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* name */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_fs_env_name, offset, NULL);
 
 	/* value */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_fs_env_value, offset, NULL);
 
 	return offset;
 }
 
 static int
-dissect_fs_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_fs_info(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* invalid bits */
 	offset=dissect_fs_invalid(tvb, offset, pinfo, tree);
 
 	/* fs type */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_fs_fs_type, offset, NULL);
 
 	/* fs logical device */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_fs_logical_device, offset, NULL);
 
 	/* fs physical device */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_fs_physical_device, offset, NULL);
 
 	/*total_size*/
@@ -1008,15 +1000,15 @@ dissect_fs_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree,
 			dissect_fs_env, hf_ndmp_fs_env);
 
 	/* status */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_fs_status, offset, NULL);
 
 	return offset;
 }
 
-static int
-dissect_get_fs_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_get_fs_info_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1036,8 +1028,8 @@ static const true_false_string tfs_tape_attr_unload = {
 	"Device supports UNLOAD",
 	"Device does NOT support unload"
 };
-static int
-dissect_tape_attr(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_tape_attr(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const attribute_flags[] = {
@@ -1046,32 +1038,31 @@ dissect_tape_attr(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_tape_attr, ett_ndmp_tape_attr, attribute_flags, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_tape_attr, ett_ndmp_tape_attr, attribute_flags, ENC_BIG_ENDIAN);
 
 	offset+=4;
 	return offset;
 }
 
 static int
-dissect_tape_capability(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_)
+dissect_tape_capability(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* name */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_tape_capability_name, offset, NULL);
 
 	/* value */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_tape_capability_value, offset, NULL);
 
 	return offset;
 }
 
 static int
-dissect_tape_dev_cap(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_tape_dev_cap(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* device */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_tape_device, offset, NULL);
 
 	/* tape attributes */
@@ -1085,22 +1076,22 @@ dissect_tape_dev_cap(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 }
 
 static int
-dissect_tape_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_tape_info(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* model */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_tape_model, offset, NULL);
 
-	/* device capabilites */
+	/* device capabilities */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
 			dissect_tape_dev_cap, hf_ndmp_tape_dev_cap);
 
 	return offset;
 }
 
-static int
-dissect_get_tape_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_get_tape_info_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1113,22 +1104,22 @@ dissect_get_tape_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 static int
-dissect_scsi_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_scsi_info(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* model */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_scsi_model, offset, NULL);
 
-	/* device capabilites */
+	/* device capabilities */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
 			dissect_tape_dev_cap, hf_ndmp_tape_dev_cap);
 
 	return offset;
 }
 
-static int
-dissect_get_scsi_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_get_scsi_info_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1140,23 +1131,23 @@ dissect_get_scsi_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_get_server_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_get_server_info_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
 
 	/* vendor */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_server_vendor, offset, NULL);
 
 	/* product */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_server_product, offset, NULL);
 
 	/* revision */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_server_revision, offset, NULL);
 
 
@@ -1168,8 +1159,7 @@ dissect_get_server_info_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 static int
-dissect_ext_version(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_) {
+dissect_ext_version(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_) {
 
 	/* extension version */
 	proto_tree_add_item(tree, hf_ndmp_ext_version, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1180,8 +1170,7 @@ dissect_ext_version(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 
 
 static int
-dissect_class_list(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, void* data _U_) {
+dissect_class_list(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_) {
 
 	/* class id */
 	proto_tree_add_item(tree, hf_ndmp_ex_class_id, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1194,9 +1183,9 @@ dissect_class_list(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_get_ext_list_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_get_ext_list_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1210,8 +1199,7 @@ dissect_get_ext_list_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 
 static int
-dissect_class_version(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_) {
+dissect_class_version(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_) {
 
 	/* class id */
 	proto_tree_add_item(tree, hf_ndmp_ex_class_id, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1224,9 +1212,9 @@ dissect_class_version(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_set_ext_list_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_set_ext_list_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* class version */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
@@ -1236,9 +1224,9 @@ dissect_set_ext_list_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 
-static int
-dissect_set_ext_list_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_set_ext_list_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1246,26 +1234,26 @@ dissect_set_ext_list_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_scsi_open_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_scsi_open_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* device */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_scsi_device, offset, NULL);
 
 
 	if(!pinfo->fd->visited){
 		/* new scsi device addressed, create a new itl structure */
-		get_itl_nexus(pinfo, TRUE);
+		get_itl_nexus(pinfo, true);
 	}
 
 	return offset;
 }
 
-static int
-dissect_scsi_get_state_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_scsi_get_state_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1285,12 +1273,12 @@ dissect_scsi_get_state_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_scsi_set_state_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo _U_, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_scsi_set_state_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo _U_, proto_tree *tree, uint32_t seq _U_)
 {
 	/* device */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_scsi_device, offset, NULL);
 
 	/* controller */
@@ -1308,8 +1296,8 @@ dissect_scsi_set_state_request(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static int
-dissect_execute_cdb_flags(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_execute_cdb_flags(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const cdb_flags[] = {
@@ -1318,19 +1306,19 @@ dissect_execute_cdb_flags(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_execute_cdb_flags, ett_ndmp_execute_cdb_flags, cdb_flags, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_execute_cdb_flags, ett_ndmp_execute_cdb_flags, cdb_flags, ENC_BIG_ENDIAN);
 
 	offset += 4;
 	return offset;
 }
 
-static int
-dissect_execute_cdb_cdb(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *parent_tree, gint devtype)
+static unsigned
+dissect_execute_cdb_cdb(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *parent_tree, int devtype)
 {
 	proto_tree* tree;
-	guint32 cdb_len;
-	guint32 cdb_len_full;
+	uint32_t cdb_len;
+	uint32_t cdb_len_full;
 
 	cdb_len = tvb_get_ntohl(tvb, offset);
 	cdb_len_full = rpc_roundup(cdb_len);
@@ -1344,15 +1332,12 @@ dissect_execute_cdb_cdb(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 	if (cdb_len != 0) {
 		tvbuff_t *cdb_tvb;
-		int tvb_len, tvb_rlen;
+		int tvb_rlen;
 
-		tvb_len=tvb_captured_length_remaining(tvb, offset);
-		if(tvb_len>16)
-			tvb_len=16;
 		tvb_rlen=tvb_reported_length_remaining(tvb, offset);
 		if(tvb_rlen>16)
 			tvb_rlen=16;
-		cdb_tvb=tvb_new_subset_length_caplen(tvb, offset, tvb_len, tvb_rlen);
+		cdb_tvb=tvb_new_subset_length(tvb, offset, tvb_rlen);
 
 		if(ndmp_conv_data->task && !ndmp_conv_data->task->itlq){
 			ndmp_conv_data->task->itlq=wmem_new(wmem_file_scope(), itlq_nexus_t);
@@ -1369,7 +1354,7 @@ dissect_execute_cdb_cdb(tvbuff_t *tvb, int offset, packet_info *pinfo,
 			ndmp_conv_data->task->itlq->extra_data=NULL;
 		}
 		if(ndmp_conv_data->task && ndmp_conv_data->task->itlq){
-			dissect_scsi_cdb(cdb_tvb, pinfo, top_tree, devtype, ndmp_conv_data->task->itlq, get_itl_nexus(pinfo, FALSE));
+			dissect_scsi_cdb(cdb_tvb, pinfo, top_tree, devtype, ndmp_conv_data->task->itlq, get_itl_nexus(pinfo, false));
 		}
 		offset += cdb_len_full;
 	}
@@ -1378,13 +1363,13 @@ dissect_execute_cdb_cdb(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 
-static int
-dissect_execute_cdb_payload(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree,
-		const char *name, int hf_len, gboolean isreq)
+static unsigned
+dissect_execute_cdb_payload(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree,
+		const char *name, int hf_len, bool isreq)
 {
 	proto_tree* tree;
-	guint32 payload_len;
-	guint32 payload_len_full;
+	uint32_t payload_len;
+	uint32_t payload_len_full;
 
 	payload_len = tvb_get_ntohl(tvb, offset);
 	payload_len_full = rpc_roundup(payload_len);
@@ -1397,15 +1382,12 @@ dissect_execute_cdb_payload(tvbuff_t *tvb, int offset, packet_info *pinfo, proto
 
 	if ((int) payload_len > 0) {
 		tvbuff_t *data_tvb;
-		int tvb_len, tvb_rlen;
+		int tvb_rlen;
 
-		tvb_len=tvb_captured_length_remaining(tvb, offset);
-		if(tvb_len>(int)payload_len)
-			tvb_len=payload_len;
 		tvb_rlen=tvb_reported_length_remaining(tvb, offset);
 		if(tvb_rlen>(int)payload_len)
 			tvb_rlen=payload_len;
-		data_tvb=tvb_new_subset_length_caplen(tvb, offset, tvb_len, tvb_rlen);
+		data_tvb=tvb_new_subset_length(tvb, offset, tvb_rlen);
 
 		if(ndmp_conv_data->task && ndmp_conv_data->task->itlq){
 			/* ndmp conceptually always send both read and write
@@ -1416,7 +1398,7 @@ dissect_execute_cdb_payload(tvbuff_t *tvb, int offset, packet_info *pinfo, proto
 			ndmp_conv_data->task->itlq->bidir_data_length=payload_len;
 			dissect_scsi_payload(data_tvb, pinfo, top_tree, isreq,
 				   ndmp_conv_data->task->itlq,
-				   get_itl_nexus(pinfo, FALSE),
+				   get_itl_nexus(pinfo, false),
 				   0);
 		}
 		offset += payload_len_full;
@@ -1440,9 +1422,9 @@ dissect_execute_cdb_payload(tvbuff_t *tvb, int offset, packet_info *pinfo, proto
  * that are the ones that trigger the dissection of NDMP_SCSI_EXECUTE_CDB
  * or NDMP_TAPE_EXECUTE_CDB requests pointers to those names.
  */
-static int
-dissect_execute_cdb_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_, gint devtype)
+static unsigned
+dissect_execute_cdb_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_, int devtype)
 {
 	/* flags */
 	offset = dissect_execute_cdb_flags(tvb, offset, pinfo, tree);
@@ -1460,33 +1442,33 @@ dissect_execute_cdb_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 	/* dataout */
 	offset = dissect_execute_cdb_payload(tvb, offset, pinfo, tree,
-	    "Data out", hf_ndmp_execute_cdb_dataout_len, TRUE);
+	    "Data out", hf_ndmp_execute_cdb_dataout_len, true);
 
 	return offset;
 }
 
-static int
-dissect_execute_cdb_request_mc(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_execute_cdb_request_mc(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	return dissect_execute_cdb_request(tvb, offset, pinfo, tree, seq,
 		SCSI_DEV_SMC);
 }
 
-static int
-dissect_execute_cdb_request_tape(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_execute_cdb_request_tape(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	return dissect_execute_cdb_request(tvb, offset, pinfo, tree, seq,
 		SCSI_DEV_SSC);
 }
 
-static int
-dissect_execute_cdb_sns(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree)
+static unsigned
+dissect_execute_cdb_sns(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree)
 {
 	proto_tree* tree;
-	guint32 sns_len;
-	guint32 sns_len_full;
+	uint32_t sns_len;
+	uint32_t sns_len_full;
 
 	sns_len = tvb_get_ntohl(tvb, offset);
 	sns_len_full = rpc_roundup(sns_len);
@@ -1500,7 +1482,7 @@ dissect_execute_cdb_sns(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tre
 
 	if (sns_len != 0) {
 		if(ndmp_conv_data->task && ndmp_conv_data->task->itlq){
-			dissect_scsi_snsinfo(tvb, pinfo, top_tree, offset, sns_len, ndmp_conv_data->task->itlq, get_itl_nexus(pinfo, FALSE));
+			dissect_scsi_snsinfo(tvb, pinfo, top_tree, offset, sns_len, ndmp_conv_data->task->itlq, get_itl_nexus(pinfo, false));
 		}
 		offset += sns_len_full;
 	}
@@ -1508,20 +1490,19 @@ dissect_execute_cdb_sns(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tre
 	return offset;
 }
 
-static int
-dissect_execute_cdb_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_execute_cdb_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
-	guint32 status;
+	uint32_t status;
 
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
 
 	/* status */
-	proto_tree_add_item(tree, hf_ndmp_execute_cdb_status, tvb, offset, 4, ENC_BIG_ENDIAN);
-	status=tvb_get_ntohl(tvb, offset);
+	proto_tree_add_item_ret_uint(tree, hf_ndmp_execute_cdb_status, tvb, offset, 4, ENC_BIG_ENDIAN, &status);
 	if(ndmp_conv_data->task && ndmp_conv_data->task->itlq){
-		dissect_scsi_rsp(tvb, pinfo, top_tree, ndmp_conv_data->task->itlq, get_itl_nexus(pinfo, FALSE), (guint8)status);
+		dissect_scsi_rsp(tvb, pinfo, top_tree, ndmp_conv_data->task->itlq, get_itl_nexus(pinfo, false), (uint8_t)status);
 	}
 	offset += 4;
 
@@ -1532,7 +1513,7 @@ dissect_execute_cdb_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 	/* datain */
 	offset = dissect_execute_cdb_payload(tvb, offset, pinfo, tree,
-	    "Data in", hf_ndmp_execute_cdb_datain_len, FALSE);
+	    "Data in", hf_ndmp_execute_cdb_datain_len, false);
 
 	/* ext_sense */
 	offset = dissect_execute_cdb_sns(tvb, offset, pinfo, tree);
@@ -1548,12 +1529,12 @@ static const value_string tape_open_mode_vals[] = {
 	{0, NULL}
 };
 
-static int
-dissect_tape_open_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_tape_open_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* device */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_tape_device, offset, NULL);
 
 	/* open mode */
@@ -1562,7 +1543,7 @@ dissect_tape_open_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 	if(!pinfo->fd->visited){
 		/* new scsi device addressed, create a new itl structure */
-		get_itl_nexus(pinfo, TRUE);
+		get_itl_nexus(pinfo, true);
 	}
 
 	return offset;
@@ -1597,8 +1578,8 @@ static const true_false_string tfs_ndmp_tape_invalid_partition = {
 	"Partition is INVALID",
 	"Partition is VALID"
 };
-static int
-dissect_tape_invalid(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_tape_invalid(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const invalid_tapes[] = {
@@ -1612,7 +1593,7 @@ dissect_tape_invalid(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_tape_invalid, ett_ndmp_tape_invalid, invalid_tapes, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_tape_invalid, ett_ndmp_tape_invalid, invalid_tapes, ENC_BIG_ENDIAN);
 
 	offset+=4;
 	return offset;
@@ -1634,8 +1615,8 @@ static const true_false_string tfs_ndmp_tape_flags_unload = {
 	"This device supports UNLOAD",
 	"This device does NOT support unload"
 };
-static int
-dissect_tape_flags(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_tape_flags(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const tape_flags[] = {
@@ -1646,15 +1627,15 @@ dissect_tape_flags(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_tape_flags, ett_ndmp_tape_flags, tape_flags, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_tape_flags, ett_ndmp_tape_flags, tape_flags, ENC_BIG_ENDIAN);
 
 	offset+=4;
 	return offset;
 }
 
-static int
-dissect_tape_get_state_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_tape_get_state_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* invalid bits */
 	offset=dissect_tape_invalid(tvb, offset, pinfo, tree);
@@ -1718,9 +1699,9 @@ static const value_string tape_mtio_vals[] = {
 	{0, NULL}
 };
 
-static int
-dissect_tape_mtio_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_tape_mtio_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* op */
 	proto_tree_add_item(tree, hf_ndmp_tape_mtio_op, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1733,9 +1714,9 @@ dissect_tape_mtio_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_tape_mtio_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_tape_mtio_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1792,14 +1773,14 @@ static const value_string halt_vals[] = {
 };
 
 static int
-dissect_tcp_env(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_tcp_env(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* name */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_tcp_env_name, offset, NULL);
 
 	/* value */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_tcp_env_value, offset, NULL);
 
 	return offset;
@@ -1807,7 +1788,7 @@ dissect_tcp_env(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *t
 
 
 static int
-dissect_ndmp_v4_tcp_addr(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_ndmp_v4_tcp_addr(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* IP addr */
 	proto_tree_add_item(tree, hf_ndmp_addr_ip, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1824,16 +1805,15 @@ dissect_ndmp_v4_tcp_addr(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tr
 	return offset;
 }
 
-static int
-dissect_ndmp_addr(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *parent_tree)
+static unsigned
+dissect_ndmp_addr(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree)
 {
 	proto_tree* tree;
-	guint32 type;
+	uint32_t type;
 
 	type=tvb_get_ntohl(tvb, offset);
 	tree = proto_tree_add_subtree_format(parent_tree, tvb, offset, 4, ett_ndmp_addr, NULL,
-				"Type: %s ", val_to_str(type, addr_type_vals,"Unknown addr type (0x%02x)") );
+				"Type: %s ", val_to_str(pinfo->pool, type, addr_type_vals,"Unknown addr type (0x%02x)") );
 
 	/*address type*/
 	proto_tree_add_item(tree, hf_ndmp_addr_type, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1868,16 +1848,16 @@ dissect_ndmp_addr(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		break;
 	case NDMP_ADDR_IPC:
 		/* IPC address */
-		offset = dissect_rpc_data(tvb, tree, hf_ndmp_addr_ipc, offset);
+		offset = dissect_rpc_data(tvb, pinfo, tree, hf_ndmp_addr_ipc, offset);
 		break;
 	}
 
 	return offset;
 }
 
-static int
-dissect_data_connect_msg(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_data_connect_msg(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* ndmp addr */
 	offset=dissect_ndmp_addr(tvb, offset, pinfo, tree);
@@ -1885,9 +1865,9 @@ dissect_data_connect_msg(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 
-static int
-dissect_mover_get_state_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_mover_get_state_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1960,9 +1940,9 @@ static const value_string mover_mode_vals[] = {
 	{0, NULL}
 };
 
-static int
-dissect_mover_listen_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_mover_listen_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* mode */
 	proto_tree_add_item(tree, hf_ndmp_mover_mode, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1975,9 +1955,9 @@ dissect_mover_listen_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_mover_listen_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_mover_listen_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -1988,9 +1968,9 @@ dissect_mover_listen_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_mover_set_window_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo _U_, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_mover_set_window_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo _U_, proto_tree *tree, uint32_t seq _U_)
 {
 	/* window offset */
 	proto_tree_add_item(tree, hf_ndmp_window_offset, tvb, offset, 8, ENC_BIG_ENDIAN);
@@ -2003,9 +1983,9 @@ dissect_mover_set_window_request(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static int
-dissect_mover_set_record_size_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo _U_, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_mover_set_record_size_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo _U_, proto_tree *tree, uint32_t seq _U_)
 {
 	/* record size */
 	proto_tree_add_item(tree, hf_ndmp_record_size, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2014,9 +1994,9 @@ dissect_mover_set_record_size_request(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static int
-dissect_mover_connect_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_mover_connect_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* mode */
 	proto_tree_add_item(tree, hf_ndmp_mover_mode, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2028,12 +2008,12 @@ dissect_mover_connect_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_log_file_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_log_file_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* file */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_file_name, offset, NULL);
 
 	/* error */
@@ -2054,9 +2034,9 @@ static const value_string log_type_vals[] = {
 	{0, NULL}
 };
 
-static int
-dissect_log_message_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_log_message_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* type */
 	proto_tree_add_item(tree, hf_ndmp_log_type, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2067,15 +2047,15 @@ dissect_log_message_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	offset += 4;
 
 	/* message */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_log_message, offset, NULL);
 
 	return offset;
 }
 
-static int
-dissect_notify_data_halted_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo _U_, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_notify_data_halted_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo, proto_tree *tree, uint32_t seq _U_)
 {
 	/* halt */
 	proto_tree_add_item(tree, hf_ndmp_halt, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2085,7 +2065,7 @@ dissect_notify_data_halted_request(tvbuff_t *tvb, int offset,
 	case NDMP_PROTOCOL_V2:
 	case NDMP_PROTOCOL_V3:
 		/* reason : only in version 2, 3 */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_halt_reason, offset, NULL);
 		break;
 	}
@@ -2093,9 +2073,9 @@ dissect_notify_data_halted_request(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static int
-dissect_notify_mover_halted_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo _U_, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_notify_mover_halted_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo, proto_tree *tree, uint32_t seq _U_)
 {
 	/* halt */
 	proto_tree_add_item(tree, hf_ndmp_halt, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2105,7 +2085,7 @@ dissect_notify_mover_halted_request(tvbuff_t *tvb, int offset,
 	case NDMP_PROTOCOL_V2:
 	case NDMP_PROTOCOL_V3:
 		/* reason : only in version 2, 3 */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_halt_reason, offset, NULL);
 		break;
 	}
@@ -2123,9 +2103,9 @@ static const value_string connected_vals[] = {
 	{0, NULL}
 };
 
-static int
-dissect_notify_connected_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo _U_, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_notify_connected_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo, proto_tree *tree, uint32_t seq _U_)
 {
 	/* connected */
 	proto_tree_add_item(tree, hf_ndmp_connected, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2136,16 +2116,16 @@ dissect_notify_connected_request(tvbuff_t *tvb, int offset,
 	offset += 4;
 
 	/* reason */
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_connected_reason, offset, NULL);
 
 	return offset;
 }
 
 
-static int
-dissect_notify_mover_paused_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo _U_, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_notify_mover_paused_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo _U_, proto_tree *tree, uint32_t seq _U_)
 {
 	/* mover pause */
 	proto_tree_add_item(tree, hf_ndmp_mover_pause, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2158,11 +2138,11 @@ dissect_notify_mover_paused_request(tvbuff_t *tvb, int offset,
 	return offset;
 }
 
-static int
-dissect_auth_data(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_auth_data(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
 		proto_tree *tree)
 {
-	guint type;
+	unsigned type;
 
 	type=tvb_get_ntohl(tvb,offset);
 
@@ -2175,18 +2155,18 @@ dissect_auth_data(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		break;
 	case NDMP_AUTH_TEXT:
 		/* auth id */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_auth_id, offset, NULL);
 
 		/* auth password */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_auth_password, offset, NULL);
 
 
 		break;
 	case NDMP_AUTH_MD5:
 		/* auth id */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_auth_id, offset, NULL);
 
 		/* digest */
@@ -2198,16 +2178,16 @@ dissect_auth_data(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_connect_client_auth_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_connect_client_auth_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo, proto_tree *tree, uint32_t seq _U_)
 {
 	return dissect_auth_data(tvb, offset, pinfo, tree);
 }
 
-static int
-dissect_connect_server_auth_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_connect_server_auth_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -2218,19 +2198,19 @@ dissect_connect_server_auth_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_tape_write_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_tape_write_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* data */
-	offset = dissect_rpc_data(tvb, tree, hf_ndmp_data, offset);
+	offset = dissect_rpc_data(tvb, pinfo, tree, hf_ndmp_data, offset);
 
 	return offset;
 }
 
-static int
-dissect_tape_write_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_tape_write_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -2242,9 +2222,9 @@ dissect_tape_write_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_tape_read_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_tape_read_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* count */
 	proto_tree_add_item(tree, hf_ndmp_count, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -2253,15 +2233,15 @@ dissect_tape_read_request(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	return offset;
 }
 
-static int
-dissect_tape_read_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_tape_read_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
 
 	/* data */
-	offset = dissect_rpc_data(tvb, tree, hf_ndmp_data, offset);
+	offset = dissect_rpc_data(tvb, pinfo, tree, hf_ndmp_data, offset);
 
 	return offset;
 }
@@ -2277,12 +2257,12 @@ static const value_string file_fs_type_vals[] = {
 };
 
 static int
-dissect_file_name(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
+dissect_file_name(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
 	proto_item* item;
 	proto_tree* tree;
 	int old_offset=offset;
-	guint32 type;
+	uint32_t type;
 	const char *name;
 
 	tree = proto_tree_add_subtree(parent_tree, tvb, offset, -1,
@@ -2296,23 +2276,23 @@ dissect_file_name(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *par
 	switch(type){
 	case NDMP_FS_UNIX:
 		/* file */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_file_name, offset, &name);
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", name);
 		break;
 	case NDMP_FS_NT:
 		/* nt file */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_nt_file_name, offset, &name);
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", name);
 
 		/* dos file */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_dos_file_name, offset, NULL);
 		break;
 	default:
 		/* file */
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 				hf_ndmp_file_name, offset, &name);
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", name);
 	}
@@ -2337,8 +2317,8 @@ static const true_false_string tfs_ndmp_file_invalid_group = {
 	"Group is INVALID",
 	"Group is valid"
 };
-static int
-dissect_file_invalids(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_file_invalids(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const invalid_files[] = {
@@ -2348,7 +2328,7 @@ dissect_file_invalids(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_file_invalid, ett_ndmp_file_invalids, invalid_files, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_file_invalid, ett_ndmp_file_invalids, invalid_files, ENC_BIG_ENDIAN);
 
 	offset+=4;
 	return offset;
@@ -2377,7 +2357,7 @@ static const value_string file_type_vals[] = {
 };
 
 static int
-dissect_file_stats(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
+dissect_file_stats(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
 	proto_item* item;
 	proto_tree* tree;
@@ -2437,7 +2417,7 @@ dissect_file_stats(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *pa
 
 
 static int
-dissect_ndmp_file(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
+dissect_ndmp_file(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
 	proto_item* item;
 	proto_tree* tree;
@@ -2466,9 +2446,9 @@ dissect_ndmp_file(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *par
 	return offset;
 }
 
-static int
-dissect_fh_add_file_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_fh_add_file_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* files */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
@@ -2478,7 +2458,7 @@ dissect_fh_add_file_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 static int
-dissect_dir(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_dir(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* file names */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
@@ -2495,9 +2475,9 @@ dissect_dir(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, voi
 	return offset;
 }
 
-static int
-dissect_fh_add_dir_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_fh_add_dir_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* dirs */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
@@ -2507,7 +2487,7 @@ dissect_fh_add_dir_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 static int
-dissect_node(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_node(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/* file stats */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
@@ -2525,9 +2505,9 @@ dissect_node(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, vo
 }
 
 
-static int
-dissect_fh_add_node_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_fh_add_node_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/* node */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
@@ -2536,12 +2516,12 @@ dissect_fh_add_node_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	return offset;
 }
 
-static int
-dissect_data_start_backup_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_data_start_backup_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq _U_)
 {
 	/*butype name*/
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_butype_name, offset, NULL);
 
 	/* default env */
@@ -2552,15 +2532,14 @@ dissect_data_start_backup_request(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 static int
-dissect_nlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
-		proto_tree *tree, void* data _U_)
+dissect_nlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	/*original path*/
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_bu_original_path, offset, NULL);
 
 	/*destination dir*/
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_bu_destination_dir, offset, NULL);
 
 	if(get_ndmp_protocol_version()==NDMP_PROTOCOL_V2){
@@ -2568,11 +2547,11 @@ dissect_nlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		offset += 4;
 	} else {
 		/*new name*/
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_bu_new_name, offset, NULL);
 
 		/*other name*/
-		offset = dissect_rpc_string(tvb, tree,
+		offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_bu_other_name, offset, NULL);
 
 		/* node */
@@ -2588,9 +2567,9 @@ dissect_nlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 }
 
 
-static int
-dissect_data_start_recover_request(tvbuff_t *tvb, int offset,
-		packet_info *pinfo, proto_tree *tree, guint32 seq _U_)
+static unsigned
+dissect_data_start_recover_request(tvbuff_t *tvb, unsigned offset,
+		packet_info *pinfo, proto_tree *tree, uint32_t seq _U_)
 {
 	if(get_ndmp_protocol_version()==NDMP_PROTOCOL_V2){
 		/* ndmp addr */
@@ -2606,15 +2585,15 @@ dissect_data_start_recover_request(tvbuff_t *tvb, int offset,
 			dissect_nlist, hf_ndmp_nlist);
 
 	/*butype name*/
-	offset = dissect_rpc_string(tvb, tree,
+	offset = dissect_rpc_string(tvb, pinfo, tree,
 			hf_ndmp_butype_name, offset, NULL);
 
 	return offset;
 }
 
-static int
-dissect_data_get_env_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_data_get_env_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* error */
 	offset=dissect_error(tvb, offset, pinfo, tree, seq);
@@ -2635,8 +2614,8 @@ static const true_false_string tfs_ndmp_state_invalid_etr = {
 	"Estimated Time Remaining is INVALID",
 	"Estimated Time Remaining is valid"
 };
-static int
-dissect_state_invalids(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
+static unsigned
+dissect_state_invalids(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 		proto_tree *parent_tree)
 {
 	static int * const invalid_states[] = {
@@ -2645,7 +2624,7 @@ dissect_state_invalids(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		NULL
 		};
 
-	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_state_invalid, ett_ndmp_state_invalids, invalid_states, ENC_NA);
+	proto_tree_add_bitmask(parent_tree, tvb, offset, hf_ndmp_state_invalid, ett_ndmp_state_invalids, invalid_states, ENC_BIG_ENDIAN);
 
 	offset+=4;
 	return offset;
@@ -2689,9 +2668,9 @@ static const value_string data_halted_vals[] = {
 	{0, NULL}
 };
 
-static int
-dissect_data_get_state_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq)
+static unsigned
+dissect_data_get_state_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq)
 {
 	/* invalids */
 	offset = dissect_state_invalids(tvb, offset, pinfo, tree);
@@ -2738,11 +2717,11 @@ dissect_data_get_state_reply(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 typedef struct _ndmp_command {
-	guint32 cmd;
-	int (*request) (tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq);
-	int (*response)(tvbuff_t *tvb, int offset, packet_info *pinfo,
-		proto_tree *tree, guint32 seq);
+	uint32_t cmd;
+	unsigned (*request) (tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq);
+	unsigned (*response)(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+		proto_tree *tree, uint32_t seq);
 } ndmp_command;
 
 static const ndmp_command ndmp_commands[] = {
@@ -2862,8 +2841,8 @@ static const ndmp_command ndmp_commands[] = {
 };
 
 
-static int
-dissect_ndmp_header(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, struct ndmp_header *nh, proto_item** msg_item)
+static unsigned
+dissect_ndmp_header(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *parent_tree, struct ndmp_header *nh, proto_item** msg_item)
 {
 	proto_item* item;
 	proto_tree* tree;
@@ -2899,16 +2878,16 @@ dissect_ndmp_header(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *p
 	offset=dissect_error(tvb, offset, pinfo, tree, nh->seq);
 
 	col_append_fstr(pinfo->cinfo, COL_INFO, "%s %s ",
-			val_to_str(nh->msg, msg_vals, "Unknown Message (0x%02x)"),
-			val_to_str(nh->type, msg_type_vals, "Unknown Type (0x%02x)")
+			val_to_str(pinfo->pool, nh->msg, msg_vals, "Unknown Message (0x%02x)"),
+			val_to_str(pinfo->pool, nh->type, msg_type_vals, "Unknown Type (0x%02x)")
 			);
 
 	return offset;
 }
 
 
-static int
-dissect_ndmp_cmd(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, struct ndmp_header *nh)
+static unsigned
+dissect_ndmp_cmd(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, struct ndmp_header *nh)
 {
 	int i;
 	proto_tree *cmd_tree=NULL;
@@ -2954,11 +2933,11 @@ dissect_ndmp_cmd(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree
 static int
 dissect_ndmp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-	int offset = 0;
-	guint32 ndmp_rm;
+	unsigned offset = 0;
+	uint32_t ndmp_rm;
 	struct ndmp_header nh;
-	guint32 size;
-	guint32 seq, len, nxt, frag_num;
+	uint32_t size;
+	uint32_t seq, len, nxt, frag_num;
 	int direction;
 	struct tcpinfo *tcpinfo;
 	ndmp_frag_info* nfi;
@@ -2968,8 +2947,8 @@ dissect_ndmp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 	wmem_map_t *frags;
 	conversation_t *conversation;
 	proto_item *vers_item;
-	gboolean save_fragmented, save_info_writable, save_proto_writable;
-	gboolean do_frag = TRUE;
+	bool save_fragmented, save_info_writable, save_proto_writable;
+	bool do_frag = true;
 	tvbuff_t* new_tvb = NULL;
 	fragment_head *frag_msg = NULL;
 
@@ -3078,7 +3057,7 @@ dissect_ndmp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 			 */
 			else
 			{
-				do_frag = FALSE;
+				do_frag = false;
 				new_tvb = tvb_new_subset_remaining(tvb, 4);
 			}
 		}
@@ -3109,7 +3088,7 @@ dissect_ndmp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 		/* If fragmentation is necessary */
 		if (do_frag)
 		{
-			pinfo->fragmented = TRUE;
+			pinfo->fragmented = true;
 
 			frag_msg = fragment_add_seq_check(&ndmp_reassembly_table,
 				tvb, 4, pinfo, seq, NULL,
@@ -3191,8 +3170,8 @@ dissect_ndmp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 	 * applied */
 	save_info_writable = col_get_writable(pinfo->cinfo, COL_INFO);
 	save_proto_writable = col_get_writable(pinfo->cinfo, COL_PROTOCOL);
-	col_set_writable(pinfo->cinfo, COL_PROTOCOL, TRUE);
-	col_set_writable(pinfo->cinfo, COL_INFO, TRUE);
+	col_set_writable(pinfo->cinfo, COL_PROTOCOL, true);
+	col_set_writable(pinfo->cinfo, COL_INFO, true);
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "NDMP");
 	col_clear(pinfo->cinfo, COL_INFO);
@@ -3277,10 +3256,10 @@ dissect_ndmp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 	return tvb_captured_length(tvb);
 }
 
-static guint
+static unsigned
 get_ndmp_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
-	guint len;
+	unsigned len;
 
 	len=tvb_get_ntohl(tvb, offset)&0x7fffffff;
 	/* Get the length of the NDMP packet. */
@@ -3289,15 +3268,15 @@ get_ndmp_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _
 	return len+4;
 }
 
-gboolean
+bool
 check_if_ndmp(tvbuff_t *tvb, packet_info *pinfo)
 {
-	guint len;
-	guint32 tmp;
+	unsigned len;
+	uint32_t tmp;
 
 	/* verify that the tcp port is 10000, ndmp always runs on port 10000*/
 	if ((pinfo->srcport!=TCP_PORT_NDMP)&&(pinfo->destport!=TCP_PORT_NDMP)) {
-		return FALSE;
+		return false;
 	}
 
 	/* check that the header looks sane */
@@ -3308,7 +3287,7 @@ check_if_ndmp(tvbuff_t *tvb, packet_info *pinfo)
 	if(len>=4){
 		tmp=(tvb_get_ntohl(tvb, 0)&RPC_RM_FRAGLEN);
 		if( (tmp<24)||(tmp>1000000) ){
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -3318,7 +3297,7 @@ check_if_ndmp(tvbuff_t *tvb, packet_info *pinfo)
 	if(len>=12){
 		tmp=tvb_get_ntohl(tvb, 8);
 		if( (tmp<0x12ceec50)||(tmp>0x70dc1ed0) ){
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -3326,7 +3305,7 @@ check_if_ndmp(tvbuff_t *tvb, packet_info *pinfo)
 	if(len>=16){
 		tmp=tvb_get_ntohl(tvb, 12);
 		if( tmp>1 ){
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -3334,7 +3313,7 @@ check_if_ndmp(tvbuff_t *tvb, packet_info *pinfo)
 	if(len>=20){
 		tmp=tvb_get_ntohl(tvb, 16);
 		if( (tmp>0xa09) || (tmp==0) ){
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -3342,11 +3321,11 @@ check_if_ndmp(tvbuff_t *tvb, packet_info *pinfo)
 	if(len>=28){
 		tmp=tvb_get_ntohl(tvb, 24);
 		if( (tmp>0x17) ){
-			return FALSE;
+			return false;
 		}
 	}
 
-	return TRUE;
+	return true;
 }
 
 /* Called because the frame has been identified as part of a conversation
@@ -3380,17 +3359,17 @@ dissect_ndmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
  *  dissect_ndmp_message will register a dissect_ndmp NDMP handle
  *  as the protocol dissector for this conversation.
  */
-static int
+static bool
 dissect_ndmp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
 	if (tvb_captured_length(tvb) < 28)
-		return 0;
+		return false;
 	if (!check_if_ndmp(tvb, pinfo))
-		return 0;
+		return false;
 
 	tcp_dissect_pdus(tvb, pinfo, tree, ndmp_desegment, 28,
 			 get_ndmp_pdu_len, dissect_ndmp_message, data);
-	return tvb_captured_length(tvb);
+	return true;
 }
 
 
@@ -3405,7 +3384,7 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_response_frame, {
 		"Response In", "ndmp.response_frame", FT_FRAMENUM, BASE_NONE,
-		NULL, 0, "The response to this NDMP command is in this frame", HFILL }},
+		FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0, "The response to this NDMP command is in this frame", HFILL }},
 
 	{ &hf_ndmp_time, {
 		"Time from request", "ndmp.time", FT_RELATIVE_TIME, BASE_NONE,
@@ -3413,7 +3392,7 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_request_frame, {
 		"Request In", "ndmp.request_frame", FT_FRAMENUM, BASE_NONE,
-		NULL, 0, "The request to this NDMP command is in this frame", HFILL }},
+		FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0, "The request to this NDMP command is in this frame", HFILL }},
 
 	{ &hf_ndmp_sequence, {
 		"Sequence", "ndmp.sequence", FT_UINT32, BASE_DEC,
@@ -3742,7 +3721,7 @@ proto_register_ndmp(void)
 #endif
 
 	{ &hf_ndmp_execute_cdb_status, {
-		"Status", "ndmp.execute_cdb.status", FT_UINT8, BASE_DEC,
+		"Status", "ndmp.execute_cdb.status", FT_UINT32, BASE_DEC,
 		VALS(scsi_status_val), 0, "SCSI status", HFILL }},
 
 	{ &hf_ndmp_execute_cdb_dataout_len, {
@@ -3769,31 +3748,31 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_tape_invalid_file_num, {
 		"Invalid file num", "ndmp.tape.invalid.file_num", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_file_num), 0x00000001, "invalid_file_num", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_file_num), 0x00000001, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_soft_errors, {
 		"Soft errors", "ndmp.tape.invalid.soft_errors", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_soft_errors), 0x00000002, "soft_errors", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_soft_errors), 0x00000002, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_block_size, {
 		"Block size", "ndmp.tape.invalid.block_size", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_block_size), 0x00000004, "block_size", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_block_size), 0x00000004, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_block_no, {
 		"Block no", "ndmp.tape.invalid.block_no", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_block_no), 0x00000008, "block_no", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_block_no), 0x00000008, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_total_space, {
 		"Total space", "ndmp.tape.invalid.total_space", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_total_space), 0x00000010, "total_space", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_total_space), 0x00000010, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_space_remain, {
 		"Space remain", "ndmp.tape.invalid.space_remain", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_space_remain), 0x00000020, "space_remain", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_space_remain), 0x00000020, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_partition, {
 		"Invalid partition", "ndmp.tape.invalid.partition", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_partition), 0x00000040, "partition", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_partition), 0x00000040, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_flags, {
 		"Flags", "ndmp.tape.flags", FT_UINT32, BASE_HEX,
@@ -3801,19 +3780,19 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_tape_flags_no_rewind, {
 		"No rewind", "ndmp.tape.flags.no_rewind", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_flags_no_rewind), 0x00000008, "no_rewind", HFILL, }},
+		TFS(&tfs_ndmp_tape_flags_no_rewind), 0x00000008, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_flags_write_protect, {
 		"Write protect", "ndmp.tape.flags.write_protect", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_flags_write_protect), 0x00000010, "write_protect", HFILL, }},
+		TFS(&tfs_ndmp_tape_flags_write_protect), 0x00000010, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_flags_error, {
 		"Error", "ndmp.tape.flags.error", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_flags_error), 0x00000020, NULL, HFILL, }},
+		TFS(&tfs_ndmp_tape_flags_error), 0x00000020, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_flags_unload, {
 		"Unload", "ndmp.tape.flags.unload", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_flags_unload), 0x00000040, NULL, HFILL, }},
+		TFS(&tfs_ndmp_tape_flags_unload), 0x00000040, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_file_num, {
 		"file_num", "ndmp.tape.status.file_num", FT_UINT32, BASE_DEC,
@@ -4001,15 +3980,15 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_file_invalid_atime, {
 		"Invalid atime", "ndmp.file.invalid.atime", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_file_invalid_atime), 0x00000001, NULL, HFILL, }},
+		TFS(&tfs_ndmp_file_invalid_atime), 0x00000001, NULL, HFILL }},
 
 	{ &hf_ndmp_file_invalid_ctime, {
 		"Invalid ctime", "ndmp.file.invalid.ctime", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_file_invalid_ctime), 0x00000002, NULL, HFILL, }},
+		TFS(&tfs_ndmp_file_invalid_ctime), 0x00000002, NULL, HFILL }},
 
 	{ &hf_ndmp_file_invalid_group, {
 		"Invalid group", "ndmp.file.invalid.group", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_file_invalid_group), 0x00000004, NULL, HFILL, }},
+		TFS(&tfs_ndmp_file_invalid_group), 0x00000004, NULL, HFILL }},
 
 	{ &hf_ndmp_file_mtime, {
 		"mtime", "ndmp.file.mtime", FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL,
@@ -4077,23 +4056,23 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_state_invalid_ebr, {
 		"EstimatedBytesLeft valid", "ndmp.bu.state.invalid.ebr", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_state_invalid_ebr), 0x00000001, "Whether EstimatedBytesLeft is valid or not", HFILL, }},
+		TFS(&tfs_ndmp_state_invalid_ebr), 0x00000001, "Whether EstimatedBytesLeft is valid or not", HFILL }},
 
 	{ &hf_ndmp_state_invalid_etr, {
 		"EstimatedTimeLeft valid", "ndmp.bu.state.invalid.etr", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_state_invalid_etr), 0x00000002, "Whether EstimatedTimeLeft is valid or not", HFILL, }},
+		TFS(&tfs_ndmp_state_invalid_etr), 0x00000002, "Whether EstimatedTimeLeft is valid or not", HFILL }},
 
 	{ &hf_ndmp_bu_operation, {
 		"Operation", "ndmp.bu.operation", FT_UINT32, BASE_DEC,
-		VALS(bu_operation_vals), 0, "BU Operation", HFILL, }},
+		VALS(bu_operation_vals), 0, "BU Operation", HFILL }},
 
 	{ &hf_ndmp_data_state, {
 		"State", "ndmp.data.state", FT_UINT32, BASE_DEC,
-		VALS(data_state_vals), 0, "Data state", HFILL, }},
+		VALS(data_state_vals), 0, "Data state", HFILL }},
 
 	{ &hf_ndmp_data_halted, {
 		"Halted Reason", "ndmp.data.halted", FT_UINT32, BASE_DEC,
-		VALS(data_halted_vals), 0, "Data halted reason", HFILL, }},
+		VALS(data_halted_vals), 0, "Data halted reason", HFILL }},
 
 	{ &hf_ndmp_data_bytes_processed, {
 		"Bytes Processed", "ndmp.data.bytes_processed", FT_UINT64, BASE_DEC,
@@ -4167,7 +4146,7 @@ proto_register_ndmp(void)
 		FT_UINT32, BASE_DEC, NULL, 0x00, NULL, HFILL } },
 	};
 
-	static gint *ett[] = {
+	static int *ett[] = {
 		&ett_ndmp,
 		&ett_ndmp_fraghdr,
 		&ett_ndmp_header,
@@ -4204,6 +4183,8 @@ proto_register_ndmp(void)
 	expert_ndmp = expert_register_protocol(proto_ndmp);
 	expert_register_field_array(expert_ndmp, ei, array_length(ei));
 
+	ndmp_handle = register_dissector("ndmp", dissect_ndmp, proto_ndmp);
+
 	/* desegmentation */
 	ndmp_module = prefs_register_protocol(proto_ndmp, NULL);
 	prefs_register_obsolete_preference(ndmp_module, "protocol_version");
@@ -4213,7 +4194,7 @@ proto_register_ndmp(void)
 	"Version of the NDMP protocol to assume if the version can not be automatically detected from the capture",
 	&ndmp_default_protocol_version,
 	ndmp_protocol_versions,
-	FALSE);
+	false);
 	prefs_register_bool_preference(ndmp_module, "desegment",
 	"Reassemble NDMP messages spanning multiple TCP segments",
 	"Whether the NDMP dissector should reassemble messages spanning multiple TCP segments."
@@ -4230,7 +4211,6 @@ proto_register_ndmp(void)
 void
 proto_reg_handoff_ndmp(void)
 {
-	ndmp_handle = create_dissector_handle(dissect_ndmp, proto_ndmp);
 	dissector_add_uint_with_preference("tcp.port",TCP_PORT_NDMP, ndmp_handle);
 	heur_dissector_add("tcp", dissect_ndmp_heur, "NDMP over TCP", "ndmp_tcp", proto_ndmp, HEURISTIC_ENABLE);
 }

@@ -9,11 +9,12 @@
  */
 
 #include <config.h>
+#include <wsutil/array.h>
 
 #include "win32-utils.h"
 
 #include <tchar.h>
-#include <VersionHelpers.h>
+#include <versionhelpers.h>
 
 /* Quote the argument element if necessary, so that it will get
  * reconstructed correctly in the C runtime startup code.  Note that
@@ -26,24 +27,24 @@
  * correctly in the command-line string passed to CreateProcess()
  * if that string is constructed by gluing those strings together.
  */
-gchar *
-protect_arg (const gchar *argv)
+char *
+protect_arg (const char *argv)
 {
-    gchar *new_arg;
-    const gchar *p = argv;
-    gchar *q;
-    gint len = 0;
-    gboolean need_dblquotes = FALSE;
+    char *new_arg;
+    const char *p = argv;
+    char *q;
+    int len = 0;
+    bool need_dblquotes = false;
 
     while (*p) {
         if (*p == ' ' || *p == '\t')
-            need_dblquotes = TRUE;
+            need_dblquotes = true;
         else if (*p == '"')
             len++;
         else if (*p == '\\') {
-            const gchar *pp = p;
+            const char *pp = p;
 
-            while (*pp && *pp == '\\')
+            while (*pp == '\\')
                 pp++;
             if (*pp == '"')
                 len++;
@@ -52,7 +53,7 @@ protect_arg (const gchar *argv)
         p++;
     }
 
-    q = new_arg = g_malloc (len + need_dblquotes*2 + 1);
+    q = new_arg = g_malloc (len + (need_dblquotes ? 2 : 0) + 1);
     p = argv;
 
     if (need_dblquotes)
@@ -62,9 +63,9 @@ protect_arg (const gchar *argv)
         if (*p == '"')
             *q++ = '\\';
         else if (*p == '\\') {
-            const gchar *pp = p;
+            const char *pp = p;
 
-            while (*pp && *pp == '\\')
+            while (*pp == '\\')
                 pp++;
             if (*pp == '"')
                 *q++ = '\\';
@@ -78,6 +79,28 @@ protect_arg (const gchar *argv)
     *q++ = '\0';
 
     return new_arg;
+}
+
+#define PIPE_STR "\\pipe\\"
+
+bool
+win32_is_pipe_name(const char *pipe_name)
+{
+    char *pncopy, *pos;
+    /* Under Windows, named pipes _must_ have the form
+     * "\\<server>\pipe\<pipename>".  <server> may be "." for localhost.
+     * https://learn.microsoft.com/en-us/windows/win32/ipc/pipe-names
+     */
+    pncopy = g_strdup(pipe_name);
+    if ((pos = strstr(pncopy, "\\\\")) == pncopy) {
+        pos = strchr(pncopy + 3, '\\');
+        if (pos && g_ascii_strncasecmp(pos, PIPE_STR, strlen(PIPE_STR)) != 0)
+            pos = NULL;
+    }
+
+    g_free(pncopy);
+
+    return (pos != NULL);
 }
 
 /*
@@ -118,7 +141,7 @@ win32strerror(DWORD error)
     if (retval == 0) {
         /* Failed. */
         tempmsg = ws_strdup_printf("Couldn't get error message for error (%lu) (because %lu)",
-                                  error, GetLastError());
+                                   error, GetLastError());
         msg = g_intern_string(tempmsg);
         g_free(tempmsg);
         return msg;
@@ -129,7 +152,7 @@ win32strerror(DWORD error)
     if (utf8_message == NULL) {
         /* Conversion failed. */
         tempmsg = ws_strdup_printf("Couldn't convert error message for error to UTF-8 (%lu) (because %lu)",
-                                  error, GetLastError());
+                                   error, GetLastError());
         msg = g_intern_string(tempmsg);
         g_free(tempmsg);
         return msg;
@@ -143,47 +166,79 @@ win32strerror(DWORD error)
 
 /*
  * Generate a string for a Win32 exception code.
+ * It appears that:
+ *
+ *    1) Windoes exception codes are NT status codes;
+ *
+ *    2) if you load ntdll.dll as a module, and then
+ *       use FormatError() with FORMAT_MESSAGE_FROM_HMODULE and the
+ *       module handle for ntdll.dll, you can get Microsoft's error
+ *       string for NT status codes.
  */
 const char *
 win32strexception(DWORD exception)
 {
-    static char errbuf[ERRBUF_SIZE+1];
-    static const struct exception_msg {
-        DWORD code;
-        char *msg;
-    } exceptions[] = {
-        { EXCEPTION_ACCESS_VIOLATION, "Access violation" },
-        { EXCEPTION_ARRAY_BOUNDS_EXCEEDED, "Array bounds exceeded" },
-        { EXCEPTION_BREAKPOINT, "Breakpoint" },
-        { EXCEPTION_DATATYPE_MISALIGNMENT, "Data type misalignment" },
-        { EXCEPTION_FLT_DENORMAL_OPERAND, "Denormal floating-point operand" },
-        { EXCEPTION_FLT_DIVIDE_BY_ZERO, "Floating-point divide by zero" },
-        { EXCEPTION_FLT_INEXACT_RESULT, "Floating-point inexact result" },
-        { EXCEPTION_FLT_INVALID_OPERATION, "Invalid floating-point operation" },
-        { EXCEPTION_FLT_OVERFLOW, "Floating-point overflow" },
-        { EXCEPTION_FLT_STACK_CHECK, "Floating-point stack check" },
-        { EXCEPTION_FLT_UNDERFLOW, "Floating-point underflow" },
-        { EXCEPTION_GUARD_PAGE, "Guard page violation" },
-        { EXCEPTION_ILLEGAL_INSTRUCTION, "Illegal instruction" },
-        { EXCEPTION_IN_PAGE_ERROR, "Page-in error" },
-        { EXCEPTION_INT_DIVIDE_BY_ZERO, "Integer divide by zero" },
-        { EXCEPTION_INT_OVERFLOW, "Integer overflow" },
-        { EXCEPTION_INVALID_DISPOSITION, "Invalid disposition" },
-        { EXCEPTION_INVALID_HANDLE, "Invalid handle" },
-        { EXCEPTION_NONCONTINUABLE_EXCEPTION, "Non-continuable exception" },
-        { EXCEPTION_PRIV_INSTRUCTION, "Privileged instruction" },
-        { EXCEPTION_SINGLE_STEP, "Single-step complete" },
-        { EXCEPTION_STACK_OVERFLOW, "Stack overflow" },
-        { 0, NULL }
-    };
-#define N_EXCEPTIONS    (sizeof exceptions / sizeof exceptions[0])
+    HMODULE ntdll_hmodule;
+    DWORD retval;
+    WCHAR *utf16_message;
+    char *utf8_message;
+    char *tempmsg;
+    const char *msg;
 
-    for (size_t i = 0; i < N_EXCEPTIONS; i++) {
-        if (exceptions[i].code == exception)
-            return exceptions[i].msg;
+    ntdll_hmodule = LoadLibraryA("ntdll.dll");
+    if (ntdll_hmodule == NULL) {
+        /* Couldn't load ntdll.dll; give up */
+        tempmsg = ws_strdup_printf("{EXCEPTION} Unknown - couldn't load ntdll.dll: %s(code 0x%08lx)",
+                                   win32strerror(GetLastError()), exception);
+        msg = g_intern_string(tempmsg);
+        g_free(tempmsg);
+        return msg;
     }
-    snprintf(errbuf, (gulong)sizeof errbuf, "Exception 0x%08lx", exception);
-    return errbuf;
+
+    /*
+     * XXX - what language ID to use?
+     *
+     * For UN*Xes, g_strerror() may or may not return localized strings.
+     *
+     * We currently don't have localized strings, except for GUI items,
+     * but we might want to do so.  On the other hand, if most of these
+     * messages are going to be read by Wireshark developers, English
+     * might be a better choice, so the developer doesn't have to get
+     * the message translated if it's in a language they don't happen
+     * to understand.  Then again, we're including the error number,
+     * so the developer can just look that up.
+     */
+    retval = FormatMessageW(FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_MAX_WIDTH_MASK,
+                            ntdll_hmodule, exception,
+                            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                            (LPTSTR)&utf16_message, ERRBUF_SIZE, NULL);
+    if (retval == 0) {
+        /* Failed. */
+        tempmsg = ws_strdup_printf("{EXCEPTION} Unknown - couldn't get error message for status: %s(code 0x%08lx)",
+                                   win32strerror(GetLastError()), exception);
+        msg = g_intern_string(tempmsg);
+        g_free(tempmsg);
+        FreeLibrary(ntdll_hmodule);
+        return msg;
+    }
+
+    utf8_message = g_utf16_to_utf8(utf16_message, -1, NULL, NULL, NULL);
+    LocalFree(utf16_message);
+    if (utf8_message == NULL) {
+        /* Conversion failed. */
+        tempmsg = ws_strdup_printf("{EXCEPTION} Unknown - couldn't convert error message for error to UTF-8: %s(code 0x%08lx))",
+                                   win32strerror(GetLastError()), exception);
+        msg = g_intern_string(tempmsg);
+        g_free(tempmsg);
+        FreeLibrary(ntdll_hmodule);
+        return msg;
+    }
+    tempmsg = ws_strdup_printf("%s(code 0x%08lx)", utf8_message, exception);
+    g_free(utf8_message);
+    msg = g_intern_string(tempmsg);
+    g_free(tempmsg);
+    FreeLibrary(ntdll_hmodule);
+    return msg;
 }
 
 // This appears to be the closest equivalent to SIGPIPE on Windows.
@@ -272,7 +327,7 @@ BOOL win32_create_process(const char *application_name, const char *command_line
         SetHandleInformation(inherit_handles[i], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
     }
     BOOL cp_res = CreateProcess(wappname, wcommandline, process_attributes, thread_attributes,
-        (n_inherit_handles > 0) ? TRUE : FALSE, wcreationflags, environment, wcurrentdirectory,
+        (n_inherit_handles > 0) ? true : false, wcreationflags, environment, wcurrentdirectory,
         &startup_infoex.StartupInfo, process_information);
     /* While this function makes the created process inherit only the explicitly
      * listed handles, there can be other functions (in 3rd party libraries)

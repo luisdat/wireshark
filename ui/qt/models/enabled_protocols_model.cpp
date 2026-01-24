@@ -12,6 +12,7 @@
 #include <ui/qt/models/enabled_protocols_model.h>
 #include <epan/packet.h>
 #include <epan/disabled_protos.h>
+#include <app/application_flavor.h>
 
 #include <ui/qt/utils/variant_pointer.h>
 #include "main_application.h"
@@ -31,9 +32,9 @@ public:
     virtual ~ProtocolTreeItem() {}
 
 protected:
-    virtual void applyValuePrivate(gboolean value)
+    virtual void applyValuePrivate(bool value)
     {
-        if (! proto_can_toggle_protocol(proto_get_id(proto_)) || proto_is_pino(proto_)) {
+        if (! proto_can_toggle_protocol(proto_get_id(proto_))) {
             return;
         }
         proto_set_decoding(proto_get_id(proto_), value);
@@ -56,7 +57,7 @@ public:
     virtual ~HeuristicTreeItem() {}
 
 protected:
-    virtual void applyValuePrivate(gboolean value)
+    virtual void applyValuePrivate(bool value)
     {
         heuristic_table_->enabled = value;
     }
@@ -239,7 +240,6 @@ QVariant EnabledProtocolsModel::data(const QModelIndex &index, int role) const
         break;
     case DATA_PROTOCOL_TYPE:
         return QVariant::fromValue(item->type());
-        break;
     default:
     break;
     }
@@ -270,7 +270,7 @@ bool EnabledProtocolsModel::setData(const QModelIndex &index, const QVariant &va
     return true;
 }
 
-static void addHeuristicItem(gpointer data, gpointer user_data)
+static void addHeuristicItem(void *data, void *user_data)
 {
     heur_dtbl_entry_t* heur = (heur_dtbl_entry_t*)data;
     ProtocolTreeItem* protocol_item = (ProtocolTreeItem*)user_data;
@@ -292,10 +292,12 @@ void EnabledProtocolsModel::populate()
         if (proto_can_toggle_protocol(i))
         {
             protocol = find_protocol_by_id(i);
-            ProtocolTreeItem* protocol_row = new ProtocolTreeItem(protocol, root_);
-            root_->prependChild(protocol_row);
+            if (!proto_is_pino(protocol)) {
+                ProtocolTreeItem* protocol_row = new ProtocolTreeItem(protocol, root_);
+                root_->prependChild(protocol_row);
 
-            proto_heuristic_dissector_foreach(protocol, addHeuristicItem, protocol_row);
+                proto_heuristic_dissector_foreach(protocol, addHeuristicItem, protocol_row);
+            }
         }
     }
 
@@ -332,7 +334,7 @@ void EnabledProtocolsModel::disableProtocol(struct _protocol *protocol)
 void EnabledProtocolsModel::saveChanges(bool writeChanges)
 {
     if (writeChanges) {
-        save_enabled_and_disabled_lists();
+        save_enabled_and_disabled_lists(application_configuration_environment_prefix());
     }
     mainApp->emitAppSignal(MainApplication::PacketDissectionChanged);
 }
@@ -472,12 +474,20 @@ bool EnabledProtocolsProxyModel::filterAcceptsChild(int sourceRow, const QModelI
 void EnabledProtocolsProxyModel::setFilter(const QString& filter, EnabledProtocolsProxyModel::SearchType type,
     EnabledProtocolItem::EnableProtocolType protocolType)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
     filter_ = filter;
     type_ = type;
     protocolType_ = protocolType;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void EnabledProtocolsProxyModel::setItemsEnable(EnabledProtocolsProxyModel::EnableType enableType, QModelIndex parent)
 {
     if (! sourceModel())
@@ -509,6 +519,7 @@ void EnabledProtocolsProxyModel::setItemsEnable(EnabledProtocolsProxyModel::Enab
             }
         }
 
+        // We recurse here, but the tree is only two levels deep
         setItemsEnable(enableType, idx);
     }
 

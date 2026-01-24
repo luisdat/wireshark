@@ -24,6 +24,7 @@
 #include <wsutil/privileges.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
+#include <app/application_flavor.h>
 
 #include <errno.h>
 #include <string.h>
@@ -31,12 +32,8 @@
 
 #include <cli_main.h>
 
-static gchar* wifidump_extcap_interface;
-#ifdef _WIN32
-#define DEFAULT_WIFIDUMP_EXTCAP_INTERFACE "wifidump.exe"
-#else
+static char* wifidump_extcap_interface;
 #define DEFAULT_WIFIDUMP_EXTCAP_INTERFACE "wifidump"
-#endif
 
 #define WIFIDUMP_VERSION_MAJOR "1"
 #define WIFIDUMP_VERSION_MINOR "0"
@@ -59,14 +56,15 @@ enum {
 	OPT_SSHKEY,
 	OPT_SSHKEY_PASSPHRASE,
 	OPT_PROXYCOMMAND,
+	OPT_SSH_SHA1,
 	OPT_REMOTE_COUNT
 };
 
-static struct ws_option longopts[] = {
+static const struct ws_option longopts[] = {
 	EXTCAP_BASE_OPTIONS,
 	{ "help", ws_no_argument, NULL, OPT_HELP},
 	{ "version", ws_no_argument, NULL, OPT_VERSION},
-	SSH_BASE_OPTIONS,
+	SSH_BASE_PACKET_OPTIONS,
 	{ "remote-channel-frequency", ws_required_argument, NULL, OPT_REMOTE_CHANNEL_FREQUENCY},
 	{ "remote-channel-width", ws_required_argument, NULL, OPT_REMOTE_CHANNEL_WIDTH},
 	{ 0, 0, 0, 0}
@@ -284,7 +282,7 @@ static int ssh_loop_read(ssh_channel channel, FILE* fp)
 		if (nbytes == 0) {
 			break;
 		}
-		if (fwrite(buffer, 1, nbytes, fp) != (guint)nbytes) {
+		if (fwrite(buffer, 1, nbytes, fp) != (unsigned)nbytes) {
 			ws_warning("Error writing to fifo");
 			ret = EXIT_FAILURE;
 			goto end;
@@ -299,7 +297,7 @@ static int ssh_loop_read(ssh_channel channel, FILE* fp)
 			ws_warning("Error reading from channel");
 			goto end;
 		}
-		if (fwrite(buffer, 1, nbytes, stderr) != (guint)nbytes) {
+		if (fwrite(buffer, 1, nbytes, stderr) != (unsigned)nbytes) {
 			ws_warning("Error writing to stderr");
 			break;
 		}
@@ -314,10 +312,10 @@ end:
 }
 
 static ssh_channel run_ssh_command(ssh_session sshs, const char* capture_functions,
-	const char* iface, const guint16 channel_frequency, const guint16 channel_width,
-	const guint16 center_frequency, const char* cfilter, const guint32 count)
+	const char* iface, const uint16_t channel_frequency, const uint16_t channel_width,
+	const uint16_t center_frequency, const char* cfilter, const uint32_t count)
 {
-	gchar* cmdline;
+	char* cmdline;
 	ssh_channel channel;
 	char* quoted_iface = NULL;
 	char* quoted_filter = NULL;
@@ -366,8 +364,8 @@ static ssh_channel run_ssh_command(ssh_session sshs, const char* capture_functio
 }
 
 static int ssh_open_remote_connection(const ssh_params_t* params, const char* capture_functions,
-	const char* iface, const guint16 channel_frequency, const guint16 channel_width,
-	const guint16 center_frequency, const char* cfilter, const guint32 count, const char* fifo)
+	const char* iface, const uint16_t channel_frequency, const uint16_t channel_width,
+	const uint16_t center_frequency, const char* cfilter, const uint32_t count, const char* fifo)
 {
 	ssh_session sshs = NULL;
 	ssh_channel channel = NULL;
@@ -456,6 +454,10 @@ static int list_config(char *interface)
 	printf("arg {number=%u}{call=--sshkey-passphrase}{display=SSH key passphrase}"
 		"{type=password}{tooltip=Passphrase to unlock the SSH private key}{group=Authentication}\n",
 		inc++);
+	printf("arg {number=%u}{call=--ssh-sha1}{display=Support SHA-1 keys (deprecated)}"
+	       "{type=boolflag}{tooltip=Support keys and key exchange algorithms using SHA-1 (deprecated)}{group=Authentication}"
+	       "\n", inc++);
+
 
 	// Capture tab
 	printf("arg {number=%u}{call=--remote-interface}{display=Remote interface}"
@@ -516,21 +518,27 @@ int main(int argc, char *argv[])
 	int option_idx = 0;
 	ssh_params_t* ssh_params = ssh_params_new();
 	char* remote_interface = NULL;
-	guint16 remote_channel_frequency = 0;
-	guint16 remote_channel_width = 0;
-	guint16 remote_center_frequency = 0;
+	uint16_t remote_channel_frequency = 0;
+	uint16_t remote_channel_width = 0;
+	uint16_t remote_center_frequency = 0;
 	char* remote_filter = NULL;
-	guint32 count = 0;
+	uint32_t count = 0;
 	int ret = EXIT_FAILURE;
 	extcap_parameters* extcap_conf = g_new0(extcap_parameters, 1);
 	char* help_url;
 	char* help_header = NULL;
-	gchar* interface_description = g_strdup("Wi-Fi remote capture");
+	char* interface_description = g_strdup("Wi-Fi remote capture");
+
+	/* Set the program name. */
+	g_set_prgname("wifidump");
 
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init("wifidump");
+	extcap_log_init();
 
 	wifidump_extcap_interface = g_path_get_basename(argv[0]);
+	if (g_str_has_suffix(wifidump_extcap_interface, ".exe")) {
+		wifidump_extcap_interface[strlen(wifidump_extcap_interface) - 4] = '\0';
+	}
 
 	/*
 	 * Get credential information for later use.
@@ -541,20 +549,20 @@ int main(int argc, char *argv[])
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	err_msg = configuration_init(argv[0], NULL);
+	err_msg = configuration_init(argv[0], "wireshark");
 	if (err_msg != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			err_msg);
 		g_free(err_msg);
 	}
 
-	help_url = data_file_url("wifidump.html");
+	help_url = data_file_url("wifidump.html", application_configuration_environment_prefix());
 	extcap_base_set_util_info(extcap_conf, argv[0], WIFIDUMP_VERSION_MAJOR, WIFIDUMP_VERSION_MINOR,
 		WIFIDUMP_VERSION_RELEASE, help_url);
 	g_free(help_url);
 	add_libssh_info(extcap_conf);
 	if (g_strcmp0(wifidump_extcap_interface, DEFAULT_WIFIDUMP_EXTCAP_INTERFACE)) {
-		gchar* temp = interface_description;
+		char* temp = interface_description;
 		interface_description = ws_strdup_printf("%s, custom version", interface_description);
 		g_free(temp);
 	}
@@ -579,6 +587,7 @@ int main(int argc, char *argv[])
 	extcap_help_add_option(extcap_conf, "--remote-password <password>", "the remote SSH password. If not specified, ssh-agent and ssh-key are used");
 	extcap_help_add_option(extcap_conf, "--sshkey <public key path>", "the path of the ssh key");
 	extcap_help_add_option(extcap_conf, "--sshkey-passphrase <public key passphrase>", "the passphrase to unlock public ssh");
+	extcap_help_add_option(extcap_conf, "--ssh-sha1", "support keys and key exchange using SHA-1 (deprecated)");
 	extcap_help_add_option(extcap_conf, "--remote-interface <iface>", "the remote capture interface");
 	extcap_help_add_option(extcap_conf, "--remote-channel-frequency <channel_frequency>", "the remote channel frequency in MHz");
 	extcap_help_add_option(extcap_conf, "--remote-channel-width <channel_width>", "the remote channel width in MHz");
@@ -639,6 +648,10 @@ int main(int argc, char *argv[])
 			g_free(ssh_params->sshkey_passphrase);
 			ssh_params->sshkey_passphrase = g_strdup(ws_optarg);
 			memset(ws_optarg, 'X', strlen(ws_optarg));
+			break;
+
+		case OPT_SSH_SHA1:
+			ssh_params->ssh_sha1 = true;
 			break;
 
 		case OPT_REMOTE_INTERFACE:
@@ -714,7 +727,7 @@ int main(int argc, char *argv[])
 		}
 		remote_center_frequency = center_freq(remote_channel_frequency, remote_channel_width);
 		filter = concat_filters(extcap_conf->capture_filter, remote_filter);
-		ssh_params->debug = extcap_conf->debug;
+		ssh_params_set_log_level(ssh_params, extcap_conf->debug);
 		ret = ssh_open_remote_connection(ssh_params, remote_capture_functions,
 			remote_interface, remote_channel_frequency, remote_channel_width, remote_center_frequency,
 			filter, count, extcap_conf->fifo);

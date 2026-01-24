@@ -13,71 +13,83 @@
 #include <epan/packet.h>
 #include "ws_symbol_export.h"
 
-WS_DLL_PUBLIC const value_string vals_http_status_code[];
+extern const value_string vals_http_status_code[];
 
 WS_DLL_PUBLIC
-void http_tcp_dissector_add(guint32 port, dissector_handle_t handle);
+void http_tcp_dissector_add(uint32_t port, dissector_handle_t handle);
 WS_DLL_PUBLIC
-void http_tcp_dissector_delete(guint32 port);
+void http_tcp_dissector_delete(uint32_t port);
 WS_DLL_PUBLIC
-void http_tcp_port_add(guint32 port);
+void http_tcp_port_add(uint32_t port);
 
 WS_DLL_PUBLIC
 void http_add_path_components_to_tree(tvbuff_t* tvb, packet_info* pinfo _U_, proto_item* item, int offset, int length);
 
+WS_DLL_PUBLIC
+dissector_handle_t http_upgrade_dissector(const char *protocol);
+
 /* Used for HTTP statistics */
 typedef struct _http_info_value_t {
-	guint32 framenum;
-	gchar	*request_method;
-	guint	 response_code;
-	gchar   *http_host;
-	const gchar   *request_uri;
-	const gchar   *referer_uri;
-	const gchar   *full_uri;
-	const gchar   *location_base_uri;
-	const gchar   *location_target;
+	uint32_t framenum;
+	unsigned	 response_code;
+	char	*request_method;
+	char    *http_host;
+	const char    *request_uri;
+	const char    *referer_uri;
+	const char    *full_uri;
+	const char    *location_base_uri;
+	const char    *location_target;
 } http_info_value_t;
 
+#define HTTP_PROTO_DATA_REQRES	0
+#define HTTP_PROTO_DATA_INFO	1
 
 /** information about a request and response on a HTTP conversation. */
 typedef struct _http_req_res_t {
 	/** the running number on the conversation */
-	guint32 number;
+	uint32_t number;
 	/** frame number of the request */
-	guint32 req_framenum;
+	uint32_t req_framenum;
 	/** frame number of the corresponding response */
-	guint32 res_framenum;
+	uint32_t res_framenum;
+	unsigned response_code;
 	/** timestamp of the request */
 	nstime_t req_ts;
-	guint    response_code;
-	gchar   *request_method;
-	gchar   *http_host;
-	gchar   *request_uri;
-	gchar   *full_uri;
-	/** pointer to the next element in the linked list, NULL for the tail node */
-	struct _http_req_res_t *next;
-	/** pointer to the previous element in the linked list, NULL for the head node */
-	struct _http_req_res_t *prev;
+	char    *request_method;
+	char    *http_host;
+	char    *request_uri;
+	char    *full_uri;
+	/** private data used by http dissector */
+	void* private_data;
+	bool req_has_range;
+	bool resp_has_range;
 } http_req_res_t;
+
+/** Used for version-independent HTTP information for upgrade protocols */
+typedef struct _http_upgrade_info_t {
+	/** Lookup header value */
+	const char *(*get_header_value)(packet_info *, const char *, bool);
+	/** Server port. Can be used for protocol heuristics */
+	uint16_t    server_port;
+	/** HTTP version (1, 2 or 3) */
+	uint8_t     http_version;
+	/** Direction of the message */
+	bool	    from_server;
+} http_upgrade_info_t;
 
 /** Conversation data of a HTTP connection. */
 typedef struct _http_conv_t {
-	guint32  req_res_num;	/**< The number of requests in the conversation. */
 
         /* Used to speed up desegmenting of chunked Transfer-Encoding. */
 	wmem_map_t *chunk_offsets_fwd;
 	wmem_map_t *chunk_offsets_rev;
 
 	/* Fields related to proxied/tunneled/Upgraded connections. */
-	guint32	 startframe;	/* First frame of proxied connection */
+	uint32_t	 startframe;	/* First frame of proxied connection */
 	int    	 startoffset;	/* Offset within the frame where the new protocol begins. */
 	dissector_handle_t next_handle;	/* New protocol */
+	http_upgrade_info_t *upgrade_info; /* Data for new protocol */
 
-	gchar   *websocket_protocol;	/* Negotiated WebSocket protocol */
-	gchar   *websocket_extensions;	/* Negotiated WebSocket extensions */
-	/* Server address and port, known after first server response */
-	guint16 server_port;
-	address server_addr;
 	/** the tail node of req_res */
 	http_req_res_t *req_res_tail;
 	/** Information from the last request or response can
@@ -86,24 +98,42 @@ typedef struct _http_conv_t {
 	 * startoffset on connections that have proxied/tunneled/Upgraded.
 	 */
 
+	/* Used for req/res matching */
+	GSList *req_list;
+        wmem_map_t *matches_table;
+
+	/* Server address and port, known after first server response */
+	address server_addr;
+	uint16_t server_port;
+
+	/* true means current message is chunked streaming, and not ended yet.
+	 * This is only meaningful during the first scan.
+	 */
+	bool message_ended;
+
+
 } http_conv_t;
 
-typedef enum _http_type {
-	HTTP_REQUEST,
-	HTTP_RESPONSE,
-	HTTP_NOTIFICATION,
-	HTTP_OTHERS,
-	SIP_DATA            /* If the content is from the SIP dissector*/
-} http_type_t;
+/* Used for HTTP Export Object feature */
+typedef struct _http_eo_t {
+	char    *hostname;
+	char    *filename;
+	char    *content_type;
+	tvbuff_t *payload;
+} http_eo_t;
 
-/** Passed to dissectors called by the HTTP dissector. */
-typedef struct _http_message_info_t {
-	http_type_t type;       /**< Message type; may be HTTP_OTHERS if not called by HTTP */
-	const char *media_str;  /**< Content-Type parameters */
-	const char *content_id; /**< Content-ID parameter */
-	/** In http1.0/1.1, data contains the header name/value mappings, valid only within the packet scope.
-	    In other protocols, the http_type is used to indicate the data transported. */
-	void *data;
-} http_message_info_t;
+/* Resolves a URI reference that might be relative to a given base URI and
+ * returns a string. Roughly similar to the algorithm in RFC 3986 5.2 but
+ * not entirely accurate to it (sacrificing some accuracy for simplicity.)
+ *
+ * @param scope wmem allocator scope for the returned string
+ * @param base_url base URI
+ * @param location_url a URI reference that might be relative to base_url
+ * (or might be an absolute URI)
+ * @return A string allocated in scope that represents a target URI after
+ * resolving location_url, using base_url as the possible base URI
+ */
+extern char *
+determine_http_location_target(wmem_allocator_t *scope, const char *base_url, const char * location_url);
 
 #endif /* __PACKET_HTTP_H__ */
