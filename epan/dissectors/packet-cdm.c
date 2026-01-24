@@ -140,14 +140,14 @@ static int* ett_cdm[] = {
 
 static bool cdm_heur = true;
 
-static heur_dtbl_entry_t* dissect_cdm_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
-    heur_dtbl_entry_t* res = NULL;
+static bool dissect_cdm_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
+    bool res = false;
 
     static guint8 MAGIC1[] = "SACTA";
     static guint8 MAGIC2[] = "CDM  ";
 
     if (tvb_captured_length(tvb) < CDM_SOURCE_LENGTH) {
-        return NULL;
+        return res;
     }
 
     guint8* cdm_source = tvb_get_string_enc(pinfo->pool, tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
@@ -156,7 +156,7 @@ static heur_dtbl_entry_t* dissect_cdm_heur_tcp(tvbuff_t* tvb, packet_info* pinfo
         memcmp(cdm_source, MAGIC2, 5) == 0)
     {
         dissect_cdm(tvb, pinfo, tree, data);
-        res = (heur_dtbl_entry_t*)1;
+        res = true;
     }
 
     return res;
@@ -308,7 +308,5 @@ void proto_reg_handoff_cdmproto(void) {
     xml_handle = find_dissector_add_dependency("xml", proto_cdm);
     cdm_handle = create_dissector_handle(dissect_cdm, proto_cdm);
 
-    //TODO: not working in github workflow
-    //heur_dissector_t heuristic_dissector_function = dissect_cdm_heur_tcp;
-    //heur_dissector_add("tcp", heuristic_dissector_function, "CDM over TCP", "cdm_tcp", proto_cdm, HEURISTIC_ENABLE);
+    heur_dissector_add("tcp", dissect_cdm_heur_tcp, "CDM over TCP", "cdm_tcp", proto_cdm, HEURISTIC_ENABLE);
 }

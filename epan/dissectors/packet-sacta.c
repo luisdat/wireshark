@@ -371,8 +371,8 @@ static bool is_sacta_fragmented(tvbuff_t* tvb, packet_info* pinfo) {
 
 static int dissect_fragmented_sacta(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
 
-static heur_dtbl_entry_t* dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
-    heur_dtbl_entry_t* res = NULL;
+static bool dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
+    bool res = false;
     // Minimo tendra cabecera SACTA, o no sera mensaje SACTA
     if (tvb_captured_length(tvb) >= SACTA_HEADER_SIZE) {
         // Mirar si es trafico de NSPV (java serializado)
@@ -381,7 +381,7 @@ static heur_dtbl_entry_t* dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pin
         if (memcmp(sacta_nspv, MAGIC1, 8) == 0)
         {
             dissect_sacta_nspv(tvb, pinfo, tree); //, data);
-            res = (heur_dtbl_entry_t *) 1;
+            res = true;
         }
         else {
 
@@ -398,7 +398,7 @@ static heur_dtbl_entry_t* dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pin
             {
                 if (end_data == 2 * w_size) {
                     dissect_sacta(tvb, pinfo, tree, data);
-                    res = (heur_dtbl_entry_t *) 1;
+                    res = true;
                 }
                 else {
                     //Caso especial: con cabecera extendida pero sin flag
@@ -1073,6 +1073,5 @@ void proto_reg_handoff_sacta(void) {
     sacta_handle = create_dissector_handle(dissect_fragmented_sacta, proto_sacta);
     dissector_add_uint_with_preference("udp.port", SACTA_UDP_PORT, sacta_handle);
 
-    //TODO: not working in github workflow
-    //heur_dissector_add("udp", (heur_dissector_t)dissect_sacta_heur_udp, "sacta over UDP", "sacta_udp", proto_sacta, HEURISTIC_ENABLE);
+    //heur_dissector_add("udp", dissect_sacta_heur_udp, "sacta over UDP", "sacta_udp", proto_sacta, HEURISTIC_ENABLE);
 }

@@ -24,7 +24,7 @@ uint32_t _4SIGHT_PROCESOR_ID_SIZE = 12;
 const uint32_t _4SIGHT_TCP_PORT_1 = 64000;
 const uint32_t _4SIGHT_TCP_PORT_2 = 64010;
 
-//uint32_t _4sight_offset_magic = 0;
+uint32_t _4sight_offset_magic = 0;
 uint32_t _4sight_offset_message_type = 4;
 uint32_t _4sight_offset_payload_length = 8;
 uint32_t _4sight_offset_processor_id = 12;
@@ -65,14 +65,13 @@ static int* ett_4sight[] = {
 
 static bool _4sight_heur = true;
 
-#if 0
-static heur_dtbl_entry_t* dissect_4sight_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
-    heur_dtbl_entry_t* res = NULL;
+static bool dissect_4sight_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
+    bool res = false;
 
     static guint32 MAGIC = 0x80808080;
 
     if (tvb_captured_length(tvb) < 4) {
-        return NULL;
+        return false;
     }
 
     guint32 magicBytes = tvb_get_uint32(tvb, _4sight_offset_magic, ENC_LITTLE_ENDIAN);
@@ -80,12 +79,11 @@ static heur_dtbl_entry_t* dissect_4sight_heur_tcp(tvbuff_t* tvb, packet_info* pi
     if (magicBytes == MAGIC)
     {
         dissect_4sight(tvb, pinfo, tree, data);
-        res = (heur_dtbl_entry_t*)1;
+        res = true;
     }
 
     return res;
 }
-#endif
 
 static guint32 get_4sight_message_len(packet_info* pinfo _U_, tvbuff_t* tvb, int offset _U_, void* data _U_)
 {
@@ -172,9 +170,7 @@ void proto_reg_handoff_4sightproto(void) {
     xml_handle = find_dissector_add_dependency("xml", proto_4sight);
     _4sight_handle = create_dissector_handle(dissect_4sight, proto_4sight);
 
-    //TODO: NOT WORKING in github workflow
-    //heur_dissector_t heuristic_dissector_function = (heur_dissector_t) dissect_4sight_heur_tcp;
-    //heur_dissector_add("tcp", heuristic_dissector_function, "FourSight over TCP", "foursight_tcp", proto_4sight, HEURISTIC_ENABLE);
+    heur_dissector_add("tcp", dissect_4sight_heur_tcp, "FourSight over TCP", "foursight_tcp", proto_4sight, HEURISTIC_ENABLE);
 
     dissector_add_for_decode_as_with_preference("tcp.port", _4sight_handle);
 }
