@@ -1,16 +1,21 @@
+#include "config.h"
 
+#include <time.h>
+#include <epan/packet.h>
+#include <epan/prefs.h>
+#include <epan/proto.h>
+#include <epan/conversation.h>
+#include <epan/expert.h>
+#include <epan/dissectors/packet-tcp.h>
+#include <wsutil/str_util.h>
 
-/*
- * packet-sacta.c
- *
- *  Created on: 12 jun. 2019
- *      Author: gromerov
- */
+#include <wsutil/wmem/wmem.h> 
+#include <epan/wmem_scopes.h> 
+
+#include <wsutil/time_util.h>
+WS_DLL_PUBLIC char* ws_strptime(const char* buf, const char* format, struct tm* tm);
 
 #include "packet-sacta.h"
-#include "address_types.h"
-#include "epan/expert.h"
-#include <epan/reassemble.h>
 
  /* packet reassembly */
 static reassembly_table msg_reassembly_table;
@@ -22,7 +27,7 @@ static reassembly_table msg_reassembly_table;
 #define CABX_TRUE 0x01
 #define CABX_FALSE 0x00
 
-static gboolean save_fragmented;
+static bool save_fragmented;
 
 static int TAMANO_CABX = 128;
 static int TAMANO_CABX_ARIS = 24;
@@ -136,7 +141,7 @@ static int offset_sacta_nspv_paquete_len = 6;
 static int offset_sacta_nspv_len = 8;
 static int SACTA_NSPV_LEN = 8;
 
-static expert_field ei_sacta_decompression_failed = EI_INIT;
+static expert_field ei_sacta_decompression_failed;
 /*
  * Set up expert info.
  */
@@ -248,7 +253,7 @@ static int* ett_sacta[] = {
         & ett_msg_fragments
 };
 
-static int sacta_heur = true;
+static bool sacta_heur = true;
 
 static char _sacta_message_text[SACTA_MESSAGE_TEXT_SIZE];
 
@@ -287,7 +292,7 @@ sacta_get_gint32(packet_info* pinfo, tvbuff_t* tvb, const gint offset) {
     return w_size;
 }
 
-static bool isXMLPacket(tvbuff_t* backing, const gint backing_offset, const gint backing_length, const gint reported_length)
+static bool isXMLPacket(packet_info* pinfo, tvbuff_t* backing, const gint backing_offset, const gint backing_length, const gint reported_length)
 {
     static gint C_XML_MAGIC_LENGTH = 5;
     static guint8 C_XML_MAGIC[] = "<?xml";
@@ -295,7 +300,7 @@ static bool isXMLPacket(tvbuff_t* backing, const gint backing_offset, const gint
     if (backing_length >= C_XML_MAGIC_LENGTH &&
         reported_length >= C_XML_MAGIC_LENGTH)
     {
-        guint8* starting_bytes = tvb_get_string_enc(wmem_packet_scope(), backing, backing_offset, C_XML_MAGIC_LENGTH, ENC_UTF_8);
+        guint8* starting_bytes = tvb_get_string_enc(pinfo->pool, backing, backing_offset, C_XML_MAGIC_LENGTH, ENC_UTF_8);
         if (memcmp(starting_bytes, C_XML_MAGIC, C_XML_MAGIC_LENGTH) == 0)
         {
             res = true;
@@ -341,8 +346,8 @@ const char* get_sacta_info(array_string* array, uint32_t index) {
 int reassemble_sacta_msg(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
 int dissect_sacta_nspv(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree);
 
-static gboolean is_sacta_fragmented(tvbuff_t* tvb, packet_info* pinfo) {
-    gboolean res = false;
+static bool is_sacta_fragmented(tvbuff_t* tvb, packet_info* pinfo) {
+    bool res = false;
     unsigned int end_data = tvb_reported_length(tvb) - SACTA_HEADER_SIZE;
     //unsigned int end_data = tvb_captured_length(tvb) - SACTA_HEADER_SIZE;
     uint16_t w_size = sacta_get_gint16(pinfo, tvb, 14);
@@ -366,17 +371,17 @@ static gboolean is_sacta_fragmented(tvbuff_t* tvb, packet_info* pinfo) {
 
 static int dissect_fragmented_sacta(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data);
 
-static int dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
-    int res = 0;
+static heur_dtbl_entry_t* dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
+    heur_dtbl_entry_t* res = NULL;
     // Minimo tendra cabecera SACTA, o no sera mensaje SACTA
     if (tvb_captured_length(tvb) >= SACTA_HEADER_SIZE) {
         // Mirar si es trafico de NSPV (java serializado)
         static guint8 MAGIC1[] = "es.indra.";
-        guint8* sacta_nspv = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_sacta_nspv_len, SACTA_NSPV_LEN, ENC_UTF_8);
+        guint8* sacta_nspv = tvb_get_string_enc(pinfo->pool, tvb, offset_sacta_nspv_len, SACTA_NSPV_LEN, ENC_UTF_8);
         if (memcmp(sacta_nspv, MAGIC1, 8) == 0)
         {
             dissect_sacta_nspv(tvb, pinfo, tree); //, data);
-            res = 1;
+            res = (heur_dtbl_entry_t *) 1;
         }
         else {
 
@@ -393,7 +398,7 @@ static int dissect_sacta_heur_udp(tvbuff_t* tvb, packet_info* pinfo, proto_tree*
             {
                 if (end_data == 2 * w_size) {
                     dissect_sacta(tvb, pinfo, tree, data);
-                    res = 1;
+                    res = (heur_dtbl_entry_t *) 1;
                 }
                 else {
                     //Caso especial: con cabecera extendida pero sin flag
@@ -432,7 +437,7 @@ int dissect_sacta_nspv(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree) {
     proto_tree* sacta_tree = proto_item_add_subtree(ti, ett_sacta_proto);
     gint16 tamano_paquete = tvb_get_gint16(tvb, offset_sacta_nspv_paquete_len, ENC_BIG_ENDIAN);
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "SACTA_NSPV");
-    guint8* paquete_nspv = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_sacta_nspv_len, tamano_paquete, ENC_UTF_8);
+    guint8* paquete_nspv = tvb_get_string_enc(pinfo->pool, tvb, offset_sacta_nspv_len, tamano_paquete, ENC_UTF_8);
     proto_tree_add_string(sacta_tree, hf_sacta_nspv_paquete, tvb, offset_sacta_nspv_len, tamano_paquete /*tamano_paquete*/, paquete_nspv);
 
     call_data_dissector(tvb, pinfo, sacta_tree);
@@ -488,14 +493,11 @@ int dissect_fragmented_sacta(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree
     //uint16_t id_msg = sacta_get_gint16(pinfo, top_tvb, 14);
     //uint16_t flags_msg = sacta_get_gint16(pinfo, top_tvb, 16);
 
-    expert_module_t* expert_sacta = expert_register_protocol(proto_sacta);
-    expert_register_field_array(expert_sacta, ei, array_length(ei));
-
     proto_item* ti = proto_tree_add_item(tree, proto_sacta, tvb, 0, -1, ENC_NA);
     proto_tree* sacta_tree = proto_item_add_subtree(ti, ett_sacta_proto);
 
     int offset = 0;
-    gboolean more_fragments = FALSE;
+    bool more_fragments = FALSE;
     //guint8      flags;
     tvbuff_t* next_tvb = NULL;
 
@@ -762,7 +764,7 @@ int dissect_sacta(tvbuff_t * tvb, packet_info * pinfo, proto_tree* tree, void* d
             tvbuff_t* asterix_tvb = tvb_new_subset_length_caplen(data_tvb, data_offset, asterixLen, asterixLen);
             call_dissector(asterix_handle, asterix_tvb, pinfo, tree);
         }
-        else if (xml_handle != NULL && (isXMLPacket(data_tvb, data_offset, longitud_datos, longitud_datos))) {
+        else if (xml_handle != NULL && (isXMLPacket(pinfo, data_tvb, data_offset, longitud_datos, longitud_datos))) {
             //If XML packet, call wireshark XML dissector
             tvbuff_t* xml_tvb = tvb_new_subset_length_caplen(data_tvb, data_offset, longitud_datos, longitud_datos);
             call_dissector(xml_handle, xml_tvb, pinfo, tree);
@@ -805,10 +807,10 @@ int dissect_sacta(tvbuff_t * tvb, packet_info * pinfo, proto_tree* tree, void* d
                         uint16_t versionId = sacta_get_gint16(pinfo, data_tvb, cabx_payload);
                         proto_tree_add_uint(current_cabx_tree, hf_aris_version_id, data_tvb, cabx_payload, TAMANO_ARIS_VERSION_ID, versionId);
 
-                        guint8* adaptacion = tvb_get_string_enc(wmem_packet_scope(), data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID, TAMANO_ARIS_ADAPTACION, ENC_UTF_8);
+                        guint8* adaptacion = tvb_get_string_enc(pinfo->pool, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID, TAMANO_ARIS_ADAPTACION, ENC_UTF_8);
                         proto_tree_add_string(current_cabx_tree, hf_aris_adaptacion, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID, TAMANO_ARIS_ADAPTACION, adaptacion);
 
-                        guint8* dependencia = tvb_get_string_enc(wmem_packet_scope(), data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID + TAMANO_ARIS_ADAPTACION, TAMANO_ARIS_DEPENDENCIA, ENC_UTF_8);
+                        guint8* dependencia = tvb_get_string_enc(pinfo->pool, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID + TAMANO_ARIS_ADAPTACION, TAMANO_ARIS_DEPENDENCIA, ENC_UTF_8);
                         proto_tree_add_string(current_cabx_tree, hf_aris_dependencia, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID + TAMANO_ARIS_ADAPTACION, TAMANO_ARIS_DEPENDENCIA, dependencia);
                         break;
                     case TIPO_INTERCEPTOR_EVEREST:
@@ -937,10 +939,10 @@ int dissect_sacta(tvbuff_t * tvb, packet_info * pinfo, proto_tree* tree, void* d
                     uint16_t versionId = sacta_get_gint16(pinfo, data_tvb, cabx_payload);
                     proto_tree_add_uint(current_cabx_tree, hf_aris_version_id, data_tvb, cabx_payload, TAMANO_ARIS_VERSION_ID, versionId);
 
-                    guint8* adaptacion = tvb_get_string_enc(wmem_packet_scope(), data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID, TAMANO_ARIS_ADAPTACION, ENC_UTF_8);
+                    guint8* adaptacion = tvb_get_string_enc(pinfo->pool, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID, TAMANO_ARIS_ADAPTACION, ENC_UTF_8);
                     proto_tree_add_string(current_cabx_tree, hf_aris_adaptacion, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID, TAMANO_ARIS_ADAPTACION, adaptacion);
 
-                    guint8* dependencia = tvb_get_string_enc(wmem_packet_scope(), data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID + TAMANO_ARIS_ADAPTACION, TAMANO_ARIS_DEPENDENCIA, ENC_UTF_8);
+                    guint8* dependencia = tvb_get_string_enc(pinfo->pool, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID + TAMANO_ARIS_ADAPTACION, TAMANO_ARIS_DEPENDENCIA, ENC_UTF_8);
                     proto_tree_add_string(current_cabx_tree, hf_aris_dependencia, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID + TAMANO_ARIS_ADAPTACION, TAMANO_ARIS_DEPENDENCIA, dependencia);
                     break;
                 case TIPO_INTERCEPTOR_EVEREST:
@@ -1050,6 +1052,9 @@ void proto_register_sacta(void) {
     proto_register_field_array(proto_sacta, hf_sacta, array_length(hf_sacta));
     proto_register_subtree_array(ett_sacta, array_length(ett_sacta));
 
+    expert_module_t* expert_sacta = expert_register_protocol(proto_sacta);
+    expert_register_field_array(expert_sacta, ei, array_length(ei));
+
     module_t* sacta_module = prefs_register_protocol(proto_sacta, NULL);
     heur_subdissector_list = register_heur_dissector_list("sacta", proto_sacta);
     prefs_register_bool_preference(sacta_module, "heur",
@@ -1061,10 +1066,12 @@ void proto_register_sacta(void) {
 
 void proto_reg_handoff_sacta(void) {
     dissector_handle_t sacta_handle;
-    heur_dissector_t heuristic_dissector_function = dissect_sacta_heur_udp;
+
     asterix_handle = find_dissector_add_dependency("asterix", proto_sacta);
     xml_handle = find_dissector_add_dependency("xml", proto_sacta);
+
     sacta_handle = create_dissector_handle(dissect_fragmented_sacta, proto_sacta);
     dissector_add_uint_with_preference("udp.port", SACTA_UDP_PORT, sacta_handle);
-    heur_dissector_add("udp", heuristic_dissector_function, "sacta over UDP", "sacta_udp", proto_sacta, HEURISTIC_ENABLE);
+
+    heur_dissector_add("udp", (heur_dissector_t) dissect_sacta_heur_udp, "sacta over UDP", "sacta_udp", proto_sacta, HEURISTIC_ENABLE);
 }

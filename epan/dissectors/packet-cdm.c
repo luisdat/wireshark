@@ -1,60 +1,22 @@
 #include "config.h"
-/*
+
 #include <time.h>
-#include <iomanip>
-#include <sstream>
+#include <epan/packet.h>
+#include <epan/prefs.h>
+#include <epan/proto.h>
+#include <epan/conversation.h>
+#include <epan/expert.h>
+#include <epan/dissectors/packet-tcp.h>
+#include <wsutil/str_util.h>
 
-extern "C" char* strptime(const char* s,
-    const char* f,
-    struct tm* tm) {
-    // Isn't the C++ standard lib nice? std::get_time is defined such that its
-    // format parameters are the exact same as strptime. Of course, we have to
-    // create a string stream first, and imbue it with the current C locale, and
-    // we also have to make sure we return the right things if it fails, or
-    // if it succeeds, but this is still far simpler an implementation than any
-    // of the versions in any of the C standard libraries.
-    std::istringstream input(s);
-    input.imbue(std::locale(setlocale(LC_ALL, nullptr)));
-    input >> std::get_time(tm, f);
-    if (input.fail()) {
-        return nullptr;
-    }
-    return (char*)(s + input.tellg());
-}
-*/
-/*
- * Just make sure we include the prototype for strptime as well
- * (needed for glibc 2.2) but make sure we do this only if not
- * yet defined.
- */
-#ifndef __USE_XOPEN
-#  define __USE_XOPEN
+#ifndef WMEM_ALLOCATOR_T_DEFINED
+typedef struct _wmem_allocator_t wmem_allocator_t;
+#define WMEM_ALLOCATOR_T_DEFINED
 #endif
-#ifndef _XOPEN_SOURCE
-#  ifndef __sun
-#    define _XOPEN_SOURCE 600
-#  endif
-#endif
+WS_DLL_PUBLIC wmem_allocator_t* wmem_packet_scope(void);
 
-/*
- * Defining _XOPEN_SOURCE is needed on some platforms, e.g. platforms
- * using glibc, to expand the set of things system header files define.
- *
- * Unfortunately, on other platforms, such as some versions of Solaris
- * (including Solaris 10), it *reduces* that set as well, causing
- * strptime() not to be declared, presumably because the version of the
- * X/Open spec that _XOPEN_SOURCE implies doesn't include strptime() and
- * blah blah blah namespace pollution blah blah blah.
- *
- * So we define __EXTENSIONS__ so that "strptime()" is declared.
- */
-#ifndef __EXTENSIONS__
-#  define __EXTENSIONS__
-#endif
-
-#ifndef HAVE_STRPTIME
-# include "wsutil/strptime.h"
-#endif
+#include <wsutil/time_util.h>
+WS_DLL_PUBLIC char* ws_strptime(const char* buf, const char* format, struct tm* tm);
 
 #include "packet-cdm.h"
 #include "packet-tcp.h"
@@ -88,9 +50,8 @@ static guint8 * cdm_time_to_human(guint8* cdmTime) {
   guint8* millis[4]; 
   memcpy(millis, &(cdmTime[12]), 3);
   millis[3] = '\0';
-  /*
   struct tm myTM;
-  if(strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
+  if(ws_strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
   {
     gint milliseconds = atoi((const char*) millis);
 	//const time_t epoch_time = (time_t)(seconds);
@@ -108,7 +69,6 @@ static guint8 * cdm_time_to_human(guint8* cdmTime) {
 		  milliseconds	
 	);
   }
-*/	
 	return last_time;
 }
 
@@ -117,14 +77,13 @@ static nstime_t cdm_time_to_ws(guint8* cdmTime) {
   guint8* millis[4]; 
   memcpy(millis, &(cdmTime[12]), 3);
   millis[3] = '\0';
-  /*
   struct tm myTM;
-  if(strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
+  if(ws_strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
   {
     gint milliseconds = atoi((const char*) millis);
     last_time.secs = mktime(&myTM);
     last_time.nsecs = milliseconds * 1000000;
-  }*/
+  }
 	
   return last_time;
 }
@@ -194,29 +153,29 @@ static int * ett_cdm[] = {
 	&ett_cdm_dst
 };
 
-static gboolean cdm_heur = true;
+static bool cdm_heur = true;
 
-static bool dissect_cdm_heur_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data) {
-  bool res = false;
+static heur_dtbl_entry_t* dissect_cdm_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
+    heur_dtbl_entry_t* res = NULL;
 
   static guint8 MAGIC1[] = "SACTA";
   static guint8 MAGIC2[] = "CDM  ";
 	//uint16_t w_size = tvb_get_ntohs(tvb, 14);
 	//unsigned int end_data = tvb_captured_length(tvb) - SACTA_HEADER_SIZE;
-	guint8* cdm_source = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
+	guint8* cdm_source = tvb_get_string_enc(pinfo->pool, tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
   if(memcmp(cdm_source, MAGIC1, 5) == 0 ||
      memcmp(cdm_source, MAGIC2, 5) == 0)
   {
     dissect_cdm(tvb, pinfo, tree, data);
-	  res = true;
+	  res = (heur_dtbl_entry_t*)1;
   }
 	
-	return res;
+	return NULL;
 }
 
 static guint get_cdm_message_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset _U_, void *data _U_)
 {
-  guint8* cdm_message_length = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
+  guint8* cdm_message_length = tvb_get_string_enc(pinfo->pool, tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
   int cdmLength = atoi(cdm_message_length);
   return cdmLength;
 }
@@ -288,20 +247,20 @@ int dissect_cdm_message(tvbuff_t *tvb, packet_info * pinfo, proto_tree * tree, v
 	
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "CDM");
 	
-        guint8* cdm_source = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
+        guint8* cdm_source = tvb_get_string_enc(pinfo->pool, tvb, offset_source, CDM_SOURCE_LENGTH, ENC_UTF_8);
 	proto_tree_add_uint(cdm_tree, hf_cdm_source, tvb, offset_source, (gint16) strlen(cdm_source), get_source(cdm_source));
 
-        guint8* cdm_destination = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_destination, CDM_DESTINATION_LENGTH, ENC_UTF_8);
+        guint8* cdm_destination = tvb_get_string_enc(pinfo->pool, tvb, offset_destination, CDM_DESTINATION_LENGTH, ENC_UTF_8);
 	proto_tree_add_uint(cdm_tree, hf_cdm_destination, tvb, offset_destination, (gint16) strlen(cdm_destination), get_destination(cdm_destination));
 
-	guint8* cdm_message_type = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_message_type, CDM_MESSAGE_TYPE_LENGTH, ENC_UTF_8);
+	guint8* cdm_message_type = tvb_get_string_enc(pinfo->pool, tvb, offset_message_type, CDM_MESSAGE_TYPE_LENGTH, ENC_UTF_8);
 	proto_tree_add_uint(cdm_tree, hf_cdm_message_type, tvb, offset_message_type, (gint16) strlen(cdm_message_type), get_message_type(cdm_message_type));
 
-	guint8* cdm_sequence_number = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_sequence_number, CDM_SEQUENCE_NUMBER_LENGTH, ENC_UTF_8);
+	guint8* cdm_sequence_number = tvb_get_string_enc(pinfo->pool, tvb, offset_sequence_number, CDM_SEQUENCE_NUMBER_LENGTH, ENC_UTF_8);
         guint32 cdm_sequence_number_int = atoi(cdm_sequence_number);
 	proto_tree_add_uint(cdm_tree, hf_cdm_sequence_number, tvb, offset_sequence_number, (gint16) strlen(cdm_sequence_number), cdm_sequence_number_int);
 
-	guint8* cdm_message_length = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
+	guint8* cdm_message_length = tvb_get_string_enc(pinfo->pool, tvb, offset_message_length, CDM_MESSAGE_LENGTH_LENGTH, ENC_UTF_8);
         guint32 cdm_message_length_int = atoi(cdm_message_length);
         guint32 cdm_data_length_int = cdm_message_length_int - CDM_HEADER_SIZE;
 	proto_tree_add_uint(cdm_tree, hf_cdm_message_length, tvb, offset_message_length, (gint16) strlen(cdm_message_length), cdm_message_length_int);
@@ -310,7 +269,7 @@ int dissect_cdm_message(tvbuff_t *tvb, packet_info * pinfo, proto_tree * tree, v
 	  proto_tree_add_uint(cdm_tree, hf_cdm_data_length, tvb, offset_message_length, (gint16) strlen(cdm_message_length), cdm_data_length_int);
 	}
 
-	guint8* cdm_timestamp = tvb_get_string_enc(wmem_packet_scope(), tvb, offset_timestamp, CDM_TIMESTAMP_LENGTH, ENC_UTF_8);
+	guint8* cdm_timestamp = tvb_get_string_enc(pinfo->pool, tvb, offset_timestamp, CDM_TIMESTAMP_LENGTH, ENC_UTF_8);
         //guint8* cdm_time_readable = cdm_time_to_human(cdm_timestamp);
         nstime_t cdm_time = cdm_time_to_ws(cdm_timestamp);
 	proto_tree_add_time(cdm_tree, hf_cdm_timestamp, tvb, offset_timestamp, CDM_TIMESTAMP_LENGTH, &cdm_time);

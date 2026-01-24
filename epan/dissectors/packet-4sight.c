@@ -1,60 +1,22 @@
 #include "config.h"
-/*
+
 #include <time.h>
-#include <iomanip>
-#include <sstream>
+#include <epan/packet.h>
+#include <epan/prefs.h>
+#include <epan/proto.h>
+#include <epan/conversation.h>
+#include <epan/expert.h>
+#include <epan/dissectors/packet-tcp.h>
+#include <wsutil/str_util.h>
 
-extern "C" char* strptime(const char* s,
-    const char* f,
-    struct tm* tm) {
-    // Isn't the C++ standard lib nice? std::get_time is defined such that its
-    // format parameters are the exact same as strptime. Of course, we have to
-    // create a string stream first, and imbue it with the current C locale, and
-    // we also have to make sure we return the right things if it fails, or
-    // if it succeeds, but this is still far simpler an implementation than any
-    // of the versions in any of the C standard libraries.
-    std::istringstream input(s);
-    input.imbue(std::locale(setlocale(LC_ALL, nullptr)));
-    input >> std::get_time(tm, f);
-    if (input.fail()) {
-        return nullptr;
-    }
-    return (char*)(s + input.tellg());
-}
-*/
-/*
- * Just make sure we include the prototype for strptime as well
- * (needed for glibc 2.2) but make sure we do this only if not
- * yet defined.
- */
-#ifndef __USE_XOPEN
-#  define __USE_XOPEN
+#ifndef WMEM_ALLOCATOR_T_DEFINED
+typedef struct _wmem_allocator_t wmem_allocator_t;
+#define WMEM_ALLOCATOR_T_DEFINED
 #endif
-#ifndef _XOPEN_SOURCE
-#  ifndef __sun
-#    define _XOPEN_SOURCE 600
-#  endif
-#endif
+WS_DLL_PUBLIC wmem_allocator_t* wmem_packet_scope(void);
 
-/*
- * Defining _XOPEN_SOURCE is needed on some platforms, e.g. platforms
- * using glibc, to expand the set of things system header files define.
- *
- * Unfortunately, on other platforms, such as some versions of Solaris
- * (including Solaris 10), it *reduces* that set as well, causing
- * strptime() not to be declared, presumably because the version of the
- * X/Open spec that _XOPEN_SOURCE implies doesn't include strptime() and
- * blah blah blah namespace pollution blah blah blah.
- *
- * So we define __EXTENSIONS__ so that "strptime()" is declared.
- */
-#ifndef __EXTENSIONS__
-#  define __EXTENSIONS__
-#endif
-
-#ifndef HAVE_STRPTIME
-# include "wsutil/strptime.h"
-#endif
+#include <wsutil/time_util.h>
+WS_DLL_PUBLIC char* ws_strptime(const char* buf, const char* format, struct tm* tm);
 
 #include "packet-4sight.h"
 #include "packet-tcp.h"
@@ -85,9 +47,8 @@ static guint8 * _4sight_time_to_human(guint8* _4sightTime) {
   guint8* millis[4]; 
   memcpy(millis, &(_4sightTime[12]), 3);
   millis[3] = '\0';
-  /*
   struct tm myTM;
-  if(strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
+  if(ws_strptime(_4sightTime, "%d%m%y%H%M%S", &myTM))
   {
     gint milliseconds = atoi((const char*) millis);
 	//const time_t epoch_time = (time_t)(seconds);
@@ -105,7 +66,6 @@ static guint8 * _4sight_time_to_human(guint8* _4sightTime) {
 		  milliseconds	
 	);
   }
-*/	
 	return last_time;
 }
 
@@ -121,14 +81,13 @@ static nstime_t _4sight_time_to_ws(guint8* _4sightTime) {
   guint8* millis[4]; 
   memcpy(millis, &(_4sightTime[12]), 3);
   millis[3] = '\0';
-  /*
   struct tm myTM;
-  if(strptime(cdmTime, "%d%m%y%H%M%S", &myTM))
+  if(ws_strptime(_4sightTime, "%d%m%y%H%M%S", &myTM))
   {
     gint milliseconds = atoi((const char*) millis);
     last_time.secs = mktime(&myTM);
     last_time.nsecs = milliseconds * 1000000;
-  }*/
+  }
 	
   return last_time;
 }
@@ -160,10 +119,11 @@ static int * ett_4sight[] = {
 	&ett_4sight_proto,
 };
 
-static gboolean _4sight_heur = true;
+static bool _4sight_heur = true;
 
-static bool dissect_4sight_heur_tcp(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void* data _U_) {
-  bool res = false;
+
+static heur_dtbl_entry_t* dissect_4sight_heur_tcp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) {
+  heur_dtbl_entry_t* res = 0;
 
   //static guint8 MAGIC = 0x80;
   static guint32 MAGIC = 0x80808080;
@@ -174,7 +134,7 @@ static bool dissect_4sight_heur_tcp(tvbuff_t *tvb _U_, packet_info *pinfo _U_, p
 //  if(magicByte == MAGIC)
   {
     dissect_4sight(tvb, pinfo, tree, data);
-	  res = true;
+    res = (heur_dtbl_entry_t*) 1;
   }
 	
   return res;
@@ -234,7 +194,7 @@ int dissect_4sight_message(tvbuff_t *tvb _U_, packet_info * pinfo, proto_tree * 
         offset += 4;
 
         //Processor id
-        guint8* processor_id = tvb_get_string_enc(wmem_packet_scope(), tvb, _4sight_offset_processor_id, _4SIGHT_PROCESOR_ID_SIZE, ENC_UTF_8);
+        guint8* processor_id = tvb_get_string_enc(pinfo->pool, tvb, _4sight_offset_processor_id, _4SIGHT_PROCESOR_ID_SIZE, ENC_UTF_8);
         proto_tree_add_string(_4sight_tree, hf_4sight_processor_id, tvb, _4sight_offset_processor_id, _4SIGHT_PROCESOR_ID_SIZE, processor_id);
         offset += 12;
 
