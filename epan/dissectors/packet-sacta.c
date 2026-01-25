@@ -60,7 +60,7 @@ enum TiposInterceptor
 static const char *STR_TIPO_INTERCEPTOR_ARIS = "ARIS";
 static const char *STR_TIPO_INTERCEPTOR_EVEREST = "eVerest";
 static const char *STR_TIPO_INTERCEPTOR_AUTONOMO = "Autonomo";
-// static const char *STR_TIPO_INTERCEPTOR_DESCONOCIDO = "DESCONOCIDO";
+static const char *STR_TIPO_INTERCEPTOR_DESCONOCIDO = "DESCONOCIDO";
 
 // static int OFFSET_ORIGEN_DOMINIO = 0;
 // static int OFFSET_ORIGEN_CENTRO = 1;
@@ -140,7 +140,7 @@ static gint ett_msg_fragments = -1;
 
 static int offset_sacta_nspv_paquete_len = 6;
 static int offset_sacta_nspv_len = 8;
-static int SACTA_NSPV_LEN = 8;
+// static int SACTA_NSPV_LEN = 8;
 
 static expert_field ei_sacta_decompression_failed;
 /*
@@ -761,7 +761,7 @@ int dissect_sacta(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
         }
         else
         {
-            tvbuff_t *decomp_data_tvb = tvb_uncompress(tvb, offset, longitud_real - SACTA_HEADER_SIZE);
+            tvbuff_t *decomp_data_tvb = tvb_uncompress_zlib(tvb, offset, longitud_real - SACTA_HEADER_SIZE);
             if (decomp_data_tvb)
             {
                 data_tvb = decomp_data_tvb;
@@ -828,7 +828,6 @@ int dissect_sacta(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
                 for (uint32_t i = 0; i < num_cabx; i++, data_offset += TAMANO_CABX, offset += TAMANO_CABX)
                 {
                     uint16_t tipo_interceptor = sacta_get_gint16(pinfo, data_tvb, data_offset);
-                    const char *str_tipo_interceptor = "DESCONOCIDO";
                     proto_tree *current_cabx_tree = 0;
                     uint32_t cabx_payload = data_offset + 4;
 
@@ -836,7 +835,6 @@ int dissect_sacta(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
                     {
                     case TIPO_INTERCEPTOR_ARIS:
 
-                        str_tipo_interceptor = STR_TIPO_INTERCEPTOR_ARIS;
                         current_cabx_tree = proto_tree_add_subtree(cabx_tree, data_tvb, data_offset, TAMANO_CABX, ett_cabx_aris, NULL, "Cabecera extendida");
                         proto_tree_add_string(current_cabx_tree, hf_cabx_tipo, data_tvb, data_offset, 2, STR_TIPO_INTERCEPTOR_ARIS);
 
@@ -850,7 +848,6 @@ int dissect_sacta(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
                         proto_tree_add_string(current_cabx_tree, hf_aris_dependencia, data_tvb, cabx_payload + TAMANO_ARIS_VERSION_ID + TAMANO_ARIS_ADAPTACION, TAMANO_ARIS_DEPENDENCIA, (const char *)dependencia);
                         break;
                     case TIPO_INTERCEPTOR_EVEREST:
-                        str_tipo_interceptor = STR_TIPO_INTERCEPTOR_EVEREST;
                         current_cabx_tree = proto_tree_add_subtree(cabx_tree, data_tvb, data_offset, TAMANO_CABX, ett_cabx_eVerest, NULL, "Cabecera extendida");
                         proto_tree_add_string(current_cabx_tree, hf_cabx_tipo, data_tvb, data_offset, 2, STR_TIPO_INTERCEPTOR_EVEREST);
 
@@ -863,7 +860,6 @@ int dissect_sacta(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
                         proto_tree_add_string(current_cabx_tree, hf_sacta_destino_cabx, data_tvb, cabx_payload + 1, 1, text);
                         break;
                     case TIPO_INTERCEPTOR_AUTONOMO:
-                        str_tipo_interceptor = STR_TIPO_INTERCEPTOR_AUTONOMO;
                         current_cabx_tree = proto_tree_add_subtree(cabx_tree, data_tvb, data_offset, TAMANO_CABX, ett_cabx_autonomo, NULL, "Cabecera extendida");
                         proto_tree_add_string(current_cabx_tree, hf_cabx_tipo, data_tvb, data_offset, 2, STR_TIPO_INTERCEPTOR_EVEREST);
 
@@ -881,6 +877,8 @@ int dissect_sacta(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
                         break;
                     default:
+                        current_cabx_tree = proto_tree_add_subtree(cabx_tree, data_tvb, data_offset, TAMANO_CABX, ett_cabx_autonomo, NULL, "Cabecera extendida");
+                        proto_tree_add_string(current_cabx_tree, hf_cabx_tipo, data_tvb, data_offset, 2, STR_TIPO_INTERCEPTOR_DESCONOCIDO);
                         break;
                     }
                 }
