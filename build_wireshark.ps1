@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    Wireshark build script (Smart Caching Version)
+    Wireshark build script (v11.0 - Enable CTest)
 .DESCRIPTION
     - Full compile, link & installer generation.
-    - Smart Build: Skips CMake if generator and flags haven't changed.
-    - Auto-switches between Ninja and VS transparently.
-    - Fixes MSB4057, RC1212, C11 SDK, and API changes.
+    - Automation: Supports -Base argument.
+    - Tests: Enables BUILD_testing=ON so CTest can find them.
 #>
 
 param (
-    [string]$Base,           # OPTIONAL: Path to the libs parent folder (skips prompt)
+    [string]$Base,           # OPTIONAL: Path to the libs parent folder
     [switch]$Clean,          # Clean the 'build' directory before starting
     [switch]$Installer,      # Generate the NSIS Installer (.exe)
+    [switch]$Tests,          # Build 'test-programs' AND Run CTest
     [switch]$Ninja,          # Use Ninja generator (Experimental)
     [switch]$VS,             # Use Visual Studio generator (Recommended)
     [switch]$AllowWarnings,  # Do not treat warnings as errors
@@ -160,11 +160,9 @@ if ($LatestSdkVersion) {
 # 3. DETERMINE DESIRED STATE
 # ==========================================
 $IsNinja = $false
-$DesiredGeneratorName = "Visual Studio" # Default internal name for logic
 if ($Ninja) {
     if (Get-Command "ninja.exe" -ErrorAction SilentlyContinue) {
         $IsNinja = $true
-        $DesiredGeneratorName = "Ninja"
         Write-Host "[SYSTEM] Target Generator: NINJA" -ForegroundColor Cyan
     }
     else {
@@ -202,21 +200,19 @@ try {
     if (Test-Path $CacheFile) {
         $CacheContent = Get-Content $CacheFile | Out-String
         
-        # 1. Check Generator Match
         $CacheHasNinja = $CacheContent -match "CMAKE_GENERATOR:INTERNAL=Ninja"
         $CacheHasVS = $CacheContent -match "CMAKE_GENERATOR:INTERNAL=Visual Studio"
-        
         $GeneratorMismatch = ($IsNinja -and -not $CacheHasNinja) -or (-not $IsNinja -and -not $CacheHasVS)
         
-        # 2. Check WError Flag Match
-        # Regex looks for ENABLE_WERROR:BOOL=ON or OFF
+        # Check WError and BUILD_testing
         $WErrorMismatch = $false
-        if ($CacheContent -match "ENABLE_WERROR:BOOL=($WErrorValue)") {
-            $WErrorMismatch = $false
-        }
-        else {
-            # Only trigger mismatch if the key exists but value differs
-            if ($CacheContent -match "ENABLE_WERROR:BOOL=") { $WErrorMismatch = $true }
+        if ($CacheContent -match "ENABLE_WERROR:BOOL=($WErrorValue)") { $WErrorMismatch = $false }
+        else { if ($CacheContent -match "ENABLE_WERROR:BOOL=") { $WErrorMismatch = $true } }
+
+        # Force re-configure if tests requested but not enabled
+        $TestsMismatch = $false
+        if ($Tests -and ($CacheContent -notmatch "BUILD_testing:BOOL=ON")) {
+            $TestsMismatch = $true
         }
 
         if ($GeneratorMismatch) {
@@ -225,8 +221,8 @@ try {
             if (Test-Path "CMakeFiles") { Remove-Item "CMakeFiles" -Recurse -Force -ErrorAction SilentlyContinue }
             $RunCMake = $true
         }
-        elseif ($WErrorMismatch) {
-            Write-Host "Build flags changed (Warnings). Re-configuring..." -ForegroundColor Yellow
+        elseif ($WErrorMismatch -or $TestsMismatch) {
+            Write-Host "Build flags changed. Re-configuring..." -ForegroundColor Yellow
             $RunCMake = $true
         }
         elseif ($ForceCMake) {
@@ -249,7 +245,13 @@ try {
         if ($IsNinja) { $Generator = "Ninja" }
 
         $SdkArg = $LatestSdkVersion.TrimEnd("\")
-        $CMakeArgs = @("-G", $Generator, "-DENABLE_WERROR=$WErrorValue", "-DCMAKE_RC_FLAGS='-DWIN32'", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
+        $CMakeArgs = @(
+            "-G", $Generator, 
+            "-DENABLE_WERROR=$WErrorValue", 
+            "-DCMAKE_RC_FLAGS='-DWIN32'",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "-DBUILD_testing=ON"  # <--- ESTO ES CRÍTICO PARA CTEST
+        )
 
         if ($LatestSdkVersion) {
             $CMakeArgs += "-DCMAKE_SYSTEM_VERSION=$SdkArg"
@@ -265,18 +267,47 @@ try {
     }
 
     # ---------------------------------------------------------
-    # BUILD
+    # MAIN BUILD (Wireshark)
     # ---------------------------------------------------------
-    Write-Host "Building project..." -ForegroundColor Green
-
-    if ($IsNinja) {
-        & ninja
+    if (-not $Tests -or $Installer) {
+        Write-Host "Building Main Project..." -ForegroundColor Green
+        if ($IsNinja) {
+            & ninja
+        }
+        else {
+            & msbuild /m /p:Configuration=RelWithDebInfo Wireshark.sln
+        }
+        if ($LASTEXITCODE -ne 0) { throw "Build failed." }
     }
-    else {
-        & msbuild /m /p:Configuration=RelWithDebInfo Wireshark.sln
-    }
 
-    if ($LASTEXITCODE -ne 0) { throw "Build failed." }
+    # ---------------------------------------------------------
+    # TESTS (BUILD & RUN)
+    # ---------------------------------------------------------
+    if ($Tests) {
+        Write-Host "Building Test Programs..." -ForegroundColor Cyan
+        if ($IsNinja) {
+            & ninja test-programs
+        }
+        else {
+            & msbuild /m /p:Configuration=RelWithDebInfo /t:test-programs Wireshark.sln
+        }
+        if ($LASTEXITCODE -ne 0) { throw "Tests Build failed." }
+
+        # --- RUNNING TESTS ---
+        Write-Host "==========================================" -ForegroundColor Magenta
+        Write-Host " Running Tests (CTest)... " -ForegroundColor Magenta
+        Write-Host "==========================================" -ForegroundColor Magenta
+        
+        # Le decimos a CTest que busque los tests en la carpeta actual
+        & ctest -C RelWithDebInfo --output-on-failure
+        
+        if ($LASTEXITCODE -ne 0) { 
+            throw "One or more tests FAILED." 
+        }
+        else {
+            Write-Host "[TESTS] ALL TESTS PASSED." -ForegroundColor Green
+        }
+    }
 
     # ---------------------------------------------------------
     # INSTALLER
@@ -294,11 +325,11 @@ try {
             Write-Host "=========================================" -ForegroundColor Green
         }
         else {
-            Write-Warning "Failed to create installer (Check NSIS)."
+            Write-Warning "Failed to create installer."
         }
     }
 
-    Write-Host "Build Process Completed." -ForegroundColor Green
+    Write-Host "Process Finished." -ForegroundColor Green
 }
 catch {
     Write-Error $_
