@@ -59,7 +59,7 @@ enum TiposInterceptor
 
 static const char *STR_TIPO_INTERCEPTOR_ARIS = "ARIS";
 static const char *STR_TIPO_INTERCEPTOR_EVEREST = "eVerest";
-static const char *STR_TIPO_INTERCEPTOR_AUTONOMO = "Autonomo";
+// static const char *STR_TIPO_INTERCEPTOR_AUTONOMO = "Autonomo";
 static const char *STR_TIPO_INTERCEPTOR_DESCONOCIDO = "DESCONOCIDO";
 
 // static int OFFSET_ORIGEN_DOMINIO = 0;
